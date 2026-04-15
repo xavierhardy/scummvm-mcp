@@ -15,6 +15,7 @@
 #include "scumm/object.h"
 #include "scumm/scumm.h"
 #include "scumm/verbs.h"
+#include "scumm/boxes.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -42,7 +43,9 @@ static Common::JSONValue *makeBool(bool v) {
 }
 
 static Common::String safeObjName(ScummEngine *vm, int obj) {
-	const byte *name = vm->getObjOrActorName(obj);
+	// MCP bridge must friend ScummEngine for protected getObjOrActorName
+	const byte *name = nullptr;
+	if (vm) name = vm->getObjOrActorName(obj);
 	if (!name || !*name)
 		return Common::String::format("unnamed:%d", obj);
 	return Common::String((const char *)name);

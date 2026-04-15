@@ -513,6 +513,7 @@ class ScummEngine : public Engine, public Common::Serializable {
 	friend class ScummDebugger;
 	friend class MonkeyMcpBridge;
 	friend class CharsetRenderer;
+	friend class MonkeyMcpHelper; // Allow MCP bridge helpers
 	friend class CharsetRendererClassic;
 	friend class CharsetRendererTownsClassic;
 	friend class ResourceManager;
@@ -533,7 +534,10 @@ public:
 	MusicEngine *_musicEngine = nullptr;
 	Player_Towns *_townsPlayer = nullptr;
 	Sound *_sound = nullptr;
+	friend class MonkeyMcpBridge;
 	MonkeyMcpBridge *_monkeyMcp = nullptr;
+	// Promote internal methods for MCP
+	using ScummEngine::getObjOrActorName;
 
 	VerbSlot *_verbs = nullptr;
 	ObjectData *_objs = nullptr;
