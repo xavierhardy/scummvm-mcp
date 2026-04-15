@@ -47,6 +47,12 @@ public:
 	static bool parseEntityId(const Common::String &id, ParsedEntityId &parsed);
 	static Common::String normalizeActionName(const Common::String &action);
 
+public:
+	// Helper to access protected getObjOrActorName from a friend
+	const byte *callGetObjOrActorName(int obj) const {
+		return _vm ? _vm->getObjOrActorName(obj) : nullptr;
+	}
+
 private:
 	struct MessageEntry {
 		uint64 seq;

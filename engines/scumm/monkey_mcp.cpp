@@ -21,9 +21,27 @@
 #include <cstring>
 
 #if defined(POSIX)
-#include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
+extern "C" {
+    int fcntl(int, int, ...);
+    ssize_t read(int, void *, size_t);
+    ssize_t write(int, const void *, size_t);
+    int errno;
+}
+#ifndef O_NONBLOCK
+#define O_NONBLOCK 04000
+#endif
+#ifndef F_GETFL
+#define F_GETFL 3
+#endif
+#ifndef F_SETFL
+#define F_SETFL 4
+#endif
+#ifndef EAGAIN
+#define EAGAIN 11
+#endif
+#ifndef EWOULDBLOCK
+#define EWOULDBLOCK EAGAIN
+#endif
 #endif
 
 namespace Scumm {
@@ -43,9 +61,9 @@ static Common::JSONValue *makeBool(bool v) {
 }
 
 static Common::String safeObjName(ScummEngine *vm, int obj) {
-	// MCP bridge must friend ScummEngine for protected getObjOrActorName
+	// Must be called from MonkeyMcpBridge, which is a friend class.
 	const byte *name = nullptr;
-	if (vm) name = vm->getObjOrActorName(obj);
+	if (vm) name = static_cast<Scumm::MonkeyMcpBridge *>(vm->_monkeyMcp)->callGetObjOrActorName(obj);
 	if (!name || !*name)
 		return Common::String::format("unnamed:%d", obj);
 	return Common::String((const char *)name);
