@@ -536,8 +536,6 @@ public:
 	Sound *_sound = nullptr;
 	friend class MonkeyMcpBridge;
 	MonkeyMcpBridge *_monkeyMcp = nullptr;
-	// Promote internal methods for MCP
-	using ScummEngine::getObjOrActorName;
 
 	VerbSlot *_verbs = nullptr;
 	ObjectData *_objs = nullptr;
