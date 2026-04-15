@@ -29,6 +29,7 @@
 #include "scumm/charset.h"
 #include "scumm/costume.h"
 #include "scumm/he/intern_he.h"
+#include "scumm/monkey_mcp.h"
 #include "scumm/object.h"
 #include "scumm/resource.h"
 #include "scumm/scumm_v7.h"
@@ -3467,6 +3468,8 @@ void ScummEngine::actorTalk(const byte *msg) {
 	Actor *a;
 
 	convertMessageToString(msg, _charsetBuffer, sizeof(_charsetBuffer));
+	if (_monkeyMcp)
+		_monkeyMcp->onActorLine((_actorToPrintStrFor == 0xFF) ? -1 : _actorToPrintStrFor, (const char *)_charsetBuffer);
 
 	// I have commented out this workaround, since it did cause another
 	// bug (#11480). It is not okay to skip the stopTalk() calls here.
