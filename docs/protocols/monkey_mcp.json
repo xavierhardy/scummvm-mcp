@@ -19,6 +19,12 @@
       "env": {},
       "cwd": null,
       "description": "Launch ScummVM and talk to its Monkey MCP bridge over stdin/stdout"
+    },
+    "scummvm-file": {
+      "transport": "stdio-file",
+      "stdinPath": "/path/to/mcp-in.fifo",
+      "stdoutPath": "/path/to/mcp-out.fifo",
+      "description": "Use named pipes (FIFOs). Client writes JSON-RPC requests to stdinPath and reads responses from stdoutPath. The engine must be started with its stdin/stdout redirected to the corresponding FIFOs."
     }
   },
   "notes": "This bridge is opt-in and only active for Monkey Island 1. Communication is JSON-RPC 2.0 over lines on stdin/stdout.",
