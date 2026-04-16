@@ -152,8 +152,16 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	_stdoutFd = -1;
 
 	// Optional TCP server if configured via scummvm config: monkey_mcp_port and monkey_mcp_host
+	const Common::String activeDomain = ConfMan.getActiveDomainName();
 	int port = ConfMan.getInt("monkey_mcp_port");
+	int portActive = ConfMan.getInt("monkey_mcp_port", activeDomain);
+	bool hasPortInActive = ConfMan.hasKey("monkey_mcp_port", activeDomain);
+	bool hasPortGlobal = ConfMan.hasKey("monkey_mcp_port");
+	bool mcpEnabledGlobal = ConfMan.getBool("monkey_mcp");
+	bool mcpEnabledActive = ConfMan.getBool("monkey_mcp", activeDomain);
 	Common::String host = ConfMan.hasKey("monkey_mcp_host") ? ConfMan.get("monkey_mcp_host") : Common::String("0.0.0.0");
+	debug("monkey_mcp: activeDomain='%s' monkey_mcp(active)=%d monkey_mcp(global)=%d hasPort(active)=%d port(active)=%d port(globalLookup)=%d",
+		activeDomain.c_str(), (int)mcpEnabledActive, (int)mcpEnabledGlobal, (int)hasPortInActive, portActive, port);
 	if (port > 0) {
 		debug("monkey_mcp: attempting to create TCP listen socket on %s:%d", host.c_str(), port);
 		_listenFd = socket(AF_INET, SOCK_STREAM, 0);
