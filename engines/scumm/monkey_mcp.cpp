@@ -183,12 +183,12 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 					_listenFd = -1;
 				}
 			} else {
-				debug("monkey_mcp: bind() failed");
+				debug("monkey_mcp: bind() failed errno=%d (%s)", errno, strerror(errno));
 				close(_listenFd);
 				_listenFd = -1;
 			}
 		} else {
-			debug("monkey_mcp: socket() failed");
+			debug("monkey_mcp: socket() failed errno=%d (%s)", errno, strerror(errno));
 			_listenFd = -1;
 		}
 	} else {
