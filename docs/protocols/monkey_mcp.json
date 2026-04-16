@@ -22,9 +22,10 @@
     },
     "scummvm-file": {
       "transport": "stdio-file",
+      "command": "/full/path/to/docs/protocols/start_scummvm_fifo.sh",
       "stdinPath": "/path/to/mcp-in.fifo",
       "stdoutPath": "/path/to/mcp-out.fifo",
-      "description": "Use named pipes (FIFOs). Client writes JSON-RPC requests to stdinPath and reads responses from stdoutPath. The engine must be started with its stdin/stdout redirected to the corresponding FIFOs."
+      "description": "Use named pipes (FIFOs). The client should spawn the provided command which starts ScummVM with stdin/stdout redirected to the FIFOs. Client then writes JSON-RPC requests to stdinPath and reads responses from stdoutPath. Replace command and paths with absolute paths on your system."
     }
   },
   "notes": "This bridge is opt-in and only active for Monkey Island 1. Communication is JSON-RPC 2.0 over lines on stdin/stdout.",
