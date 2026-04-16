@@ -49,21 +49,41 @@ extern "C" {
 #ifndef SOCK_STREAM
 #define SOCK_STREAM 1
 #endif
+#if defined(__APPLE__) || defined(__MACH__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+// BSD/macOS platform-specific constants
+#ifndef SOL_SOCKET
+#define SOL_SOCKET 0xffff
+#endif
+#ifndef SO_REUSEADDR
+#define SO_REUSEADDR 0x0004
+#endif
+#ifndef O_NONBLOCK
+#define O_NONBLOCK 0x0004
+#endif
+#ifndef EAGAIN
+#define EAGAIN 35
+#endif
+#else
+// Linux platform-specific constants
 #ifndef SOL_SOCKET
 #define SOL_SOCKET 1
 #endif
 #ifndef SO_REUSEADDR
 #define SO_REUSEADDR 2
 #endif
+#ifndef O_NONBLOCK
+#define O_NONBLOCK 04000
+#endif
+#ifndef EAGAIN
+#define EAGAIN 11
+#endif
+#endif
+
 #ifndef INADDR_ANY
 #define INADDR_ANY 0
 #endif
 #ifndef SHUT_RDWR
 #define SHUT_RDWR 2
-#endif
-
-#ifndef O_NONBLOCK
-#define O_NONBLOCK 04000
 #endif
 #ifndef F_GETFL
 #define F_GETFL 3
@@ -71,23 +91,30 @@ extern "C" {
 #ifndef F_SETFL
 #define F_SETFL 4
 #endif
-#ifndef EAGAIN
-#define EAGAIN 11
-#endif
 #ifndef EWOULDBLOCK
 #define EWOULDBLOCK EAGAIN
 #endif
 
-// Minimal sockaddr_in definition. On BSD/macOS a leading sin_len is present.
+// Minimal sockaddr_in layout. Use unsigned int (4 bytes) for s_addr to match
+// in_addr_t (uint32_t) on all 32/64-bit platforms. On BSD/macOS, sin_family is
+// uint8_t (not uint16_t as on Linux), so the struct offsets differ.
 #if defined(__APPLE__) || defined(__MACH__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
-typedef unsigned char sa_len_t;
-typedef unsigned short sa_family_t;
-struct in_addr { unsigned long s_addr; };
-struct sockaddr_in { sa_len_t sin_len; sa_family_t sin_family; unsigned short sin_port; struct in_addr sin_addr; char sin_zero[8]; };
+struct in_addr { unsigned int s_addr; };
+struct sockaddr_in {
+    unsigned char  sin_len;     // 1 byte, offset 0
+    unsigned char  sin_family;  // 1 byte, offset 1 (uint8_t on BSD!)
+    unsigned short sin_port;    // 2 bytes, offset 2
+    struct in_addr sin_addr;    // 4 bytes, offset 4
+    char           sin_zero[8]; // 8 bytes, offset 8
+};  // 16 bytes total
 #else
-typedef unsigned short sa_family_t;
-struct in_addr { unsigned long s_addr; };
-struct sockaddr_in { sa_family_t sin_family; unsigned short sin_port; struct in_addr sin_addr; char sin_zero[8]; };
+struct in_addr { unsigned int s_addr; };
+struct sockaddr_in {
+    unsigned short sin_family;  // 2 bytes, offset 0
+    unsigned short sin_port;    // 2 bytes, offset 2
+    struct in_addr sin_addr;    // 4 bytes, offset 4
+    char           sin_zero[8]; // 8 bytes, offset 8
+};  // 16 bytes total
 #endif
 
 #ifndef htons
