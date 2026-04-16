@@ -5,33 +5,15 @@
   "scope": "Monkey Island 1 (GID_MONKEY, GID_MONKEY_EGA, GID_MONKEY_VGA)",
   "activationConfig": "monkey_mcp=true",
   "mcpServers": {
-    "scummvm-stdio": {
-      "transport": "stdio",
-      "command": "/full/path/to/scummvm",
-      "args": [
-        "-c",
-        "/full/path/to/scummvm.ini",
-        "--debugflags",
-        "monkey_mcp,scumm",
-        "--debuglevel",
-        "11"
-      ],
-      "env": {},
-      "cwd": null,
-      "description": "Launch ScummVM and talk to its Monkey MCP bridge over stdin/stdout"
-    },
-    "scummvm-file": {
-      "transport": "stdio-file",
-      "command": "/full/path/to/docs/protocols/start_scummvm_fifo.sh",
-      "stdinPath": "/path/to/mcp-in.fifo",
-      "stdoutPath": "/path/to/mcp-out.fifo",
-      "description": "Use named pipes (FIFOs). The client should spawn the provided command which starts ScummVM with stdin/stdout redirected to the FIFOs. Client then writes JSON-RPC requests to stdinPath and reads responses from stdoutPath. Replace command and paths with absolute paths on your system."
-    },
     "scummvm-tcp": {
       "transport": "tcp",
       "url": "tcp://127.0.0.1:12345",
       "description": "Connect to ScummVM's built-in TCP MCP server. Enable by setting monkey_mcp=true and monkey_mcp_port=12345 in scummvm.ini (or global scummvm section)."
     }
+  },
+  "deprecatedTransports": {
+    "stdio": "The engine no longer supports stdio transport for MCP. Use the built-in TCP server (monkey_mcp_port) or the external FIFO/pipe proxy scripts in docs/protocols if you need stdio-style integration.",
+    "stdio-file": "FIFO/pipe helper scripts remain in docs/protocols for backward compatibility but are deprecated. Prefer TCP transport."
   },
   "notes": "This bridge is opt-in and only active for Monkey Island 1. Communication is JSON-RPC 2.0 over lines on stdin/stdout.",
   "networkExamples": {

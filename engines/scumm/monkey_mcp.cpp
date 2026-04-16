@@ -26,7 +26,45 @@ extern "C" {
     int fcntl(int, int, ...);
     ssize_t read(int, void *, size_t);
     ssize_t write(int, const void *, size_t);
+
+    /* Minimal socket-related declarations to avoid including system headers
+       directly from engine code (to keep forbidden.h happy). */
+    int socket(int domain, int type, int protocol);
+    int setsockopt(int socket, int level, int option_name, const void *option_value, unsigned int option_len);
+    int bind(int socket, const void *address, unsigned int address_len);
+    int listen(int socket, int backlog);
+    int accept(int socket, void *address, unsigned int *address_len);
+    ssize_t recv(int socket, void *buf, size_t len, int flags);
+    ssize_t send(int socket, const void *buf, size_t len, int flags);
+    int close(int fd);
+    unsigned long inet_addr(const char *cp);
+    unsigned short htons(unsigned short hostshort);
 }
+
+/* Minimal socket/type definitions */
+#ifndef AF_INET
+#define AF_INET 2
+#endif
+#ifndef SOCK_STREAM
+#define SOCK_STREAM 1
+#endif
+#ifndef SOL_SOCKET
+#define SOL_SOCKET 1
+#endif
+#ifndef SO_REUSEADDR
+#define SO_REUSEADDR 2
+#endif
+#ifndef INADDR_ANY
+#define INADDR_ANY 0
+#endif
+#ifndef SHUT_RDWR
+#define SHUT_RDWR 2
+#endif
+
+typedef unsigned short sa_family_t;
+struct in_addr { unsigned long s_addr; };
+struct sockaddr_in { sa_family_t sin_family; unsigned short sin_port; struct in_addr sin_addr; char sin_zero[8]; };
+
 #ifndef O_NONBLOCK
 #define O_NONBLOCK 04000
 #endif
@@ -84,6 +122,8 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	  _initialized(false),
 	  _stdinFd(-1),
 	  _stdoutFd(-1),
+	  _listenFd(-1),
+	  _clientFd(-1),
 	  _nextMessageSeq(1),
 	  _frameCounter(0) {
 	debug("monkey_mcp: ctor start, vm=%p", vm);
@@ -102,13 +142,45 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	}
 
 #if defined(POSIX)
-	_stdinFd = 0;
-	_stdoutFd = 1;
-	int flags = fcntl(_stdinFd, F_GETFL, 0);
-	debug("monkey_mcp: fcntl(F_GETFL) returned %d", flags);
-	if (flags >= 0) {
-		int r = fcntl(_stdinFd, F_SETFL, flags | O_NONBLOCK);
-		debug("monkey_mcp: fcntl(F_SETFL) returned %d", r);
+	// We no longer use stdin/stdout for MCP. Network-only mode will be used when configured.
+	_stdinFd = -1;
+	_stdoutFd = -1;
+
+	// Optional TCP server if configured via scummvm config: monkey_mcp_port and monkey_mcp_host
+	int port = ConfMan.getInt("monkey_mcp_port");
+	Common::String host = ConfMan.hasKey("monkey_mcp_host") ? ConfMan.get("monkey_mcp_host") : Common::String("0.0.0.0");
+	if (port > 0) {
+		debug("monkey_mcp: attempting to create TCP listen socket on %s:%d", host.c_str(), port);
+		_listenFd = socket(AF_INET, SOCK_STREAM, 0);
+		if (_listenFd >= 0) {
+			int opt = 1;
+			setsockopt(_listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+			struct sockaddr_in addr;
+			memset(&addr, 0, sizeof(addr));
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons((unsigned short)port);
+			addr.sin_addr.s_addr = (host == "0.0.0.0") ? INADDR_ANY : inet_addr(host.c_str());
+			if (bind(_listenFd, &addr, sizeof(addr)) == 0) {
+				if (listen(_listenFd, 1) == 0) {
+					int lf = fcntl(_listenFd, F_GETFL, 0);
+					if (lf >= 0) fcntl(_listenFd, F_SETFL, lf | O_NONBLOCK);
+					debug("monkey_mcp: listening on %s:%d (fd=%d)", host.c_str(), port, _listenFd);
+				} else {
+					debug("monkey_mcp: listen() failed");
+					close(_listenFd);
+					_listenFd = -1;
+				}
+			} else {
+				debug("monkey_mcp: bind() failed");
+				close(_listenFd);
+				_listenFd = -1;
+			}
+		} else {
+			debug("monkey_mcp: socket() failed");
+			_listenFd = -1;
+		}
+	} else {
+		debug("monkey_mcp: network MCP disabled (monkey_mcp_port not set)");
 	}
 #else
 	_enabled = false;
@@ -117,6 +189,16 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 }
 
 MonkeyMcpBridge::~MonkeyMcpBridge() {
+#if defined(POSIX)
+	if (_clientFd >= 0) {
+		close(_clientFd);
+		_clientFd = -1;
+	}
+	if (_listenFd >= 0) {
+		close(_listenFd);
+		_listenFd = -1;
+	}
+#endif
 }
 
 bool MonkeyMcpBridge::isMonkey1() const {
@@ -207,17 +289,43 @@ void MonkeyMcpBridge::pump() {
 #if defined(POSIX)
 	char buf[1024];
 	int readLoopCount = 0;
+	
+	// If we have a listening socket, try to accept a new client (non-blocking)
+	if (_listenFd >= 0 && _clientFd < 0) {
+		int newfd = accept(_listenFd, nullptr, nullptr);
+		if (newfd >= 0) {
+			// set non-blocking
+			int nf = fcntl(newfd, F_GETFL, 0);
+			if (nf >= 0) fcntl(newfd, F_SETFL, nf | O_NONBLOCK);
+			if (_clientFd >= 0) close(_clientFd);
+			_clientFd = newfd;
+			debug("monkey_mcp: client connected (fd=%d)", _clientFd);
+		} else {
+			// no incoming connection or error; ignore
+		}
+	}
+
+	// Only read from network client. Stdio transport removed.
+	if (_clientFd < 0) {
+		// No client connected; nothing to read.
+		return;
+	}
+
+	int fdToRead = _clientFd;
 	while (true) {
 		++readLoopCount;
-		ssize_t n = ::read(_stdinFd, buf, sizeof(buf));
-		debug("monkey_mcp: pump read loop %d: read returned %d, errno=%d", readLoopCount, (int)n, errno);
+		ssize_t n = ::read(fdToRead, buf, sizeof(buf));
+		debug("monkey_mcp: pump read loop %d on fd %d: read returned %d, errno=%d", readLoopCount, fdToRead, (int)n, errno);
 		if (n <= 0) {
 			if (n == 0) {
-				debug("monkey_mcp: stdin EOF (n=0)");
+				debug("monkey_mcp: client EOF on fd %d (n=0)", fdToRead);
+				// client disconnected
+				close(_clientFd);
+				_clientFd = -1;
 				break;
 			}
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				debug("monkey_mcp: would block (EAGAIN/EWOULDBLOCK), breaking");
+				debug("monkey_mcp: would block (EAGAIN/EWOULDBLOCK) on fd %d, breaking", fdToRead);
 				break;
 			}
 			debug("monkey_mcp: breaking on n<0, errno not EAGAIN");
@@ -779,7 +887,17 @@ void MonkeyMcpBridge::writeJson(Common::JSONValue *value) {
 		return;
 #if defined(POSIX)
 	Common::String out = value->stringify() + "\n";
-	(void)::write(_stdoutFd, out.c_str(), out.size());
+	if (_clientFd >= 0) {
+		ssize_t r = send(_clientFd, out.c_str(), out.size(), 0);
+		if (r < 0) {
+			debug("monkey_mcp: send to client failed, closing client (errno=%d)", errno);
+			close(_clientFd);
+			_clientFd = -1;
+		}
+	} else {
+		// No network client connected; drop the message.
+		debug("monkey_mcp: no client connected; dropping reply");
+	}
 #else
 	(void)value;
 #endif

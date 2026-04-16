@@ -68,6 +68,8 @@ private:
 	bool _initialized;
 	int _stdinFd;
 	int _stdoutFd;
+	int _listenFd;
+	int _clientFd;
 	Common::String _inBuffer;
 
 	Common::Array<MessageEntry> _messages;
