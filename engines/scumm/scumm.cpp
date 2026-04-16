@@ -459,7 +459,7 @@ ScummEngine::ScummEngine(OSystem *syst, const DetectorResult &dr)
 
 	debug("monkey_mcp: about to create bridge");
 	_monkeyMcp = new MonkeyMcpBridge(this);
-	debug("monkey_mcp: bridge created %p", _monkeyMcp);
+	debug("monkey_mcp: bridge created %p", (void *)_monkeyMcp);
 }
 
 

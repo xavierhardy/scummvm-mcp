@@ -38,7 +38,6 @@ extern "C" {
     ssize_t send(int socket, const void *buf, size_t len, int flags);
     int close(int fd);
     unsigned long inet_addr(const char *cp);
-    unsigned short htons(unsigned short hostshort);
 }
 
 /* Minimal socket/type definitions */
@@ -79,6 +78,12 @@ struct sockaddr_in { sa_family_t sin_family; unsigned short sin_port; struct in_
 #endif
 #ifndef EWOULDBLOCK
 #define EWOULDBLOCK EAGAIN
+#endif
+
+#ifndef htons
+static inline unsigned short htons(unsigned short x) {
+	return (unsigned short)((((unsigned short)x & 0xff) << 8) | (((unsigned short)x & 0xff00) >> 8));
+}
 #endif
 #endif
 
@@ -126,7 +131,7 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	  _clientFd(-1),
 	  _nextMessageSeq(1),
 	  _frameCounter(0) {
-	debug("monkey_mcp: ctor start, vm=%p", vm);
+	debug("monkey_mcp: ctor start, vm=%p", (void *)vm);
 	if (!_vm) {
 		debug("monkey_mcp: no vm, returning");
 		return;
@@ -134,7 +139,7 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 
 	bool confVal = ConfMan.getBool("monkey_mcp");
 	debug("monkey_mcp: isMonkey1=%d, confVal=%d", (int)isMonkey1(), (int)confVal);
-
+	
 	_enabled = isMonkey1() && confVal;
 	debug("monkey_mcp: enabled=%d", (int)_enabled);
 	if (!_enabled) {
@@ -289,7 +294,7 @@ void MonkeyMcpBridge::pump() {
 #if defined(POSIX)
 	char buf[1024];
 	int readLoopCount = 0;
-	
+
 	// If we have a listening socket, try to accept a new client (non-blocking)
 	if (_listenFd >= 0 && _clientFd < 0) {
 		int newfd = accept(_listenFd, nullptr, nullptr);
