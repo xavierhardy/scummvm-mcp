@@ -194,26 +194,39 @@ void MonkeyMcpBridge::pump() {
 
 #if defined(POSIX)
 	char buf[1024];
+	int readLoopCount = 0;
 	while (true) {
+		++readLoopCount;
 		ssize_t n = ::read(_stdinFd, buf, sizeof(buf));
+		debug("monkey_mcp: pump read loop %d: read returned %d, errno=%d", readLoopCount, (int)n, errno);
 		if (n <= 0) {
-			if (n == 0)
+			if (n == 0) {
+				debug("monkey_mcp: stdin EOF (n=0)");
 				break;
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			}
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				debug("monkey_mcp: would block (EAGAIN/EWOULDBLOCK), breaking");
 				break;
+			}
+			debug("monkey_mcp: breaking on n<0, errno not EAGAIN");
 			break;
 		}
 		_inBuffer += Common::String(buf, n);
 	}
 
+	int parseLoopCount = 0;
 	while (true) {
+		++parseLoopCount;
 		const char *start = _inBuffer.c_str();
 		const char *newline = strchr(start, '\n');
-		if (!newline)
+		if (!newline) {
+			debug("monkey_mcp: parse buffer has no newline after %d lines", parseLoopCount);
 			break;
+		}
 		Common::String line(start, newline);
 		_inBuffer = Common::String(newline + 1);
 		line.trim();
+		debug("monkey_mcp: got JSON line: '%s'", line.c_str());
 		if (!line.empty())
 			handleJsonLine(line);
 	}
