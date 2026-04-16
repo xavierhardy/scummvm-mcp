@@ -156,7 +156,6 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	int port = ConfMan.getInt("monkey_mcp_port");
 	int portActive = ConfMan.getInt("monkey_mcp_port", activeDomain);
 	bool hasPortInActive = ConfMan.hasKey("monkey_mcp_port", activeDomain);
-	bool hasPortGlobal = ConfMan.hasKey("monkey_mcp_port");
 	bool mcpEnabledGlobal = ConfMan.getBool("monkey_mcp");
 	bool mcpEnabledActive = ConfMan.getBool("monkey_mcp", activeDomain);
 	Common::String host = ConfMan.hasKey("monkey_mcp_host") ? ConfMan.get("monkey_mcp_host") : Common::String("0.0.0.0");
