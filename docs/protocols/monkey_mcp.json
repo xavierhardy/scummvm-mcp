@@ -4,6 +4,23 @@
   "transport": "stdio",
   "scope": "Monkey Island 1 (GID_MONKEY, GID_MONKEY_EGA, GID_MONKEY_VGA)",
   "activationConfig": "monkey_mcp=true",
+  "mcpServers": {
+    "scummvm-stdio": {
+      "transport": "stdio",
+      "command": "/full/path/to/scummvm",
+      "args": [
+        "-c",
+        "/full/path/to/scummvm.ini",
+        "--debugflags",
+        "monkey_mcp,scumm",
+        "--debuglevel",
+        "11"
+      ],
+      "env": {},
+      "cwd": null,
+      "description": "Launch ScummVM and talk to its Monkey MCP bridge over stdin/stdout"
+    }
+  },
   "notes": "This bridge is opt-in and only active for Monkey Island 1. Communication is JSON-RPC 2.0 over lines on stdin/stdout.",
   "methods": {
     "initialize": {
