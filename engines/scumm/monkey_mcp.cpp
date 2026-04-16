@@ -180,6 +180,9 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 			setsockopt(_listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 			struct sockaddr_in addr;
 			memset(&addr, 0, sizeof(addr));
+#if defined(__APPLE__) || defined(__MACH__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+			addr.sin_len = sizeof(addr);
+#endif
 			addr.sin_family = AF_INET;
 			addr.sin_port = htons((unsigned short)port);
 			if (host == "0.0.0.0") {
