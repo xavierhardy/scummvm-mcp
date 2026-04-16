@@ -422,21 +422,65 @@ void MonkeyMcpBridge::pump() {
 		_inBuffer += Common::String(buf, n);
 	}
 
-	int parseLoopCount = 0;
+	// HTTP request parser: wait for \r\n\r\n (end of headers), then read
+	// Content-Length bytes of body. Handles pipelined requests in one buffer.
 	while (true) {
-		++parseLoopCount;
-		const char *start = _inBuffer.c_str();
-		const char *newline = strchr(start, '\n');
-		if (!newline) {
-			debug("monkey_mcp: parse buffer has no newline after %d lines", parseLoopCount);
-			break;
+		const char *buf2 = _inBuffer.c_str();
+		size_t bufLen = _inBuffer.size();
+
+		// Find end of HTTP headers
+		const char *headersEnd = strstr(buf2, "\r\n\r\n");
+		if (!headersEnd)
+			break; // need more data
+
+		size_t headersLen = (size_t)(headersEnd - buf2) + 4; // includes the \r\n\r\n
+
+		// Parse Content-Length from headers
+		int contentLength = 0;
+		const char *p = buf2;
+		const char *hEnd = headersEnd;
+		while (p < hEnd) {
+			// find next \r\n
+			const char *lineEnd = nullptr;
+			for (const char *q = p; q + 1 < hEnd; ++q) {
+				if (q[0] == '\r' && q[1] == '\n') { lineEnd = q; break; }
+			}
+			if (!lineEnd) lineEnd = hEnd;
+			// case-insensitive prefix match for "content-length:"
+			size_t lineLen = (size_t)(lineEnd - p);
+			if (lineLen > 15) {
+				// strncasecmp not available everywhere; do manual compare
+				const char *hdr = "content-length:";
+				bool match = true;
+				for (int ci = 0; ci < 15; ++ci) {
+					char c = p[ci];
+					if (c >= 'A' && c <= 'Z') c += 32;
+					if (c != hdr[ci]) { match = false; break; }
+				}
+				if (match) {
+					const char *val = p + 15;
+					while (val < lineEnd && (*val == ' ' || *val == '\t')) ++val;
+					contentLength = 0;
+					while (val < lineEnd && *val >= '0' && *val <= '9')
+						contentLength = contentLength * 10 + (*val++ - '0');
+				}
+			}
+			if (lineEnd >= hEnd) break;
+			p = lineEnd + 2; // skip \r\n
 		}
-		Common::String line(start, newline);
-		_inBuffer = Common::String(newline + 1);
-		line.trim();
-		debug("monkey_mcp: got JSON line: '%s'", line.c_str());
-		if (!line.empty())
-			handleJsonLine(line);
+
+		// Wait until full body is available
+		if (bufLen < headersLen + (size_t)contentLength)
+			break;
+
+		Common::String body(buf2 + headersLen, contentLength);
+		_inBuffer = Common::String(buf2 + headersLen + contentLength,
+		                           bufLen - headersLen - contentLength);
+
+		body.trim();
+		debug("monkey_mcp: HTTP request body: '%s'", body.c_str());
+		if (!body.empty())
+			handleJsonLine(body);
 	}
 #endif
 }
@@ -974,7 +1018,12 @@ void MonkeyMcpBridge::writeJson(Common::JSONValue *value) {
 	if (!_enabled || !value)
 		return;
 #if defined(POSIX)
-	Common::String out = value->stringify() + "\n";
+	Common::String json = value->stringify();
+	Common::String out =
+		"HTTP/1.1 200 OK\r\n"
+		"Content-Type: application/json\r\n"
+		"Content-Length: " + Common::String::format("%d", (int)json.size()) + "\r\n"
+		"\r\n" + json;
 	const char *data = out.c_str();
 	size_t remaining = out.size();
 	if (_clientFd >= 0) {
