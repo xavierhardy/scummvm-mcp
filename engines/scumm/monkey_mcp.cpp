@@ -22,69 +22,12 @@
 
 #if defined(POSIX)
 #include <errno.h>
-extern "C" {
-    int fcntl(int, int, ...);
-    ssize_t read(int, void *, size_t);
-    ssize_t write(int, const void *, size_t);
-
-    /* Minimal socket-related declarations to avoid including system headers
-       directly from engine code (to keep forbidden.h happy). */
-    int socket(int domain, int type, int protocol);
-    int setsockopt(int socket, int level, int option_name, const void *option_value, unsigned int option_len);
-    int bind(int socket, const void *address, unsigned int address_len);
-    int listen(int socket, int backlog);
-    int accept(int socket, void *address, unsigned int *address_len);
-    ssize_t recv(int socket, void *buf, size_t len, int flags);
-    ssize_t send(int socket, const void *buf, size_t len, int flags);
-    int close(int fd);
-    unsigned long inet_addr(const char *cp);
-}
-
-/* Minimal socket/type definitions */
-#ifndef AF_INET
-#define AF_INET 2
-#endif
-#ifndef SOCK_STREAM
-#define SOCK_STREAM 1
-#endif
-#ifndef SOL_SOCKET
-#define SOL_SOCKET 1
-#endif
-#ifndef SO_REUSEADDR
-#define SO_REUSEADDR 2
-#endif
-#ifndef INADDR_ANY
-#define INADDR_ANY 0
-#endif
-#ifndef SHUT_RDWR
-#define SHUT_RDWR 2
-#endif
-
-typedef unsigned short sa_family_t;
-struct in_addr { unsigned long s_addr; };
-struct sockaddr_in { sa_family_t sin_family; unsigned short sin_port; struct in_addr sin_addr; char sin_zero[8]; };
-
-#ifndef O_NONBLOCK
-#define O_NONBLOCK 04000
-#endif
-#ifndef F_GETFL
-#define F_GETFL 3
-#endif
-#ifndef F_SETFL
-#define F_SETFL 4
-#endif
-#ifndef EAGAIN
-#define EAGAIN 11
-#endif
-#ifndef EWOULDBLOCK
-#define EWOULDBLOCK EAGAIN
-#endif
-
-#ifndef htons
-static inline unsigned short htons(unsigned short x) {
-	return (unsigned short)((((unsigned short)x & 0xff) << 8) | (((unsigned short)x & 0xff00) >> 8));
-}
-#endif
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
 #endif
 
 namespace Scumm {
@@ -171,8 +114,16 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 			memset(&addr, 0, sizeof(addr));
 			addr.sin_family = AF_INET;
 			addr.sin_port = htons((unsigned short)port);
-			addr.sin_addr.s_addr = (host == "0.0.0.0") ? INADDR_ANY : inet_addr(host.c_str());
-			if (bind(_listenFd, &addr, sizeof(addr)) == 0) {
+			if (host == "0.0.0.0") {
+				addr.sin_addr.s_addr = INADDR_ANY;
+			} else {
+				if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+					debug("monkey_mcp: invalid host address '%s'", host.c_str());
+					close(_listenFd);
+					_listenFd = -1;
+				}
+			}
+			if (_listenFd >= 0 && bind(_listenFd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
 				if (listen(_listenFd, 1) == 0) {
 					int lf = fcntl(_listenFd, F_GETFL, 0);
 					if (lf >= 0) fcntl(_listenFd, F_SETFL, lf | O_NONBLOCK);
