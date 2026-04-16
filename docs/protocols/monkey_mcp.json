@@ -26,9 +26,20 @@
       "stdinPath": "/path/to/mcp-in.fifo",
       "stdoutPath": "/path/to/mcp-out.fifo",
       "description": "Use named pipes (FIFOs). The client should spawn the provided command which starts ScummVM with stdin/stdout redirected to the FIFOs. Client then writes JSON-RPC requests to stdinPath and reads responses from stdoutPath. Replace command and paths with absolute paths on your system."
+    },
+    "scummvm-tcp": {
+      "transport": "tcp",
+      "url": "tcp://127.0.0.1:12345",
+      "description": "Connect to ScummVM's built-in TCP MCP server. Enable by setting monkey_mcp=true and monkey_mcp_port=12345 in scummvm.ini (or global scummvm section)."
     }
   },
   "notes": "This bridge is opt-in and only active for Monkey Island 1. Communication is JSON-RPC 2.0 over lines on stdin/stdout.",
+  "networkExamples": {
+    "scummvm_ini": "[monkey]\nmonkey_mcp=true\nmonkey_mcp_port=12345\nmonkey_mcp_host=127.0.0.1\n",
+    "nc_example": "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}' | nc 127.0.0.1 12345",
+    "nc_response": "{ \"jsonrpc\": \"2.0\", \"id\": 1, \"result\": { \"protocolVersion\": \"2025-03-26\", \"serverInfo\": { \"name\": \"scumm-monkey-mcp\", \"version\": \"0.1\" } } }"
+  },
+
   "methods": {
     "initialize": {
       "description": "Initialize and declare server capabilities.",
