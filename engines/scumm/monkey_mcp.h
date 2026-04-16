@@ -76,6 +76,9 @@ private:
 	uint64 _nextMessageSeq;
 	uint32 _frameCounter;
 
+	Common::Array<Common::String> _outQueue; // buffered outgoing JSON strings when no client connected
+	static const uint kMaxOutQueue = 512;
+
 	bool isMonkey1() const;
 	void pushMessage(const char *type, int actorId, const Common::String &text);
 

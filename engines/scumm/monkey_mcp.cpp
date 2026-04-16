@@ -300,6 +300,33 @@ void MonkeyMcpBridge::pump() {
 			if (_clientFd >= 0) close(_clientFd);
 			_clientFd = newfd;
 			debug("monkey_mcp: client connected (fd=%d)", _clientFd);
+			// Flush any queued outgoing JSON
+			if (!_outQueue.empty()) {
+				for (uint i = 0; i < _outQueue.size(); ++i) {
+					const Common::String &s = _outQueue[i];
+					const char *data = s.c_str();
+					size_t remaining = s.size();
+					while (remaining > 0) {
+						ssize_t sent = send(_clientFd, data, remaining, 0);
+						if (sent < 0) {
+							if (errno == EAGAIN || errno == EWOULDBLOCK) {
+								// can't send now; leave remaining queue as-is
+								break;
+							}
+							debug("monkey_mcp: send failed while flushing queue, closing client (errno=%d)", errno);
+							close(_clientFd);
+							_clientFd = -1;
+							break;
+						}
+						data += sent;
+						remaining -= sent;
+					}
+					if (_clientFd < 0)
+						break;
+				}
+				if (_clientFd >= 0)
+					_outQueue.clear();
+			}
 		} else {
 			// no incoming connection or error; ignore
 		}
@@ -887,17 +914,34 @@ void MonkeyMcpBridge::writeJson(Common::JSONValue *value) {
 		return;
 #if defined(POSIX)
 	Common::String out = value->stringify() + "\n";
+	const char *data = out.c_str();
+	size_t remaining = out.size();
 	if (_clientFd >= 0) {
-		ssize_t r = send(_clientFd, out.c_str(), out.size(), 0);
-		if (r < 0) {
-			debug("monkey_mcp: send to client failed, closing client (errno=%d)", errno);
-			close(_clientFd);
-			_clientFd = -1;
+		// Try to send all data; on EAGAIN/EWOULDBLOCK queue it
+		while (remaining > 0) {
+			ssize_t r = send(_clientFd, data, remaining, 0);
+			if (r < 0) {
+				if (errno == EAGAIN || errno == EWOULDBLOCK) {
+					break; // will queue below
+				}
+				debug("monkey_mcp: send to client failed, closing client (errno=%d)", errno);
+				close(_clientFd);
+				_clientFd = -1;
+				r = -1;
+				break;
+			}
+			data += r;
+			remaining -= r;
 		}
-	} else {
-		// No network client connected; drop the message.
-		debug("monkey_mcp: no client connected; dropping reply");
+		if (remaining == 0)
+			return; // sent fully
 	}
+
+	// If we get here, either no client or couldn't send fully -> queue
+	if (_outQueue.size() >= kMaxOutQueue)
+		_outQueue.remove_at(0);
+	_outQueue.push_back(out);
+	debug("monkey_mcp: queued outgoing message, queue size=%d", (int)_outQueue.size());
 #else
 	(void)value;
 #endif
