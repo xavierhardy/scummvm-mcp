@@ -157,6 +157,28 @@ static Common::String lowerTrimmed(const Common::String &s) {
 	return out;
 }
 
+static Common::JSONValue *makeProp(const char *type, const char *desc = nullptr) {
+	Common::JSONObject p;
+	p.setVal("type", makeString(type));
+	if (desc && *desc)
+		p.setVal("description", makeString(desc));
+	return new Common::JSONValue(p);
+}
+
+static Common::JSONValue *makeToolSchema(Common::JSONObject &props, const char *const *required = nullptr, int reqCount = 0) {
+	Common::JSONObject schema;
+	schema.setVal("type", makeString("object"));
+	schema.setVal("properties", new Common::JSONValue(props));
+	schema.setVal("additionalProperties", makeBool(false));
+	if (required && reqCount > 0) {
+		Common::JSONArray req;
+		for (int i = 0; i < reqCount; i++)
+			req.push_back(makeString(required[i]));
+		schema.setVal("required", new Common::JSONValue(req));
+	}
+	return new Common::JSONValue(schema);
+}
+
 static Common::JSONValue *wrapInMcpContent(Common::JSONValue *result) {
 	if (!result)
 		return nullptr;
@@ -561,24 +583,78 @@ Common::JSONValue *MonkeyMcpBridge::handleInitialize(const Common::JSONValue &) 
 Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 	Common::JSONArray tools;
 
-	struct ToolDef { const char *name; const char *desc; };
-	static const ToolDef kTools[] = {
-		{"list_inventory", "List all inventory items"},
-		{"list_scene_interactables", "List interactable scene objects, people, places and current choices"},
-		{"execute_action", "Execute a verb action on targets"},
-		{"respond_to_choice", "Respond to a multi-choice dialogue option"},
-		{"move_to", "Move ego actor to target or coordinates"},
-		{"read_latest_messages", "Read recent dialogue/system messages"}
+	auto addTool = [&](const char *name, const char *desc, Common::JSONValue *schema) {
+		Common::JSONObject tool;
+		tool.setVal("name", makeString(name));
+		tool.setVal("description", makeString(desc));
+		tool.setVal("inputSchema", schema);
+		tools.push_back(new Common::JSONValue(tool));
 	};
 
-	for (uint i = 0; i < ARRAYSIZE(kTools); ++i) {
-		Common::JSONObject schema;
-		schema.setVal("type", makeString("object"));
-		Common::JSONObject tool;
-		tool.setVal("name", makeString(kTools[i].name));
-		tool.setVal("description", makeString(kTools[i].desc));
-		tool.setVal("inputSchema", new Common::JSONValue(schema));
-		tools.push_back(new Common::JSONValue(tool));
+	// list_inventory
+	{
+		Common::JSONObject props;
+		addTool("list_inventory",
+			"List all inventory items owned by the player.",
+			makeToolSchema(props));
+	}
+
+	// list_scene_interactables
+	{
+		Common::JSONObject props;
+		props.setVal("includePlaces", makeProp("boolean", "Include walk-box places in result (default true)"));
+		props.setVal("includeChoices", makeProp("boolean", "Include verb-slot choices in result (default true)"));
+		addTool("list_scene_interactables",
+			"List objects, people, walk-box places, and verb choices in the current room. "
+			"The 'id' field of each entry is used as targetId in execute_action and move_to.",
+			makeToolSchema(props));
+	}
+
+	// execute_action
+	{
+		Common::JSONObject props;
+		props.setVal("verbId", makeProp("integer", "Verb ID from choices[].verbId (e.g. 13 for 'Talk to', 9 for 'Look at', 11 for 'Pick up')"));
+		props.setVal("action", makeProp("string", "Verb label string (e.g. 'Talk to', 'Look at', 'Pick up'). Provide verbId OR action, not both."));
+		props.setVal("targetId", makeProp("string", "Entity id to act on — the 'id' field from objects[], people[], or inventory items (e.g. 'obj:955', 'actor:1', 'inv:42')"));
+		props.setVal("withId", makeProp("string", "Second object for 'Use X with Y' actions — entity id of the instrument item (e.g. 'inv:42')"));
+		const char *req[] = {"targetId"};
+		addTool("execute_action",
+			"Execute a verb action on a scene object, actor, or inventory item. "
+			"Provide verbId OR action to specify the verb (required). "
+			"targetId is required and must be the 'id' field from list_scene_interactables or list_inventory.",
+			makeToolSchema(props, req, 1));
+	}
+
+	// respond_to_choice
+	{
+		Common::JSONObject props;
+		props.setVal("choiceId", makeProp("string", "Choice id from choices[].id in list_scene_interactables (e.g. 'choice:verbslot:7')"));
+		props.setVal("index", makeProp("integer", "0-based index into the active choices list (alternative to choiceId)"));
+		addTool("respond_to_choice",
+			"Select a verb-slot choice. Provide choiceId (the 'id' from choices[] in list_scene_interactables, "
+			"e.g. 'choice:verbslot:7') OR index (0-based position in the choices list).",
+			makeToolSchema(props));
+	}
+
+	// move_to
+	{
+		Common::JSONObject props;
+		props.setVal("targetId", makeProp("string", "Walk-box or entity id to walk toward — use 'id' from places[] (e.g. 'place:box:2'), objects[] (e.g. 'obj:421'), or people[] (e.g. 'actor:1') in list_scene_interactables"));
+		props.setVal("x", makeProp("integer", "Explicit X pixel coordinate to walk to (use with y; alternative to targetId)"));
+		props.setVal("y", makeProp("integer", "Explicit Y pixel coordinate to walk to (use with x; alternative to targetId)"));
+		addTool("move_to",
+			"Walk Guybrush to a location. Provide targetId (a 'place:box:N', 'obj:N', or 'actor:N' id from list_scene_interactables) OR explicit x+y pixel coordinates.",
+			makeToolSchema(props));
+	}
+
+	// read_latest_messages
+	{
+		Common::JSONObject props;
+		props.setVal("sinceSeq", makeProp("integer", "Only return messages with seq > this value; use latestSeq from a prior response to get only new messages"));
+		props.setVal("limit", makeProp("integer", "Maximum number of messages to return (default 30, max 200)"));
+		addTool("read_latest_messages",
+			"Read recent dialogue and system messages. Pass sinceSeq from the previous latestSeq to get only new messages.",
+			makeToolSchema(props));
 	}
 
 	Common::JSONObject result;
