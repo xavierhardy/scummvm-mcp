@@ -22,12 +22,80 @@
 
 #if defined(POSIX)
 #include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
+// Avoid including system socket headers directly to prevent conflicts with
+// common/forbidden.h in engine code. Forward-declare the minimal functions
+// and types we need, and define a sockaddr_in layout compatible with
+// common platforms (Linux and BSD/macOS).
+extern "C" {
+    int fcntl(int, int, ...);
+    ssize_t read(int, void *, size_t);
+    ssize_t write(int, const void *, size_t);
+
+    int socket(int domain, int type, int protocol);
+    int setsockopt(int socket, int level, int option_name, const void *option_value, unsigned int option_len);
+    int bind(int socket, const void *address, unsigned int address_len);
+    int listen(int socket, int backlog);
+    int accept(int socket, void *address, unsigned int *address_len);
+    ssize_t recv(int socket, void *buf, size_t len, int flags);
+    ssize_t send(int socket, const void *buf, size_t len, int flags);
+    int close(int fd);
+    unsigned long inet_addr(const char *cp);
+    int inet_pton(int af, const char *src, void *dst);
+}
+
+#ifndef AF_INET
+#define AF_INET 2
+#endif
+#ifndef SOCK_STREAM
+#define SOCK_STREAM 1
+#endif
+#ifndef SOL_SOCKET
+#define SOL_SOCKET 1
+#endif
+#ifndef SO_REUSEADDR
+#define SO_REUSEADDR 2
+#endif
+#ifndef INADDR_ANY
+#define INADDR_ANY 0
+#endif
+#ifndef SHUT_RDWR
+#define SHUT_RDWR 2
+#endif
+
+#ifndef O_NONBLOCK
+#define O_NONBLOCK 04000
+#endif
+#ifndef F_GETFL
+#define F_GETFL 3
+#endif
+#ifndef F_SETFL
+#define F_SETFL 4
+#endif
+#ifndef EAGAIN
+#define EAGAIN 11
+#endif
+#ifndef EWOULDBLOCK
+#define EWOULDBLOCK EAGAIN
+#endif
+
+// Minimal sockaddr_in definition. On BSD/macOS a leading sin_len is present.
+#if defined(__APPLE__) || defined(__MACH__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+typedef unsigned char sa_len_t;
+typedef unsigned short sa_family_t;
+struct in_addr { unsigned long s_addr; };
+struct sockaddr_in { sa_len_t sin_len; sa_family_t sin_family; unsigned short sin_port; struct in_addr sin_addr; char sin_zero[8]; };
+#else
+typedef unsigned short sa_family_t;
+struct in_addr { unsigned long s_addr; };
+struct sockaddr_in { sa_family_t sin_family; unsigned short sin_port; struct in_addr sin_addr; char sin_zero[8]; };
+#endif
+
+#ifndef htons
+static inline unsigned short htons(unsigned short x) {
+    return (unsigned short)((((unsigned short)x & 0xff) << 8) | (((unsigned short)x & 0xff00) >> 8));
+}
+#endif
+
 #endif
 
 namespace Scumm {
