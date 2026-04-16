@@ -157,6 +157,25 @@ static Common::String lowerTrimmed(const Common::String &s) {
 	return out;
 }
 
+static Common::JSONValue *wrapInMcpContent(Common::JSONValue *result) {
+	if (!result)
+		return nullptr;
+	bool isError = result->isObject() && result->asObject().contains("error");
+	Common::String json = result->stringify();
+	delete result;
+
+	Common::JSONObject textContent;
+	textContent.setVal("type", makeString("text"));
+	textContent.setVal("text", makeString(json));
+	Common::JSONArray contentArray;
+	contentArray.push_back(new Common::JSONValue(textContent));
+	Common::JSONObject out;
+	out.setVal("content", new Common::JSONValue(contentArray));
+	if (isError)
+		out.setVal("isError", makeBool(true));
+	return new Common::JSONValue(out);
+}
+
 } // namespace
 
 MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
@@ -588,26 +607,26 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 	if (!isMonkey1()) {
 		Common::JSONObject err;
 		err.setVal("error", makeString("Tool is only available for Monkey Island 1"));
-		return new Common::JSONValue(err);
+		return wrapInMcpContent(new Common::JSONValue(err));
 	}
 
 	if (name == "list_inventory")
-		return toolListInventory(*argsVal);
+		return wrapInMcpContent(toolListInventory(*argsVal));
 	if (name == "list_scene_interactables")
-		return toolListSceneInteractables(*argsVal);
+		return wrapInMcpContent(toolListSceneInteractables(*argsVal));
 	if (name == "execute_action")
-		return toolExecuteAction(*argsVal);
+		return wrapInMcpContent(toolExecuteAction(*argsVal));
 	if (name == "respond_to_choice")
-		return toolRespondToChoice(*argsVal);
+		return wrapInMcpContent(toolRespondToChoice(*argsVal));
 	if (name == "move_to")
-		return toolMoveTo(*argsVal);
+		return wrapInMcpContent(toolMoveTo(*argsVal));
 	if (name == "read_latest_messages")
-		return toolReadLatestMessages(*argsVal);
+		return wrapInMcpContent(toolReadLatestMessages(*argsVal));
 
 	Common::JSONObject err;
 	err.setVal("error", makeString("Unknown tool"));
 	err.setVal("name", makeString(name));
-	return new Common::JSONValue(err);
+	return wrapInMcpContent(new Common::JSONValue(err));
 }
 
 Common::JSONValue *MonkeyMcpBridge::toolListInventory(const Common::JSONValue &) {
