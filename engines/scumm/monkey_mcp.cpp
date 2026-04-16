@@ -21,11 +21,11 @@
 #include <cstring>
 
 #if defined(POSIX)
+#include <errno.h>
 extern "C" {
     int fcntl(int, int, ...);
     ssize_t read(int, void *, size_t);
     ssize_t write(int, const void *, size_t);
-    int errno;
 }
 #ifndef O_NONBLOCK
 #define O_NONBLOCK 04000
@@ -86,22 +86,34 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	  _stdoutFd(-1),
 	  _nextMessageSeq(1),
 	  _frameCounter(0) {
-	if (!_vm)
+	debug("monkey_mcp: ctor start, vm=%p", vm);
+	if (!_vm) {
+		debug("monkey_mcp: no vm, returning");
 		return;
+	}
 
-	_enabled = isMonkey1() && ConfMan.getBool("monkey_mcp");
-	if (!_enabled)
+	bool confVal = ConfMan.getBool("monkey_mcp");
+	debug("monkey_mcp: isMonkey1=%d, confVal=%d", (int)isMonkey1(), (int)confVal);
+
+	_enabled = isMonkey1() && confVal;
+	debug("monkey_mcp: enabled=%d", (int)_enabled);
+	if (!_enabled) {
 		return;
+	}
 
 #if defined(POSIX)
 	_stdinFd = 0;
 	_stdoutFd = 1;
 	int flags = fcntl(_stdinFd, F_GETFL, 0);
-	if (flags >= 0)
-		fcntl(_stdinFd, F_SETFL, flags | O_NONBLOCK);
+	debug("monkey_mcp: fcntl(F_GETFL) returned %d", flags);
+	if (flags >= 0) {
+		int r = fcntl(_stdinFd, F_SETFL, flags | O_NONBLOCK);
+		debug("monkey_mcp: fcntl(F_SETFL) returned %d", r);
+	}
 #else
 	_enabled = false;
 #endif
+	debug("monkey_mcp: ctor done");
 }
 
 MonkeyMcpBridge::~MonkeyMcpBridge() {

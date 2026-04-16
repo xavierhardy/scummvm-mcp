@@ -457,7 +457,9 @@ ScummEngine::ScummEngine(OSystem *syst, const DetectorResult &dr)
 
 	_enableHECompetitiveOnlineMods = ConfMan.getBool("enable_competitive_mods");
 
+	debug("monkey_mcp: about to create bridge");
 	_monkeyMcp = new MonkeyMcpBridge(this);
+	debug("monkey_mcp: bridge created %p", _monkeyMcp);
 }
 
 
