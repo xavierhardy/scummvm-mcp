@@ -256,6 +256,8 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	  _initialized(false),
 	  _listenFd(-1),
 	  _clientFd(-1),
+	  _getSseFd(-1),
+	  _getSseLastHeartbeatFrame(0),
 	  _nextMessageSeq(1),
 	  _frameCounter(0),
 	  _sseActive(false),
@@ -326,6 +328,7 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 MonkeyMcpBridge::~MonkeyMcpBridge() {
 	delete _ssePendingId;
 #if defined(POSIX)
+	if (_getSseFd >= 0) { close(_getSseFd); _getSseFd = -1; }
 	if (_clientFd >= 0) { close(_clientFd); _clientFd = -1; }
 	if (_listenFd >= 0) { close(_listenFd); _listenFd = -1; }
 #endif
@@ -340,7 +343,30 @@ void MonkeyMcpBridge::pump() {
 	++_frameCounter;
 
 #if defined(POSIX)
-	// Accept new client only when idle (no SSE stream, no existing client).
+	// Drive persistent GET SSE heartbeats; detect disconnects.
+	if (_getSseFd >= 0) {
+		// Check if client disconnected.
+		char probe[1];
+		ssize_t r = recv(_getSseFd, probe, 1, 0);
+		if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+			debug("monkey_mcp: GET SSE client disconnected");
+			close(_getSseFd); _getSseFd = -1;
+			_getSseLastHeartbeatFrame = 0;
+		} else if (_frameCounter - _getSseLastHeartbeatFrame >= 60) {
+			// Send keepalive comment.
+			Common::String hb = ": keepalive\n\n";
+			send(_getSseFd, hb.c_str(), hb.size(), 0);
+			_getSseLastHeartbeatFrame = _frameCounter;
+		}
+	}
+
+	// While act/answer SSE is active, drive it each frame.
+	if (_sseActive) {
+		pumpSse();
+		// Don't return — still accept POST connections below.
+	}
+
+	// Accept a new POST connection if none is active (GET SSE may be open in parallel).
 	if (_listenFd >= 0 && _clientFd < 0 && !_sseActive) {
 		int newfd = accept(_listenFd, nullptr, nullptr);
 		if (newfd >= 0) {
@@ -352,11 +378,7 @@ void MonkeyMcpBridge::pump() {
 		}
 	}
 
-	// While SSE is active, drive the stream each frame.
-	if (_sseActive) {
-		pumpSse();
-		return;
-	}
+	if (_sseActive) return; // already pumped SSE above
 
 	if (_clientFd < 0) return;
 
@@ -547,7 +569,8 @@ void MonkeyMcpBridge::writeHttpResponse(int status, const Common::String &conten
 	const char *statusText = (status == 200) ? "OK"
 	                       : (status == 202) ? "Accepted"
 	                       : (status == 404) ? "Not Found"
-	                       : (status == 405) ? "Method Not Allowed" : "OK";
+	                       : (status == 405) ? "Method Not Allowed"
+	                       : (status == 409) ? "Conflict" : "OK";
 	Common::String response = Common::String::format("HTTP/1.1 %d %s\r\n", status, statusText);
 	if (!contentType.empty())
 		response += "Content-Type: " + contentType + "\r\n";
@@ -598,14 +621,25 @@ void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
 		return;
 	}
 
-	// GET is allowed for the state tool (quick status check without SSE).
+	// GET: establish persistent SSE stream for server-to-client notifications.
 	if (method == "GET") {
-		debug("monkey_mcp: GET request (state shorthand)");
-		Common::JSONValue *stateResult = toolState(Common::JSONValue(Common::JSONObject()));
-		Common::String json = stateResult->stringify();
-		delete stateResult;
-		debug("monkey_mcp: state JSON length=%d, first 100 chars: %.100s", (int)json.size(), json.c_str());
-		writeHttpResponse(200, "application/json", json);
+		if (_getSseFd >= 0) {
+			// Already have a GET SSE connection; reject the new one.
+			debug("monkey_mcp: GET SSE already active, rejecting duplicate");
+			writeHttpResponse(409, "", "");
+			return;
+		}
+		debug("monkey_mcp: GET SSE connection established (fd=%d)", _clientFd);
+		// Send SSE headers and keep the connection alive.
+		sendRaw("HTTP/1.1 200 OK\r\n"
+		        "Content-Type: text/event-stream\r\n"
+		        "Cache-Control: no-cache\r\n"
+		        "Connection: keep-alive\r\n"
+		        "\r\n");
+		// Promote _clientFd to _getSseFd so pump() drives it independently.
+		_getSseFd = _clientFd;
+		_clientFd = -1;
+		_getSseLastHeartbeatFrame = _frameCounter;
 		return;
 	}
 

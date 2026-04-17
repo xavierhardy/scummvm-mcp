@@ -58,7 +58,9 @@ private:
 	bool _enabled;
 	bool _initialized;
 	int _listenFd;
-	int _clientFd;
+	int _clientFd;       // short-lived POST connection
+	int _getSseFd;       // persistent GET SSE connection for server notifications
+	uint32 _getSseLastHeartbeatFrame;
 	Common::String _inBuffer;
 	Common::String _sessionId;
 
