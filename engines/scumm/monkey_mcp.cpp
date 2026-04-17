@@ -503,8 +503,7 @@ void MonkeyMcpBridge::writeHttpResponse(int status, const Common::String &conten
 	Common::String response = Common::String::format("HTTP/1.1 %d %s\r\n", status, statusText);
 	if (!contentType.empty())
 		response += "Content-Type: " + contentType + "\r\n";
-	if (!body.empty())
-		response += Common::String::format("Content-Length: %d\r\n", (int)body.size());
+	response += Common::String::format("Content-Length: %d\r\n", (int)body.size());
 	if (!extraHeaders.empty())
 		response += extraHeaders;
 	response += "\r\n";
