@@ -1029,6 +1029,7 @@ void MonkeyMcpBridge::startSse(const Common::JSONValue *id) {
 	_ssePendingId = id ? new Common::JSONValue(*id) : nullptr;
 	_sseStartFrame = _frameCounter;
 	_sseLastHeartbeatFrame = _frameCounter;
+	debug("monkey_mcp: SSE started, frame=%d", _sseStartFrame);
 	writeSseHeaders();
 }
 
@@ -1050,6 +1051,7 @@ void MonkeyMcpBridge::pumpSse() {
 #if defined(POSIX)
 	if (_clientFd < 0) {
 		// Client disconnected; abandon SSE.
+		debug("monkey_mcp: SSE client disconnected");
 		_sseActive = false;
 		delete _ssePendingId; _ssePendingId = nullptr;
 		return;
@@ -1086,12 +1088,17 @@ void MonkeyMcpBridge::pumpSse() {
 
 	// Timeout after 600 frames (~20 s at 30 fps).
 	if (_frameCounter - _sseStartFrame > 600) {
+		debug("monkey_mcp: SSE timeout after 600 frames");
 		closeSse(false, "action timed out");
 		return;
 	}
 
-	if (isActionDone())
+	uint32 elapsed = _frameCounter - _sseStartFrame;
+	bool done = isActionDone();
+	if (done) {
+		debug("monkey_mcp: action completed at frame %d (elapsed=%d)", _frameCounter, elapsed);
 		closeSse(true);
+	}
 #endif
 }
 
@@ -1231,14 +1238,31 @@ Actor *MonkeyMcpBridge::getEgoActor() const {
 
 bool MonkeyMcpBridge::isActionDone() const {
 	// Require at least 3 frames to have elapsed since the action started.
-	if (_frameCounter - _sseStartFrame < 3) return false;
+	if (_frameCounter - _sseStartFrame < 3) {
+		if ((_frameCounter - _sseStartFrame) % 30 == 0)
+			debug("monkey_mcp: action not done (frame %d, elapsed=%d < 3)",
+				_frameCounter, _frameCounter - _sseStartFrame);
+		return false;
+	}
 	// Ego must not be walking.
 	Actor *ego = getEgoActor();
-	if (ego && ego->_moving) return false;
+	if (ego && ego->_moving) {
+		if ((_frameCounter - _sseStartFrame) % 30 == 0)
+			debug("monkey_mcp: action not done (ego still moving at frame %d)", _frameCounter);
+		return false;
+	}
 	// No speech ongoing.
-	if (_vm->_talkDelay > 0) return false;
+	if (_vm->_talkDelay > 0) {
+		if ((_frameCounter - _sseStartFrame) % 30 == 0)
+			debug("monkey_mcp: action not done (talkDelay=%d at frame %d)", _vm->_talkDelay, _frameCounter);
+		return false;
+	}
 	// User input must be enabled (covers cutscenes).
-	if (_vm->_userPut <= 0) return false;
+	if (_vm->_userPut <= 0) {
+		if ((_frameCounter - _sseStartFrame) % 30 == 0)
+			debug("monkey_mcp: action not done (userPut=%d at frame %d)", _vm->_userPut, _frameCounter);
+		return false;
+	}
 	return true;
 }
 
