@@ -148,6 +148,54 @@ static Common::String lowerTrimmed(const Common::String &s) {
 	return out;
 }
 
+// Sanitize string for JSON: replace invalid UTF-8 with replacement character.
+static Common::String sanitizeForJson(const Common::String &s) {
+	Common::String out;
+	for (size_t i = 0; i < s.size(); ++i) {
+		unsigned char c = (unsigned char)s[i];
+		// Valid ASCII
+		if (c < 0x80) {
+			out += (char)c;
+		}
+		// Multi-byte UTF-8 sequence start (0xC0-0xFD)
+		else if ((c & 0xE0) == 0xC0) {
+			// 2-byte sequence: check next byte
+			if (i + 1 < s.size() && ((unsigned char)s[i+1] & 0xC0) == 0x80) {
+				out += (char)c;
+				out += s[++i];
+			} else {
+				out += '\xEF'; out += '\xBF'; out += '\xBD'; // U+FFFD replacement
+			}
+		}
+		else if ((c & 0xF0) == 0xE0) {
+			// 3-byte sequence
+			if (i + 2 < s.size() && ((unsigned char)s[i+1] & 0xC0) == 0x80 && ((unsigned char)s[i+2] & 0xC0) == 0x80) {
+				out += (char)c;
+				out += s[++i];
+				out += s[++i];
+			} else {
+				out += '\xEF'; out += '\xBF'; out += '\xBD';
+			}
+		}
+		else if ((c & 0xF8) == 0xF0) {
+			// 4-byte sequence
+			if (i + 3 < s.size() && ((unsigned char)s[i+1] & 0xC0) == 0x80 && ((unsigned char)s[i+2] & 0xC0) == 0x80 && ((unsigned char)s[i+3] & 0xC0) == 0x80) {
+				out += (char)c;
+				out += s[++i];
+				out += s[++i];
+				out += s[++i];
+			} else {
+				out += '\xEF'; out += '\xBF'; out += '\xBD';
+			}
+		}
+		else {
+			// Invalid continuation byte or other invalid byte
+			out += '\xEF'; out += '\xBF'; out += '\xBD';
+		}
+	}
+	return out;
+}
+
 // Returns the display name of an object/actor. If the object has no name,
 // returns an empty string (callers decide whether to skip or synthesise a name).
 static Common::String getObjName(ScummEngine *vm, int obj) {
@@ -804,10 +852,11 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 	Common::JSONArray inventory, objects, actors;
 	for (uint i = 0; i < entities.size(); ++i) {
 		const NamedEntity &ne = entities[i];
+		Common::String safe = sanitizeForJson(ne.displayName);
 		switch (ne.kind) {
-		case NamedEntity::kInventory: inventory.push_back(makeString(ne.displayName)); break;
-		case NamedEntity::kObject:    objects.push_back(makeString(ne.displayName));   break;
-		case NamedEntity::kActor:     actors.push_back(makeString(ne.displayName));    break;
+		case NamedEntity::kInventory: inventory.push_back(makeString(safe)); break;
+		case NamedEntity::kObject:    objects.push_back(makeString(safe));   break;
+		case NamedEntity::kActor:     actors.push_back(makeString(safe));    break;
 		}
 	}
 	out.setVal("inventory", new Common::JSONValue(inventory));
@@ -825,7 +874,8 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 		Common::String label = lowerTrimmed((const char *)textBuf);
 		if (label.empty()) continue;
-		verbsArr.push_back(makeString(normalizeActionName(label)));
+		Common::String safe = sanitizeForJson(normalizeActionName(label));
+		verbsArr.push_back(makeString(safe));
 	}
 	out.setVal("verbs", new Common::JSONValue(verbsArr));
 
@@ -837,10 +887,13 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		if (m.actorId >= 0) {
 			int objId = _vm->actorToObj(m.actorId);
 			Common::String actorName = getObjName(_vm, objId);
-			if (!actorName.empty())
-				entry.setVal("actor", makeString(lowerTrimmed(actorName)));
+			if (!actorName.empty()) {
+				Common::String safe = sanitizeForJson(lowerTrimmed(actorName));
+				entry.setVal("actor", makeString(safe));
+			}
 		}
-		entry.setVal("text", makeString(m.text));
+		Common::String safeText = sanitizeForJson(m.text);
+		entry.setVal("text", makeString(safeText));
 		msgsArr.push_back(new Common::JSONValue(entry));
 	}
 	out.setVal("messages", new Common::JSONValue(msgsArr));
@@ -860,7 +913,8 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		if (!hasPendingQuestion()) break; // only include choices when in question mode
 		Common::JSONObject choice;
 		choice.setVal("id",    makeInt(++choiceCount));
-		choice.setVal("label", makeString(Common::String((const char *)textBuf)));
+		Common::String safe = sanitizeForJson(Common::String((const char *)textBuf));
+		choice.setVal("label", makeString(safe));
 		choiceList.push_back(new Common::JSONValue(choice));
 	}
 	if (choiceCount > 0) {
@@ -1085,11 +1139,15 @@ void MonkeyMcpBridge::pumpSse() {
 		if (m.actorId >= 0) {
 			int objId = _vm->actorToObj(m.actorId);
 			Common::String actorName = getObjName(_vm, objId);
-			if (!actorName.empty())
-				params.setVal("actor", makeString(lowerTrimmed(actorName)));
+			if (!actorName.empty()) {
+				Common::String safe = sanitizeForJson(lowerTrimmed(actorName));
+				params.setVal("actor", makeString(safe));
+			}
 		}
-		params.setVal("text", makeString(m.text));
-		params.setVal("type", makeString(m.type));
+		Common::String safeText = sanitizeForJson(m.text);
+		params.setVal("text", makeString(safeText));
+		Common::String safeType = sanitizeForJson(m.type);
+		params.setVal("type", makeString(safeType));
 		n.setVal("params", new Common::JSONValue(params));
 		Common::JSONValue *nval = new Common::JSONValue(n);
 		emitSseData(nval->stringify());
@@ -1185,7 +1243,8 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 		if (!wasPresent) {
 			Common::String name = getObjName(_vm, obj);
 			if (name.empty()) name = Common::String::format("obj-%d", obj);
-			added.push_back(makeString(lowerTrimmed(name)));
+			Common::String safe = sanitizeForJson(lowerTrimmed(name));
+			added.push_back(makeString(safe));
 		}
 	}
 	if (!added.empty())
@@ -1222,7 +1281,8 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 			if (!textBuf[0]) continue;
 			Common::JSONObject choice;
 			choice.setVal("id",    makeInt(++choiceCount));
-			choice.setVal("label", makeString(Common::String((const char *)textBuf)));
+			Common::String safe = sanitizeForJson(Common::String((const char *)textBuf));
+			choice.setVal("label", makeString(safe));
 			choiceList.push_back(new Common::JSONValue(choice));
 		}
 		if (choiceCount > 0) {
