@@ -404,6 +404,8 @@ void MonkeyMcpBridge::pump() {
 		                           bufLen - headersLen - contentLength);
 
 		body.trim();
+		debug("monkey_mcp: HTTP %s request, session='%s', body=%d bytes",
+			method.c_str(), sessionHdr.c_str(), (int)body.size());
 		handleHttpRequest(method, sessionHdr, body);
 
 		// handleHttpRequest may have started SSE (or closed the connection).
@@ -535,10 +537,14 @@ void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
 	if (!body.empty()) {
 		// Peek at method to decide if session check applies.
 		bool isInit = (body.contains("\"initialize\""));
-		if (!isInit && !_sessionId.empty() &&
-		    !sessionHdr.empty() && sessionHdr != _sessionId) {
-			writeHttpResponse(404, "", "");
-			return;
+		if (!isInit && !_sessionId.empty()) {
+			// Non-initialize request after session created: must provide matching session ID.
+			if (sessionHdr.empty() || sessionHdr != _sessionId) {
+				debug("monkey_mcp: session validation failed: expected '%s', got '%s'",
+					_sessionId.c_str(), sessionHdr.empty() ? "(empty)" : sessionHdr.c_str());
+				writeHttpResponse(404, "", "");
+				return;
+			}
 		}
 	}
 
@@ -610,6 +616,7 @@ Common::JSONValue *MonkeyMcpBridge::handleInitialize(const Common::JSONValue &) 
 	_sessionId = Common::String::format("monkey1-%08x%08x",
 	             (unsigned)_frameCounter,
 	             (unsigned)((uintptr_t)this >> 4));
+	debug("monkey_mcp: initialize: generated session ID '%s'", _sessionId.c_str());
 
 	Common::JSONObject o;
 	o.setVal("protocolVersion", makeString("2025-03-26"));
