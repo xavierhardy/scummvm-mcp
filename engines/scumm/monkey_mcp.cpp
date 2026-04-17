@@ -602,9 +602,8 @@ void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
 	if (method == "GET") {
 		debug("monkey_mcp: GET request (state shorthand)");
 		Common::JSONValue *stateResult = toolState(Common::JSONValue(Common::JSONObject()));
-		Common::JSONValue *wrapped = wrapContent(stateResult);
-		Common::String json = wrapped->stringify();
-		delete wrapped;
+		Common::String json = stateResult->stringify();
+		delete stateResult;
 		writeHttpResponse(200, "application/json", json);
 		return;
 	}
