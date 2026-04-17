@@ -550,17 +550,22 @@ void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
 		return;
 	}
 
-	// No standalone SSE GET support.
+	// GET is allowed for the state tool (quick status check without SSE).
 	if (method == "GET") {
-		writeHttpResponse(405, "", "");
+		debug("monkey_mcp: GET request (state shorthand)");
+		Common::JSONValue *stateResult = toolState(Common::JSONValue(Common::JSONObject()));
+		Common::JSONValue *wrapped = wrapContent(stateResult);
+		Common::String json = wrapped->stringify();
+		delete wrapped;
+		writeHttpResponse(200, "application/json", json);
 		return;
 	}
 
-	// POST: validate session (skip for initialize which creates the session).
-	if (!body.empty()) {
-		// Peek at method to decide if session check applies.
-		bool isInit = (body.contains("\"initialize\""));
-		if (!isInit && !_sessionId.empty()) {
+	// Validate session for non-initialize requests (POST with body or GET).
+	if (!_sessionId.empty()) {
+		// Check if this is an initialize request (which creates the session).
+		bool isInit = (method == "POST" && body.contains("\"initialize\""));
+		if (!isInit) {
 			// Non-initialize request after session created: must provide matching session ID.
 			if (sessionHdr.empty() || sessionHdr != _sessionId) {
 				debug("monkey_mcp: session validation failed: expected '%s', got '%s'",
