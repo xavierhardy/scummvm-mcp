@@ -16,24 +16,10 @@
 namespace Scumm {
 
 class ScummEngine;
+class Actor;
 
 class MonkeyMcpBridge {
 public:
-	enum EntityKind {
-		kEntityInvalid,
-		kEntityObject,
-		kEntityActor,
-		kEntityInventory,
-		kEntityPlaceBox,
-		kEntityChoiceVerbSlot
-	};
-
-	struct ParsedEntityId {
-		EntityKind kind;
-		int value;
-		ParsedEntityId() : kind(kEntityInvalid), value(-1) {}
-	};
-
 	explicit MonkeyMcpBridge(ScummEngine *vm);
 	~MonkeyMcpBridge();
 
@@ -43,12 +29,9 @@ public:
 	void onSystemLine(const Common::String &text);
 	void onDialogPrompt(const Common::String &text);
 
-	// Unit-test friendly helpers
-	static bool parseEntityId(const Common::String &id, ParsedEntityId &parsed);
 	static Common::String normalizeActionName(const Common::String &action);
 
-public:
-	// Helper to access protected getObjOrActorName from a friend
+	// Accessor for protected getObjOrActorName used by safeObjName()
 	const byte *callGetObjOrActorName(int obj) const {
 		return _vm ? _vm->getObjOrActorName(obj) : nullptr;
 	}
@@ -63,46 +46,86 @@ private:
 		Common::String text;
 	};
 
+	// Flat record produced by buildEntityMap()
+	struct NamedEntity {
+		enum Kind { kInventory, kObject, kActor };
+		Kind kind;
+		int numId;                  // obj_nr for objects/inventory, actor._number for actors
+		Common::String displayName; // deduplicated name (e.g. "sword" or "sword-42")
+	};
+
 	ScummEngine *_vm;
 	bool _enabled;
 	bool _initialized;
-	int _stdinFd;
-	int _stdoutFd;
 	int _listenFd;
 	int _clientFd;
 	Common::String _inBuffer;
+	Common::String _sessionId;
 
 	Common::Array<MessageEntry> _messages;
 	uint64 _nextMessageSeq;
 	uint32 _frameCounter;
 
-	Common::Array<Common::String> _outQueue; // buffered outgoing JSON strings when no client connected
-	static const uint kMaxOutQueue = 512;
+	// SSE streaming state (active while act/answer is executing)
+	bool _sseActive;
+	Common::JSONValue *_ssePendingId;    // owned deep copy of JSON-RPC id
+	uint32 _sseStartFrame;
+	uint32 _sseLastHeartbeatFrame;
+	Common::Array<uint16> _ssePreInventory;
+	int _ssePreRoom;
+	int _ssePrePosX, _ssePrePosY;
 
+	// ---- Lifecycle ----
 	bool isMonkey1() const;
 	void pushMessage(const char *type, int actorId, const Common::String &text);
 
-	void handleJsonLine(const Common::String &line);
-	Common::JSONValue *handleRequest(const Common::JSONValue &req);
+	// ---- Transport ----
+	void handleHttpRequest(const Common::String &method,
+	                       const Common::String &sessionHdr,
+	                       const Common::String &body);
+	void writeHttpResponse(int status, const Common::String &contentType,
+	                       const Common::String &body,
+	                       const Common::String &extraHeaders = "");
+	bool sendRaw(const Common::String &data);
 
+	// SSE helpers (keep _clientFd open, no Content-Length)
+	void writeSseHeaders();
+	void emitSseData(const Common::String &data);
+	void emitSseComment(const Common::String &comment);
+
+	// ---- JSON-RPC dispatch ----
+	void handleJsonRpc(const Common::String &body);
+	Common::JSONValue *handleRequest(const Common::JSONValue &req);
 	Common::JSONValue *handleInitialize(const Common::JSONValue &req);
 	Common::JSONValue *handleToolsList();
 	Common::JSONValue *handleToolCall(const Common::JSONValue &req);
 
-	Common::JSONValue *toolListInventory(const Common::JSONValue &args);
-	Common::JSONValue *toolListSceneInteractables(const Common::JSONValue &args);
-	Common::JSONValue *toolExecuteAction(const Common::JSONValue &args);
-	Common::JSONValue *toolRespondToChoice(const Common::JSONValue &args);
-	Common::JSONValue *toolMoveTo(const Common::JSONValue &args);
-	Common::JSONValue *toolReadLatestMessages(const Common::JSONValue &args);
+	// ---- Tools ----
+	Common::JSONValue *toolState(const Common::JSONValue &args);
+	void toolAct(const Common::JSONValue &args, const Common::JSONValue *id);
+	void toolAnswer(const Common::JSONValue &args, const Common::JSONValue *id);
 
-	void writeJsonRpcResult(const Common::JSONValue *id, Common::JSONValue *result);
-	void writeJsonRpcError(const Common::JSONValue *id, int code, const Common::String &msg);
-	void writeJson(Common::JSONValue *value);
+	// ---- SSE lifecycle ----
+	void pumpSse();
+	void startSse(const Common::JSONValue *id);
+	void closeSse(bool success, const Common::String &errorMsg = "");
+	void snapshotPreAction();
+	Common::JSONObject buildStateChanges() const;
 
-	int resolveTargetToObjectId(const Common::String &id, bool allowPlace, bool *isPlace = nullptr, int *placeBox = nullptr) const;
+	// ---- Game state helpers ----
+	Actor *getEgoActor() const;
+	bool hasPendingQuestion() const;
+	bool isActionDone() const;
+
+	void buildEntityMap(Common::Array<NamedEntity> &entities) const;
+	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
 	bool resolveVerb(const Common::String &action, int &verbId) const;
 	void buildChoices(Common::JSONArray &choices) const;
+
+	// ---- Response helpers ----
+	void writeJsonRpcResult(const Common::JSONValue *id, Common::JSONValue *result,
+	                        const Common::String &extraHeaders = "");
+	void writeJsonRpcError(const Common::JSONValue *id, int code, const Common::String &msg);
 };
 
 } // End of namespace Scumm

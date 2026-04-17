@@ -8,6 +8,8 @@
 
 #include "common/config-manager.h"
 #include "common/debug.h"
+#include "common/hashmap.h"
+#include "common/hash-str.h"
 
 #include "scumm/actor.h"
 #include "scumm/detection.h"
@@ -24,23 +26,22 @@
 #include <errno.h>
 // Avoid including system socket headers directly to prevent conflicts with
 // common/forbidden.h in engine code. Forward-declare the minimal functions
-// and types we need, and define a sockaddr_in layout compatible with
-// common platforms (Linux and BSD/macOS).
+// and types we need.
 extern "C" {
-    int fcntl(int, int, ...);
-    ssize_t read(int, void *, size_t);
-    ssize_t write(int, const void *, size_t);
+	int fcntl(int, int, ...);
+	ssize_t read(int, void *, size_t);
+	ssize_t write(int, const void *, size_t);
 
-    int socket(int domain, int type, int protocol);
-    int setsockopt(int socket, int level, int option_name, const void *option_value, unsigned int option_len);
-    int bind(int socket, const void *address, unsigned int address_len);
-    int listen(int socket, int backlog);
-    int accept(int socket, void *address, unsigned int *address_len);
-    ssize_t recv(int socket, void *buf, size_t len, int flags);
-    ssize_t send(int socket, const void *buf, size_t len, int flags);
-    int close(int fd);
-    unsigned long inet_addr(const char *cp);
-    int inet_pton(int af, const char *src, void *dst);
+	int socket(int domain, int type, int protocol);
+	int setsockopt(int socket, int level, int option_name, const void *option_value, unsigned int option_len);
+	int bind(int socket, const void *address, unsigned int address_len);
+	int listen(int socket, int backlog);
+	int accept(int socket, void *address, unsigned int *address_len);
+	ssize_t recv(int socket, void *buf, size_t len, int flags);
+	ssize_t send(int socket, const void *buf, size_t len, int flags);
+	int close(int fd);
+	unsigned long inet_addr(const char *cp);
+	int inet_pton(int af, const char *src, void *dst);
 }
 
 #ifndef AF_INET
@@ -50,7 +51,6 @@ extern "C" {
 #define SOCK_STREAM 1
 #endif
 #if defined(__APPLE__) || defined(__MACH__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
-// BSD/macOS platform-specific constants
 #ifndef SOL_SOCKET
 #define SOL_SOCKET 0xffff
 #endif
@@ -64,7 +64,6 @@ extern "C" {
 #define EAGAIN 35
 #endif
 #else
-// Linux platform-specific constants
 #ifndef SOL_SOCKET
 #define SOL_SOCKET 1
 #endif
@@ -95,59 +94,51 @@ extern "C" {
 #define EWOULDBLOCK EAGAIN
 #endif
 
-// Minimal sockaddr_in layout. Use unsigned int (4 bytes) for s_addr to match
-// in_addr_t (uint32_t) on all 32/64-bit platforms. On BSD/macOS, sin_family is
-// uint8_t (not uint16_t as on Linux), so the struct offsets differ.
+// Minimal sockaddr_in layout matching the platform ABI.
+// Use unsigned int (4 bytes) for s_addr (= uint32_t on all platforms).
+// On BSD/macOS sin_family is uint8_t; on Linux it is uint16_t.
 #if defined(__APPLE__) || defined(__MACH__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
 struct in_addr { unsigned int s_addr; };
 struct sockaddr_in {
-    unsigned char  sin_len;     // 1 byte, offset 0
-    unsigned char  sin_family;  // 1 byte, offset 1 (uint8_t on BSD!)
-    unsigned short sin_port;    // 2 bytes, offset 2
-    struct in_addr sin_addr;    // 4 bytes, offset 4
-    char           sin_zero[8]; // 8 bytes, offset 8
-};  // 16 bytes total
+	unsigned char  sin_len;
+	unsigned char  sin_family;
+	unsigned short sin_port;
+	struct in_addr sin_addr;
+	char           sin_zero[8];
+};
 #else
 struct in_addr { unsigned int s_addr; };
 struct sockaddr_in {
-    unsigned short sin_family;  // 2 bytes, offset 0
-    unsigned short sin_port;    // 2 bytes, offset 2
-    struct in_addr sin_addr;    // 4 bytes, offset 4
-    char           sin_zero[8]; // 8 bytes, offset 8
-};  // 16 bytes total
+	unsigned short sin_family;
+	unsigned short sin_port;
+	struct in_addr sin_addr;
+	char           sin_zero[8];
+};
 #endif
 
 #ifndef htons
 static inline unsigned short htons(unsigned short x) {
-    return (unsigned short)((((unsigned short)x & 0xff) << 8) | (((unsigned short)x & 0xff00) >> 8));
+	return (unsigned short)((((unsigned short)x & 0xff) << 8) | (((unsigned short)x & 0xff00) >> 8));
 }
 #endif
 
-#endif
+#endif // POSIX
 
 namespace Scumm {
 
+// ---------------------------------------------------------------------------
+// Anonymous-namespace helpers
+// ---------------------------------------------------------------------------
 namespace {
 
 static Common::JSONValue *makeString(const Common::String &s) {
 	return new Common::JSONValue(s);
 }
-
 static Common::JSONValue *makeInt(int v) {
 	return new Common::JSONValue((long long int)v);
 }
-
 static Common::JSONValue *makeBool(bool v) {
 	return new Common::JSONValue(v);
-}
-
-static Common::String safeObjName(ScummEngine *vm, int obj) {
-	// Must be called from MonkeyMcpBridge, which is a friend class.
-	const byte *name = nullptr;
-	if (vm) name = static_cast<Scumm::MonkeyMcpBridge *>(vm->_monkeyMcp)->callGetObjOrActorName(obj);
-	if (!name || !*name)
-		return Common::String::format("unnamed:%d", obj);
-	return Common::String((const char *)name);
 }
 
 static Common::String lowerTrimmed(const Common::String &s) {
@@ -155,6 +146,15 @@ static Common::String lowerTrimmed(const Common::String &s) {
 	out.trim();
 	out.toLowercase();
 	return out;
+}
+
+// Returns the display name of an object/actor. If the object has no name,
+// returns an empty string (callers decide whether to skip or synthesise a name).
+static Common::String getObjName(ScummEngine *vm, int obj) {
+	if (!vm) return "";
+	const byte *name = static_cast<Scumm::MonkeyMcpBridge *>(vm->_monkeyMcp)->callGetObjOrActorName(obj);
+	if (!name || !*name) return "";
+	return Common::String((const char *)name);
 }
 
 static Common::JSONValue *makeProp(const char *type, const char *desc = nullptr) {
@@ -165,7 +165,9 @@ static Common::JSONValue *makeProp(const char *type, const char *desc = nullptr)
 	return new Common::JSONValue(p);
 }
 
-static Common::JSONValue *makeToolSchema(Common::JSONObject &props, const char *const *required = nullptr, int reqCount = 0) {
+static Common::JSONValue *makeToolSchema(Common::JSONObject &props,
+                                          const char *const *required = nullptr,
+                                          int reqCount = 0) {
 	Common::JSONObject schema;
 	schema.setVal("type", makeString("object"));
 	schema.setVal("properties", new Common::JSONValue(props));
@@ -179,69 +181,58 @@ static Common::JSONValue *makeToolSchema(Common::JSONObject &props, const char *
 	return new Common::JSONValue(schema);
 }
 
-static Common::JSONValue *wrapInMcpContent(Common::JSONValue *result) {
-	if (!result)
-		return nullptr;
-	bool isError = result->isObject() && result->asObject().contains("error");
-	Common::String json = result->stringify();
+// Wrap a tool result object in MCP content envelope.
+static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = false) {
+	Common::String json = result ? result->stringify() : "{}";
 	delete result;
-
-	Common::JSONObject textContent;
-	textContent.setVal("type", makeString("text"));
-	textContent.setVal("text", makeString(json));
-	Common::JSONArray contentArray;
-	contentArray.push_back(new Common::JSONValue(textContent));
+	Common::JSONObject text;
+	text.setVal("type", makeString("text"));
+	text.setVal("text", makeString(json));
+	Common::JSONArray arr;
+	arr.push_back(new Common::JSONValue(text));
 	Common::JSONObject out;
-	out.setVal("content", new Common::JSONValue(contentArray));
-	if (isError)
-		out.setVal("isError", makeBool(true));
+	out.setVal("content", new Common::JSONValue(arr));
+	if (isError) out.setVal("isError", makeBool(true));
 	return new Common::JSONValue(out);
 }
 
-} // namespace
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Construction / destruction
+// ---------------------------------------------------------------------------
 
 MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	: _vm(vm),
 	  _enabled(false),
 	  _initialized(false),
-	  _stdinFd(-1),
-	  _stdoutFd(-1),
 	  _listenFd(-1),
 	  _clientFd(-1),
 	  _nextMessageSeq(1),
-	  _frameCounter(0) {
+	  _frameCounter(0),
+	  _sseActive(false),
+	  _ssePendingId(nullptr),
+	  _sseStartFrame(0),
+	  _sseLastHeartbeatFrame(0),
+	  _ssePreRoom(0),
+	  _ssePrePosX(0),
+	  _ssePrePosY(0) {
 	debug("monkey_mcp: ctor start, vm=%p", (void *)vm);
-	if (!_vm) {
-		debug("monkey_mcp: no vm, returning");
-		return;
-	}
+	if (!_vm) return;
 
 	bool confVal = ConfMan.getBool("monkey_mcp");
-	debug("monkey_mcp: isMonkey1=%d, confVal=%d", (int)isMonkey1(), (int)confVal);
-	
 	_enabled = isMonkey1() && confVal;
 	debug("monkey_mcp: enabled=%d", (int)_enabled);
-	if (!_enabled) {
-		return;
-	}
+	if (!_enabled) return;
 
 #if defined(POSIX)
-	// We no longer use stdin/stdout for MCP. Network-only mode will be used when configured.
-	_stdinFd = -1;
-	_stdoutFd = -1;
-
-	// Optional TCP server if configured via scummvm config: monkey_mcp_port and monkey_mcp_host
 	const Common::String activeDomain = ConfMan.getActiveDomainName();
 	int port = ConfMan.getInt("monkey_mcp_port");
-	int portActive = ConfMan.getInt("monkey_mcp_port", activeDomain);
-	bool hasPortInActive = ConfMan.hasKey("monkey_mcp_port", activeDomain);
-	bool mcpEnabledGlobal = ConfMan.getBool("monkey_mcp");
-	bool mcpEnabledActive = ConfMan.getBool("monkey_mcp", activeDomain);
-	Common::String host = ConfMan.hasKey("monkey_mcp_host") ? ConfMan.get("monkey_mcp_host") : Common::String("0.0.0.0");
-	debug("monkey_mcp: activeDomain='%s' monkey_mcp(active)=%d monkey_mcp(global)=%d hasPort(active)=%d port(active)=%d port(globalLookup)=%d",
-		activeDomain.c_str(), (int)mcpEnabledActive, (int)mcpEnabledGlobal, (int)hasPortInActive, portActive, port);
+	Common::String host = ConfMan.hasKey("monkey_mcp_host")
+	                      ? ConfMan.get("monkey_mcp_host")
+	                      : Common::String("127.0.0.1");
+	debug("monkey_mcp: port=%d host=%s", port, host.c_str());
 	if (port > 0) {
-		debug("monkey_mcp: attempting to create TCP listen socket on %s:%d", host.c_str(), port);
 		_listenFd = socket(AF_INET, SOCK_STREAM, 0);
 		if (_listenFd >= 0) {
 			int opt = 1;
@@ -257,9 +248,8 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 				addr.sin_addr.s_addr = INADDR_ANY;
 			} else {
 				if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
-					debug("monkey_mcp: invalid host address '%s'", host.c_str());
-					close(_listenFd);
-					_listenFd = -1;
+					debug("monkey_mcp: invalid host '%s'", host.c_str());
+					close(_listenFd); _listenFd = -1;
 				}
 			}
 			if (_listenFd >= 0 && bind(_listenFd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
@@ -269,20 +259,15 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 					debug("monkey_mcp: listening on %s:%d (fd=%d)", host.c_str(), port, _listenFd);
 				} else {
 					debug("monkey_mcp: listen() failed");
-					close(_listenFd);
-					_listenFd = -1;
+					close(_listenFd); _listenFd = -1;
 				}
-			} else {
-				debug("monkey_mcp: bind() failed errno=%d (%s)", errno, strerror(errno));
-				close(_listenFd);
-				_listenFd = -1;
+			} else if (_listenFd >= 0) {
+				debug("monkey_mcp: bind() failed errno=%d", errno);
+				close(_listenFd); _listenFd = -1;
 			}
-		} else {
-			debug("monkey_mcp: socket() failed errno=%d (%s)", errno, strerror(errno));
-			_listenFd = -1;
 		}
 	} else {
-		debug("monkey_mcp: network MCP disabled (monkey_mcp_port not set)");
+		debug("monkey_mcp: monkey_mcp_port not set, network disabled");
 	}
 #else
 	_enabled = false;
@@ -291,71 +276,148 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 }
 
 MonkeyMcpBridge::~MonkeyMcpBridge() {
+	delete _ssePendingId;
 #if defined(POSIX)
-	if (_clientFd >= 0) {
-		close(_clientFd);
-		_clientFd = -1;
+	if (_clientFd >= 0) { close(_clientFd); _clientFd = -1; }
+	if (_listenFd >= 0) { close(_listenFd); _listenFd = -1; }
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Game-loop hook
+// ---------------------------------------------------------------------------
+
+void MonkeyMcpBridge::pump() {
+	if (!_enabled) return;
+	++_frameCounter;
+
+#if defined(POSIX)
+	// Accept new client only when idle (no SSE stream, no existing client).
+	if (_listenFd >= 0 && _clientFd < 0 && !_sseActive) {
+		int newfd = accept(_listenFd, nullptr, nullptr);
+		if (newfd >= 0) {
+			int nf = fcntl(newfd, F_GETFL, 0);
+			if (nf >= 0) fcntl(newfd, F_SETFL, nf | O_NONBLOCK);
+			_clientFd = newfd;
+			_inBuffer.clear();
+			debug("monkey_mcp: client connected (fd=%d)", _clientFd);
+		}
 	}
-	if (_listenFd >= 0) {
-		close(_listenFd);
-		_listenFd = -1;
+
+	// While SSE is active, drive the stream each frame.
+	if (_sseActive) {
+		pumpSse();
+		return;
+	}
+
+	if (_clientFd < 0) return;
+
+	// Read available bytes.
+	char buf[4096];
+	while (true) {
+		ssize_t n = ::read(_clientFd, buf, sizeof(buf));
+		if (n <= 0) {
+			if (n == 0) {
+				debug("monkey_mcp: client EOF");
+				close(_clientFd); _clientFd = -1;
+			} else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+				debug("monkey_mcp: read error errno=%d", errno);
+				close(_clientFd); _clientFd = -1;
+			}
+			break;
+		}
+		_inBuffer += Common::String(buf, n);
+	}
+
+	if (_clientFd < 0) return;
+
+	// Parse one or more HTTP requests from the buffer.
+	while (true) {
+		const char *buf2 = _inBuffer.c_str();
+		size_t bufLen = _inBuffer.size();
+
+		// Wait for end of HTTP headers.
+		const char *headersEnd = strstr(buf2, "\r\n\r\n");
+		if (!headersEnd) break;
+
+		size_t headersLen = (size_t)(headersEnd - buf2) + 4;
+
+		// Extract HTTP method from the request line.
+		Common::String method;
+		{
+			const char *sp = (const char *)memchr(buf2, ' ', headersLen);
+			if (sp) method = Common::String(buf2, sp);
+		}
+
+		// Walk headers to extract Content-Length and Mcp-Session-Id.
+		int contentLength = 0;
+		Common::String sessionHdr;
+		const char *p = buf2;
+		const char *hEnd = headersEnd;
+		// Skip request line (first \r\n).
+		const char *firstLine = nullptr;
+		for (const char *q = p; q + 1 < hEnd; ++q) {
+			if (q[0] == '\r' && q[1] == '\n') { firstLine = q; break; }
+		}
+		if (firstLine) p = firstLine + 2;
+
+		while (p < hEnd) {
+			const char *lineEnd = nullptr;
+			for (const char *q = p; q + 1 < hEnd; ++q) {
+				if (q[0] == '\r' && q[1] == '\n') { lineEnd = q; break; }
+			}
+			if (!lineEnd) lineEnd = hEnd;
+			size_t lineLen = (size_t)(lineEnd - p);
+
+			// Helper: case-insensitive header prefix check.
+			auto hdrMatch = [&](const char *hdr, size_t hdrLen) -> const char * {
+				if (lineLen <= hdrLen) return nullptr;
+				for (size_t ci = 0; ci < hdrLen; ++ci) {
+					char c = p[ci];
+					if (c >= 'A' && c <= 'Z') c += 32;
+					if (c != hdr[ci]) return nullptr;
+				}
+				const char *val = p + hdrLen;
+				while (val < lineEnd && (*val == ' ' || *val == '\t')) ++val;
+				return val;
+			};
+
+			const char *val;
+			if ((val = hdrMatch("content-length:", 15)) != nullptr) {
+				contentLength = 0;
+				while (val < lineEnd && *val >= '0' && *val <= '9')
+					contentLength = contentLength * 10 + (*val++ - '0');
+			} else if ((val = hdrMatch("mcp-session-id:", 15)) != nullptr) {
+				sessionHdr = Common::String(val, lineEnd);
+				sessionHdr.trim();
+			}
+
+			if (lineEnd >= hEnd) break;
+			p = lineEnd + 2;
+		}
+
+		// Wait until the full body is buffered.
+		if (bufLen < headersLen + (size_t)contentLength) break;
+
+		Common::String body(buf2 + headersLen, contentLength);
+		_inBuffer = Common::String(buf2 + headersLen + contentLength,
+		                           bufLen - headersLen - contentLength);
+
+		body.trim();
+		handleHttpRequest(method, sessionHdr, body);
+
+		// handleHttpRequest may have started SSE (or closed the connection).
+		if (_sseActive || _clientFd < 0) break;
 	}
 #endif
 }
 
-bool MonkeyMcpBridge::isMonkey1() const {
-	if (!_vm)
-		return false;
-	return _vm->_game.id == GID_MONKEY || _vm->_game.id == GID_MONKEY_EGA || _vm->_game.id == GID_MONKEY_VGA;
-}
-
-Common::String MonkeyMcpBridge::normalizeActionName(const Common::String &action) {
-	Common::String s = lowerTrimmed(action);
-	s.replace('-', '_');
-	s.replace(' ', '_');
-	if (s == "walk") return "walk_to";
-	if (s == "goto") return "walk_to";
-	if (s == "look") return "look_at";
-	if (s == "pick") return "pick_up";
-	if (s == "pickup") return "pick_up";
-	if (s == "talk") return "talk_to";
-	return s;
-}
-
-bool MonkeyMcpBridge::parseEntityId(const Common::String &id, ParsedEntityId &parsed) {
-	parsed = ParsedEntityId();
-	if (id.hasPrefix("obj:")) {
-		parsed.kind = kEntityObject;
-		parsed.value = atoi(id.c_str() + 4);
-		return parsed.value >= 0;
-	}
-	if (id.hasPrefix("actor:")) {
-		parsed.kind = kEntityActor;
-		parsed.value = atoi(id.c_str() + 6);
-		return parsed.value >= 0;
-	}
-	if (id.hasPrefix("inv:")) {
-		parsed.kind = kEntityInventory;
-		parsed.value = atoi(id.c_str() + 4);
-		return parsed.value >= 0;
-	}
-	if (id.hasPrefix("place:box:")) {
-		parsed.kind = kEntityPlaceBox;
-		parsed.value = atoi(id.c_str() + 10);
-		return parsed.value >= 0;
-	}
-	if (id.hasPrefix("choice:verbslot:")) {
-		parsed.kind = kEntityChoiceVerbSlot;
-		parsed.value = atoi(id.c_str() + 16);
-		return parsed.value >= 0;
-	}
-	return false;
-}
+// ---------------------------------------------------------------------------
+// Message queue
+// ---------------------------------------------------------------------------
 
 void MonkeyMcpBridge::pushMessage(const char *type, int actorId, const Common::String &text) {
-	if (!_enabled || text.empty())
-		return;
-
+	if (!_enabled || text.empty()) return;
 	MessageEntry m;
 	m.seq = _nextMessageSeq++;
 	m.frame = _frameCounter;
@@ -364,7 +426,6 @@ void MonkeyMcpBridge::pushMessage(const char *type, int actorId, const Common::S
 	m.type = type;
 	m.text = text;
 	_messages.push_back(m);
-
 	const uint kMaxMessages = 512;
 	if (_messages.size() > kMaxMessages)
 		_messages.remove_at(0);
@@ -373,161 +434,124 @@ void MonkeyMcpBridge::pushMessage(const char *type, int actorId, const Common::S
 void MonkeyMcpBridge::onActorLine(int actorId, const Common::String &text) {
 	pushMessage("actor", actorId, text);
 }
-
 void MonkeyMcpBridge::onSystemLine(const Common::String &text) {
 	pushMessage("system", -1, text);
 }
-
 void MonkeyMcpBridge::onDialogPrompt(const Common::String &text) {
 	pushMessage("dialog", -1, text);
 }
 
-void MonkeyMcpBridge::pump() {
-	if (!_enabled)
-		return;
+// ---------------------------------------------------------------------------
+// HTTP / transport helpers
+// ---------------------------------------------------------------------------
 
-	++_frameCounter;
-
+bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 #if defined(POSIX)
-	char buf[1024];
-	int readLoopCount = 0;
-
-	// If we have a listening socket, try to accept a new client (non-blocking)
-	if (_listenFd >= 0 && _clientFd < 0) {
-		int newfd = accept(_listenFd, nullptr, nullptr);
-		if (newfd >= 0) {
-			// set non-blocking
-			int nf = fcntl(newfd, F_GETFL, 0);
-			if (nf >= 0) fcntl(newfd, F_SETFL, nf | O_NONBLOCK);
-			if (_clientFd >= 0) close(_clientFd);
-			_clientFd = newfd;
-			debug("monkey_mcp: client connected (fd=%d)", _clientFd);
-			// Flush any queued outgoing JSON
-			if (!_outQueue.empty()) {
-				for (uint i = 0; i < _outQueue.size(); ++i) {
-					const Common::String &s = _outQueue[i];
-					const char *data = s.c_str();
-					size_t remaining = s.size();
-					while (remaining > 0) {
-						ssize_t sent = send(_clientFd, data, remaining, 0);
-						if (sent < 0) {
-							if (errno == EAGAIN || errno == EWOULDBLOCK) {
-								// can't send now; leave remaining queue as-is
-								break;
-							}
-							debug("monkey_mcp: send failed while flushing queue, closing client (errno=%d)", errno);
-							close(_clientFd);
-							_clientFd = -1;
-							break;
-						}
-						data += sent;
-						remaining -= sent;
-					}
-					if (_clientFd < 0)
-						break;
-				}
-				if (_clientFd >= 0)
-					_outQueue.clear();
-			}
-		} else {
-			// no incoming connection or error; ignore
+	if (_clientFd < 0) return false;
+	const char *ptr = data.c_str();
+	size_t remaining = data.size();
+	while (remaining > 0) {
+		ssize_t r = send(_clientFd, ptr, remaining, 0);
+		if (r < 0) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK) break; // partial ok for SSE
+			debug("monkey_mcp: send failed errno=%d, closing", errno);
+			close(_clientFd); _clientFd = -1;
+			return false;
 		}
+		ptr += r;
+		remaining -= r;
 	}
-
-	// Only read from network client. Stdio transport removed.
-	if (_clientFd < 0) {
-		// No client connected; nothing to read.
-		return;
-	}
-
-	int fdToRead = _clientFd;
-	while (true) {
-		++readLoopCount;
-		ssize_t n = ::read(fdToRead, buf, sizeof(buf));
-		debug("monkey_mcp: pump read loop %d on fd %d: read returned %d, errno=%d", readLoopCount, fdToRead, (int)n, errno);
-		if (n <= 0) {
-			if (n == 0) {
-				debug("monkey_mcp: client EOF on fd %d (n=0)", fdToRead);
-				// client disconnected
-				close(_clientFd);
-				_clientFd = -1;
-				break;
-			}
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				debug("monkey_mcp: would block (EAGAIN/EWOULDBLOCK) on fd %d, breaking", fdToRead);
-				break;
-			}
-			debug("monkey_mcp: breaking on n<0, errno not EAGAIN");
-			break;
-		}
-		_inBuffer += Common::String(buf, n);
-	}
-
-	// HTTP request parser: wait for \r\n\r\n (end of headers), then read
-	// Content-Length bytes of body. Handles pipelined requests in one buffer.
-	while (true) {
-		const char *buf2 = _inBuffer.c_str();
-		size_t bufLen = _inBuffer.size();
-
-		// Find end of HTTP headers
-		const char *headersEnd = strstr(buf2, "\r\n\r\n");
-		if (!headersEnd)
-			break; // need more data
-
-		size_t headersLen = (size_t)(headersEnd - buf2) + 4; // includes the \r\n\r\n
-
-		// Parse Content-Length from headers
-		int contentLength = 0;
-		const char *p = buf2;
-		const char *hEnd = headersEnd;
-		while (p < hEnd) {
-			// find next \r\n
-			const char *lineEnd = nullptr;
-			for (const char *q = p; q + 1 < hEnd; ++q) {
-				if (q[0] == '\r' && q[1] == '\n') { lineEnd = q; break; }
-			}
-			if (!lineEnd) lineEnd = hEnd;
-			// case-insensitive prefix match for "content-length:"
-			size_t lineLen = (size_t)(lineEnd - p);
-			if (lineLen > 15) {
-				// strncasecmp not available everywhere; do manual compare
-				const char *hdr = "content-length:";
-				bool match = true;
-				for (int ci = 0; ci < 15; ++ci) {
-					char c = p[ci];
-					if (c >= 'A' && c <= 'Z') c += 32;
-					if (c != hdr[ci]) { match = false; break; }
-				}
-				if (match) {
-					const char *val = p + 15;
-					while (val < lineEnd && (*val == ' ' || *val == '\t')) ++val;
-					contentLength = 0;
-					while (val < lineEnd && *val >= '0' && *val <= '9')
-						contentLength = contentLength * 10 + (*val++ - '0');
-				}
-			}
-			if (lineEnd >= hEnd) break;
-			p = lineEnd + 2; // skip \r\n
-		}
-
-		// Wait until full body is available
-		if (bufLen < headersLen + (size_t)contentLength)
-			break;
-
-		Common::String body(buf2 + headersLen, contentLength);
-		_inBuffer = Common::String(buf2 + headersLen + contentLength,
-		                           bufLen - headersLen - contentLength);
-
-		body.trim();
-		debug("monkey_mcp: HTTP request body: '%s'", body.c_str());
-		if (!body.empty())
-			handleJsonLine(body);
-	}
+	return true;
+#else
+	return false;
 #endif
 }
 
-void MonkeyMcpBridge::handleJsonLine(const Common::String &line) {
-	Common::JSONValue *parsed = Common::JSON::parse(line);
+void MonkeyMcpBridge::writeHttpResponse(int status, const Common::String &contentType,
+                                         const Common::String &body,
+                                         const Common::String &extraHeaders) {
+	const char *statusText = (status == 200) ? "OK"
+	                       : (status == 202) ? "Accepted"
+	                       : (status == 404) ? "Not Found"
+	                       : (status == 405) ? "Method Not Allowed" : "OK";
+	Common::String response = Common::String::format("HTTP/1.1 %d %s\r\n", status, statusText);
+	if (!contentType.empty())
+		response += "Content-Type: " + contentType + "\r\n";
+	if (!body.empty())
+		response += Common::String::format("Content-Length: %d\r\n", (int)body.size());
+	if (!extraHeaders.empty())
+		response += extraHeaders;
+	response += "\r\n";
+	response += body;
+	sendRaw(response);
+}
+
+void MonkeyMcpBridge::writeSseHeaders() {
+	sendRaw("HTTP/1.1 200 OK\r\n"
+	        "Content-Type: text/event-stream\r\n"
+	        "Cache-Control: no-cache\r\n"
+	        "\r\n");
+}
+
+void MonkeyMcpBridge::emitSseData(const Common::String &data) {
+	sendRaw("data: " + data + "\n\n");
+}
+
+void MonkeyMcpBridge::emitSseComment(const Common::String &comment) {
+	sendRaw(": " + comment + "\n\n");
+}
+
+// ---------------------------------------------------------------------------
+// HTTP request routing
+// ---------------------------------------------------------------------------
+
+void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
+                                         const Common::String &sessionHdr,
+                                         const Common::String &body) {
+	// CORS preflight — no session check.
+	if (method == "OPTIONS") {
+		sendRaw("HTTP/1.1 200 OK\r\n"
+		        "Access-Control-Allow-Origin: *\r\n"
+		        "Access-Control-Allow-Methods: POST, GET, DELETE, OPTIONS\r\n"
+		        "Access-Control-Allow-Headers: Content-Type, Mcp-Session-Id\r\n"
+		        "\r\n");
+		return;
+	}
+
+	// Session termination.
+	if (method == "DELETE") {
+		_sessionId.clear();
+		writeHttpResponse(200, "", "");
+		return;
+	}
+
+	// No standalone SSE GET support.
+	if (method == "GET") {
+		writeHttpResponse(405, "", "");
+		return;
+	}
+
+	// POST: validate session (skip for initialize which creates the session).
+	if (!body.empty()) {
+		// Peek at method to decide if session check applies.
+		bool isInit = (body.contains("\"initialize\""));
+		if (!isInit && !_sessionId.empty() &&
+		    !sessionHdr.empty() && sessionHdr != _sessionId) {
+			writeHttpResponse(404, "", "");
+			return;
+		}
+	}
+
+	if (!body.empty())
+		handleJsonRpc(body);
+}
+
+// ---------------------------------------------------------------------------
+// JSON-RPC dispatch
+// ---------------------------------------------------------------------------
+
+void MonkeyMcpBridge::handleJsonRpc(const Common::String &body) {
+	Common::JSONValue *parsed = Common::JSON::parse(body);
 	if (!parsed || !parsed->isObject()) {
 		writeJsonRpcError(nullptr, -32700, "Parse error");
 		delete parsed;
@@ -535,50 +559,73 @@ void MonkeyMcpBridge::handleJsonLine(const Common::String &line) {
 	}
 
 	const Common::JSONObject &root = parsed->asObject();
-	const Common::JSONValue *id = nullptr;
-	if (root.contains("id"))
-		id = root["id"];
+
+	// Notifications have no "id" — respond 202 Accepted, no body.
+	if (!root.contains("id") || root["id"]->isNull()) {
+		writeHttpResponse(202, "", "");
+		delete parsed;
+		return;
+	}
+
+	const Common::JSONValue *id = root["id"];
+
+	// Check which method this is so we can add the session header for initialize.
+	bool isInitialize = root.contains("method") && root["method"]->isString()
+	                    && root["method"]->asString() == "initialize";
 
 	Common::JSONValue *result = handleRequest(*parsed);
+
+	// toolAct/toolAnswer set _sseActive=true instead of returning a value.
+	if (_sseActive) {
+		delete parsed;
+		return;
+	}
+
 	if (!result) {
 		writeJsonRpcError(id, -32601, "Method not found");
 	} else {
-		writeJsonRpcResult(id, result);
+		Common::String extra;
+		if (isInitialize && !_sessionId.empty())
+			extra = "Mcp-Session-Id: " + _sessionId + "\r\n";
+		writeJsonRpcResult(id, result, extra);
 	}
 
 	delete parsed;
 }
 
 Common::JSONValue *MonkeyMcpBridge::handleRequest(const Common::JSONValue &req) {
-	if (!req.isObject())
-		return nullptr;
+	if (!req.isObject()) return nullptr;
 	const Common::JSONObject &obj = req.asObject();
-	if (!obj.contains("method") || !obj["method"]->isString())
-		return nullptr;
-
+	if (!obj.contains("method") || !obj["method"]->isString()) return nullptr;
 	Common::String method = obj["method"]->asString();
-	if (method == "initialize")
-		return handleInitialize(req);
-	if (method == "tools/list")
-		return handleToolsList();
-	if (method == "tools/call")
-		return handleToolCall(req);
+	if (method == "initialize")  return handleInitialize(req);
+	if (method == "tools/list")  return handleToolsList();
+	if (method == "tools/call")  return handleToolCall(req);
 	return nullptr;
 }
 
 Common::JSONValue *MonkeyMcpBridge::handleInitialize(const Common::JSONValue &) {
 	_initialized = true;
+	// Session ID: frame counter XOR object address — unique per session, not security-sensitive.
+	_sessionId = Common::String::format("monkey1-%08x%08x",
+	             (unsigned)_frameCounter,
+	             (unsigned)((uintptr_t)this >> 4));
+
 	Common::JSONObject o;
 	o.setVal("protocolVersion", makeString("2025-03-26"));
-	Common::JSONObject capabilities;
-	capabilities.setVal("tools", new Common::JSONValue(Common::JSONObject()));
-	o.setVal("capabilities", new Common::JSONValue(capabilities));
-	Common::JSONObject serverInfo;
-	serverInfo.setVal("name", makeString("scumm-monkey-mcp"));
-	serverInfo.setVal("version", makeString("0.1"));
-	o.setVal("serverInfo", new Common::JSONValue(serverInfo));
+	Common::JSONObject caps;
+	caps.setVal("tools", new Common::JSONValue(Common::JSONObject()));
+	o.setVal("capabilities", new Common::JSONValue(caps));
+	Common::JSONObject info;
+	info.setVal("name", makeString("scumm-monkey-mcp"));
+	info.setVal("version", makeString("1.0"));
+	o.setVal("serverInfo", new Common::JSONValue(info));
 	return new Common::JSONValue(o);
 }
+
+// ---------------------------------------------------------------------------
+// tools/list
+// ---------------------------------------------------------------------------
 
 Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 	Common::JSONArray tools;
@@ -591,70 +638,42 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		tools.push_back(new Common::JSONValue(tool));
 	};
 
-	// list_inventory
+	// state
 	{
 		Common::JSONObject props;
-		addTool("list_inventory",
-			"List all inventory items owned by the player.",
-			makeToolSchema(props));
+		addTool("state",
+		        "Returns the current game state: room, position, inventory, scene objects, "
+		        "actors in room, active verbs, latest messages (cleared after reading), "
+		        "and pending dialog question if any.",
+		        makeToolSchema(props));
 	}
 
-	// list_scene_interactables
+	// act
 	{
 		Common::JSONObject props;
-		props.setVal("includePlaces", makeProp("boolean", "Include walk-box places in result (default true)"));
-		props.setVal("includeChoices", makeProp("boolean", "Include verb-slot choices in result (default true)"));
-		addTool("list_scene_interactables",
-			"List objects, people, walk-box places, and verb choices in the current room. "
-			"The 'id' field of each entry is used as targetId in execute_action and move_to.",
-			makeToolSchema(props));
+		props.setVal("verb",   makeProp("string",  "Verb name (e.g. 'open', 'use', 'look_at', 'walk_to'). Required."));
+		props.setVal("actor1", makeProp("string",  "Primary target name (e.g. 'door', 'guybrush'). For 'use X on Y', this is X."));
+		props.setVal("actor2", makeProp("string",  "Secondary target for 'use X on Y' actions (Y)."));
+		props.setVal("x",      makeProp("integer", "X pixel coordinate for walk_to (use with y instead of actor1)."));
+		props.setVal("y",      makeProp("integer", "Y pixel coordinate for walk_to."));
+		const char *req[] = {"verb"};
+		addTool("act",
+		        "Perform a verb action. Streams dialog and events via SSE until the "
+		        "action/cutscene sequence completes, then returns state changes. "
+		        "Fails if a question is pending (use 'answer' first) or another action is running.",
+		        makeToolSchema(props, req, 1));
 	}
 
-	// execute_action
+	// answer
 	{
 		Common::JSONObject props;
-		props.setVal("verbId", makeProp("integer", "Verb ID from choices[].verbId (e.g. 13 for 'Talk to', 9 for 'Look at', 11 for 'Pick up')"));
-		props.setVal("action", makeProp("string", "Verb label string (e.g. 'Talk to', 'Look at', 'Pick up'). Provide verbId OR action, not both."));
-		props.setVal("targetId", makeProp("string", "Entity id to act on — the 'id' field from objects[], people[], or inventory items (e.g. 'obj:955', 'actor:1', 'inv:42')"));
-		props.setVal("withId", makeProp("string", "Second object for 'Use X with Y' actions — entity id of the instrument item (e.g. 'inv:42')"));
-		const char *req[] = {"targetId"};
-		addTool("execute_action",
-			"Execute a verb action on a scene object, actor, or inventory item. "
-			"Provide verbId OR action to specify the verb (required). "
-			"targetId is required and must be the 'id' field from list_scene_interactables or list_inventory.",
-			makeToolSchema(props, req, 1));
-	}
-
-	// respond_to_choice
-	{
-		Common::JSONObject props;
-		props.setVal("choiceId", makeProp("string", "Choice id from choices[].id in list_scene_interactables (e.g. 'choice:verbslot:7')"));
-		props.setVal("index", makeProp("integer", "0-based index into the active choices list (alternative to choiceId)"));
-		addTool("respond_to_choice",
-			"Select a verb-slot choice. Provide choiceId (the 'id' from choices[] in list_scene_interactables, "
-			"e.g. 'choice:verbslot:7') OR index (0-based position in the choices list).",
-			makeToolSchema(props));
-	}
-
-	// move_to
-	{
-		Common::JSONObject props;
-		props.setVal("targetId", makeProp("string", "Walk-box or entity id to walk toward — use 'id' from places[] (e.g. 'place:box:2'), objects[] (e.g. 'obj:421'), or people[] (e.g. 'actor:1') in list_scene_interactables"));
-		props.setVal("x", makeProp("integer", "Explicit X pixel coordinate to walk to (use with y; alternative to targetId)"));
-		props.setVal("y", makeProp("integer", "Explicit Y pixel coordinate to walk to (use with x; alternative to targetId)"));
-		addTool("move_to",
-			"Walk Guybrush to a location. Provide targetId (a 'place:box:N', 'obj:N', or 'actor:N' id from list_scene_interactables) OR explicit x+y pixel coordinates.",
-			makeToolSchema(props));
-	}
-
-	// read_latest_messages
-	{
-		Common::JSONObject props;
-		props.setVal("sinceSeq", makeProp("integer", "Only return messages with seq > this value; use latestSeq from a prior response to get only new messages"));
-		props.setVal("limit", makeProp("integer", "Maximum number of messages to return (default 30, max 200)"));
-		addTool("read_latest_messages",
-			"Read recent dialogue and system messages. Pass sinceSeq from the previous latestSeq to get only new messages.",
-			makeToolSchema(props));
+		props.setVal("id", makeProp("integer", "1-indexed dialog choice (1 = first option shown in state.question.choices)."));
+		const char *req[] = {"id"};
+		addTool("answer",
+		        "Select a dialog choice by 1-based index. Streams events via SSE until "
+		        "the conversation sequence completes, then returns state changes. "
+		        "Fails if no question is currently pending.",
+		        makeToolSchema(props, req, 1));
 	}
 
 	Common::JSONObject result;
@@ -662,213 +681,679 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 	return new Common::JSONValue(result);
 }
 
+// ---------------------------------------------------------------------------
+// tools/call dispatch
+// ---------------------------------------------------------------------------
+
 Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req) {
-	if (!req.isObject())
-		return nullptr;
+	if (!req.isObject()) return nullptr;
 	const Common::JSONObject &obj = req.asObject();
-	if (!obj.contains("params") || !obj["params"]->isObject())
-		return nullptr;
+	if (!obj.contains("params") || !obj["params"]->isObject()) return nullptr;
 	const Common::JSONObject &params = obj["params"]->asObject();
-	if (!params.contains("name") || !params["name"]->isString())
-		return nullptr;
+	if (!params.contains("name") || !params["name"]->isString()) return nullptr;
+
 	Common::String name = params["name"]->asString();
+
 	Common::JSONObject empty;
-	const Common::JSONValue *argsVal = nullptr;
-	if (params.contains("arguments"))
-		argsVal = params["arguments"];
-	Common::JSONValue emptyValue(empty);
-	if (!argsVal)
-		argsVal = &emptyValue;
+	const Common::JSONValue *argsVal = params.contains("arguments") ? params["arguments"] : nullptr;
+	Common::JSONValue emptyVal(empty);
+	if (!argsVal) argsVal = &emptyVal;
 
 	if (!isMonkey1()) {
 		Common::JSONObject err;
-		err.setVal("error", makeString("Tool is only available for Monkey Island 1"));
-		return wrapInMcpContent(new Common::JSONValue(err));
+		err.setVal("error", makeString("Only available for Monkey Island 1"));
+		return wrapContent(new Common::JSONValue(err), true);
 	}
 
-	if (name == "list_inventory")
-		return wrapInMcpContent(toolListInventory(*argsVal));
-	if (name == "list_scene_interactables")
-		return wrapInMcpContent(toolListSceneInteractables(*argsVal));
-	if (name == "execute_action")
-		return wrapInMcpContent(toolExecuteAction(*argsVal));
-	if (name == "respond_to_choice")
-		return wrapInMcpContent(toolRespondToChoice(*argsVal));
-	if (name == "move_to")
-		return wrapInMcpContent(toolMoveTo(*argsVal));
-	if (name == "read_latest_messages")
-		return wrapInMcpContent(toolReadLatestMessages(*argsVal));
+	if (name == "state")
+		return wrapContent(toolState(*argsVal));
+
+	// act and answer start SSE and return nothing via the normal path.
+	const Common::JSONValue *id = obj.contains("id") ? obj["id"] : nullptr;
+	if (name == "act") {
+		toolAct(*argsVal, id);
+		return nullptr;
+	}
+	if (name == "answer") {
+		toolAnswer(*argsVal, id);
+		return nullptr;
+	}
 
 	Common::JSONObject err;
-	err.setVal("error", makeString("Unknown tool"));
-	err.setVal("name", makeString(name));
-	return wrapInMcpContent(new Common::JSONValue(err));
+	err.setVal("error", makeString("Unknown tool: " + name));
+	return wrapContent(new Common::JSONValue(err), true);
 }
 
-Common::JSONValue *MonkeyMcpBridge::toolListInventory(const Common::JSONValue &) {
-	Common::JSONArray items;
-	int ego = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
-	for (int i = 0; i < _vm->_numInventory; ++i) {
-		int obj = _vm->_inventory[i];
-		if (!obj)
-			continue;
-		if (_vm->getOwner(obj) != ego)
-			continue;
-		Common::JSONObject item;
-		item.setVal("id", makeString(Common::String::format("inv:%d", obj)));
-		item.setVal("objectId", makeInt(obj));
-		item.setVal("name", makeString(safeObjName(_vm, obj)));
-		item.setVal("slot", makeInt(i));
-		items.push_back(new Common::JSONValue(item));
-	}
+// ---------------------------------------------------------------------------
+// Tool: state
+// ---------------------------------------------------------------------------
+
+Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 	Common::JSONObject out;
-	out.setVal("items", new Common::JSONValue(items));
+
+	out.setVal("room", makeInt(_vm->_currentRoom));
+
+	// Ego position.
+	Actor *ego = getEgoActor();
+	if (ego) {
+		Common::JSONObject pos;
+		pos.setVal("x", makeInt(ego->getRealPos().x));
+		pos.setVal("y", makeInt(ego->getRealPos().y));
+		out.setVal("position", new Common::JSONValue(pos));
+	}
+
+	// Build deduplicated entity map.
+	Common::Array<NamedEntity> entities;
+	buildEntityMap(entities);
+
+	Common::JSONArray inventory, objects, actors;
+	for (uint i = 0; i < entities.size(); ++i) {
+		const NamedEntity &ne = entities[i];
+		switch (ne.kind) {
+		case NamedEntity::kInventory: inventory.push_back(makeString(ne.displayName)); break;
+		case NamedEntity::kObject:    objects.push_back(makeString(ne.displayName));   break;
+		case NamedEntity::kActor:     actors.push_back(makeString(ne.displayName));    break;
+		}
+	}
+	out.setVal("inventory", new Common::JSONValue(inventory));
+	out.setVal("objects",   new Common::JSONValue(objects));
+	out.setVal("actors",    new Common::JSONValue(actors));
+
+	// Active verbs (non-empty names only).
+	Common::JSONArray verbsArr;
+	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid || vs.saveid != 0) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256];
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		Common::String label = lowerTrimmed((const char *)textBuf);
+		if (label.empty()) continue;
+		verbsArr.push_back(makeString(normalizeActionName(label)));
+	}
+	out.setVal("verbs", new Common::JSONValue(verbsArr));
+
+	// Messages — return all, then clear.
+	Common::JSONArray msgsArr;
+	for (uint i = 0; i < _messages.size(); ++i) {
+		const MessageEntry &m = _messages[i];
+		Common::JSONObject entry;
+		if (m.actorId >= 0) {
+			int objId = _vm->actorToObj(m.actorId);
+			Common::String actorName = getObjName(_vm, objId);
+			if (!actorName.empty())
+				entry.setVal("actor", makeString(lowerTrimmed(actorName)));
+		}
+		entry.setVal("text", makeString(m.text));
+		msgsArr.push_back(new Common::JSONValue(entry));
+	}
+	out.setVal("messages", new Common::JSONValue(msgsArr));
+	_messages.clear();
+
+	// Pending dialog question.
+	int choiceCount = 0;
+	Common::JSONArray choiceList;
+	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256];
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		if (!textBuf[0]) continue;
+		if (!hasPendingQuestion()) break; // only include choices when in question mode
+		Common::JSONObject choice;
+		choice.setVal("id",    makeInt(++choiceCount));
+		choice.setVal("label", makeString(Common::String((const char *)textBuf)));
+		choiceList.push_back(new Common::JSONValue(choice));
+	}
+	if (choiceCount > 0) {
+		Common::JSONObject question;
+		question.setVal("choices", new Common::JSONValue(choiceList));
+		out.setVal("question", new Common::JSONValue(question));
+	}
+
 	return new Common::JSONValue(out);
 }
 
-void MonkeyMcpBridge::buildChoices(Common::JSONArray &choices) const {
-	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
-		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1)
-			continue;
-		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-		if (!ptr)
-			continue;
-		byte textBuf[256];
-		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-		Common::JSONObject choice;
-		choice.setVal("id", makeString(Common::String::format("choice:verbslot:%d", slot)));
-		choice.setVal("verbSlot", makeInt(slot));
-		choice.setVal("verbId", makeInt(vs.verbid));
-		choice.setVal("label", makeString((const char *)textBuf));
-		choices.push_back(new Common::JSONValue(choice));
-	}
-}
+// ---------------------------------------------------------------------------
+// Tool: act
+// ---------------------------------------------------------------------------
 
-Common::JSONValue *MonkeyMcpBridge::toolListSceneInteractables(const Common::JSONValue &args) {
-	bool includePlaces = true;
-	bool includeChoices = true;
-	if (args.isObject()) {
-		const Common::JSONObject &a = args.asObject();
-		if (a.contains("includePlaces") && a["includePlaces"]->isBool())
-			includePlaces = a["includePlaces"]->asBool();
-		if (a.contains("includeChoices") && a["includeChoices"]->isBool())
-			includeChoices = a["includeChoices"]->asBool();
+void MonkeyMcpBridge::toolAct(const Common::JSONValue &args, const Common::JSONValue *id) {
+	if (_sseActive) {
+		writeJsonRpcError(id, -32001, "act: another action is already in progress");
+		return;
+	}
+	if (hasPendingQuestion()) {
+		writeJsonRpcError(id, -32001, "act: a dialog question is pending — use 'answer' first");
+		return;
+	}
+	if (!args.isObject()) {
+		writeJsonRpcError(id, -32602, "act: arguments must be an object");
+		return;
 	}
 
-	Common::JSONArray objects;
-	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
-		const ObjectData &o = _vm->_objs[i];
-		if (!o.obj_nr)
-			continue;
-		Common::JSONObject obj;
-		obj.setVal("id", makeString(Common::String::format("obj:%d", o.obj_nr)));
-		obj.setVal("objectId", makeInt(o.obj_nr));
-		obj.setVal("name", makeString(safeObjName(_vm, o.obj_nr)));
-		obj.setVal("x", makeInt(o.x_pos));
-		obj.setVal("y", makeInt(o.y_pos));
-		obj.setVal("w", makeInt(o.width));
-		obj.setVal("h", makeInt(o.height));
-		objects.push_back(new Common::JSONValue(obj));
+	const Common::JSONObject &a = args.asObject();
+	if (!a.contains("verb") || !a["verb"]->isString()) {
+		writeJsonRpcError(id, -32602, "act: missing 'verb'");
+		return;
 	}
+	Common::String verbStr = a["verb"]->asString();
+	Common::String normVerb = normalizeActionName(verbStr);
 
-	Common::JSONArray people;
-	for (int i = 1; i < _vm->_numActors; ++i) {
-		Actor *a = _vm->_actors[i];
-		if (!a || !a->_visible || !a->isInCurrentRoom())
-			continue;
-		int objId = _vm->actorToObj(a->_number);
-		Common::JSONObject person;
-		person.setVal("id", makeString(Common::String::format("actor:%d", a->_number)));
-		person.setVal("actorId", makeInt(a->_number));
-		person.setVal("name", makeString(safeObjName(_vm, objId)));
-		person.setVal("x", makeInt(a->getRealPos().x));
-		person.setVal("y", makeInt(a->getRealPos().y));
-		people.push_back(new Common::JSONValue(person));
-	}
-
-	Common::JSONArray places;
-	if (includePlaces) {
-		const int numBoxes = _vm->getNumBoxes();
-		for (int i = 0; i < numBoxes; ++i) {
-			BoxCoords b = _vm->getBoxCoordinates(i);
-			int x = (b.ul.x + b.ur.x + b.ll.x + b.lr.x) / 4;
-			int y = (b.ul.y + b.ur.y + b.ll.y + b.lr.y) / 4;
-			Common::JSONObject place;
-			place.setVal("id", makeString(Common::String::format("place:box:%d", i)));
-			place.setVal("box", makeInt(i));
-			place.setVal("name", makeString(Common::String::format("walk box %d", i)));
-			place.setVal("x", makeInt(x));
-			place.setVal("y", makeInt(y));
-			places.push_back(new Common::JSONValue(place));
+	// Walk-to with explicit coordinates.
+	if (normVerb == "walk_to" && !a.contains("actor1")) {
+		if (a.contains("x") && a.contains("y") &&
+		    a["x"]->isIntegerNumber() && a["y"]->isIntegerNumber()) {
+			int wx = (int)a["x"]->asIntegerNumber();
+			int wy = (int)a["y"]->asIntegerNumber();
+			snapshotPreAction();
+			Actor *ego = getEgoActor();
+			if (ego) ego->startWalkActor(wx, wy, -1);
+			startSse(id);
+			return;
 		}
 	}
 
-	Common::JSONArray choices;
-	if (includeChoices)
-		buildChoices(choices);
+	// Resolve verb.
+	int verbId = -1;
+	if (!resolveVerb(verbStr, verbId)) {
+		writeJsonRpcError(id, -32602, "act: unknown verb '" + verbStr + "'");
+		return;
+	}
 
-	Common::JSONObject out;
-	out.setVal("room", makeInt(_vm->_currentRoom));
-	out.setVal("objects", new Common::JSONValue(objects));
-	out.setVal("people", new Common::JSONValue(people));
-	out.setVal("places", new Common::JSONValue(places));
-	out.setVal("choices", new Common::JSONValue(choices));
-	return new Common::JSONValue(out);
+	// Walk-to with named target.
+	if (normVerb == "walk_to") {
+		int toX = -1, toY = -1;
+		if (a.contains("actor1") && a["actor1"]->isString()) {
+			NamedEntity ent;
+			if (!resolveEntityByName(a["actor1"]->asString(), ent)) {
+				writeJsonRpcError(id, -32602, "act: unknown target '" + a["actor1"]->asString() + "'");
+				return;
+			}
+			if (ent.kind == NamedEntity::kInventory) {
+				writeJsonRpcError(id, -32602, "act: cannot walk to an inventory item");
+				return;
+			}
+			if (ent.kind == NamedEntity::kActor) {
+				Actor *ta = _vm->derefActor(ent.numId, "toolAct-walk");
+				if (ta) { toX = ta->getRealPos().x; toY = ta->getRealPos().y; }
+			} else {
+				int obj = ent.numId;
+				int gx = 0, gy = 0;
+				if (_vm->getObjectOrActorXY(obj, gx, gy)) { toX = gx; toY = gy; }
+			}
+		} else if (a.contains("x") && a.contains("y") &&
+		           a["x"]->isIntegerNumber() && a["y"]->isIntegerNumber()) {
+			toX = (int)a["x"]->asIntegerNumber();
+			toY = (int)a["y"]->asIntegerNumber();
+		}
+		if (toX < 0 || toY < 0) {
+			writeJsonRpcError(id, -32602, "act: walk_to needs actor1 or x+y coordinates");
+			return;
+		}
+		snapshotPreAction();
+		Actor *ego = getEgoActor();
+		if (ego) ego->startWalkActor(toX, toY, -1);
+		startSse(id);
+		return;
+	}
+
+	// General action.
+	int objectA = 0, objectB = 0;
+	if (a.contains("actor1") && a["actor1"]->isString()) {
+		NamedEntity ent;
+		if (!resolveEntityByName(a["actor1"]->asString(), ent)) {
+			writeJsonRpcError(id, -32602, "act: unknown actor1 '" + a["actor1"]->asString() + "'");
+			return;
+		}
+		objectA = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
+	}
+	if (a.contains("actor2") && a["actor2"]->isString()) {
+		NamedEntity ent;
+		if (!resolveEntityByName(a["actor2"]->asString(), ent)) {
+			writeJsonRpcError(id, -32602, "act: unknown actor2 '" + a["actor2"]->asString() + "'");
+			return;
+		}
+		objectB = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
+	}
+
+	snapshotPreAction();
+	_vm->doSentence(verbId, objectA, objectB);
+	startSse(id);
 }
 
-int MonkeyMcpBridge::resolveTargetToObjectId(const Common::String &id, bool allowPlace, bool *isPlace, int *placeBox) const {
-	if (isPlace)
-		*isPlace = false;
-	if (placeBox)
-		*placeBox = -1;
+// ---------------------------------------------------------------------------
+// Tool: answer
+// ---------------------------------------------------------------------------
 
-	ParsedEntityId parsed;
-	if (!parseEntityId(id, parsed))
-		return -1;
-
-	if (parsed.kind == kEntityObject || parsed.kind == kEntityInventory) {
-		if (parsed.value >= 0 && parsed.value < _vm->_numGlobalObjects)
-			return parsed.value;
-		return -1;
+void MonkeyMcpBridge::toolAnswer(const Common::JSONValue &args, const Common::JSONValue *id) {
+	if (_sseActive) {
+		writeJsonRpcError(id, -32001, "answer: another action is already in progress");
+		return;
+	}
+	if (!hasPendingQuestion()) {
+		writeJsonRpcError(id, -32001, "answer: no dialog question is currently pending");
+		return;
+	}
+	if (!args.isObject()) {
+		writeJsonRpcError(id, -32602, "answer: arguments must be an object");
+		return;
+	}
+	const Common::JSONObject &a = args.asObject();
+	if (!a.contains("id") || !a["id"]->isIntegerNumber()) {
+		writeJsonRpcError(id, -32602, "answer: missing 'id'");
+		return;
 	}
 
-	if (parsed.kind == kEntityActor) {
-		if (!_vm->isValidActor(parsed.value))
-			return -1;
-		return _vm->actorToObj(parsed.value);
+	int choiceIdx = (int)a["id"]->asIntegerNumber(); // 1-based
+	if (choiceIdx < 1) {
+		writeJsonRpcError(id, -32602, "answer: id must be >= 1");
+		return;
 	}
 
-	if (parsed.kind == kEntityPlaceBox && allowPlace) {
-		if (isPlace)
-			*isPlace = true;
-		if (placeBox)
-			*placeBox = parsed.value;
-		return 0;
+	// Find the Nth active choice verb.
+	int current = 0;
+	int chosenSlot = -1;
+	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256];
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		if (!textBuf[0]) continue;
+		++current;
+		if (current == choiceIdx) { chosenSlot = slot; break; }
 	}
 
-	return -1;
+	if (chosenSlot < 0) {
+		writeJsonRpcError(id, -32602,
+		    Common::String::format("answer: choice %d not found (only %d available)", choiceIdx, current));
+		return;
+	}
+
+	const VerbSlot &vs = _vm->_verbs[chosenSlot];
+	snapshotPreAction();
+	_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
+	startSse(id);
+}
+
+// ---------------------------------------------------------------------------
+// SSE streaming
+// ---------------------------------------------------------------------------
+
+void MonkeyMcpBridge::startSse(const Common::JSONValue *id) {
+	_sseActive = true;
+	delete _ssePendingId;
+	_ssePendingId = id ? new Common::JSONValue(*id) : nullptr;
+	_sseStartFrame = _frameCounter;
+	_sseLastHeartbeatFrame = _frameCounter;
+	writeSseHeaders();
+}
+
+void MonkeyMcpBridge::snapshotPreAction() {
+	_ssePreRoom = _vm->_currentRoom;
+	_ssePreInventory.clear();
+	for (int i = 0; i < _vm->_numInventory; ++i)
+		_ssePreInventory.push_back(_vm->_inventory[i]);
+	Actor *ego = getEgoActor();
+	if (ego) {
+		_ssePrePosX = ego->getRealPos().x;
+		_ssePrePosY = ego->getRealPos().y;
+	} else {
+		_ssePrePosX = _ssePrePosY = 0;
+	}
+}
+
+void MonkeyMcpBridge::pumpSse() {
+#if defined(POSIX)
+	if (_clientFd < 0) {
+		// Client disconnected; abandon SSE.
+		_sseActive = false;
+		delete _ssePendingId; _ssePendingId = nullptr;
+		return;
+	}
+
+	// Emit any new messages immediately as SSE notification events, then
+	// remove them from the queue so state() doesn't redisplay them.
+	while (!_messages.empty()) {
+		const MessageEntry &m = _messages[0];
+		Common::JSONObject n;
+		n.setVal("jsonrpc", makeString("2.0"));
+		n.setVal("method",  makeString("notifications/message"));
+		Common::JSONObject params;
+		if (m.actorId >= 0) {
+			int objId = _vm->actorToObj(m.actorId);
+			Common::String actorName = getObjName(_vm, objId);
+			if (!actorName.empty())
+				params.setVal("actor", makeString(lowerTrimmed(actorName)));
+		}
+		params.setVal("text", makeString(m.text));
+		params.setVal("type", makeString(m.type));
+		n.setVal("params", new Common::JSONValue(params));
+		Common::JSONValue *nval = new Common::JSONValue(n);
+		emitSseData(nval->stringify());
+		delete nval;
+		_messages.remove_at(0);
+	}
+
+	// Periodic keep-alive comment.
+	if (_frameCounter - _sseLastHeartbeatFrame >= 60) {
+		emitSseComment("keepalive");
+		_sseLastHeartbeatFrame = _frameCounter;
+	}
+
+	// Timeout after 600 frames (~20 s at 30 fps).
+	if (_frameCounter - _sseStartFrame > 600) {
+		closeSse(false, "action timed out");
+		return;
+	}
+
+	if (isActionDone())
+		closeSse(true);
+#endif
+}
+
+void MonkeyMcpBridge::closeSse(bool success, const Common::String &errorMsg) {
+	if (success) {
+		// Build state-change diff.
+		Common::JSONObject changes = buildStateChanges();
+		Common::JSONObject resultObj;
+		Common::JSONObject textContent;
+		textContent.setVal("type", makeString("text"));
+		textContent.setVal("text", makeString("done"));
+		Common::JSONArray contentArr;
+		contentArr.push_back(new Common::JSONValue(textContent));
+		resultObj.setVal("content", new Common::JSONValue(contentArr));
+		resultObj.setVal("changes", new Common::JSONValue(changes));
+
+		Common::JSONObject rpc;
+		rpc.setVal("jsonrpc", makeString("2.0"));
+		if (_ssePendingId) rpc.setVal("id", new Common::JSONValue(*_ssePendingId));
+		else               rpc.setVal("id", new Common::JSONValue());
+		rpc.setVal("result", new Common::JSONValue(resultObj));
+		Common::JSONValue *rpcVal = new Common::JSONValue(rpc);
+		emitSseData(rpcVal->stringify());
+		delete rpcVal;
+	} else {
+		// Error result.
+		Common::JSONObject errObj;
+		errObj.setVal("code",    makeInt(-32000));
+		errObj.setVal("message", makeString(errorMsg));
+		Common::JSONObject rpc;
+		rpc.setVal("jsonrpc", makeString("2.0"));
+		if (_ssePendingId) rpc.setVal("id", new Common::JSONValue(*_ssePendingId));
+		else               rpc.setVal("id", new Common::JSONValue());
+		rpc.setVal("error", new Common::JSONValue(errObj));
+		Common::JSONValue *rpcVal = new Common::JSONValue(rpc);
+		emitSseData(rpcVal->stringify());
+		delete rpcVal;
+	}
+
+	// Close the TCP connection to signal end-of-stream.
+#if defined(POSIX)
+	if (_clientFd >= 0) {
+		close(_clientFd);
+		_clientFd = -1;
+	}
+#endif
+
+	_sseActive = false;
+	delete _ssePendingId;
+	_ssePendingId = nullptr;
+}
+
+Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
+	Common::JSONObject changes;
+
+	// Inventory additions.
+	Common::JSONArray added;
+	int ego = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
+	for (int i = 0; i < _vm->_numInventory; ++i) {
+		uint16 obj = _vm->_inventory[i];
+		if (!obj) continue;
+		if (_vm->getOwner(obj) != ego) continue;
+		bool wasPresent = false;
+		for (uint j = 0; j < _ssePreInventory.size(); ++j) {
+			if (_ssePreInventory[j] == obj) { wasPresent = true; break; }
+		}
+		if (!wasPresent) {
+			Common::String name = getObjName(_vm, obj);
+			if (name.empty()) name = Common::String::format("obj-%d", obj);
+			added.push_back(makeString(lowerTrimmed(name)));
+		}
+	}
+	if (!added.empty())
+		changes.setVal("inventory_added", new Common::JSONValue(added));
+
+	// Room change.
+	if ((int)_vm->_currentRoom != _ssePreRoom)
+		changes.setVal("room_changed", makeInt(_vm->_currentRoom));
+
+	// Position change.
+	Actor *ego2 = getEgoActor();
+	if (ego2) {
+		int cx = ego2->getRealPos().x;
+		int cy = ego2->getRealPos().y;
+		if (cx != _ssePrePosX || cy != _ssePrePosY) {
+			Common::JSONObject pos;
+			pos.setVal("x", makeInt(cx));
+			pos.setVal("y", makeInt(cy));
+			changes.setVal("position", new Common::JSONValue(pos));
+		}
+	}
+
+	// Pending question.
+	if (hasPendingQuestion()) {
+		int choiceCount = 0;
+		Common::JSONArray choiceList;
+		for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+			if (!ptr) continue;
+			byte textBuf[256];
+			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+			if (!textBuf[0]) continue;
+			Common::JSONObject choice;
+			choice.setVal("id",    makeInt(++choiceCount));
+			choice.setVal("label", makeString(Common::String((const char *)textBuf)));
+			choiceList.push_back(new Common::JSONValue(choice));
+		}
+		if (choiceCount > 0) {
+			Common::JSONObject question;
+			question.setVal("choices", new Common::JSONValue(choiceList));
+			changes.setVal("question", new Common::JSONValue(question));
+		}
+	}
+
+	return changes;
+}
+
+// ---------------------------------------------------------------------------
+// Game state helpers
+// ---------------------------------------------------------------------------
+
+bool MonkeyMcpBridge::isMonkey1() const {
+	if (!_vm) return false;
+	return _vm->_game.id == GID_MONKEY
+	    || _vm->_game.id == GID_MONKEY_EGA
+	    || _vm->_game.id == GID_MONKEY_VGA;
+}
+
+Actor *MonkeyMcpBridge::getEgoActor() const {
+	if (!_vm || _vm->VAR_EGO == 0xFF) return nullptr;
+	int egoNum = _vm->VAR(_vm->VAR_EGO);
+	if (!_vm->isValidActor(egoNum)) return nullptr;
+	return _vm->derefActor(egoNum, "getEgoActor");
+}
+
+bool MonkeyMcpBridge::isActionDone() const {
+	// Require at least 3 frames to have elapsed since the action started.
+	if (_frameCounter - _sseStartFrame < 3) return false;
+	// Ego must not be walking.
+	Actor *ego = getEgoActor();
+	if (ego && ego->_moving) return false;
+	// No speech ongoing.
+	if (_vm->_talkDelay > 0) return false;
+	// User input must be enabled (covers cutscenes).
+	if (_vm->_userPut <= 0) return false;
+	return true;
+}
+
+bool MonkeyMcpBridge::hasPendingQuestion() const {
+	if (!_vm || _vm->_userPut <= 0) return false;
+
+	// Standard MI1 action verb names — if ALL active verbs are non-standard,
+	// we're in dialog mode.
+	static const char *kStdVerbs[] = {
+		"open", "close", "give", "pick_up", "look_at", "talk_to",
+		"walk_to", "push", "pull", "use", nullptr
+	};
+
+	bool hasStandard = false, hasNonStandard = false;
+	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256];
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		if (!textBuf[0]) continue;
+		Common::String label = normalizeActionName((const char *)textBuf);
+		bool isStd = false;
+		for (int i = 0; kStdVerbs[i]; ++i) {
+			if (label == kStdVerbs[i]) { isStd = true; break; }
+		}
+		if (isStd) hasStandard = true;
+		else       hasNonStandard = true;
+	}
+	// Dialog mode: only non-standard entries visible.
+	return hasNonStandard && !hasStandard;
+}
+
+// ---------------------------------------------------------------------------
+// Name resolution
+// ---------------------------------------------------------------------------
+
+Common::String MonkeyMcpBridge::normalizeActionName(const Common::String &action) {
+	Common::String s = lowerTrimmed(action);
+	s.replace('-', '_');
+	s.replace(' ', '_');
+	if (s == "walk")    return "walk_to";
+	if (s == "goto")    return "walk_to";
+	if (s == "look")    return "look_at";
+	if (s == "pick")    return "pick_up";
+	if (s == "pickup")  return "pick_up";
+	if (s == "talk")    return "talk_to";
+	return s;
+}
+
+void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const {
+	entities.clear();
+
+	struct RawEntry {
+		NamedEntity::Kind kind;
+		int numId;
+		Common::String baseName;
+	};
+	Common::Array<RawEntry> raw;
+
+	// Inventory (owned by ego, skip unnamed).
+	int ego = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
+	for (int i = 0; i < _vm->_numInventory; ++i) {
+		int obj = _vm->_inventory[i];
+		if (!obj || _vm->getOwner(obj) != ego) continue;
+		Common::String name = getObjName(_vm, obj);
+		if (name.empty()) continue; // skip unnamed inventory
+		RawEntry e;
+		e.kind = NamedEntity::kInventory;
+		e.numId = obj;
+		e.baseName = normalizeActionName(name);
+		raw.push_back(e);
+	}
+
+	// Scene objects (use ID as name if unnamed).
+	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
+		const ObjectData &od = _vm->_objs[i];
+		if (!od.obj_nr) continue;
+		Common::String name = getObjName(_vm, od.obj_nr);
+		RawEntry e;
+		e.kind = NamedEntity::kObject;
+		e.numId = od.obj_nr;
+		e.baseName = name.empty() ? Common::String::format("obj-%d", od.obj_nr)
+		                          : normalizeActionName(name);
+		raw.push_back(e);
+	}
+
+	// Actors in room (use ID as name if unnamed).
+	for (int i = 1; i < _vm->_numActors; ++i) {
+		Actor *a = _vm->_actors[i];
+		if (!a || !a->_visible || !a->isInCurrentRoom()) continue;
+		int objId = _vm->actorToObj(a->_number);
+		Common::String name = getObjName(_vm, objId);
+		RawEntry e;
+		e.kind = NamedEntity::kActor;
+		e.numId = a->_number;
+		e.baseName = name.empty() ? Common::String::format("actor-%d", a->_number)
+		                          : normalizeActionName(name);
+		raw.push_back(e);
+	}
+
+	// Count each base name to detect duplicates.
+	Common::HashMap<Common::String, int> nameCount;
+	for (uint i = 0; i < raw.size(); ++i) {
+		if (nameCount.contains(raw[i].baseName))
+			nameCount[raw[i].baseName]++;
+		else
+			nameCount[raw[i].baseName] = 1;
+	}
+
+	// Assign display names.
+	for (uint i = 0; i < raw.size(); ++i) {
+		NamedEntity ne;
+		ne.kind    = raw[i].kind;
+		ne.numId   = raw[i].numId;
+		ne.displayName = (nameCount[raw[i].baseName] > 1)
+		                 ? raw[i].baseName + "-" + Common::String::format("%d", raw[i].numId)
+		                 : raw[i].baseName;
+		entities.push_back(ne);
+	}
+}
+
+bool MonkeyMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity &out) const {
+	Common::String normalized = normalizeActionName(name);
+	Common::Array<NamedEntity> entities;
+	buildEntityMap(entities);
+	for (uint i = 0; i < entities.size(); ++i) {
+		if (entities[i].displayName == normalized) {
+			out = entities[i];
+			return true;
+		}
+	}
+	return false;
 }
 
 bool MonkeyMcpBridge::resolveVerb(const Common::String &action, int &verbId) const {
 	Common::String normalized = normalizeActionName(action);
-
 	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0)
-			continue;
+		if (!vs.verbid || vs.saveid != 0) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-		if (!ptr)
-			continue;
+		if (!ptr) continue;
 		byte textBuf[256];
 		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 		Common::String label = normalizeActionName((const char *)textBuf);
+		if (label.empty()) continue;
 		if (label == normalized || label.contains(normalized)) {
 			verbId = vs.verbid;
 			return true;
 		}
 	}
-
+	// Fallback for walk_to: first active action verb.
 	if (normalized == "walk_to") {
 		for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
@@ -878,308 +1363,57 @@ bool MonkeyMcpBridge::resolveVerb(const Common::String &action, int &verbId) con
 			}
 		}
 	}
-
 	return false;
 }
 
-Common::JSONValue *MonkeyMcpBridge::toolExecuteAction(const Common::JSONValue &args) {
-	if (!args.isObject()) {
-		Common::JSONObject err;
-		err.setVal("error", makeString("arguments must be an object"));
-		return new Common::JSONValue(err);
+void MonkeyMcpBridge::buildChoices(Common::JSONArray &choices) const {
+	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256];
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		if (!textBuf[0]) continue;
+		Common::JSONObject choice;
+		choice.setVal("verbSlot", makeInt(slot));
+		choice.setVal("verbId",   makeInt(vs.verbid));
+		choice.setVal("label",    makeString(Common::String((const char *)textBuf)));
+		choices.push_back(new Common::JSONValue(choice));
 	}
-
-	const Common::JSONObject &a = args.asObject();
-	int verbId = -1;
-	if (a.contains("verbId") && a["verbId"]->isIntegerNumber()) {
-		verbId = (int)a["verbId"]->asIntegerNumber();
-	} else if (a.contains("action") && a["action"]->isString()) {
-		if (!resolveVerb(a["action"]->asString(), verbId)) {
-			Common::JSONObject err;
-			err.setVal("error", makeString("unable to resolve action to verb"));
-			return new Common::JSONValue(err);
-		}
-	} else {
-		Common::JSONObject err;
-		err.setVal("error", makeString("missing action or verbId"));
-		return new Common::JSONValue(err);
-	}
-
-	if (!a.contains("targetId") || !a["targetId"]->isString()) {
-		Common::JSONObject err;
-		err.setVal("error", makeString("missing targetId"));
-		return new Common::JSONValue(err);
-	}
-
-	bool isPlace = false;
-	int placeBox = -1;
-	int targetObj = resolveTargetToObjectId(a["targetId"]->asString(), true, &isPlace, &placeBox);
-	if (targetObj < 0 && !isPlace) {
-		Common::JSONObject err;
-		err.setVal("error", makeString("invalid targetId"));
-		return new Common::JSONValue(err);
-	}
-
-	if (isPlace) {
-		if (placeBox < 0 || placeBox >= _vm->getNumBoxes()) {
-			Common::JSONObject err;
-			err.setVal("error", makeString("invalid place box"));
-			return new Common::JSONValue(err);
-		}
-		BoxCoords b = _vm->getBoxCoordinates(placeBox);
-		int x = (b.ul.x + b.ur.x + b.ll.x + b.lr.x) / 4;
-		int y = (b.ul.y + b.ur.y + b.ll.y + b.lr.y) / 4;
-		Actor *ego = (_vm->VAR_EGO != 0xFF) ? _vm->derefActor(_vm->VAR(_vm->VAR_EGO), "toolExecuteAction") : nullptr;
-		if (ego)
-			ego->startWalkActor(x, y, -1);
-
-		Common::JSONObject out;
-		out.setVal("queued", makeBool(true));
-		out.setVal("mode", makeString("walk"));
-		out.setVal("x", makeInt(x));
-		out.setVal("y", makeInt(y));
-		return new Common::JSONValue(out);
-	}
-
-	int objectA = targetObj;
-	int objectB = 0;
-	if (a.contains("withId") && a["withId"]->isString()) {
-		int withObj = resolveTargetToObjectId(a["withId"]->asString(), false);
-		if (withObj < 0) {
-			Common::JSONObject err;
-			err.setVal("error", makeString("invalid withId"));
-			return new Common::JSONValue(err);
-		}
-		objectA = withObj;
-		objectB = targetObj;
-	}
-
-	_vm->doSentence(verbId, objectA, objectB);
-
-	Common::JSONObject out;
-	out.setVal("queued", makeBool(true));
-	out.setVal("verbId", makeInt(verbId));
-	out.setVal("objectA", makeInt(objectA));
-	out.setVal("objectB", makeInt(objectB));
-	return new Common::JSONValue(out);
 }
 
-Common::JSONValue *MonkeyMcpBridge::toolRespondToChoice(const Common::JSONValue &args) {
-	if (!args.isObject()) {
-		Common::JSONObject err;
-		err.setVal("error", makeString("arguments must be an object"));
-		return new Common::JSONValue(err);
-	}
+// ---------------------------------------------------------------------------
+// JSON-RPC response helpers
+// ---------------------------------------------------------------------------
 
-	const Common::JSONObject &a = args.asObject();
-	int slot = -1;
-	if (a.contains("choiceId") && a["choiceId"]->isString()) {
-		ParsedEntityId parsed;
-		if (parseEntityId(a["choiceId"]->asString(), parsed) && parsed.kind == kEntityChoiceVerbSlot)
-			slot = parsed.value;
-	}
-	if (slot < 0 && a.contains("index") && a["index"]->isIntegerNumber()) {
-		int choiceIndex = (int)a["index"]->asIntegerNumber();
-		if (choiceIndex >= 0) {
-			int current = 0;
-			for (int s = 1; s < _vm->_numVerbs; ++s) {
-				const VerbSlot &candidate = _vm->_verbs[s];
-				if (!candidate.verbid || candidate.saveid != 0 || candidate.curmode != 1)
-					continue;
-				if (current == choiceIndex) {
-					slot = s;
-					break;
-				}
-				++current;
-			}
-		}
-	}
-
-	if (slot <= 0 || slot >= _vm->_numVerbs) {
-		Common::JSONObject err;
-		err.setVal("error", makeString("invalid choice"));
-		return new Common::JSONValue(err);
-	}
-
-	const VerbSlot &vs = _vm->_verbs[slot];
-	if (!vs.verbid) {
-		Common::JSONObject err;
-		err.setVal("error", makeString("choice is not active"));
-		return new Common::JSONValue(err);
-	}
-
-	_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
-
-	Common::JSONObject out;
-	out.setVal("queued", makeBool(true));
-	out.setVal("verbSlot", makeInt(slot));
-	out.setVal("verbId", makeInt(vs.verbid));
-	return new Common::JSONValue(out);
-}
-
-Common::JSONValue *MonkeyMcpBridge::toolMoveTo(const Common::JSONValue &args) {
-	if (!args.isObject()) {
-		Common::JSONObject err;
-		err.setVal("error", makeString("arguments must be an object"));
-		return new Common::JSONValue(err);
-	}
-	const Common::JSONObject &a = args.asObject();
-	int x = -1;
-	int y = -1;
-
-	if (a.contains("targetId") && a["targetId"]->isString()) {
-		bool isPlace = false;
-		int placeBox = -1;
-		int obj = resolveTargetToObjectId(a["targetId"]->asString(), true, &isPlace, &placeBox);
-		if (isPlace) {
-			if (placeBox < 0 || placeBox >= _vm->getNumBoxes()) {
-				Common::JSONObject err;
-				err.setVal("error", makeString("invalid place box"));
-				return new Common::JSONValue(err);
-			}
-			BoxCoords b = _vm->getBoxCoordinates(placeBox);
-			x = (b.ul.x + b.ur.x + b.ll.x + b.lr.x) / 4;
-			y = (b.ul.y + b.ur.y + b.ll.y + b.lr.y) / 4;
-		} else if (obj > 0) {
-			if (_vm->getObjectOrActorXY(obj, x, y) == 0) {
-				Common::JSONObject err;
-				err.setVal("error", makeString("unable to resolve target coordinates"));
-				return new Common::JSONValue(err);
-			}
-		} else {
-			Common::JSONObject err;
-			err.setVal("error", makeString("invalid targetId"));
-			return new Common::JSONValue(err);
-		}
-	} else if (a.contains("x") && a.contains("y") && a["x"]->isIntegerNumber() && a["y"]->isIntegerNumber()) {
-		x = (int)a["x"]->asIntegerNumber();
-		y = (int)a["y"]->asIntegerNumber();
-	} else {
-		Common::JSONObject err;
-		err.setVal("error", makeString("missing targetId or x/y"));
-		return new Common::JSONValue(err);
-	}
-
-	Actor *ego = (_vm->VAR_EGO != 0xFF) ? _vm->derefActor(_vm->VAR(_vm->VAR_EGO), "toolMoveTo") : nullptr;
-	if (ego)
-		ego->startWalkActor(x, y, -1);
-
-	Common::JSONObject out;
-	out.setVal("queued", makeBool(true));
-	out.setVal("mode", makeString("walk"));
-	out.setVal("x", makeInt(x));
-	out.setVal("y", makeInt(y));
-	return new Common::JSONValue(out);
-}
-
-Common::JSONValue *MonkeyMcpBridge::toolReadLatestMessages(const Common::JSONValue &args) {
-	uint64 sinceSeq = 0;
-	int limit = 30;
-	if (args.isObject()) {
-		const Common::JSONObject &a = args.asObject();
-		if (a.contains("sinceSeq") && a["sinceSeq"]->isIntegerNumber())
-			sinceSeq = (uint64)a["sinceSeq"]->asIntegerNumber();
-		if (a.contains("limit") && a["limit"]->isIntegerNumber())
-			limit = (int)a["limit"]->asIntegerNumber();
-	}
-	if (limit <= 0)
-		limit = 1;
-	if (limit > 200)
-		limit = 200;
-
-	Common::JSONArray outMessages;
-	for (uint i = 0; i < _messages.size(); ++i) {
-		const MessageEntry &m = _messages[i];
-		if (m.seq <= sinceSeq)
-			continue;
-		Common::JSONObject entry;
-		entry.setVal("seq", new Common::JSONValue((long long int)m.seq));
-		entry.setVal("room", makeInt(m.room));
-		entry.setVal("type", makeString(m.type));
-		entry.setVal("actorId", makeInt(m.actorId));
-		entry.setVal("text", makeString(m.text));
-		outMessages.push_back(new Common::JSONValue(entry));
-		if ((int)outMessages.size() >= limit)
-			break;
-	}
-
-	Common::JSONObject out;
-	out.setVal("messages", new Common::JSONValue(outMessages));
-	out.setVal("latestSeq", new Common::JSONValue((long long int)(_nextMessageSeq ? _nextMessageSeq - 1 : 0)));
-	return new Common::JSONValue(out);
-}
-
-void MonkeyMcpBridge::writeJson(Common::JSONValue *value) {
-	if (!_enabled || !value)
-		return;
-#if defined(POSIX)
-	Common::String json = value->stringify();
-	Common::String out =
-		"HTTP/1.1 200 OK\r\n"
-		"Content-Type: application/json\r\n"
-		"Content-Length: " + Common::String::format("%d", (int)json.size()) + "\r\n"
-		"\r\n" + json;
-	const char *data = out.c_str();
-	size_t remaining = out.size();
-	if (_clientFd >= 0) {
-		// Try to send all data; on EAGAIN/EWOULDBLOCK queue it
-		while (remaining > 0) {
-			ssize_t r = send(_clientFd, data, remaining, 0);
-			if (r < 0) {
-				if (errno == EAGAIN || errno == EWOULDBLOCK) {
-					break; // will queue below
-				}
-				debug("monkey_mcp: send to client failed, closing client (errno=%d)", errno);
-				close(_clientFd);
-				_clientFd = -1;
-				r = -1;
-				break;
-			}
-			data += r;
-			remaining -= r;
-		}
-		if (remaining == 0)
-			return; // sent fully
-	}
-
-	// If we get here, either no client or couldn't send fully -> queue
-	if (_outQueue.size() >= kMaxOutQueue)
-		_outQueue.remove_at(0);
-	_outQueue.push_back(out);
-	debug("monkey_mcp: queued outgoing message, queue size=%d", (int)_outQueue.size());
-#else
-	(void)value;
-#endif
-}
-
-void MonkeyMcpBridge::writeJsonRpcResult(const Common::JSONValue *id, Common::JSONValue *result) {
+void MonkeyMcpBridge::writeJsonRpcResult(const Common::JSONValue *id,
+                                          Common::JSONValue *result,
+                                          const Common::String &extraHeaders) {
 	Common::JSONObject root;
 	root.setVal("jsonrpc", makeString("2.0"));
-	if (id)
-		root.setVal("id", new Common::JSONValue(*id));
-	else
-		root.setVal("id", new Common::JSONValue());
+	root.setVal("id",     id ? new Common::JSONValue(*id) : new Common::JSONValue());
 	root.setVal("result", result ? result : new Common::JSONValue(Common::JSONObject()));
 	Common::JSONValue *obj = new Common::JSONValue(root);
-	writeJson(obj);
+	Common::String json = obj->stringify();
 	delete obj;
+	writeHttpResponse(200, "application/json", json, extraHeaders);
 }
 
-void MonkeyMcpBridge::writeJsonRpcError(const Common::JSONValue *id, int code, const Common::String &msg) {
+void MonkeyMcpBridge::writeJsonRpcError(const Common::JSONValue *id,
+                                         int code,
+                                         const Common::String &msg) {
 	Common::JSONObject err;
-	err.setVal("code", makeInt(code));
+	err.setVal("code",    makeInt(code));
 	err.setVal("message", makeString(msg));
-
 	Common::JSONObject root;
 	root.setVal("jsonrpc", makeString("2.0"));
-	if (id)
-		root.setVal("id", new Common::JSONValue(*id));
-	else
-		root.setVal("id", new Common::JSONValue());
-	root.setVal("error", new Common::JSONValue(err));
+	root.setVal("id",     id ? new Common::JSONValue(*id) : new Common::JSONValue());
+	root.setVal("error",  new Common::JSONValue(err));
 	Common::JSONValue *obj = new Common::JSONValue(root);
-	writeJson(obj);
+	Common::String json = obj->stringify();
 	delete obj;
+	writeHttpResponse(200, "application/json", json);
 }
 
 } // End of namespace Scumm
