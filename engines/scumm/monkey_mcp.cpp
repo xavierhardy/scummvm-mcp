@@ -620,8 +620,10 @@ void MonkeyMcpBridge::handleJsonRpc(const Common::String &body) {
 		writeJsonRpcError(id, -32601, "Method not found");
 	} else {
 		Common::String extra;
-		if (isInitialize && !_sessionId.empty())
+		if (isInitialize && !_sessionId.empty()) {
 			extra = "Mcp-Session-Id: " + _sessionId + "\r\n";
+			debug("monkey_mcp: initialize response including session header '%s'", _sessionId.c_str());
+		}
 		writeJsonRpcResult(id, result, extra);
 	}
 
