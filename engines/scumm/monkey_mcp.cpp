@@ -604,6 +604,7 @@ void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
 		Common::JSONValue *stateResult = toolState(Common::JSONValue(Common::JSONObject()));
 		Common::String json = stateResult->stringify();
 		delete stateResult;
+		debug("monkey_mcp: state JSON length=%d, first 100 chars: %.100s", (int)json.size(), json.c_str());
 		writeHttpResponse(200, "application/json", json);
 		return;
 	}
