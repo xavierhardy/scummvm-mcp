@@ -318,10 +318,12 @@ void MonkeyMcpBridge::pump() {
 		ssize_t n = ::read(_clientFd, buf, sizeof(buf));
 		if (n <= 0) {
 			if (n == 0) {
-				debug("monkey_mcp: client EOF");
+				debug("monkey_mcp: client closed connection cleanly");
 				close(_clientFd); _clientFd = -1;
-			} else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-				debug("monkey_mcp: read error errno=%d", errno);
+			} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				// Non-blocking read would block; try again next frame
+			} else {
+				debug("monkey_mcp: read error errno=%d (%s)", errno, strerror(errno));
 				close(_clientFd); _clientFd = -1;
 			}
 			break;
@@ -452,16 +454,36 @@ bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 	if (_clientFd < 0) return false;
 	const char *ptr = data.c_str();
 	size_t remaining = data.size();
+	size_t totalSent = 0;
 	while (remaining > 0) {
 		ssize_t r = send(_clientFd, ptr, remaining, 0);
 		if (r < 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK) break; // partial ok for SSE
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				// Only allow incomplete send for SSE streaming (where we retry next frame).
+				// For regular responses, we must send the complete response before returning.
+				if (_sseActive && totalSent > 0) {
+					return false; // Queued for next attempt (not needed yet; see below)
+				}
+				// For non-SSE, this shouldn't happen on a small response. If it does, close.
+				if (!_sseActive) {
+					debug("monkey_mcp: send would block on non-SSE response (sent %d/%d bytes)",
+						(int)totalSent, (int)(totalSent + remaining));
+					close(_clientFd); _clientFd = -1;
+					return false;
+				}
+				break;
+			}
 			debug("monkey_mcp: send failed errno=%d, closing", errno);
 			close(_clientFd); _clientFd = -1;
 			return false;
 		}
 		ptr += r;
 		remaining -= r;
+		totalSent += r;
+	}
+	if (remaining > 0) {
+		debug("monkey_mcp: incomplete send: %d bytes remaining", (int)remaining);
+		return false;
 	}
 	return true;
 #else
