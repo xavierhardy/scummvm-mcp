@@ -576,6 +576,14 @@ void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
 		}
 	}
 
+	// Reject tool calls (act/answer) while another action is streaming.
+	if (_sseActive && method == "POST" && body.contains("\"tools/call\"")) {
+		debug("monkey_mcp: rejected concurrent tool call (SSE already active)");
+		Common::JSONValue errId;
+		writeJsonRpcError(&errId, -32001, "action in progress: wait for previous call to complete");
+		return;
+	}
+
 	if (!body.empty())
 		handleJsonRpc(body);
 }
