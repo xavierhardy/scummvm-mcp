@@ -485,6 +485,8 @@ bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 		debug("monkey_mcp: incomplete send: %d bytes remaining", (int)remaining);
 		return false;
 	}
+	if (totalSent > 0)
+		debug("monkey_mcp: sent %d bytes successfully", (int)totalSent);
 	return true;
 #else
 	return false;
@@ -590,7 +592,12 @@ void MonkeyMcpBridge::handleJsonRpc(const Common::String &body) {
 
 	// Notifications have no "id" — respond 202 Accepted, no body.
 	if (!root.contains("id") || root["id"]->isNull()) {
+		Common::String method = (root.contains("method") && root["method"]->isString())
+		                       ? root["method"]->asString()
+		                       : "(unknown)";
+		debug("monkey_mcp: notification '%s', sending 202 Accepted", method.c_str());
 		writeHttpResponse(202, "", "");
+		debug("monkey_mcp: 202 response sent for '%s'", method.c_str());
 		delete parsed;
 		return;
 	}
@@ -626,6 +633,7 @@ Common::JSONValue *MonkeyMcpBridge::handleRequest(const Common::JSONValue &req) 
 	const Common::JSONObject &obj = req.asObject();
 	if (!obj.contains("method") || !obj["method"]->isString()) return nullptr;
 	Common::String method = obj["method"]->asString();
+	debug("monkey_mcp: handling request method '%s'", method.c_str());
 	if (method == "initialize")  return handleInitialize(req);
 	if (method == "tools/list")  return handleToolsList();
 	if (method == "tools/call")  return handleToolCall(req);
