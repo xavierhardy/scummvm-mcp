@@ -709,8 +709,10 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		props.setVal("y",      makeProp("integer", "Y pixel coordinate for walk_to."));
 		const char *req[] = {"verb"};
 		addTool("act",
-		        "Perform a verb action. Streams dialog and events via SSE until the "
-		        "action/cutscene sequence completes, then returns state changes. "
+		        "Perform a verb action. Blocks until the action/cutscene sequence completes, "
+		        "streaming dialog and events via SSE, then returns state changes. "
+		        "IMPORTANT: Actions are sequential - only one can be in progress at a time. "
+		        "Wait for the previous act/answer call to complete before sending the next one. "
 		        "Fails if a question is pending (use 'answer' first) or another action is running.",
 		        makeToolSchema(props, req, 1));
 	}
@@ -721,9 +723,11 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		props.setVal("id", makeProp("integer", "1-indexed dialog choice (1 = first option shown in state.question.choices)."));
 		const char *req[] = {"id"};
 		addTool("answer",
-		        "Select a dialog choice by 1-based index. Streams events via SSE until "
-		        "the conversation sequence completes, then returns state changes. "
-		        "Fails if no question is currently pending.",
+		        "Select a dialog choice by 1-based index. Blocks until the conversation "
+		        "sequence completes, streaming events via SSE, then returns state changes. "
+		        "IMPORTANT: Actions are sequential - only one can be in progress at a time. "
+		        "Wait for the previous act/answer call to complete before sending the next one. "
+		        "Fails if no question is currently pending or another action is running.",
 		        makeToolSchema(props, req, 1));
 	}
 
