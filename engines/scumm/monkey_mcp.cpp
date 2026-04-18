@@ -868,8 +868,11 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		positionSchema.setVal("properties", new Common::JSONValue(positionProps));
 		outputProps.setVal("position", new Common::JSONValue(positionSchema));
 		
-		outputProps.setVal("verbs", makeProp("array", "Available verbs"));
-		outputProps.setVal("inventory", makeProp("array", "Inventory items"));
+		Common::JSONObject stringArray;
+		stringArray.setVal("type",  makeString("array"));
+		stringArray.setVal("items", makeProp("string"));
+		outputProps.setVal("verbs",      new Common::JSONValue(stringArray));
+		outputProps.setVal("inventory",  new Common::JSONValue(stringArray));
 		
 		// Objects array schema
 		Common::JSONObject objectItemProps;
@@ -887,16 +890,7 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		objectsArray.setVal("items", new Common::JSONValue(objectItem));
 		outputProps.setVal("objects", new Common::JSONValue(objectsArray));
 
-		// Actors array schema
-		Common::JSONObject actorItemProps;
-		actorItemProps.setVal("name", makeProp("string", "Actor name"));
-		Common::JSONObject actorItem;
-		actorItem.setVal("type",       makeString("object"));
-		actorItem.setVal("properties", new Common::JSONValue(actorItemProps));
-		Common::JSONObject actorsArray;
-		actorsArray.setVal("type",  makeString("array"));
-		actorsArray.setVal("items", new Common::JSONValue(actorItem));
-		outputProps.setVal("actors", new Common::JSONValue(actorsArray));
+		outputProps.setVal("actors", new Common::JSONValue(stringArray));
 		
 		// Messages array schema
 		Common::JSONObject msgItemProps;
