@@ -320,7 +320,7 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	if (!_vm) return;
 
 	bool confVal = ConfMan.getBool("monkey_mcp");
-	_enabled = isMonkey1() && confVal;
+	_enabled = (_vm != nullptr) && confVal;
 	debug(1, "monkey_mcp: enabled=%d", (int)_enabled);
 	if (!_enabled) return;
 
@@ -1012,9 +1012,9 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 	Common::JSONValue emptyVal(empty);
 	if (!argsVal) argsVal = &emptyVal;
 
-	if (!isMonkey1()) {
+	if (!_vm) {
 		Common::JSONObject err;
-		err.setVal("error", makeString("Only available for Monkey Island 1"));
+		err.setVal("error", makeString("No game loaded"));
 		return wrapError(new Common::JSONValue(err));
 	}
 
@@ -1742,14 +1742,10 @@ bool MonkeyMcpBridge::isActionDone() const {
 bool MonkeyMcpBridge::hasPendingQuestion() const {
 	if (!_vm || _vm->_userPut <= 0) return false;
 
-	// Standard MI1 action verb names — if ALL active verbs are non-standard,
-	// we're in dialog mode.
-	static const char *kStdVerbs[] = {
-		"open", "close", "give", "pick_up", "look_at", "talk_to",
-		"walk_to", "push", "pull", "use", nullptr
-	};
-
-	bool hasStandard = false, hasNonStandard = false;
+	// Dialog mode: visible verb slots exist that have no keyboard shortcut.
+	// Action verbs (open, pick_up, etc.) always have vs.key != 0.
+	// Dialog choices are always unkeyed (vs.key == 0).
+	bool hasKeyed = false, hasUnkeyed = false;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
@@ -1758,16 +1754,10 @@ bool MonkeyMcpBridge::hasPendingQuestion() const {
 		byte textBuf[256];
 		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 		if (!textBuf[0]) continue;
-		Common::String label = normalizeActionName((const char *)textBuf);
-		bool isStd = false;
-		for (int i = 0; kStdVerbs[i]; ++i) {
-			if (label == kStdVerbs[i]) { isStd = true; break; }
-		}
-		if (isStd) hasStandard = true;
-		else       hasNonStandard = true;
+		if (vs.key) hasKeyed = true;
+		else        hasUnkeyed = true;
 	}
-	// Dialog mode: only non-standard entries visible.
-	return hasNonStandard && !hasStandard;
+	return hasUnkeyed && !hasKeyed;
 }
 
 // ---------------------------------------------------------------------------
