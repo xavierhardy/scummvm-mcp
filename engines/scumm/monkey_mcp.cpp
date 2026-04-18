@@ -989,7 +989,10 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 
 	if (name == "state") {
 		Common::JSONValue *stateResult = toolState(*argsVal);
-		Common::JSONValue *wrappedResult = wrapContent(stateResult, false, new Common::JSONValue(stateResult->asObject()));
+		// Create a deep copy for structured content
+		Common::JSONObject structuredCopy(stateResult->asObject());
+		Common::JSONValue *structured = new Common::JSONValue(structuredCopy);
+		Common::JSONValue *wrappedResult = wrapContent(stateResult, false, structured);
 		return wrappedResult;
 	}
 
@@ -1491,7 +1494,10 @@ void MonkeyMcpBridge::closeSse(bool success, const Common::String &errorMsg) {
 				} else {
 					// "state" — respond immediately
 					Common::JSONValue *stateResult = toolState(*next.args);
-					Common::JSONValue *wrappedResult = wrapContent(stateResult, false, new Common::JSONValue(stateResult->asObject()));
+					// Create a deep copy for structured content
+					Common::JSONObject structuredCopy(stateResult->asObject());
+					Common::JSONValue *structured = new Common::JSONValue(structuredCopy);
+					Common::JSONValue *wrappedResult = wrapContent(stateResult, false, structured);
 					writeJsonRpcResult(next.id, wrappedResult);
 				}
 				found = true;
