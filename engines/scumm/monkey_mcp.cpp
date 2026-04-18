@@ -905,18 +905,37 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		        makeOutputSchema(outputProps));
 	}
 
+	// Shared output schema for act/answer: the state-change diff returned in structuredContent.
+	auto makeChangesSchema = [&]() -> Common::JSONValue * {
+		Common::JSONObject props;
+		props.setVal("inventory_added",  makeProp("array",   "Names of items added to inventory"));
+		props.setVal("room_changed",     makeProp("integer", "New room number (only present if room changed)"));
+		Common::JSONObject posProps;
+		posProps.setVal("x", makeProp("integer", "X coordinate"));
+		posProps.setVal("y", makeProp("integer", "Y coordinate"));
+		Common::JSONObject posSchema;
+		posSchema.setVal("type",       makeString("object"));
+		posSchema.setVal("properties", new Common::JSONValue(posProps));
+		props.setVal("position",        new Common::JSONValue(posSchema));
+		props.setVal("objects_changed", makeProp("array",  "Objects whose state changed: [{name, old_state, new_state}]"));
+		props.setVal("question",        makeProp("object", "Pending dialog question if action ended with one: {choices:[{id,label}]}"));
+		return makeOutputSchema(props);
+	};
+
 	// act
 	{
 		Common::JSONObject props;
-		props.setVal("verb",   makeProp("string",  "Verb name (e.g. 'open', 'use', 'look_at', 'walk_to'). Required."));
-		props.setVal("object1", makePropOneOf("string", "integer", "Primary target: object name (e.g. 'door') or numeric id from state. For 'use X on Y', this is X."));
-		props.setVal("object2", makePropOneOf("string", "integer", "Secondary target for 'use X on Y' actions (Y): name or numeric id."));
-		props.setVal("x",       makeProp("integer", "X pixel coordinate for walk_to. Prefer object1 when the target is a named object."));
-		props.setVal("y",      makeProp("integer", "Y pixel coordinate for walk_to (use with x)."));
+		props.setVal("verb",    makeProp("string", "Verb name (e.g. 'open', 'use', 'look_at', 'walk_to'). Required."));
+		props.setVal("object1", makePropOneOf("string", "integer",
+		    "Primary target: name or numeric id of an object/actor/inventory item "
+		    "currently present in state (objects[], actors[], or inventory[]). "
+		    "For 'use X on Y', this is X."));
+		props.setVal("object2", makePropOneOf("string", "integer",
+		    "Secondary target for 'use X on Y' (Y): name or numeric id, "
+		    "must currently exist in state."));
+		props.setVal("x", makeProp("integer", "X pixel coordinate for walk_to. Prefer object1 when the target is a named object."));
+		props.setVal("y", makeProp("integer", "Y pixel coordinate for walk_to (use with x)."));
 		const char *req[] = {"verb"};
-		Common::JSONObject outputProps;
-		outputProps.setVal("state", makeProp("object", "Updated game state after action completes"));
-		
 		addTool("act",
 		        "Perform a verb action. Blocks until the action/cutscene sequence completes, "
 		        "streaming dialog and events via SSE, then returns state changes. "
@@ -924,7 +943,7 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		        "Wait for the previous act/answer call to complete before sending the next one. "
 		        "Fails if a question is pending (use 'answer' first) or another action is running.",
 		        makeToolSchema(props, req, 1),
-		        makeOutputSchema(outputProps));
+		        makeChangesSchema());
 	}
 
 	// answer
@@ -932,9 +951,6 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		Common::JSONObject props;
 		props.setVal("id", makeProp("integer", "1-indexed dialog choice (1 = first option shown in state.question.choices)."));
 		const char *req[] = {"id"};
-		Common::JSONObject outputProps;
-		outputProps.setVal("state", makeProp("object", "Updated game state after conversation completes"));
-		
 		addTool("answer",
 		        "Select a dialog choice by 1-based index. Blocks until the conversation "
 		        "sequence completes, streaming events via SSE, then returns state changes. "
@@ -942,7 +958,7 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		        "Wait for the previous act/answer call to complete before sending the next one. "
 		        "Fails if no question is currently pending or another action is running.",
 		        makeToolSchema(props, req, 1),
-		        makeOutputSchema(outputProps));
+		        makeChangesSchema());
 	}
 
 	Common::JSONObject result;
@@ -1428,14 +1444,17 @@ void MonkeyMcpBridge::closeSse(bool success, const Common::String &errorMsg) {
 	if (success) {
 		// Build state-change diff.
 		Common::JSONObject changes = buildStateChanges();
-		Common::JSONObject resultObj;
+		Common::JSONValue *changesVal = new Common::JSONValue(changes);
+
 		Common::JSONObject textContent;
 		textContent.setVal("type", makeString("text"));
-		textContent.setVal("text", makeString("done"));
+		textContent.setVal("text", makeString(changesVal->stringify()));
 		Common::JSONArray contentArr;
 		contentArr.push_back(new Common::JSONValue(textContent));
-		resultObj.setVal("content", new Common::JSONValue(contentArr));
-		resultObj.setVal("changes", new Common::JSONValue(changes));
+
+		Common::JSONObject resultObj;
+		resultObj.setVal("content",           new Common::JSONValue(contentArr));
+		resultObj.setVal("structuredContent", changesVal);
 
 		Common::JSONObject rpc;
 		rpc.setVal("jsonrpc", makeString("2.0"));
