@@ -973,23 +973,31 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 			inventory.push_back(makeString(safe));
 			break;
 		case NamedEntity::kObject: {
-			// Determine which verbs the object has script handlers for.
-			Common::JSONArray possible;
+			Common::JSONArray compatVerbs;
 			bool hasLookAt = false, hasWalkTo = false;
+			int handlerCount = 0;
+			bool walkToHasHandler = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
 				if (_vm->getVerbEntrypoint(ne.numId, activeVerbs[k].verbId) != 0) {
-					possible.push_back(makeString(activeVerbs[k].name));
+					compatVerbs.push_back(makeString(activeVerbs[k].name));
+					handlerCount++;
 					if (activeVerbs[k].name == "look_at") hasLookAt = true;
-					if (activeVerbs[k].name == "walk_to") hasWalkTo = true;
+					if (activeVerbs[k].name == "walk_to") { hasWalkTo = true; walkToHasHandler = true; }
 				}
 			}
-			if (!hasLookAt) possible.push_back(makeString("look_at"));
-			if (!hasWalkTo) possible.push_back(makeString("walk_to"));
+			if (!hasLookAt) compatVerbs.push_back(makeString("look_at"));
+			if (!hasWalkTo) compatVerbs.push_back(makeString("walk_to"));
+
+			// pathway: only walk_to has a real script handler — pure exit trigger.
+			bool isPathway = walkToHasHandler && (handlerCount == 1);
 
 			Common::JSONObject obj;
-			obj.setVal("name",     makeString(safe));
-			obj.setVal("state",    makeInt(_vm->getState(ne.numId)));
-			obj.setVal("possible", new Common::JSONValue(possible));
+			obj.setVal("id",               makeInt(ne.numId));
+			obj.setVal("name",             makeString(safe));
+			obj.setVal("state",            makeInt(_vm->getState(ne.numId)));
+			obj.setVal("visible",          makeBool(ne.visible));
+			obj.setVal("pathway",          makeBool(isPathway));
+			obj.setVal("compatible_verbs", new Common::JSONValue(compatVerbs));
 			objects.push_back(new Common::JSONValue(obj));
 			break;
 		}
@@ -1599,6 +1607,7 @@ void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const
 		NamedEntity::Kind kind;
 		int numId;
 		Common::String baseName;
+		bool visible = false;
 	};
 	Common::Array<RawEntry> raw;
 
@@ -1626,6 +1635,10 @@ void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const
 		e.numId = od.obj_nr;
 		e.baseName = name.empty() ? Common::String::format("obj-%d", od.obj_nr)
 		                          : normalizeActionName(name);
+		// Visibility: state & 0xF != 0, with single-level parent check.
+		e.visible = (od.state & 0xF) != 0;
+		if (e.visible && od.parent != 0 && od.parent < _vm->_numLocalObjects)
+			e.visible = ((_vm->_objs[od.parent].state & 0xF) == od.parentstate);
 		raw.push_back(e);
 	}
 
@@ -1652,14 +1665,13 @@ void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const
 			nameCount[raw[i].baseName] = 1;
 	}
 
-	// Assign display names.
+	// Assign display names — no ID suffix; the id field disambiguates duplicates.
 	for (uint i = 0; i < raw.size(); ++i) {
 		NamedEntity ne;
-		ne.kind    = raw[i].kind;
-		ne.numId   = raw[i].numId;
-		ne.displayName = (nameCount[raw[i].baseName] > 1)
-		                 ? raw[i].baseName + "-" + Common::String::format("%d", raw[i].numId)
-		                 : raw[i].baseName;
+		ne.kind        = raw[i].kind;
+		ne.numId       = raw[i].numId;
+		ne.displayName = raw[i].baseName;
+		ne.visible     = raw[i].visible;
 		entities.push_back(ne);
 	}
 }

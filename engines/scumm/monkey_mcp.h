@@ -51,7 +51,8 @@ private:
 		enum Kind { kInventory, kObject, kActor };
 		Kind kind;
 		int numId;                  // obj_nr for objects/inventory, actor._number for actors
-		Common::String displayName; // deduplicated name (e.g. "sword" or "sword-42")
+		Common::String displayName;
+		bool visible;               // kObject: state & 0xF != 0 with parent-chain check
 	};
 
 	// One active TCP connection (POST or persistent GET SSE).
