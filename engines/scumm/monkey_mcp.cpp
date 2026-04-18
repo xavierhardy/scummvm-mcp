@@ -213,6 +213,17 @@ static Common::JSONValue *makeProp(const char *type, const char *desc = nullptr)
 	return new Common::JSONValue(p);
 }
 
+static Common::JSONValue *makePropOneOf(const char *type1, const char *type2, const char *desc) {
+	Common::JSONObject p;
+	Common::JSONArray oneOf;
+	Common::JSONObject t1; t1.setVal("type", makeString(type1)); oneOf.push_back(new Common::JSONValue(t1));
+	Common::JSONObject t2; t2.setVal("type", makeString(type2)); oneOf.push_back(new Common::JSONValue(t2));
+	p.setVal("oneOf", new Common::JSONValue(oneOf));
+	if (desc && *desc)
+		p.setVal("description", makeString(desc));
+	return new Common::JSONValue(p);
+}
+
 static Common::JSONValue *makeToolSchema(Common::JSONObject &props,
                                           const char *const *required = nullptr,
                                           int reqCount = 0) {
@@ -829,8 +840,8 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 	{
 		Common::JSONObject props;
 		props.setVal("verb",   makeProp("string",  "Verb name (e.g. 'open', 'use', 'look_at', 'walk_to'). Required."));
-		props.setVal("object1", makeProp("string",  "Primary target name (e.g. 'door', 'chest'). For 'use X on Y', this is X."));
-		props.setVal("object2", makeProp("string",  "Secondary target for 'use X on Y' actions (Y)."));
+		props.setVal("object1", makePropOneOf("string", "integer", "Primary target: object name (e.g. 'door') or numeric id from state. For 'use X on Y', this is X."));
+		props.setVal("object2", makePropOneOf("string", "integer", "Secondary target for 'use X on Y' actions (Y): name or numeric id."));
 		props.setVal("x",       makeProp("integer", "X pixel coordinate for walk_to. Prefer object1 when the target is a named object."));
 		props.setVal("y",      makeProp("integer", "Y pixel coordinate for walk_to (use with x)."));
 		const char *req[] = {"verb"};
@@ -1123,23 +1134,31 @@ void MonkeyMcpBridge::toolAct(const Common::JSONValue &args, const Common::JSONV
 
 	// General action (including walk_to with a named target via doSentence,
 	// which triggers the object's verb script and handles room transitions).
+	auto resolveObject = [&](const char *param, int &out) -> bool {
+		if (!a.contains(param)) return true;
+		const Common::JSONValue *v = a[param];
+		if (v->isIntegerNumber()) {
+			out = (int)v->asIntegerNumber();
+			return true;
+		}
+		if (v->isString()) {
+			NamedEntity ent;
+			if (!resolveEntityByName(v->asString(), ent)) {
+				writeJsonRpcError(id, -32602,
+					Common::String("act: unknown ") + param + " '" + v->asString() + "'");
+				return false;
+			}
+			out = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
+			return true;
+		}
+		writeJsonRpcError(id, -32602,
+			Common::String("act: ") + param + " must be a string name or integer id");
+		return false;
+	};
+
 	int objectA = 0, objectB = 0;
-	if (a.contains("object1") && a["object1"]->isString()) {
-		NamedEntity ent;
-		if (!resolveEntityByName(a["object1"]->asString(), ent)) {
-			writeJsonRpcError(id, -32602, "act: unknown object1 '" + a["object1"]->asString() + "'");
-			return;
-		}
-		objectA = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
-	}
-	if (a.contains("object2") && a["object2"]->isString()) {
-		NamedEntity ent;
-		if (!resolveEntityByName(a["object2"]->asString(), ent)) {
-			writeJsonRpcError(id, -32602, "act: unknown object2 '" + a["object2"]->asString() + "'");
-			return;
-		}
-		objectB = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
-	}
+	if (!resolveObject("object1", objectA)) return;
+	if (!resolveObject("object2", objectB)) return;
 
 	snapshotPreAction();
 	_vm->doSentence(verbId, objectA, objectB);
