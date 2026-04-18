@@ -158,7 +158,7 @@ private:
 
 	// ---- Response helpers ----
 	void writeJsonRpcResult(const Common::JSONValue *id, Common::JSONValue *result,
-	                        const Common::String &extraHeaders = "", bool wrapContentFlag = false);
+	                        const Common::String &extraHeaders = "");
 	void writeJsonRpcError(const Common::JSONValue *id, int code, const Common::String &msg);
 };
 

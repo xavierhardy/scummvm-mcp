@@ -246,8 +246,8 @@ static Common::JSONValue *makeOutputSchema(Common::JSONObject &props,
 	return makeToolSchema(props, required, reqCount);
 }
 
-// Wrap a tool result object in MCP content envelope.
-static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = false, Common::JSONValue *structured = nullptr) {
+// Wrap a tool result in the MCP content envelope with isError flag.
+static Common::JSONValue *wrapError(Common::JSONValue *result) {
 	Common::String json = result ? result->stringify() : "{}";
 	Common::JSONObject text;
 	text.setVal("type", makeString("text"));
@@ -255,15 +255,24 @@ static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = 
 	Common::JSONArray arr;
 	arr.push_back(new Common::JSONValue(text));
 	Common::JSONObject out;
-	out.setVal("content", new Common::JSONValue(arr));
-	if (structured) {
-		// Take ownership of structured content
-		out.setVal("structuredContent", structured);
-	} else if (isError) {
-		out.setVal("isError", makeBool(true));
-	}
-	// Clean up input parameters
+	out.setVal("content",  new Common::JSONValue(arr));
+	out.setVal("isError",  makeBool(true));
 	delete result;
+	return new Common::JSONValue(out);
+}
+
+// Wrap a structured tool result: result is used for BOTH content[].text (stringified)
+// AND structuredContent. Takes ownership of result — no copy, no double-free.
+static Common::JSONValue *wrapStructured(Common::JSONValue *result) {
+	Common::String json = result ? result->stringify() : "{}";
+	Common::JSONObject text;
+	text.setVal("type", makeString("text"));
+	text.setVal("text", makeString(json));
+	Common::JSONArray arr;
+	arr.push_back(new Common::JSONValue(text));
+	Common::JSONObject out;
+	out.setVal("content",          new Common::JSONValue(arr));
+	out.setVal("structuredContent", result);   // takes ownership, no copy
 	return new Common::JSONValue(out);
 }
 
@@ -988,7 +997,7 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 	if (!isMonkey1()) {
 		Common::JSONObject err;
 		err.setVal("error", makeString("Only available for Monkey Island 1"));
-		return wrapContent(new Common::JSONValue(err), true);
+		return wrapError(new Common::JSONValue(err));
 	}
 
 	const Common::JSONValue *id = obj.contains("id") ? obj["id"] : nullptr;
@@ -1006,13 +1015,8 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 		return nullptr;
 	}
 
-	if (name == "state") {
-		Common::JSONValue *stateResult = toolState(*argsVal);
-		// Create wrapped result for direct return
-		Common::JSONObject structuredCopy(stateResult->asObject());
-		Common::JSONValue *structured = new Common::JSONValue(structuredCopy);
-		return wrapContent(stateResult, false, structured);
-	}
+	if (name == "state")
+		return wrapStructured(toolState(*argsVal));
 
 	// act and answer start SSE and return nothing via the normal path.
 	if (name == "act") {
@@ -1026,7 +1030,7 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 
 	Common::JSONObject err;
 	err.setVal("error", makeString("Unknown tool: " + name));
-	return wrapContent(new Common::JSONValue(err), true);
+	return wrapError(new Common::JSONValue(err));
 }
 
 // ---------------------------------------------------------------------------
@@ -1515,8 +1519,7 @@ void MonkeyMcpBridge::closeSse(bool success, const Common::String &errorMsg) {
 					toolAnswer(*next.args, next.id);
 				} else {
 					// "state" — respond immediately
-					Common::JSONValue *stateResult = toolState(*next.args);
-					writeJsonRpcResult(next.id, stateResult, "", true);
+					writeJsonRpcResult(next.id, wrapStructured(toolState(*next.args)));
 				}
 				found = true;
 				break;
@@ -1879,26 +1882,11 @@ void MonkeyMcpBridge::buildChoices(Common::JSONArray &choices) const {
 
 void MonkeyMcpBridge::writeJsonRpcResult(const Common::JSONValue *id,
                                           Common::JSONValue *result,
-                                          const Common::String &extraHeaders,
-                                          bool wrapContentFlag) {
+                                          const Common::String &extraHeaders) {
 	Common::JSONObject root;
 	root.setVal("jsonrpc", makeString("2.0"));
 	root.setVal("id",     id ? new Common::JSONValue(*id) : new Common::JSONValue());
-	
-	Common::JSONValue *finalResult = result;
-	if (wrapContentFlag && result) {
-		// Create a deep copy for structured content
-		Common::JSONObject structuredCopy(result->asObject());
-		Common::JSONValue *structured = new Common::JSONValue(structuredCopy);
-		// wrapContent takes ownership of result and structured, returns new object
-		Common::JSONValue *wrapped = wrapContent(result, false, structured);
-		// Don't delete result - wrapContent owns it now
-		finalResult = wrapped;
-	} else if (!result) {
-		finalResult = new Common::JSONValue(Common::JSONObject());
-	}
-	
-	root.setVal("result", finalResult);
+	root.setVal("result", result ? result : new Common::JSONValue(Common::JSONObject()));
 	Common::JSONValue *obj = new Common::JSONValue(root);
 	Common::String json = obj->stringify();
 	delete obj;
