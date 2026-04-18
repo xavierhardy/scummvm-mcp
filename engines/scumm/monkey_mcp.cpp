@@ -1022,7 +1022,7 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 	out.setVal("room", makeInt(_vm->_currentRoom));
 
 	// Room name from background object (slot 0), if available.
-	if (_vm->_numLocalObjects > 0 && _vm->_objs[0].obj_nr) {
+	if (_vm->_objs && _vm->_numLocalObjects > 0 && _vm->_objs[0].obj_nr) {
 		Common::String rn = getObjName(_vm, _vm->_objs[0].obj_nr);
 		if (!rn.empty()) {
 			rn = normalizeActionName(rn);
@@ -1332,6 +1332,7 @@ void MonkeyMcpBridge::snapshotPreAction() {
 		_ssePrePosX = _ssePrePosY = 0;
 	}
 	_ssePreObjectStates.clear();
+	if (!_vm->_objs) return;
 	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
 		const ObjectData &od = _vm->_objs[i];
 		if (!od.obj_nr) continue;
@@ -1552,7 +1553,7 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 
 	// Object state changes.
 	Common::JSONArray objChanges;
-	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
+	for (int i = 1; _vm->_objs && i < _vm->_numLocalObjects; ++i) {
 		const ObjectData &od = _vm->_objs[i];
 		if (!od.obj_nr) continue;
 		int newState = _vm->getState(od.obj_nr);
@@ -1725,7 +1726,7 @@ void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const
 	}
 
 	// Scene objects (use ID as name if unnamed).
-	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
+	for (int i = 1; _vm->_objs && i < _vm->_numLocalObjects; ++i) {
 		const ObjectData &od = _vm->_objs[i];
 		if (!od.obj_nr) continue;
 		Common::String name = getObjName(_vm, od.obj_nr);
