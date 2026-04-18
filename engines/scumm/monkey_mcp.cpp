@@ -249,7 +249,6 @@ static Common::JSONValue *makeOutputSchema(Common::JSONObject &props,
 // Wrap a tool result object in MCP content envelope.
 static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = false, Common::JSONValue *structured = nullptr) {
 	Common::String json = result ? result->stringify() : "{}";
-	delete result;
 	Common::JSONObject text;
 	text.setVal("type", makeString("text"));
 	text.setVal("text", makeString(json));
@@ -258,10 +257,13 @@ static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = 
 	Common::JSONObject out;
 	out.setVal("content", new Common::JSONValue(arr));
 	if (structured) {
+		// Take ownership of structured content
 		out.setVal("structuredContent", structured);
 	} else if (isError) {
 		out.setVal("isError", makeBool(true));
 	}
+	// Clean up input parameters
+	delete result;
 	return new Common::JSONValue(out);
 }
 
@@ -1863,7 +1865,10 @@ void MonkeyMcpBridge::writeJsonRpcResult(const Common::JSONValue *id,
 		// Create a deep copy for structured content
 		Common::JSONObject structuredCopy(result->asObject());
 		Common::JSONValue *structured = new Common::JSONValue(structuredCopy);
-		finalResult = wrapContent(result, false, structured);
+		// wrapContent takes ownership of result and structured, returns new object
+		Common::JSONValue *wrapped = wrapContent(result, false, structured);
+		// Don't delete result - wrapContent owns it now
+		finalResult = wrapped;
 	} else if (!result) {
 		finalResult = new Common::JSONValue(Common::JSONObject());
 	}
