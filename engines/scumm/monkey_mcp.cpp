@@ -846,12 +846,54 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		Common::JSONObject outputProps;
 		outputProps.setVal("room", makeProp("integer", "Current room number"));
 		outputProps.setVal("room_name", makeProp("string", "Human-readable room name (optional)"));
+		
+		// Position object schema
+		Common::JSONObject positionSchema;
+		positionSchema.setVal("type", makeString("object"));
+		Common::JSONObject positionProps;
+		positionProps.setVal("x", makeProp("integer", "X coordinate"));
+		positionProps.setVal("y", makeProp("integer", "Y coordinate"));
+		positionSchema.setVal("properties", new Common::JSONValue(positionProps));
+		outputProps.setVal("position", new Common::JSONValue(positionSchema));
+		
 		outputProps.setVal("verbs", makeProp("array", "Available verbs"));
 		outputProps.setVal("inventory", makeProp("array", "Inventory items"));
-		outputProps.setVal("objects", makeProp("array", "Scene objects"));
-		outputProps.setVal("actors", makeProp("array", "Actors in room"));
+		
+		// Objects array schema
+		Common::JSONObject objectSchema;
+		objectSchema.setVal("type", makeString("object"));
+		Common::JSONObject objectProps;
+		objectProps.setVal("id", makeProp("integer", "Object ID"));
+		objectProps.setVal("name", makeProp("string", "Object name"));
+		objectProps.setVal("state", makeProp("integer", "Object state"));
+		objectProps.setVal("visible", makeProp("boolean", "Visibility status"));
+		objectProps.setVal("pathway", makeProp("boolean", "Is pathway/exit"));
+		objectSchema.setVal("properties", new Common::JSONValue(objectProps));
+		outputProps.setVal("objects", new Common::JSONValue(objectSchema));
+		
+		// Actors array schema
+		Common::JSONObject actorSchema;
+		actorSchema.setVal("type", makeString("object"));
+		Common::JSONObject actorProps;
+		actorProps.setVal("id", makeProp("integer", "Actor ID"));
+		actorProps.setVal("name", makeProp("string", "Actor name"));
+		actorProps.setVal("state", makeProp("integer", "Actor state"));
+		actorProps.setVal("costume", makeProp("integer", "Current costume"));
+		actorProps.setVal("talk_color", makeProp("integer", "Talk color"));
+		actorSchema.setVal("properties", new Common::JSONValue(actorProps));
+		outputProps.setVal("actors", new Common::JSONValue(actorSchema));
+		
 		outputProps.setVal("messages", makeProp("array", "Recent messages"));
-		outputProps.setVal("question", makeProp("object", "Pending dialog question (optional)"));
+		
+		// Question object schema
+		Common::JSONObject questionSchema;
+		questionSchema.setVal("type", makeString("object"));
+		Common::JSONObject questionProps;
+		questionProps.setVal("id", makeProp("integer", "Question ID"));
+		questionProps.setVal("text", makeProp("string", "Question text"));
+		questionProps.setVal("answers", makeProp("array", "Available answers"));
+		questionSchema.setVal("properties", new Common::JSONValue(questionProps));
+		outputProps.setVal("question", new Common::JSONValue(questionSchema));
 		
 		addTool("state",
 		        "Returns the current game state: room, position, inventory, scene objects, "
