@@ -91,6 +91,11 @@ private:
 	uint64 _nextMessageSeq;
 	uint32 _frameCounter;
 
+	struct ObjStateSnap {
+		int objNr;
+		int state;
+	};
+
 	// SSE streaming state (active while act/answer is executing)
 	bool _sseActive;
 	int _sseClientId;                    // which client owns the current SSE stream (-1 = none)
@@ -98,6 +103,7 @@ private:
 	uint32 _sseStartFrame;
 	uint32 _sseLastHeartbeatFrame;
 	Common::Array<uint16> _ssePreInventory;
+	Common::Array<ObjStateSnap> _ssePreObjectStates;
 	int _ssePreRoom;
 	int _ssePrePosX, _ssePrePosY;
 

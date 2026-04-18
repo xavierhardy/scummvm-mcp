@@ -946,9 +946,19 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		const NamedEntity &ne = entities[i];
 		Common::String safe = sanitizeForJson(ne.displayName);
 		switch (ne.kind) {
-		case NamedEntity::kInventory: inventory.push_back(makeString(safe)); break;
-		case NamedEntity::kObject:    objects.push_back(makeString(safe));   break;
-		case NamedEntity::kActor:     actors.push_back(makeString(safe));    break;
+		case NamedEntity::kInventory:
+			inventory.push_back(makeString(safe));
+			break;
+		case NamedEntity::kObject: {
+			Common::JSONObject obj;
+			obj.setVal("name",  makeString(safe));
+			obj.setVal("state", makeInt(_vm->getState(ne.numId)));
+			objects.push_back(new Common::JSONValue(obj));
+			break;
+		}
+		case NamedEntity::kActor:
+			actors.push_back(makeString(safe));
+			break;
 		}
 	}
 	out.setVal("inventory", new Common::JSONValue(inventory));
@@ -1210,6 +1220,15 @@ void MonkeyMcpBridge::snapshotPreAction() {
 	} else {
 		_ssePrePosX = _ssePrePosY = 0;
 	}
+	_ssePreObjectStates.clear();
+	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
+		const ObjectData &od = _vm->_objs[i];
+		if (!od.obj_nr) continue;
+		ObjStateSnap snap;
+		snap.objNr = od.obj_nr;
+		snap.state = _vm->getState(od.obj_nr);
+		_ssePreObjectStates.push_back(snap);
+	}
 }
 
 void MonkeyMcpBridge::pumpSse() {
@@ -1403,6 +1422,31 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 			changes.setVal("position", new Common::JSONValue(pos));
 		}
 	}
+
+	// Object state changes.
+	Common::JSONArray objChanges;
+	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
+		const ObjectData &od = _vm->_objs[i];
+		if (!od.obj_nr) continue;
+		int newState = _vm->getState(od.obj_nr);
+		int preState = newState;
+		for (uint j = 0; j < _ssePreObjectStates.size(); ++j) {
+			if (_ssePreObjectStates[j].objNr == od.obj_nr) {
+				preState = _ssePreObjectStates[j].state;
+				break;
+			}
+		}
+		if (newState == preState) continue;
+		Common::String name = getObjName(_vm, od.obj_nr);
+		if (name.empty()) name = Common::String::format("obj-%d", od.obj_nr);
+		Common::JSONObject entry;
+		entry.setVal("name",      makeString(sanitizeForJson(lowerTrimmed(name))));
+		entry.setVal("old_state", makeInt(preState));
+		entry.setVal("new_state", makeInt(newState));
+		objChanges.push_back(new Common::JSONValue(entry));
+	}
+	if (!objChanges.empty())
+		changes.setVal("objects_changed", new Common::JSONValue(objChanges));
 
 	// Pending question.
 	if (hasPendingQuestion()) {
