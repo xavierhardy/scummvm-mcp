@@ -244,6 +244,20 @@ static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = 
 	return new Common::JSONValue(out);
 }
 
+// Log an S()/R() message: HTTP headers at level 5, body (or bare SSE data) at level 0.
+static void logMessage(const char *prefix, int clientId, uint32 msgId, const char *data, size_t len) {
+	const char *sep = (const char *)memmem(data, len, "\r\n\r\n", 4);
+	if (sep) {
+		size_t hdrLen  = (size_t)(sep - data) + 4;
+		size_t bodyLen = len - hdrLen;
+		debug(5, "%s(%d,%06x) [headers]: %.*s", prefix, clientId, msgId, (int)hdrLen, data);
+		if (bodyLen > 0)
+			debug("%s(%d,%06x): %.*s", prefix, clientId, msgId, (int)bodyLen, sep + 4);
+	} else {
+		debug("%s(%d,%06x): %.*s", prefix, clientId, msgId, (int)len, data);
+	}
+}
+
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -489,7 +503,7 @@ void MonkeyMcpBridge::pump() {
 				break;
 			}
 			uint32 rId = _nextRecvMsgId++;
-			debug("R(%d,%06x): %.*s", ce.clientId, rId, (int)n, buf);
+			logMessage("R", ce.clientId, rId, buf, n);
 			ce.inBuffer += Common::String(buf, n);
 		}
 
@@ -555,7 +569,7 @@ bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 	if (_activeFd < 0) return false;
 
 	uint32 msgId = _nextSendMsgId++;
-	debug("S(%d,%06x): %.*s", _activeClientId, msgId, (int)data.size(), data.c_str());
+	logMessage("S", _activeClientId, msgId, data.c_str(), data.size());
 
 	const char *ptr = data.c_str();
 	size_t remaining = data.size();
