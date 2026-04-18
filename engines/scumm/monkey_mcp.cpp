@@ -448,7 +448,7 @@ void MonkeyMcpBridge::pump() {
 		} else if (_frameCounter - ce.lastHeartbeatFrame >= 60) {
 			Common::String hb = ": keepalive\n\n";
 			send(ce.fd, hb.c_str(), hb.size(), 0);
-			debug(5, "S(%d,%06x): [keepalive]", ce.clientId, _nextSendMsgId++);
+			debug(3, "S(%d,%06x): [keepalive]", ce.clientId, _nextSendMsgId++);
 			ce.lastHeartbeatFrame = _frameCounter;
 		}
 	}
@@ -829,9 +829,9 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 	{
 		Common::JSONObject props;
 		props.setVal("verb",   makeProp("string",  "Verb name (e.g. 'open', 'use', 'look_at', 'walk_to'). Required."));
-		props.setVal("actor1", makeProp("string",  "Primary target name (e.g. 'door', 'guybrush'). For 'use X on Y', this is X."));
-		props.setVal("actor2", makeProp("string",  "Secondary target for 'use X on Y' actions (Y)."));
-		props.setVal("x",      makeProp("integer", "X pixel coordinate for walk_to (use with y instead of actor1)."));
+		props.setVal("object1", makeProp("string",  "Primary target name (e.g. 'door', 'chest'). For 'use X on Y', this is X."));
+		props.setVal("object2", makeProp("string",  "Secondary target for 'use X on Y' actions (Y)."));
+		props.setVal("x",       makeProp("integer", "X pixel coordinate for walk_to (use with y instead of object1)."));
 		props.setVal("y",      makeProp("integer", "Y pixel coordinate for walk_to."));
 		const char *req[] = {"verb"};
 		addTool("act",
@@ -902,7 +902,7 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 	}
 
 	if (name == "state")
-		return wrapContent(toolState(*argsVal));
+		return toolState(*argsVal);
 
 	// act and answer start SSE and return nothing via the normal path.
 	if (name == "act") {
@@ -928,6 +928,19 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 
 	out.setVal("room", makeInt(_vm->_currentRoom));
 
+	// Room name from background object (slot 0), if available.
+	if (_vm->_numLocalObjects > 0 && _vm->_objs[0].obj_nr) {
+		Common::String rn = getObjName(_vm, _vm->_objs[0].obj_nr);
+		if (!rn.empty()) {
+			rn = normalizeActionName(rn);
+			bool hasCtrl = false;
+			for (uint ci = 0; ci < rn.size(); ++ci)
+				if ((unsigned char)rn[ci] < 0x20) { hasCtrl = true; break; }
+			if (!hasCtrl)
+				out.setVal("room_name", makeString(sanitizeForJson(rn)));
+		}
+	}
+
 	// Ego position.
 	Actor *ego = getEgoActor();
 	if (ego) {
@@ -951,6 +964,10 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		_vm->convertMessageToString(ptr2, textBuf2, sizeof(textBuf2));
 		Common::String label = lowerTrimmed((const char *)textBuf2);
 		if (label.empty()) continue;
+		bool labelHasCtrl = false;
+		for (uint ci = 0; ci < label.size(); ++ci)
+			if ((unsigned char)label[ci] < 0x20) { labelHasCtrl = true; break; }
+		if (labelHasCtrl) continue;
 		Common::String safe2 = sanitizeForJson(normalizeActionName(label));
 		verbsArr.push_back(makeString(safe2));
 		VerbInfo vi;
@@ -1084,7 +1101,7 @@ void MonkeyMcpBridge::toolAct(const Common::JSONValue &args, const Common::JSONV
 	Common::String normVerb = normalizeActionName(verbStr);
 
 	// Walk-to with explicit coordinates.
-	if (normVerb == "walk_to" && !a.contains("actor1")) {
+	if (normVerb == "walk_to" && !a.contains("object1")) {
 		if (a.contains("x") && a.contains("y") &&
 		    a["x"]->isIntegerNumber() && a["y"]->isIntegerNumber()) {
 			int wx = (int)a["x"]->asIntegerNumber();
@@ -1107,18 +1124,18 @@ void MonkeyMcpBridge::toolAct(const Common::JSONValue &args, const Common::JSONV
 	// General action (including walk_to with a named target via doSentence,
 	// which triggers the object's verb script and handles room transitions).
 	int objectA = 0, objectB = 0;
-	if (a.contains("actor1") && a["actor1"]->isString()) {
+	if (a.contains("object1") && a["object1"]->isString()) {
 		NamedEntity ent;
-		if (!resolveEntityByName(a["actor1"]->asString(), ent)) {
-			writeJsonRpcError(id, -32602, "act: unknown actor1 '" + a["actor1"]->asString() + "'");
+		if (!resolveEntityByName(a["object1"]->asString(), ent)) {
+			writeJsonRpcError(id, -32602, "act: unknown object1 '" + a["object1"]->asString() + "'");
 			return;
 		}
 		objectA = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
 	}
-	if (a.contains("actor2") && a["actor2"]->isString()) {
+	if (a.contains("object2") && a["object2"]->isString()) {
 		NamedEntity ent;
-		if (!resolveEntityByName(a["actor2"]->asString(), ent)) {
-			writeJsonRpcError(id, -32602, "act: unknown actor2 '" + a["actor2"]->asString() + "'");
+		if (!resolveEntityByName(a["object2"]->asString(), ent)) {
+			writeJsonRpcError(id, -32602, "act: unknown object2 '" + a["object2"]->asString() + "'");
 			return;
 		}
 		objectB = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
@@ -1267,10 +1284,25 @@ void MonkeyMcpBridge::pumpSse() {
 		_messages.remove_at(0);
 	}
 
-	// Periodic keep-alive comment.
+	// Periodic keep-alive comment (sent directly to avoid level-0 logging).
 	if (_frameCounter - _sseLastHeartbeatFrame >= 60) {
-		emitSseComment("keepalive");
+		Common::String hb = ": keepalive\n\n";
+		::send(_activeFd, hb.c_str(), hb.size(), 0);
+		debug(3, "S(%d,%06x): [keepalive]", _activeClientId, _nextSendMsgId++);
 		_sseLastHeartbeatFrame = _frameCounter;
+	}
+
+	// Early exit: ego idle, no speech, but userPut still locked after 3 s — action failed silently.
+	{
+		Actor *ego = getEgoActor();
+		bool egoIdle = !ego || !ego->_moving;
+		if (egoIdle && _vm->_talkDelay == 0 && _vm->_userPut <= 0 &&
+		    _frameCounter - _sseStartFrame > 90) {
+			debug(1, "monkey_mcp: action stuck (userPut=0, no motion/speech) at frame %d — closing SSE",
+			      _frameCounter);
+			closeSse(true);
+			return;
+		}
 	}
 
 	// Timeout after 600 frames (~20 s at 30 fps).
@@ -1360,7 +1392,7 @@ void MonkeyMcpBridge::closeSse(bool success, const Common::String &errorMsg) {
 					toolAnswer(*next.args, next.id);
 				} else {
 					// "state" — respond immediately
-					writeJsonRpcResult(next.id, wrapContent(toolState(*next.args)));
+					writeJsonRpcResult(next.id, toolState(*next.args));
 				}
 				found = true;
 				break;
@@ -1603,6 +1635,13 @@ void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const
 		e.visible = (od.state & 0xF) != 0;
 		if (e.visible && od.parent != 0 && od.parent < _vm->_numLocalObjects)
 			e.visible = ((_vm->_objs[od.parent].state & 0xF) == od.parentstate);
+		// Skip names that contain encoding artifacts (control characters).
+		if (!name.empty()) {
+			bool hasCtrl = false;
+			for (uint ci = 0; ci < e.baseName.size(); ++ci)
+				if ((unsigned char)e.baseName[ci] < 0x20) { hasCtrl = true; break; }
+			if (hasCtrl) continue;
+		}
 		raw.push_back(e);
 	}
 
@@ -1617,6 +1656,13 @@ void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const
 		e.numId = a->_number;
 		e.baseName = name.empty() ? Common::String::format("actor-%d", a->_number)
 		                          : normalizeActionName(name);
+		// Skip names that contain encoding artifacts (control characters).
+		if (!name.empty()) {
+			bool hasCtrl = false;
+			for (uint ci = 0; ci < e.baseName.size(); ++ci)
+				if ((unsigned char)e.baseName[ci] < 0x20) { hasCtrl = true; break; }
+			if (hasCtrl) continue;
+		}
 		raw.push_back(e);
 	}
 
