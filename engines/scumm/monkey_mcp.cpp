@@ -945,6 +945,7 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		posSchema.setVal("properties", new Common::JSONValue(posProps));
 		props.setVal("position",        new Common::JSONValue(posSchema));
 		props.setVal("objects_changed", makeProp("array",  "Objects whose state changed: [{name, old_state, new_state}]"));
+		props.setVal("messages",        makeProp("array",  "Dialog/narration lines spoken during the action: [{text, actor?}]"));
 		props.setVal("question",        makeProp("object", "Pending dialog question if action ended with one: {choices:[{id,label}]}"));
 		return makeOutputSchema(props);
 	};
