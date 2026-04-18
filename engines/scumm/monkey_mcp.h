@@ -54,15 +54,38 @@ private:
 		Common::String displayName; // deduplicated name (e.g. "sword" or "sword-42")
 	};
 
+	// One active TCP connection (POST or persistent GET SSE).
+	struct ClientEntry {
+		int clientId;
+		int fd;
+		Common::String inBuffer;
+		bool isGetSse;
+		uint32 lastHeartbeatFrame;
+	};
+
+	// A tool call deferred because SSE was active when it arrived.
+	struct PendingToolCall {
+		int clientId;
+		Common::String toolName;    // "act", "answer", or "state"
+		Common::JSONValue *args;    // owned deep copy
+		Common::JSONValue *id;      // owned deep copy of JSON-RPC id
+	};
+
 	ScummEngine *_vm;
 	bool _enabled;
 	bool _initialized;
 	int _listenFd;
-	int _clientFd;       // short-lived POST connection
-	int _getSseFd;       // persistent GET SSE connection for server notifications
-	uint32 _getSseLastHeartbeatFrame;
-	Common::String _inBuffer;
 	Common::String _sessionId;
+
+	// Multi-client connection pool.
+	Common::Array<ClientEntry> _clients;
+	int _nextClientId;      // sequential client ID counter, starts at 1
+	int _activeFd;          // fd currently targeted by sendRaw()
+	int _activeClientId;    // client ID used for S()/R() log prefixes
+
+	// Per-message log sequence numbers (global, not per-client).
+	uint32 _nextSendMsgId;
+	uint32 _nextRecvMsgId;
 
 	Common::Array<MessageEntry> _messages;
 	uint64 _nextMessageSeq;
@@ -70,12 +93,16 @@ private:
 
 	// SSE streaming state (active while act/answer is executing)
 	bool _sseActive;
+	int _sseClientId;                    // which client owns the current SSE stream (-1 = none)
 	Common::JSONValue *_ssePendingId;    // owned deep copy of JSON-RPC id
 	uint32 _sseStartFrame;
 	uint32 _sseLastHeartbeatFrame;
 	Common::Array<uint16> _ssePreInventory;
 	int _ssePreRoom;
 	int _ssePrePosX, _ssePrePosY;
+
+	// FIFO queue of tool calls deferred while SSE was active.
+	Common::Array<PendingToolCall> _toolQueue;
 
 	// ---- Lifecycle ----
 	bool isMonkey1() const;
