@@ -1616,6 +1616,30 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 	if (!objChanges.empty())
 		changes.setVal("objects_changed", new Common::JSONValue(objChanges));
 
+	// Messages accumulated during the action.
+	{
+		Common::JSONArray msgs;
+		for (uint i = 0; i < _messages.size(); ++i) {
+			const MessageEntry &me = _messages[i];
+			if (me.frame < _sseStartFrame) continue;
+			Common::JSONObject m;
+			m.setVal("text", makeString(me.text));
+			if (!me.type.empty() && me.type != "system") {
+				// Include actor name when available.
+				const byte *actorNamePtr = (me.actorId > 0)
+				    ? callGetObjOrActorName(me.actorId) : nullptr;
+				Common::String actorName;
+				if (actorNamePtr)
+					actorName = sanitizeForJson(lowerTrimmed(Common::String((const char *)actorNamePtr)));
+				if (!actorName.empty())
+					m.setVal("actor", makeString(actorName));
+			}
+			msgs.push_back(new Common::JSONValue(m));
+		}
+		if (!msgs.empty())
+			changes.setVal("messages", new Common::JSONValue(msgs));
+	}
+
 	// Pending question.
 	if (hasPendingQuestion()) {
 		int choiceCount = 0;
