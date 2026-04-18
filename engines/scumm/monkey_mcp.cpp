@@ -831,8 +831,8 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		props.setVal("verb",   makeProp("string",  "Verb name (e.g. 'open', 'use', 'look_at', 'walk_to'). Required."));
 		props.setVal("object1", makeProp("string",  "Primary target name (e.g. 'door', 'chest'). For 'use X on Y', this is X."));
 		props.setVal("object2", makeProp("string",  "Secondary target for 'use X on Y' actions (Y)."));
-		props.setVal("x",       makeProp("integer", "X pixel coordinate for walk_to (use with y instead of object1)."));
-		props.setVal("y",      makeProp("integer", "Y pixel coordinate for walk_to."));
+		props.setVal("x",       makeProp("integer", "X pixel coordinate for walk_to. Prefer object1 when the target is a named object."));
+		props.setVal("y",      makeProp("integer", "Y pixel coordinate for walk_to (use with x)."));
 		const char *req[] = {"verb"};
 		addTool("act",
 		        "Perform a verb action. Blocks until the action/cutscene sequence completes, "
