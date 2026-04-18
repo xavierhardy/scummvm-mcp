@@ -1104,44 +1104,8 @@ void MonkeyMcpBridge::toolAct(const Common::JSONValue &args, const Common::JSONV
 		return;
 	}
 
-	// Walk-to with named target.
-	if (normVerb == "walk_to") {
-		int toX = -1, toY = -1;
-		if (a.contains("actor1") && a["actor1"]->isString()) {
-			NamedEntity ent;
-			if (!resolveEntityByName(a["actor1"]->asString(), ent)) {
-				writeJsonRpcError(id, -32602, "act: unknown target '" + a["actor1"]->asString() + "'");
-				return;
-			}
-			if (ent.kind == NamedEntity::kInventory) {
-				writeJsonRpcError(id, -32602, "act: cannot walk to an inventory item");
-				return;
-			}
-			if (ent.kind == NamedEntity::kActor) {
-				Actor *ta = _vm->derefActor(ent.numId, "toolAct-walk");
-				if (ta) { toX = ta->getRealPos().x; toY = ta->getRealPos().y; }
-			} else {
-				int obj = ent.numId;
-				int gx = 0, gy = 0;
-				if (_vm->getObjectOrActorXY(obj, gx, gy)) { toX = gx; toY = gy; }
-			}
-		} else if (a.contains("x") && a.contains("y") &&
-		           a["x"]->isIntegerNumber() && a["y"]->isIntegerNumber()) {
-			toX = (int)a["x"]->asIntegerNumber();
-			toY = (int)a["y"]->asIntegerNumber();
-		}
-		if (toX < 0 || toY < 0) {
-			writeJsonRpcError(id, -32602, "act: walk_to needs actor1 or x+y coordinates");
-			return;
-		}
-		snapshotPreAction();
-		Actor *ego = getEgoActor();
-		if (ego) ego->startWalkActor(toX, toY, -1);
-		startSse(id);
-		return;
-	}
-
-	// General action.
+	// General action (including walk_to with a named target via doSentence,
+	// which triggers the object's verb script and handles room transitions).
 	int objectA = 0, objectB = 0;
 	if (a.contains("actor1") && a["actor1"]->isString()) {
 		NamedEntity ent;
