@@ -32,9 +32,7 @@ public:
 	static Common::String normalizeActionName(const Common::String &action);
 
 	// Accessor for protected getObjOrActorName used by safeObjName()
-	const byte *callGetObjOrActorName(int obj) const {
-		return _vm ? _vm->getObjOrActorName(obj) : nullptr;
-	}
+	const byte *callGetObjOrActorName(int obj) const;
 
 private:
 	struct MessageEntry {

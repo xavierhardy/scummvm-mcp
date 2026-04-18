@@ -800,6 +800,7 @@ Common::JSONValue *MonkeyMcpBridge::handleRequest(const Common::JSONValue &req) 
 	if (method == "initialize")  return handleInitialize(req);
 	if (method == "tools/list")  return handleToolsList();
 	if (method == "tools/call")  return handleToolCall(req);
+	if (method == "ping")        return new Common::JSONValue(Common::JSONObject());
 	return nullptr;
 }
 
@@ -1626,6 +1627,10 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 // ---------------------------------------------------------------------------
 // Game state helpers
 // ---------------------------------------------------------------------------
+
+const byte *MonkeyMcpBridge::callGetObjOrActorName(int obj) const {
+	return _vm ? _vm->getObjOrActorName(obj) : nullptr;
+}
 
 bool MonkeyMcpBridge::isMonkey1() const {
 	if (!_vm) return false;
