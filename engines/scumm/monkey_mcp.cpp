@@ -802,7 +802,9 @@ Common::JSONValue *MonkeyMcpBridge::handleInitialize(const Common::JSONValue &) 
 	Common::JSONObject o;
 	o.setVal("protocolVersion", makeString("2025-03-26"));
 	Common::JSONObject caps;
-	caps.setVal("tools", new Common::JSONValue(Common::JSONObject()));
+	Common::JSONObject toolsCaps;
+	toolsCaps.setVal("listChanged", makeBool(true));
+	caps.setVal("tools", new Common::JSONValue(toolsCaps));
 	o.setVal("capabilities", new Common::JSONValue(caps));
 	Common::JSONObject info;
 	info.setVal("name", makeString("scumm-monkey-mcp"));
