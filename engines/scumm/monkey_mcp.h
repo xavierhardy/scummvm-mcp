@@ -101,10 +101,12 @@ private:
 	Common::JSONValue *_ssePendingId;    // owned deep copy of JSON-RPC id
 	uint32 _sseStartFrame;
 	uint32 _sseLastHeartbeatFrame;
+	uint32 _sseDoneAtFrame;              // frame when isActionDone() first became true (0 = not yet)
 	Common::Array<uint16> _ssePreInventory;
 	Common::Array<ObjStateSnap> _ssePreObjectStates;
 	int _ssePreRoom;
 	int _ssePrePosX, _ssePrePosY;
+	Common::Array<MessageEntry> _sseMessages;  // messages emitted via SSE, for buildStateChanges()
 
 	// FIFO queue of tool calls deferred while SSE was active.
 	Common::Array<PendingToolCall> _toolQueue;

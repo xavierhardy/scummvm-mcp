@@ -1353,6 +1353,8 @@ void MonkeyMcpBridge::startSse(const Common::JSONValue *id) {
 	_ssePendingId = id ? new Common::JSONValue(*id) : nullptr;
 	_sseStartFrame = _frameCounter;
 	_sseLastHeartbeatFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseMessages.clear();
 	debug(1, "monkey_mcp: SSE started for client %d, frame=%d", _sseClientId, _sseStartFrame);
 	writeSseHeaders();
 }
@@ -1400,8 +1402,10 @@ void MonkeyMcpBridge::pumpSse() {
 
 	// Emit any new messages immediately as SSE notification events, then
 	// remove them from the queue so state() doesn't redisplay them.
+	// Also save to _sseMessages so buildStateChanges() can include them in the result.
 	while (!_messages.empty()) {
 		const MessageEntry &m = _messages[0];
+		_sseMessages.push_back(m);
 		Common::JSONObject n;
 		n.setVal("jsonrpc", makeString("2.0"));
 		n.setVal("method",  makeString("notifications/message"));
@@ -1456,8 +1460,19 @@ void MonkeyMcpBridge::pumpSse() {
 	uint32 elapsed = _frameCounter - _sseStartFrame;
 	bool done = isActionDone();
 	if (done) {
-		debug(1, "monkey_mcp: action completed at frame %d (elapsed=%d)", _frameCounter, elapsed);
-		closeSse(true);
+		if (_sseDoneAtFrame == 0) {
+			_sseDoneAtFrame = _frameCounter;
+			debug(1, "monkey_mcp: action looks done at frame %d (elapsed=%d), settling...", _frameCounter, elapsed);
+		}
+		// Wait up to 15 frames for dialog choices to appear before closing.
+		bool questionReady = hasPendingQuestion();
+		bool settled = _frameCounter - _sseDoneAtFrame >= 15;
+		if (questionReady || settled) {
+			debug(1, "monkey_mcp: closing SSE at frame %d (question=%d, settled=%d)", _frameCounter, questionReady, settled);
+			closeSse(true);
+		}
+	} else {
+		_sseDoneAtFrame = 0;  // reset if conditions change (e.g. new speech started)
 	}
 #endif
 }
@@ -1616,23 +1631,20 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 	if (!objChanges.empty())
 		changes.setVal("objects_changed", new Common::JSONValue(objChanges));
 
-	// Messages accumulated during the action.
+	// Messages emitted via SSE during the action (saved in _sseMessages by pumpSse).
 	{
 		Common::JSONArray msgs;
-		for (uint i = 0; i < _messages.size(); ++i) {
-			const MessageEntry &me = _messages[i];
-			if (me.frame < _sseStartFrame) continue;
+		for (uint i = 0; i < _sseMessages.size(); ++i) {
+			const MessageEntry &me = _sseMessages[i];
 			Common::JSONObject m;
 			m.setVal("text", makeString(me.text));
-			if (!me.type.empty() && me.type != "system") {
-				// Include actor name when available.
-				const byte *actorNamePtr = (me.actorId > 0)
-				    ? callGetObjOrActorName(me.actorId) : nullptr;
-				Common::String actorName;
-				if (actorNamePtr)
-					actorName = sanitizeForJson(lowerTrimmed(Common::String((const char *)actorNamePtr)));
-				if (!actorName.empty())
-					m.setVal("actor", makeString(actorName));
+			if (me.actorId > 0) {
+				const byte *actorNamePtr = callGetObjOrActorName(me.actorId);
+				if (actorNamePtr) {
+					Common::String actorName = sanitizeForJson(lowerTrimmed(Common::String((const char *)actorNamePtr)));
+					if (!actorName.empty())
+						m.setVal("actor", makeString(actorName));
+				}
 			}
 			msgs.push_back(new Common::JSONValue(m));
 		}
