@@ -1157,9 +1157,11 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		out.setVal("question", new Common::JSONValue(question));
 	}
 
-	// Create a copy for structured content
+	// Create separate objects for text and structured content
+	Common::JSONObject outCopy(out);
+	Common::JSONValue *textResult = new Common::JSONValue(outCopy);
 	Common::JSONValue *structured = new Common::JSONValue(out);
-	return wrapContent(new Common::JSONValue(out), false, structured);
+	return wrapContent(textResult, false, structured);
 }
 
 // ---------------------------------------------------------------------------
