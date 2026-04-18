@@ -489,7 +489,7 @@ void MonkeyMcpBridge::pump() {
 				break;
 			}
 			uint32 rId = _nextRecvMsgId++;
-			debug(5, "R(%d,%06x): %.*s", ce.clientId, rId, (int)n, buf);
+			debug("R(%d,%06x): %.*s", ce.clientId, rId, (int)n, buf);
 			ce.inBuffer += Common::String(buf, n);
 		}
 
@@ -555,7 +555,7 @@ bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 	if (_activeFd < 0) return false;
 
 	uint32 msgId = _nextSendMsgId++;
-	debug(5, "S(%d,%06x): %.*s", _activeClientId, msgId, (int)data.size(), data.c_str());
+	debug("S(%d,%06x): %.*s", _activeClientId, msgId, (int)data.size(), data.c_str());
 
 	const char *ptr = data.c_str();
 	size_t remaining = data.size();
