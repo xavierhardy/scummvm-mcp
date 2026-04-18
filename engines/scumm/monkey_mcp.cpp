@@ -434,7 +434,7 @@ void MonkeyMcpBridge::pump() {
 		} else if (_frameCounter - ce.lastHeartbeatFrame >= 60) {
 			Common::String hb = ": keepalive\n\n";
 			send(ce.fd, hb.c_str(), hb.size(), 0);
-			debug("S(%d,%06x): [keepalive]", ce.clientId, _nextSendMsgId++);
+			debug(5, "S(%d,%06x): [keepalive]", ce.clientId, _nextSendMsgId++);
 			ce.lastHeartbeatFrame = _frameCounter;
 		}
 	}
@@ -489,8 +489,7 @@ void MonkeyMcpBridge::pump() {
 				break;
 			}
 			uint32 rId = _nextRecvMsgId++;
-			debug("R(%d,%06x): %.*s", ce.clientId, rId,
-				(int)(n < 300 ? n : 300), buf);
+			debug(5, "R(%d,%06x): %.*s", ce.clientId, rId, (int)n, buf);
 			ce.inBuffer += Common::String(buf, n);
 		}
 
@@ -555,10 +554,8 @@ bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 #if defined(POSIX)
 	if (_activeFd < 0) return false;
 
-	// Log before sending (truncated to 300 chars).
 	uint32 msgId = _nextSendMsgId++;
-	debug("S(%d,%06x): %.*s", _activeClientId, msgId,
-		(int)(data.size() < 300 ? data.size() : 300), data.c_str());
+	debug(5, "S(%d,%06x): %.*s", _activeClientId, msgId, (int)data.size(), data.c_str());
 
 	const char *ptr = data.c_str();
 	size_t remaining = data.size();
@@ -1442,7 +1439,7 @@ bool MonkeyMcpBridge::isActionDone() const {
 	// Require at least 3 frames to have elapsed since the action started.
 	if (_frameCounter - _sseStartFrame < 3) {
 		if ((_frameCounter - _sseStartFrame) % 30 == 0)
-			debug("monkey_mcp: action not done (frame %d, elapsed=%d < 3)",
+			debug(5, "monkey_mcp: action not done (frame %d, elapsed=%d < 3)",
 				_frameCounter, _frameCounter - _sseStartFrame);
 		return false;
 	}
@@ -1450,19 +1447,19 @@ bool MonkeyMcpBridge::isActionDone() const {
 	Actor *ego = getEgoActor();
 	if (ego && ego->_moving) {
 		if ((_frameCounter - _sseStartFrame) % 30 == 0)
-			debug("monkey_mcp: action not done (ego still moving at frame %d)", _frameCounter);
+			debug(5, "monkey_mcp: action not done (ego still moving at frame %d)", _frameCounter);
 		return false;
 	}
 	// No speech ongoing.
 	if (_vm->_talkDelay > 0) {
 		if ((_frameCounter - _sseStartFrame) % 30 == 0)
-			debug("monkey_mcp: action not done (talkDelay=%d at frame %d)", _vm->_talkDelay, _frameCounter);
+			debug(5, "monkey_mcp: action not done (talkDelay=%d at frame %d)", _vm->_talkDelay, _frameCounter);
 		return false;
 	}
 	// User input must be enabled (covers cutscenes).
 	if (_vm->_userPut <= 0) {
 		if ((_frameCounter - _sseStartFrame) % 30 == 0)
-			debug("monkey_mcp: action not done (userPut=%d at frame %d)", _vm->_userPut, _frameCounter);
+			debug(5, "monkey_mcp: action not done (userPut=%d at frame %d)", _vm->_userPut, _frameCounter);
 		return false;
 	}
 	return true;
