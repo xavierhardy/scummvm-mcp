@@ -284,12 +284,12 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	  _ssePreRoom(0),
 	  _ssePrePosX(0),
 	  _ssePrePosY(0) {
-	debug("monkey_mcp: ctor start, vm=%p", (void *)vm);
+	debug(1, "monkey_mcp: ctor start, vm=%p", (void *)vm);
 	if (!_vm) return;
 
 	bool confVal = ConfMan.getBool("monkey_mcp");
 	_enabled = isMonkey1() && confVal;
-	debug("monkey_mcp: enabled=%d", (int)_enabled);
+	debug(1, "monkey_mcp: enabled=%d", (int)_enabled);
 	if (!_enabled) return;
 
 #if defined(POSIX)
@@ -298,7 +298,7 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 	Common::String host = ConfMan.hasKey("monkey_mcp_host")
 	                      ? ConfMan.get("monkey_mcp_host")
 	                      : Common::String("127.0.0.1");
-	debug("monkey_mcp: port=%d host=%s", port, host.c_str());
+	debug(1, "monkey_mcp: port=%d host=%s", port, host.c_str());
 	if (port > 0) {
 		_listenFd = socket(AF_INET, SOCK_STREAM, 0);
 		if (_listenFd >= 0) {
@@ -315,7 +315,7 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 				addr.sin_addr.s_addr = INADDR_ANY;
 			} else {
 				if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
-					debug("monkey_mcp: invalid host '%s'", host.c_str());
+					debug(1, "monkey_mcp: invalid host '%s'", host.c_str());
 					close(_listenFd); _listenFd = -1;
 				}
 			}
@@ -323,23 +323,23 @@ MonkeyMcpBridge::MonkeyMcpBridge(ScummEngine *vm)
 				if (listen(_listenFd, 16) == 0) {
 					int lf = fcntl(_listenFd, F_GETFL, 0);
 					if (lf >= 0) fcntl(_listenFd, F_SETFL, lf | O_NONBLOCK);
-					debug("monkey_mcp: listening on %s:%d (fd=%d)", host.c_str(), port, _listenFd);
+					debug(1, "monkey_mcp: listening on %s:%d (fd=%d)", host.c_str(), port, _listenFd);
 				} else {
-					debug("monkey_mcp: listen() failed");
+					debug(1, "monkey_mcp: listen() failed");
 					close(_listenFd); _listenFd = -1;
 				}
 			} else if (_listenFd >= 0) {
-				debug("monkey_mcp: bind() failed errno=%d", errno);
+				debug(1, "monkey_mcp: bind() failed errno=%d", errno);
 				close(_listenFd); _listenFd = -1;
 			}
 		}
 	} else {
-		debug("monkey_mcp: monkey_mcp_port not set, network disabled");
+		debug(1, "monkey_mcp: monkey_mcp_port not set, network disabled");
 	}
 #else
 	_enabled = false;
 #endif
-	debug("monkey_mcp: ctor done");
+	debug(1, "monkey_mcp: ctor done");
 }
 
 MonkeyMcpBridge::~MonkeyMcpBridge() {
@@ -443,7 +443,7 @@ void MonkeyMcpBridge::pump() {
 		char probe[1];
 		ssize_t r = recv(ce.fd, probe, 1, 0);
 		if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-			debug("monkey_mcp: client %d GET SSE disconnected", ce.clientId);
+			debug(1, "monkey_mcp: client %d GET SSE disconnected", ce.clientId);
 			close(ce.fd); ce.fd = -1;
 		} else if (_frameCounter - ce.lastHeartbeatFrame >= 60) {
 			Common::String hb = ": keepalive\n\n";
@@ -476,7 +476,7 @@ void MonkeyMcpBridge::pump() {
 			ce.isGetSse = false;
 			ce.lastHeartbeatFrame = _frameCounter;
 			_clients.push_back(ce);
-			debug("monkey_mcp: client %d connected (fd=%d)", ce.clientId, newfd);
+			debug(1, "monkey_mcp: client %d connected (fd=%d)", ce.clientId, newfd);
 		}
 	}
 
@@ -494,10 +494,10 @@ void MonkeyMcpBridge::pump() {
 			ssize_t n = ::read(ce.fd, buf, sizeof(buf));
 			if (n <= 0) {
 				if (n == 0) {
-					debug("monkey_mcp: client %d closed connection cleanly", ce.clientId);
+					debug(1, "monkey_mcp: client %d closed connection cleanly", ce.clientId);
 					close(ce.fd); ce.fd = -1;
 				} else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-					debug("monkey_mcp: client %d read error errno=%d", ce.clientId, errno);
+					debug(1, "monkey_mcp: client %d read error errno=%d", ce.clientId, errno);
 					close(ce.fd); ce.fd = -1;
 				}
 				break;
@@ -514,7 +514,7 @@ void MonkeyMcpBridge::pump() {
 			Common::String method, sessionHdr, body;
 			if (!parseHttpRequest(ce.inBuffer, method, sessionHdr, body)) break;
 
-			debug("monkey_mcp: client %d HTTP %s, session='%s', body=%d bytes",
+			debug(1, "monkey_mcp: client %d HTTP %s, session='%s', body=%d bytes",
 				ce.clientId, method.c_str(), sessionHdr.c_str(), (int)body.size());
 			handleHttpRequest(method, sessionHdr, body);
 
@@ -579,7 +579,7 @@ bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 		if (r < 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				if (!_sseActive) {
-					debug("monkey_mcp: send would block on non-SSE response (sent %d/%d bytes)",
+					debug(1, "monkey_mcp: send would block on non-SSE response (sent %d/%d bytes)",
 						(int)totalSent, (int)(totalSent + remaining));
 					// Mark this client fd as dead.
 					for (uint i = 0; i < _clients.size(); ++i)
@@ -589,7 +589,7 @@ bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 				}
 				break;
 			}
-			debug("monkey_mcp: client %d send failed errno=%d, closing", _activeClientId, errno);
+			debug(1, "monkey_mcp: client %d send failed errno=%d, closing", _activeClientId, errno);
 			for (uint i = 0; i < _clients.size(); ++i)
 				if (_clients[i].fd == _activeFd) { _clients[i].fd = -1; break; }
 			close(_activeFd); _activeFd = -1;
@@ -600,7 +600,7 @@ bool MonkeyMcpBridge::sendRaw(const Common::String &data) {
 		totalSent += r;
 	}
 	if (remaining > 0) {
-		debug("monkey_mcp: client %d incomplete send: %d bytes remaining", _activeClientId, (int)remaining);
+		debug(1, "monkey_mcp: client %d incomplete send: %d bytes remaining", _activeClientId, (int)remaining);
 		return false;
 	}
 	return true;
@@ -672,13 +672,13 @@ void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
 		// Check if there's already a GET SSE connection.
 		for (uint i = 0; i < _clients.size(); ++i) {
 			if (_clients[i].isGetSse) {
-				debug("monkey_mcp: GET SSE already active (client %d), rejecting duplicate from client %d",
+				debug(1, "monkey_mcp: GET SSE already active (client %d), rejecting duplicate from client %d",
 					_clients[i].clientId, _activeClientId);
 				writeHttpResponse(409, "", "");
 				return;
 			}
 		}
-		debug("monkey_mcp: client %d promoted to GET SSE (fd=%d)", _activeClientId, _activeFd);
+		debug(1, "monkey_mcp: client %d promoted to GET SSE (fd=%d)", _activeClientId, _activeFd);
 		sendRaw("HTTP/1.1 200 OK\r\n"
 		        "Content-Type: text/event-stream\r\n"
 		        "Cache-Control: no-cache\r\n"
@@ -702,7 +702,7 @@ void MonkeyMcpBridge::handleHttpRequest(const Common::String &method,
 		if (!isInit) {
 			// Non-initialize request after session created: must provide matching session ID.
 			if (sessionHdr.empty() || sessionHdr != _sessionId) {
-				debug("monkey_mcp: session validation failed: expected '%s', got '%s'",
+				debug(1, "monkey_mcp: session validation failed: expected '%s', got '%s'",
 					_sessionId.c_str(), sessionHdr.empty() ? "(empty)" : sessionHdr.c_str());
 				writeHttpResponse(404, "", "");
 				return;
@@ -733,9 +733,9 @@ void MonkeyMcpBridge::handleJsonRpc(const Common::String &body) {
 		Common::String method = (root.contains("method") && root["method"]->isString())
 		                       ? root["method"]->asString()
 		                       : "(unknown)";
-		debug("monkey_mcp: notification '%s', sending 202 Accepted", method.c_str());
+		debug(1, "monkey_mcp: notification '%s', sending 202 Accepted", method.c_str());
 		writeHttpResponse(202, "", "");
-		debug("monkey_mcp: 202 response sent for '%s'", method.c_str());
+		debug(1, "monkey_mcp: 202 response sent for '%s'", method.c_str());
 		delete parsed;
 		return;
 	}
@@ -760,7 +760,7 @@ void MonkeyMcpBridge::handleJsonRpc(const Common::String &body) {
 		Common::String extra;
 		if (isInitialize && !_sessionId.empty()) {
 			extra = "Mcp-Session-Id: " + _sessionId + "\r\n";
-			debug("monkey_mcp: initialize response including session header '%s'", _sessionId.c_str());
+			debug(1, "monkey_mcp: initialize response including session header '%s'", _sessionId.c_str());
 		}
 		writeJsonRpcResult(id, result, extra);
 	}
@@ -773,7 +773,7 @@ Common::JSONValue *MonkeyMcpBridge::handleRequest(const Common::JSONValue &req) 
 	const Common::JSONObject &obj = req.asObject();
 	if (!obj.contains("method") || !obj["method"]->isString()) return nullptr;
 	Common::String method = obj["method"]->asString();
-	debug("monkey_mcp: handling request method '%s'", method.c_str());
+	debug(1, "monkey_mcp: handling request method '%s'", method.c_str());
 	if (method == "initialize")  return handleInitialize(req);
 	if (method == "tools/list")  return handleToolsList();
 	if (method == "tools/call")  return handleToolCall(req);
@@ -786,7 +786,7 @@ Common::JSONValue *MonkeyMcpBridge::handleInitialize(const Common::JSONValue &) 
 	_sessionId = Common::String::format("monkey1-%08x%08x",
 	             (unsigned)_frameCounter,
 	             (unsigned)((uintptr_t)this >> 4));
-	debug("monkey_mcp: initialize: generated session ID '%s'", _sessionId.c_str());
+	debug(1, "monkey_mcp: initialize: generated session ID '%s'", _sessionId.c_str());
 
 	Common::JSONObject o;
 	o.setVal("protocolVersion", makeString("2025-03-26"));
@@ -890,7 +890,7 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 
 	// Queue any tool call that arrives while SSE is active.
 	if (_sseActive && (name == "act" || name == "answer" || name == "state")) {
-		debug("monkey_mcp: client %d tool '%s' queued (SSE active)", _activeClientId, name.c_str());
+		debug(1, "monkey_mcp: client %d tool '%s' queued (SSE active)", _activeClientId, name.c_str());
 		PendingToolCall pending;
 		pending.clientId  = _activeClientId;
 		pending.toolName  = name;
@@ -1204,7 +1204,7 @@ void MonkeyMcpBridge::startSse(const Common::JSONValue *id) {
 	_ssePendingId = id ? new Common::JSONValue(*id) : nullptr;
 	_sseStartFrame = _frameCounter;
 	_sseLastHeartbeatFrame = _frameCounter;
-	debug("monkey_mcp: SSE started for client %d, frame=%d", _sseClientId, _sseStartFrame);
+	debug(1, "monkey_mcp: SSE started for client %d, frame=%d", _sseClientId, _sseStartFrame);
 	writeSseHeaders();
 }
 
@@ -1239,7 +1239,7 @@ void MonkeyMcpBridge::pumpSse() {
 		if (_clients[i].clientId == _sseClientId) { sseClient = &_clients[i]; break; }
 
 	if (!sseClient || sseClient->fd < 0) {
-		debug("monkey_mcp: SSE client %d disconnected, abandoning", _sseClientId);
+		debug(1, "monkey_mcp: SSE client %d disconnected, abandoning", _sseClientId);
 		_sseActive = false;
 		_sseClientId = -1;
 		delete _ssePendingId; _ssePendingId = nullptr;
@@ -1283,7 +1283,7 @@ void MonkeyMcpBridge::pumpSse() {
 
 	// Timeout after 600 frames (~20 s at 30 fps).
 	if (_frameCounter - _sseStartFrame > 600) {
-		debug("monkey_mcp: SSE timeout after 600 frames");
+		debug(1, "monkey_mcp: SSE timeout after 600 frames");
 		closeSse(false, "action timed out");
 		return;
 	}
@@ -1291,7 +1291,7 @@ void MonkeyMcpBridge::pumpSse() {
 	uint32 elapsed = _frameCounter - _sseStartFrame;
 	bool done = isActionDone();
 	if (done) {
-		debug("monkey_mcp: action completed at frame %d (elapsed=%d)", _frameCounter, elapsed);
+		debug(1, "monkey_mcp: action completed at frame %d (elapsed=%d)", _frameCounter, elapsed);
 		closeSse(true);
 	}
 #endif
@@ -1360,7 +1360,7 @@ void MonkeyMcpBridge::closeSse(bool success, const Common::String &errorMsg) {
 			if (_clients[i].clientId == next.clientId && _clients[i].fd >= 0) {
 				_activeFd = _clients[i].fd;
 				_activeClientId = next.clientId;
-				debug("monkey_mcp: dequeuing tool '%s' for client %d",
+				debug(1, "monkey_mcp: dequeuing tool '%s' for client %d",
 					next.toolName.c_str(), next.clientId);
 				if (next.toolName == "act") {
 					toolAct(*next.args, next.id);
