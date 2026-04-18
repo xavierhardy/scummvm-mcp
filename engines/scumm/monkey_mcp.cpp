@@ -872,38 +872,58 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		outputProps.setVal("inventory", makeProp("array", "Inventory items"));
 		
 		// Objects array schema
-		Common::JSONObject objectSchema;
-		objectSchema.setVal("type", makeString("object"));
-		Common::JSONObject objectProps;
-		objectProps.setVal("id", makeProp("integer", "Object ID"));
-		objectProps.setVal("name", makeProp("string", "Object name"));
-		objectProps.setVal("state", makeProp("integer", "Object state"));
-		objectProps.setVal("visible", makeProp("boolean", "Visibility status"));
-		objectProps.setVal("pathway", makeProp("boolean", "Is pathway/exit"));
-		objectSchema.setVal("properties", new Common::JSONValue(objectProps));
-		outputProps.setVal("objects", new Common::JSONValue(objectSchema));
-		
+		Common::JSONObject objectItemProps;
+		objectItemProps.setVal("id",              makeProp("integer", "Object ID"));
+		objectItemProps.setVal("name",            makeProp("string",  "Object name"));
+		objectItemProps.setVal("state",           makeProp("integer", "Object state"));
+		objectItemProps.setVal("visible",         makeProp("boolean", "Visibility status"));
+		objectItemProps.setVal("pathway",         makeProp("boolean", "Is pathway/exit"));
+		objectItemProps.setVal("compatible_verbs",makeProp("array",   "Verbs that have script handlers for this object"));
+		Common::JSONObject objectItem;
+		objectItem.setVal("type",       makeString("object"));
+		objectItem.setVal("properties", new Common::JSONValue(objectItemProps));
+		Common::JSONObject objectsArray;
+		objectsArray.setVal("type",  makeString("array"));
+		objectsArray.setVal("items", new Common::JSONValue(objectItem));
+		outputProps.setVal("objects", new Common::JSONValue(objectsArray));
+
 		// Actors array schema
-		Common::JSONObject actorSchema;
-		actorSchema.setVal("type", makeString("object"));
-		Common::JSONObject actorProps;
-		actorProps.setVal("id", makeProp("integer", "Actor ID"));
-		actorProps.setVal("name", makeProp("string", "Actor name"));
-		actorProps.setVal("state", makeProp("integer", "Actor state"));
-		actorProps.setVal("costume", makeProp("integer", "Current costume"));
-		actorProps.setVal("talk_color", makeProp("integer", "Talk color"));
-		actorSchema.setVal("properties", new Common::JSONValue(actorProps));
-		outputProps.setVal("actors", new Common::JSONValue(actorSchema));
+		Common::JSONObject actorItemProps;
+		actorItemProps.setVal("name", makeProp("string", "Actor name"));
+		Common::JSONObject actorItem;
+		actorItem.setVal("type",       makeString("object"));
+		actorItem.setVal("properties", new Common::JSONValue(actorItemProps));
+		Common::JSONObject actorsArray;
+		actorsArray.setVal("type",  makeString("array"));
+		actorsArray.setVal("items", new Common::JSONValue(actorItem));
+		outputProps.setVal("actors", new Common::JSONValue(actorsArray));
 		
-		outputProps.setVal("messages", makeProp("array", "Recent messages"));
-		
-		// Question object schema
-		Common::JSONObject questionSchema;
-		questionSchema.setVal("type", makeString("object"));
+		// Messages array schema
+		Common::JSONObject msgItemProps;
+		msgItemProps.setVal("text",  makeProp("string", "Message text"));
+		msgItemProps.setVal("actor", makeProp("string", "Actor name (optional)"));
+		Common::JSONObject msgItem;
+		msgItem.setVal("type",       makeString("object"));
+		msgItem.setVal("properties", new Common::JSONValue(msgItemProps));
+		Common::JSONObject messagesArray;
+		messagesArray.setVal("type",  makeString("array"));
+		messagesArray.setVal("items", new Common::JSONValue(msgItem));
+		outputProps.setVal("messages", new Common::JSONValue(messagesArray));
+
+		// Question object schema (optional)
+		Common::JSONObject choiceItemProps;
+		choiceItemProps.setVal("id",    makeProp("integer", "1-based choice index"));
+		choiceItemProps.setVal("label", makeProp("string",  "Choice text"));
+		Common::JSONObject choiceItem;
+		choiceItem.setVal("type",       makeString("object"));
+		choiceItem.setVal("properties", new Common::JSONValue(choiceItemProps));
+		Common::JSONObject choicesArray;
+		choicesArray.setVal("type",  makeString("array"));
+		choicesArray.setVal("items", new Common::JSONValue(choiceItem));
 		Common::JSONObject questionProps;
-		questionProps.setVal("id", makeProp("integer", "Question ID"));
-		questionProps.setVal("text", makeProp("string", "Question text"));
-		questionProps.setVal("answers", makeProp("array", "Available answers"));
+		questionProps.setVal("choices", new Common::JSONValue(choicesArray));
+		Common::JSONObject questionSchema;
+		questionSchema.setVal("type",       makeString("object"));
 		questionSchema.setVal("properties", new Common::JSONValue(questionProps));
 		outputProps.setVal("question", new Common::JSONValue(questionSchema));
 		
