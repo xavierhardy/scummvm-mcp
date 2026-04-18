@@ -1355,6 +1355,7 @@ void MonkeyMcpBridge::startSse(const Common::JSONValue *id) {
 	_sseStartFrame = _frameCounter;
 	_sseLastHeartbeatFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
 	_sseMessages.clear();
 	debug(1, "monkey_mcp: SSE started for client %d, frame=%d", _sseClientId, _sseStartFrame);
 	writeSseHeaders();
@@ -1438,16 +1439,21 @@ void MonkeyMcpBridge::pumpSse() {
 		_sseLastHeartbeatFrame = _frameCounter;
 	}
 
-	// Early exit: ego idle, no speech, but userPut still locked after 3 s — action failed silently.
+	// Early exit: ego idle, no speech, userPut locked — action failed silently.
+	// Require the condition to persist for 90 consecutive frames (not just 90 total).
 	{
 		Actor *ego = getEgoActor();
 		bool egoIdle = !ego || !ego->_moving;
-		if (egoIdle && _vm->_talkDelay == 0 && _vm->_userPut <= 0 &&
-		    _frameCounter - _sseStartFrame > 90) {
-			debug(1, "monkey_mcp: action stuck (userPut=0, no motion/speech) at frame %d — closing SSE",
-			      _frameCounter);
-			closeSse(true);
-			return;
+		bool stuck = egoIdle && _vm->_talkDelay == 0 && _vm->_userPut <= 0;
+		if (stuck) {
+			if (_sseStuckAtFrame == 0) _sseStuckAtFrame = _frameCounter;
+			if (_frameCounter - _sseStuckAtFrame > 90) {
+				debug(1, "monkey_mcp: action stuck for 90 frames (userPut=0, no motion/speech) — closing SSE");
+				closeSse(true);
+				return;
+			}
+		} else {
+			_sseStuckAtFrame = 0;
 		}
 	}
 

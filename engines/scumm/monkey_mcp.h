@@ -102,6 +102,7 @@ private:
 	uint32 _sseStartFrame;
 	uint32 _sseLastHeartbeatFrame;
 	uint32 _sseDoneAtFrame;              // frame when isActionDone() first became true (0 = not yet)
+	uint32 _sseStuckAtFrame;             // frame when "stuck" condition first became true (0 = not yet)
 	Common::Array<uint16> _ssePreInventory;
 	Common::Array<ObjStateSnap> _ssePreObjectStates;
 	int _ssePreRoom;
