@@ -937,6 +937,29 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		out.setVal("position", new Common::JSONValue(pos));
 	}
 
+	// Collect active (verbId, name) pairs — used for verbs list and per-object possible list.
+	struct VerbInfo { int verbId; Common::String name; };
+	Common::Array<VerbInfo> activeVerbs;
+	Common::JSONArray verbsArr;
+	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		// key==0: prepositions, sentence-display slots, and other non-clickable entries.
+		if (!vs.verbid || vs.saveid != 0 || !vs.key) continue;
+		const byte *ptr2 = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr2) continue;
+		byte textBuf2[256];
+		_vm->convertMessageToString(ptr2, textBuf2, sizeof(textBuf2));
+		Common::String label = lowerTrimmed((const char *)textBuf2);
+		if (label.empty()) continue;
+		Common::String safe2 = sanitizeForJson(normalizeActionName(label));
+		verbsArr.push_back(makeString(safe2));
+		VerbInfo vi;
+		vi.verbId = vs.verbid;
+		vi.name   = safe2;
+		activeVerbs.push_back(vi);
+	}
+	out.setVal("verbs", new Common::JSONValue(verbsArr));
+
 	// Build deduplicated entity map.
 	Common::Array<NamedEntity> entities;
 	buildEntityMap(entities);
@@ -950,9 +973,23 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 			inventory.push_back(makeString(safe));
 			break;
 		case NamedEntity::kObject: {
+			// Determine which verbs the object has script handlers for.
+			Common::JSONArray possible;
+			bool hasLookAt = false, hasWalkTo = false;
+			for (uint k = 0; k < activeVerbs.size(); ++k) {
+				if (_vm->getVerbEntrypoint(ne.numId, activeVerbs[k].verbId) != 0) {
+					possible.push_back(makeString(activeVerbs[k].name));
+					if (activeVerbs[k].name == "look_at") hasLookAt = true;
+					if (activeVerbs[k].name == "walk_to") hasWalkTo = true;
+				}
+			}
+			if (!hasLookAt) possible.push_back(makeString("look_at"));
+			if (!hasWalkTo) possible.push_back(makeString("walk_to"));
+
 			Common::JSONObject obj;
-			obj.setVal("name",  makeString(safe));
-			obj.setVal("state", makeInt(_vm->getState(ne.numId)));
+			obj.setVal("name",     makeString(safe));
+			obj.setVal("state",    makeInt(_vm->getState(ne.numId)));
+			obj.setVal("possible", new Common::JSONValue(possible));
 			objects.push_back(new Common::JSONValue(obj));
 			break;
 		}
@@ -964,23 +1001,6 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 	out.setVal("inventory", new Common::JSONValue(inventory));
 	out.setVal("objects",   new Common::JSONValue(objects));
 	out.setVal("actors",    new Common::JSONValue(actors));
-
-	// Active verbs (non-empty names only).
-	Common::JSONArray verbsArr;
-	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
-		const VerbSlot &vs = _vm->_verbs[slot];
-		// key==0: prepositions, sentence-display slots, and other non-clickable entries.
-		if (!vs.verbid || vs.saveid != 0 || !vs.key) continue;
-		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-		if (!ptr) continue;
-		byte textBuf[256];
-		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-		Common::String label = lowerTrimmed((const char *)textBuf);
-		if (label.empty()) continue;
-		Common::String safe = sanitizeForJson(normalizeActionName(label));
-		verbsArr.push_back(makeString(safe));
-	}
-	out.setVal("verbs", new Common::JSONValue(verbsArr));
 
 	// Messages — return all, then clear.
 	Common::JSONArray msgsArr;
