@@ -240,8 +240,14 @@ static Common::JSONValue *makeToolSchema(Common::JSONObject &props,
 	return new Common::JSONValue(schema);
 }
 
+static Common::JSONValue *makeOutputSchema(Common::JSONObject &props,
+                                           const char *const *required = nullptr,
+                                           int reqCount = 0) {
+	return makeToolSchema(props, required, reqCount);
+}
+
 // Wrap a tool result object in MCP content envelope.
-static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = false) {
+static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = false, Common::JSONValue *structured = nullptr) {
 	Common::String json = result ? result->stringify() : "{}";
 	delete result;
 	Common::JSONObject text;
@@ -251,7 +257,11 @@ static Common::JSONValue *wrapContent(Common::JSONValue *result, bool isError = 
 	arr.push_back(new Common::JSONValue(text));
 	Common::JSONObject out;
 	out.setVal("content", new Common::JSONValue(arr));
-	if (isError) out.setVal("isError", makeBool(true));
+	if (structured) {
+		out.setVal("structuredContent", structured);
+	} else if (isError) {
+		out.setVal("isError", makeBool(true));
+	}
 	return new Common::JSONValue(out);
 }
 
@@ -820,22 +830,35 @@ Common::JSONValue *MonkeyMcpBridge::handleInitialize(const Common::JSONValue &) 
 Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 	Common::JSONArray tools;
 
-	auto addTool = [&](const char *name, const char *desc, Common::JSONValue *schema) {
+	auto addTool = [&](const char *name, const char *desc, Common::JSONValue *inputSchema, Common::JSONValue *outputSchema) {
 		Common::JSONObject tool;
 		tool.setVal("name", makeString(name));
 		tool.setVal("description", makeString(desc));
-		tool.setVal("inputSchema", schema);
+		tool.setVal("inputSchema", inputSchema);
+		if (outputSchema)
+			tool.setVal("outputSchema", outputSchema);
 		tools.push_back(new Common::JSONValue(tool));
 	};
 
 	// state
 	{
-		Common::JSONObject props;
+		Common::JSONObject inputProps;
+		Common::JSONObject outputProps;
+		outputProps.setVal("room", makeProp("integer", "Current room number"));
+		outputProps.setVal("room_name", makeProp("string", "Human-readable room name (optional)"));
+		outputProps.setVal("verbs", makeProp("array", "Available verbs"));
+		outputProps.setVal("inventory", makeProp("array", "Inventory items"));
+		outputProps.setVal("objects", makeProp("array", "Scene objects"));
+		outputProps.setVal("actors", makeProp("array", "Actors in room"));
+		outputProps.setVal("messages", makeProp("array", "Recent messages"));
+		outputProps.setVal("question", makeProp("object", "Pending dialog question (optional)"));
+		
 		addTool("state",
 		        "Returns the current game state: room, position, inventory, scene objects, "
 		        "actors in room, active verbs, latest messages (cleared after reading), "
 		        "and pending dialog question if any.",
-		        makeToolSchema(props));
+		        makeToolSchema(inputProps),
+		        makeOutputSchema(outputProps));
 	}
 
 	// act
@@ -847,13 +870,17 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		props.setVal("x",       makeProp("integer", "X pixel coordinate for walk_to. Prefer object1 when the target is a named object."));
 		props.setVal("y",      makeProp("integer", "Y pixel coordinate for walk_to (use with x)."));
 		const char *req[] = {"verb"};
+		Common::JSONObject outputProps;
+		outputProps.setVal("state", makeProp("object", "Updated game state after action completes"));
+		
 		addTool("act",
 		        "Perform a verb action. Blocks until the action/cutscene sequence completes, "
 		        "streaming dialog and events via SSE, then returns state changes. "
 		        "IMPORTANT: Actions are sequential - only one can be in progress at a time. "
 		        "Wait for the previous act/answer call to complete before sending the next one. "
 		        "Fails if a question is pending (use 'answer' first) or another action is running.",
-		        makeToolSchema(props, req, 1));
+		        makeToolSchema(props, req, 1),
+		        makeOutputSchema(outputProps));
 	}
 
 	// answer
@@ -861,13 +888,17 @@ Common::JSONValue *MonkeyMcpBridge::handleToolsList() {
 		Common::JSONObject props;
 		props.setVal("id", makeProp("integer", "1-indexed dialog choice (1 = first option shown in state.question.choices)."));
 		const char *req[] = {"id"};
+		Common::JSONObject outputProps;
+		outputProps.setVal("state", makeProp("object", "Updated game state after conversation completes"));
+		
 		addTool("answer",
 		        "Select a dialog choice by 1-based index. Blocks until the conversation "
 		        "sequence completes, streaming events via SSE, then returns state changes. "
 		        "IMPORTANT: Actions are sequential - only one can be in progress at a time. "
 		        "Wait for the previous act/answer call to complete before sending the next one. "
 		        "Fails if no question is currently pending or another action is running.",
-		        makeToolSchema(props, req, 1));
+		        makeToolSchema(props, req, 1),
+		        makeOutputSchema(outputProps));
 	}
 
 	Common::JSONObject result;
@@ -1084,7 +1115,9 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		out.setVal("question", new Common::JSONValue(question));
 	}
 
-	return new Common::JSONValue(out);
+	// Create a copy for structured content
+	Common::JSONValue *structured = new Common::JSONValue(out);
+	return wrapContent(new Common::JSONValue(out), false, structured);
 }
 
 // ---------------------------------------------------------------------------
