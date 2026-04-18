@@ -989,11 +989,10 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 
 	if (name == "state") {
 		Common::JSONValue *stateResult = toolState(*argsVal);
-		// Create a deep copy for structured content
+		// Create wrapped result for direct return
 		Common::JSONObject structuredCopy(stateResult->asObject());
 		Common::JSONValue *structured = new Common::JSONValue(structuredCopy);
-		Common::JSONValue *wrappedResult = wrapContent(stateResult, false, structured);
-		return wrappedResult;
+		return wrapContent(stateResult, false, structured);
 	}
 
 	// act and answer start SSE and return nothing via the normal path.
@@ -1494,11 +1493,7 @@ void MonkeyMcpBridge::closeSse(bool success, const Common::String &errorMsg) {
 				} else {
 					// "state" — respond immediately
 					Common::JSONValue *stateResult = toolState(*next.args);
-					// Create a deep copy for structured content
-					Common::JSONObject structuredCopy(stateResult->asObject());
-					Common::JSONValue *structured = new Common::JSONValue(structuredCopy);
-					Common::JSONValue *wrappedResult = wrapContent(stateResult, false, structured);
-					writeJsonRpcResult(next.id, wrappedResult);
+					writeJsonRpcResult(next.id, stateResult, "", true);
 				}
 				found = true;
 				break;
@@ -1857,11 +1852,23 @@ void MonkeyMcpBridge::buildChoices(Common::JSONArray &choices) const {
 
 void MonkeyMcpBridge::writeJsonRpcResult(const Common::JSONValue *id,
                                           Common::JSONValue *result,
-                                          const Common::String &extraHeaders) {
+                                          const Common::String &extraHeaders,
+                                          bool wrapContentFlag) {
 	Common::JSONObject root;
 	root.setVal("jsonrpc", makeString("2.0"));
 	root.setVal("id",     id ? new Common::JSONValue(*id) : new Common::JSONValue());
-	root.setVal("result", result ? result : new Common::JSONValue(Common::JSONObject()));
+	
+	Common::JSONValue *finalResult = result;
+	if (wrapContentFlag && result) {
+		// Create a deep copy for structured content
+		Common::JSONObject structuredCopy(result->asObject());
+		Common::JSONValue *structured = new Common::JSONValue(structuredCopy);
+		finalResult = wrapContent(result, false, structured);
+	} else if (!result) {
+		finalResult = new Common::JSONValue(Common::JSONObject());
+	}
+	
+	root.setVal("result", finalResult);
 	Common::JSONValue *obj = new Common::JSONValue(root);
 	Common::String json = obj->stringify();
 	delete obj;

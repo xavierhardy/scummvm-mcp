@@ -160,7 +160,7 @@ private:
 
 	// ---- Response helpers ----
 	void writeJsonRpcResult(const Common::JSONValue *id, Common::JSONValue *result,
-	                        const Common::String &extraHeaders = "");
+	                        const Common::String &extraHeaders = "", bool wrapContentFlag = false);
 	void writeJsonRpcError(const Common::JSONValue *id, int code, const Common::String &msg);
 };
 
