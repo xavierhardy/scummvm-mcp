@@ -987,8 +987,11 @@ Common::JSONValue *MonkeyMcpBridge::handleToolCall(const Common::JSONValue &req)
 		return nullptr;
 	}
 
-	if (name == "state")
-		return toolState(*argsVal);
+	if (name == "state") {
+		Common::JSONValue *stateResult = toolState(*argsVal);
+		Common::JSONValue *wrappedResult = wrapContent(stateResult, false, new Common::JSONValue(stateResult->asObject()));
+		return wrappedResult;
+	}
 
 	// act and answer start SSE and return nothing via the normal path.
 	if (name == "act") {
@@ -1157,11 +1160,8 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 		out.setVal("question", new Common::JSONValue(question));
 	}
 
-	// Create separate objects for text and structured content
-	Common::JSONObject outCopy(out);
-	Common::JSONValue *textResult = new Common::JSONValue(outCopy);
-	Common::JSONValue *structured = new Common::JSONValue(out);
-	return wrapContent(textResult, false, structured);
+	// toolState returns the raw object; callers are responsible for wrapping
+	return new Common::JSONValue(out);
 }
 
 // ---------------------------------------------------------------------------
@@ -1490,7 +1490,9 @@ void MonkeyMcpBridge::closeSse(bool success, const Common::String &errorMsg) {
 					toolAnswer(*next.args, next.id);
 				} else {
 					// "state" — respond immediately
-					writeJsonRpcResult(next.id, toolState(*next.args));
+					Common::JSONValue *stateResult = toolState(*next.args);
+					Common::JSONValue *wrappedResult = wrapContent(stateResult, false, new Common::JSONValue(stateResult->asObject()));
+					writeJsonRpcResult(next.id, wrappedResult);
 				}
 				found = true;
 				break;
