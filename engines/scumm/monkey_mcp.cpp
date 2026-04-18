@@ -959,7 +959,8 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 	Common::JSONArray verbsArr;
 	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0) continue;
+		// key==0: prepositions, sentence-display slots, and other non-clickable entries.
+		if (!vs.verbid || vs.saveid != 0 || !vs.key) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
 		byte textBuf[256];
