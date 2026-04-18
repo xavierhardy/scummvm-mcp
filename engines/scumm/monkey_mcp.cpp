@@ -1064,7 +1064,7 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 	struct VerbInfo { int verbId; Common::String name; };
 	Common::Array<VerbInfo> activeVerbs;
 	Common::JSONArray verbsArr;
-	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		// key==0: prepositions, sentence-display slots, and other non-clickable entries.
 		if (!vs.verbid || vs.saveid != 0 || !vs.key) continue;
@@ -1160,7 +1160,7 @@ Common::JSONValue *MonkeyMcpBridge::toolState(const Common::JSONValue &) {
 	// Pending dialog question.
 	int choiceCount = 0;
 	Common::JSONArray choiceList;
-	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
@@ -1297,7 +1297,7 @@ void MonkeyMcpBridge::toolAnswer(const Common::JSONValue &args, const Common::JS
 	// Find the Nth active choice verb.
 	int current = 0;
 	int chosenSlot = -1;
-	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
@@ -1339,7 +1339,7 @@ void MonkeyMcpBridge::startSse(const Common::JSONValue *id) {
 void MonkeyMcpBridge::snapshotPreAction() {
 	_ssePreRoom = _vm->_currentRoom;
 	_ssePreInventory.clear();
-	for (int i = 0; i < _vm->_numInventory; ++i)
+	for (int i = 0; _vm->_inventory && i < _vm->_numInventory; ++i)
 		_ssePreInventory.push_back(_vm->_inventory[i]);
 	Actor *ego = getEgoActor();
 	if (ego) {
@@ -1536,7 +1536,7 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 	// Inventory additions.
 	Common::JSONArray added;
 	int ego = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
-	for (int i = 0; i < _vm->_numInventory; ++i) {
+	for (int i = 0; _vm->_inventory && i < _vm->_numInventory; ++i) {
 		uint16 obj = _vm->_inventory[i];
 		if (!obj) continue;
 		if (_vm->getOwner(obj) != ego) continue;
@@ -1600,7 +1600,7 @@ Common::JSONObject MonkeyMcpBridge::buildStateChanges() const {
 	if (hasPendingQuestion()) {
 		int choiceCount = 0;
 		Common::JSONArray choiceList;
-		for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
 			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
@@ -1687,7 +1687,7 @@ bool MonkeyMcpBridge::hasPendingQuestion() const {
 	};
 
 	bool hasStandard = false, hasNonStandard = false;
-	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
@@ -1737,7 +1737,7 @@ void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const
 
 	// Inventory (owned by ego, skip unnamed).
 	int ego = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
-	for (int i = 0; i < _vm->_numInventory; ++i) {
+	for (int i = 0; _vm->_inventory && i < _vm->_numInventory; ++i) {
 		int obj = _vm->_inventory[i];
 		if (!obj || _vm->getOwner(obj) != ego) continue;
 		Common::String name = getObjName(_vm, obj);
@@ -1774,7 +1774,7 @@ void MonkeyMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const
 	}
 
 	// Actors in room (use ID as name if unnamed).
-	for (int i = 1; i < _vm->_numActors; ++i) {
+	for (int i = 1; _vm->_actors && i < _vm->_numActors; ++i) {
 		Actor *a = _vm->_actors[i];
 		if (!a || !a->_visible || !a->isInCurrentRoom()) continue;
 		int objId = _vm->actorToObj(a->_number);
@@ -1829,7 +1829,7 @@ bool MonkeyMcpBridge::resolveEntityByName(const Common::String &name, NamedEntit
 
 bool MonkeyMcpBridge::resolveVerb(const Common::String &action, int &verbId) const {
 	Common::String normalized = normalizeActionName(action);
-	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
@@ -1845,7 +1845,7 @@ bool MonkeyMcpBridge::resolveVerb(const Common::String &action, int &verbId) con
 	}
 	// Fallback for walk_to: first active action verb.
 	if (normalized == "walk_to") {
-		for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (vs.verbid && vs.saveid == 0 && vs.curmode == 1) {
 				verbId = vs.verbid;
@@ -1857,7 +1857,7 @@ bool MonkeyMcpBridge::resolveVerb(const Common::String &action, int &verbId) con
 }
 
 void MonkeyMcpBridge::buildChoices(Common::JSONArray &choices) const {
-	for (int slot = 1; slot < _vm->_numVerbs; ++slot) {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
