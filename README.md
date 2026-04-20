@@ -2,6 +2,8 @@
 
 ## MCP Server (AI Agent Integration)
 
+**[Watch the demo on YouTube](https://youtu.be/NJbDvZJOuqs)**
+
 This fork adds an **MCP (Model Context Protocol) server** that exposes SCUMM engine game state and controls to AI agents. It enables large language models to play classic LucasArts adventure games by observing game state and issuing actions via a standard TCP interface.
 
 > **Compatibility:** Monkey Island 1 (including the demo) is the primary supported game and has been tested end-to-end. Other SCUMM engine games (MI2, Indiana Jones, Day of the Tentacle, Sam & Max, etc.) are partially supported — the core `state`/`act`/`answer` tools work but have not been thoroughly tested. Curse of Monkey Island (CMI) is experimental due to its different verb/UI system.
