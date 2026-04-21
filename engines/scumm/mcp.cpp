@@ -477,6 +477,10 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		errorOut = "act: another action is already in progress";
 		return false;
 	}
+	if (_vm->_userPut <= 0) {
+		errorOut = "act: game is not accepting input right now";
+		return false;
+	}
 	if (hasPendingQuestion()) {
 		errorOut = "act: a dialog question is pending — use 'answer' first";
 		return false;
@@ -504,6 +508,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		const Common::JSONValue *v = a[param];
 		if (v->isIntegerNumber()) {
 			out = (int)v->asIntegerNumber();
+			if (out < 0) {
+				errorOut = Common::String::format("act: %s id %d is negative", param, out);
+				return false;
+			}
+			if (_vm->_numGlobalObjects > 0 && out >= _vm->_numGlobalObjects) {
+				errorOut = Common::String::format(
+					"act: %s id %d out of bounds (0-%d)",
+					param, out, _vm->_numGlobalObjects - 1);
+				return false;
+			}
 			return true;
 		}
 		if (v->isString()) {
@@ -599,6 +613,10 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &errorOut) {
 	if (_streaming) {
 		errorOut = "walk: another action is already in progress";
+		return false;
+	}
+	if (_vm->_userPut <= 0) {
+		errorOut = "walk: game is not accepting input right now";
 		return false;
 	}
 	if (hasPendingQuestion()) {
@@ -874,7 +892,7 @@ bool ScummMcpBridge::isActionDone() const {
 
 bool ScummMcpBridge::hasPendingQuestion() const {
 	if (!_vm || _vm->_userPut <= 0) return false;
-	bool hasKeyed = false, hasUnkeyed = false;
+	bool hasKeyed = false, hasUnkeyed = false, hasNumericKeyed = false;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
@@ -883,10 +901,19 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 		byte textBuf[256];
 		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 		if (!textBuf[0]) continue;
-		if (vs.key) hasKeyed = true;
-		else        hasUnkeyed = true;
+		if (vs.key) {
+			hasKeyed = true;
+			// Indy4/FOA assigns numeric keys '1'-'9' to dialog choices
+			if (vs.key >= '1' && vs.key <= '9') hasNumericKeyed = true;
+		} else {
+			hasUnkeyed = true;
+		}
 	}
-	return hasUnkeyed && !hasKeyed;
+	// MI1-style: dialog choices are unkeyed, normal verb bar is keyed (or absent)
+	if (hasUnkeyed && !hasKeyed) return true;
+	// Indy4-style: dialog choices have numeric keys; normal verb bar is saved (saveid!=0)
+	if (hasNumericKeyed && !hasUnkeyed) return true;
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -902,8 +929,11 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 	if (s == "walk")    return "walk_to";
 	if (s == "goto")    return "walk_to";
 	if (s == "look")    return "look_at";
+	if (s == "examine") return "look_at";
 	if (s == "pick")    return "pick_up";
 	if (s == "pickup")  return "pick_up";
+	if (s == "take")    return "pick_up";
+	if (s == "get")     return "pick_up";
 	if (s == "talk")    return "talk_to";
 	return s;
 }
@@ -1020,6 +1050,38 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 			}
 		}
 	}
+
+	// Fallback for v6/v7/v8 games that use right-click context menus: the verb
+	// bar is ephemeral so _verbs has no text labels during normal gameplay.
+	// Try a canonical name→ID table, accepting an ID only if at least one room
+	// object or inventory item actually has a script handler for it.
+	static const struct { const char *name; int id; } kFallback[] = {
+		{"open",    1}, {"close",   2}, {"give",    3},
+		{"pick_up", 4}, {"look_at", 5}, {"talk_to", 6},
+		{"use",     7}, {"push",    8}, {"pull",    9},
+		{"walk_to", 13}, {nullptr,  0}
+	};
+	for (int fi = 0; kFallback[fi].name; ++fi) {
+		if (normalized != kFallback[fi].name) continue;
+		int cid = kFallback[fi].id;
+		for (int oi = 1; _vm->_objs && oi < _vm->_numLocalObjects; ++oi) {
+			if (!_vm->_objs[oi].obj_nr) continue;
+			if (_vm->getVerbEntrypoint(_vm->_objs[oi].obj_nr, cid) != 0) {
+				verbId = cid;
+				return true;
+			}
+		}
+		int ego = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
+		for (int ii = 0; _vm->_inventory && ii < _vm->_numInventory; ++ii) {
+			int obj = _vm->_inventory[ii];
+			if (!obj || _vm->getOwner(obj) != ego) continue;
+			if (_vm->getVerbEntrypoint(obj, cid) != 0) {
+				verbId = cid;
+				return true;
+			}
+		}
+	}
+
 	return false;
 }
 

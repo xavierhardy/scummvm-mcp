@@ -834,11 +834,10 @@ Common::JSONValue *McpServer::handleToolCall(const Common::JSONValue &req, bool 
 
 	if (isStreaming && !result) {
 		// Streaming tool rejected the call during validation.
-		Common::JSONObject err;
-		err.setVal("code", mcpJsonInt(-32000));
-		err.setVal("message", mcpJsonString(errMsg.empty() ? "tool rejected" : errMsg));
-		writeJsonRpcError(id, -32000, errMsg.empty() ? "tool rejected" : errMsg);
-		startedStream = true; // response already sent
+		// Use -32602 (Invalid params) and set startedStream=true so handleJsonRpc
+		// short-circuits and does not emit a second "Method not found" response.
+		writeJsonRpcError(id, -32602, errMsg.empty() ? "tool rejected" : errMsg);
+		startedStream = true;
 		return nullptr;
 	}
 
