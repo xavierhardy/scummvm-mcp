@@ -66,9 +66,9 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	if (!_enabled) return;
 
 	int port = ConfMan.hasKey("mcp_port") ? ConfMan.getInt("mcp_port") : 23456;
-	_server = new Networking::McpServer(port, "scummvm", "1.0");
+	Common::String host = ConfMan.hasKey("mcp_host") ? ConfMan.get("mcp_host") : "127.0.0.1";
+	_server = new Networking::McpServer(port, "scummvm", "1.0", host);
 	if (!_server->isListening()) {
-		debug(1, "mcp: server failed to bind; disabling");
 		delete _server;
 		_server = nullptr;
 		_enabled = false;

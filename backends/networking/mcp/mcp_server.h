@@ -58,7 +58,8 @@ public:
 	};
 
 	McpServer(int port, const Common::String &serverName,
-	          const Common::String &serverVersion);
+	          const Common::String &serverVersion,
+	          const Common::String &bindHost = "127.0.0.1");
 	~McpServer();
 
 	// Returns true if the listening socket was successfully bound.
@@ -117,6 +118,7 @@ private:
 	int _port;
 	Common::String _serverName;
 	Common::String _serverVersion;
+	Common::String _bindHost;
 	IToolHandler *_handler;
 
 	Common::Array<ToolSpec> _tools;

@@ -9,6 +9,7 @@
 #include "backends/networking/mcp/mcp_server.h"
 
 #include "common/debug.h"
+#include "common/system.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -315,10 +316,12 @@ bool parseHttpRequest(Common::String &inBuffer,
 // ---------------------------------------------------------------------------
 
 McpServer::McpServer(int port, const Common::String &serverName,
-                     const Common::String &serverVersion)
+                     const Common::String &serverVersion,
+                     const Common::String &bindHost)
 	: _port(port),
 	  _serverName(serverName),
 	  _serverVersion(serverVersion),
+	  _bindHost(bindHost),
 	  _handler(nullptr),
 	  _listenFd(-1),
 	  _nextClientId(1),
@@ -355,13 +358,13 @@ McpServer::McpServer(int port, const Common::String &serverName,
 #endif
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons((unsigned short)_port);
-	if (inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) != 1) {
-		warning("mcp: inet_pton failed — server disabled");
+	if (inet_pton(AF_INET, _bindHost.c_str(), &addr.sin_addr) != 1) {
+		warning("mcp: invalid bind address '%s' — server disabled", _bindHost.c_str());
 		close(_listenFd); _listenFd = -1;
 		return;
 	}
 	if (bind(_listenFd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-		warning("mcp: bind() failed on port %d (errno=%d) — is port already in use? Server disabled.", _port, errno);
+		warning("mcp: bind() failed on %s:%d (errno=%d) — is port already in use?", _bindHost.c_str(), _port, errno);
 		close(_listenFd); _listenFd = -1;
 		return;
 	}
@@ -372,7 +375,11 @@ McpServer::McpServer(int port, const Common::String &serverName,
 	}
 	int lf = fcntl(_listenFd, F_GETFL, 0);
 	if (lf >= 0) fcntl(_listenFd, F_SETFL, lf | O_NONBLOCK);
-	warning("mcp: listening on 127.0.0.1:%d", _port);
+	if (g_system)
+		g_system->logMessage(LogMessageType::kInfo,
+		    Common::String::format("mcp: listening on %s:%d\n", _bindHost.c_str(), _port).c_str());
+	else
+		debug(1, "mcp: listening on %s:%d", _bindHost.c_str(), _port);
 #endif
 }
 
