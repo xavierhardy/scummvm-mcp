@@ -27,7 +27,7 @@
 
 #include "scumm/actor.h"
 #include "scumm/charset.h"
-#include "scumm/monkey_mcp.h"
+#include "scumm/mcp.h"
 #include "scumm/dialogs.h"
 #include "scumm/file.h"
 #include "scumm/imuse_digi/dimuse_engine.h"
@@ -111,10 +111,10 @@ void ScummEngine::printString(int m, const byte *msg) {
 #ifdef USE_TTS
 		_voiceNextString = true;
 #endif
-		if (_monkeyMcp) {
+		if (_mcpBridge) {
 			byte buf[500];
 			convertMessageToString(msg, buf, sizeof(buf));
-			_monkeyMcp->onSystemLine((const char *)buf);
+			_mcpBridge->onSystemLine((const char *)buf);
 		}
 		drawString(1, msg);
 		break;
@@ -161,8 +161,8 @@ void ScummEngine::showMessageDialog(const byte *msg) {
 	byte buf[500];
 
 	convertMessageToString(msg, buf, sizeof(buf));
-	if (_monkeyMcp)
-		_monkeyMcp->onDialogPrompt((const char *)buf);
+	if (_mcpBridge)
+		_mcpBridge->onDialogPrompt((const char *)buf);
 
 	if (_string[3].color == 0)
 		_string[3].color = 4;

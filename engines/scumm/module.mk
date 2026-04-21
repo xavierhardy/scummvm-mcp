@@ -50,9 +50,9 @@ MODULE_OBJS := \
 	macgui/macgui_v5.o \
 	macgui/macgui_v6.o \
 	macgui/macgui_widgets.o \
+	mcp.o \
 	metaengine.o \
 	midiparser_ro.o \
-	monkey_mcp.o \
 	object.o \
 	palette.o \
 	playback.o \

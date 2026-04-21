@@ -8,6 +8,7 @@ MODULE_OBJS := \
 	events/default/default-events.o \
 	fs/abstract-fs.o \
 	fs/stdiostream.o \
+	networking/mcp/mcp_server.o \
 	keymapper/action.o \
 	keymapper/hardware-input.o \
 	keymapper/input-watcher.o \

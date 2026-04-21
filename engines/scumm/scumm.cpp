@@ -59,7 +59,7 @@
 #include "scumm/he/sound_he.h"
 #include "scumm/object.h"
 #include "scumm/macgui/macgui.h"
-#include "scumm/monkey_mcp.h"
+#include "scumm/mcp.h"
 #include "scumm/players/player_ad.h"
 #include "scumm/players/player_nes.h"
 #include "scumm/players/player_sid.h"
@@ -270,7 +270,7 @@ ScummEngine::ScummEngine(OSystem *syst, const DetectorResult &dr)
 	if (_bootParam)
 		_debugMode = true;
 
-	ConfMan.registerDefault("monkey_mcp", false);
+	ConfMan.registerDefault("mcp", false);
 	_copyProtection = ConfMan.getBool("copy_protection");
 	if (ConfMan.getBool("demo_mode") || ConfMan.getBool("enable_demo_mode"))
 		_game.features |= GF_DEMO;
@@ -457,14 +457,12 @@ ScummEngine::ScummEngine(OSystem *syst, const DetectorResult &dr)
 
 	_enableHECompetitiveOnlineMods = ConfMan.getBool("enable_competitive_mods");
 
-	debug("monkey_mcp: about to create bridge");
-	_monkeyMcp = new MonkeyMcpBridge(this);
-	debug("monkey_mcp: bridge created %p", (void *)_monkeyMcp);
+	_mcpBridge = new ScummMcpBridge(this);
 }
 
 
 ScummEngine::~ScummEngine() {
-	delete _monkeyMcp;
+	delete _mcpBridge;
 	delete _musicEngine;
 
 	// Delete the sound object earlier than the actors
@@ -2994,8 +2992,8 @@ void ScummEngine_v0::scummLoop(int delta) {
 }
 
 void ScummEngine::scummLoop(int delta) {
-	if (_monkeyMcp)
-		_monkeyMcp->pump();
+	if (_mcpBridge)
+		_mcpBridge->pump();
 
 	// Notify the script about how much time has passed, in jiffies
 	if (VAR_TIMER != 0xFF)
