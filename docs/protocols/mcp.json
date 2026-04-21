@@ -1,0 +1,363 @@
+{
+  "protocol": "ScummVM MCP",
+  "protocolVersion": "2025-03-26",
+  "transport": "Streamable HTTP (JSON-RPC 2.0 over HTTP + SSE)",
+  "scope": "All SCUMM engine games (MI1, MI2, Indiana Jones, DOTT, Sam & Max, etc.)",
+  "activationConfig": "mcp=true",
+  "server": {
+    "name": "scummvm",
+    "version": "1.0",
+    "defaultPort": 23456,
+    "bindAddress": "127.0.0.1"
+  },
+  "mcpServers": {
+    "scummvm": {
+      "transport": "http",
+      "url": "http://127.0.0.1:23456/mcp",
+      "description": "Connect to ScummVM's built-in MCP server. Enable by setting mcp=true in scummvm.ini. Use mcp_port to override the default port (23456)."
+    }
+  },
+  "notes": "The MCP server uses Streamable HTTP (MCP spec 2025-03-26). Sync tools (state) return immediately; streaming tools (act, answer, walk) open an SSE channel and emit notifications as dialog plays out, then return a structured result when the action completes.",
+  "networkExamples": {
+    "scummvm_ini": "[monkey1]\nmcp=true\n",
+    "scummvm_ini_custom_port": "[monkey1]\nmcp=true\nmcp_port=23456\n",
+    "initialize_request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "protocolVersion": "2025-03-26",
+        "clientInfo": { "name": "my-client", "version": "1.0" }
+      }
+    },
+    "initialize_response": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "protocolVersion": "2025-03-26",
+        "serverInfo": { "name": "scummvm", "version": "1.0" },
+        "capabilities": { "tools": { "listChanged": true } }
+      }
+    }
+  },
+
+  "methods": {
+    "initialize": {
+      "description": "Handshake. Client declares its protocol version; server replies with its capabilities and identity.",
+      "params": {
+        "protocolVersion": "string",
+        "clientInfo": { "name": "string", "version": "string" }
+      },
+      "result": {
+        "protocolVersion": "string",
+        "serverInfo": { "name": "string", "version": "string" },
+        "capabilities": { "tools": { "listChanged": "boolean" } }
+      }
+    },
+    "tools/list": {
+      "description": "List all MCP tools exposed by the engine.",
+      "params": {},
+      "result": {
+        "tools": [
+          { "name": "string", "description": "string", "inputSchema": {}, "outputSchema": {} }
+        ]
+      }
+    },
+    "tools/call": {
+      "description": "Invoke a tool. Sync tools (state) return immediately. Streaming tools (act, answer, walk) promote the connection to SSE and stream notifications before sending a final result.",
+      "params": {
+        "name": "string (state | act | answer | walk)",
+        "arguments": "object — see tool schemas below"
+      },
+      "result": "object — see tool schemas below"
+    },
+    "ping": {
+      "description": "Keep-alive / connectivity check.",
+      "params": {},
+      "result": {}
+    }
+  },
+
+  "tools": [
+    {
+      "name": "state",
+      "type": "sync",
+      "description": "Read the current game state: room, position, available verbs, inventory, visible objects, actors, buffered dialog lines, and any pending dialog question.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "room":      { "type": "integer", "description": "Current room number" },
+          "room_name": { "type": "string",  "description": "Human-readable room name" },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "integer" },
+              "y": { "type": "integer" }
+            }
+          },
+          "verbs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Verb names currently available in the UI (e.g. walk_to, look_at, pick_up)"
+          },
+          "inventory": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Names of items in the player's inventory"
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id":               { "type": "integer" },
+                "name":             { "type": "string" },
+                "state":            { "type": "integer" },
+                "visible":          { "type": "boolean" },
+                "pathway":          { "type": "boolean" },
+                "compatible_verbs": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "description": "Objects visible in the current room"
+          },
+          "actors": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Names of actors present in the current room"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text":  { "type": "string" },
+                "actor": { "type": "string" },
+                "type":  { "type": "string", "enum": ["dialog", "system"] }
+              }
+            },
+            "description": "Dialog lines buffered since the last state call (cleared on read)"
+          },
+          "question": {
+            "type": "object",
+            "properties": {
+              "choices": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id":    { "type": "integer" },
+                    "label": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "description": "Present only when a dialog choice is pending. Use the answer tool to respond."
+          }
+        }
+      },
+      "examples": [
+        {
+          "description": "Read game state",
+          "request":  { "jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": { "name": "state", "arguments": {} } },
+          "response": {
+            "jsonrpc": "2.0", "id": 10,
+            "result": {
+              "content": [{ "type": "text", "text": "{\"room\":3,\"room_name\":\"The Scumm Bar\",...}" }],
+              "structuredContent": {
+                "room": 3,
+                "room_name": "The Scumm Bar",
+                "position": { "x": 320, "y": 140 },
+                "verbs": ["open","close","give","pick_up","look_at","talk_to","walk_to","push","pull","use"],
+                "inventory": ["sword","idol"],
+                "objects": [
+                  { "id": 42, "name": "mug", "state": 1, "visible": true, "pathway": false, "compatible_verbs": ["look_at","pick_up"] }
+                ],
+                "actors": ["guybrush","pirate"],
+                "messages": [],
+                "question": null
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "act",
+      "type": "streaming",
+      "description": "Execute a verb on a named object or actor (by name or numeric ID from state). Streams SSE notifications as dialog plays out; returns a state-change summary when the action completes. For walking to pixel coordinates, use the walk tool instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "verb": {
+            "type": "string",
+            "description": "Verb to perform. Case-insensitive. Aliases: walk→walk_to, look→look_at, pick/pickup→pick_up, talk→talk_to."
+          },
+          "target1": {
+            "oneOf": [
+              { "type": "string",  "description": "Primary target by name (from state.objects or state.actors)" },
+              { "type": "integer", "description": "Primary target by numeric object ID (from state.objects[].id)" }
+            ]
+          },
+          "target2": {
+            "oneOf": [
+              { "type": "string",  "description": "Secondary target by name (for two-object verbs like use)" },
+              { "type": "integer", "description": "Secondary target by numeric object ID" }
+            ]
+          }
+        },
+        "required": ["verb"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/definitions/stateChanges"
+      },
+      "examples": [
+        {
+          "description": "Look at a named object",
+          "request":  { "jsonrpc": "2.0", "id": 20, "method": "tools/call", "params": { "name": "act", "arguments": { "verb": "look_at", "target1": "mug" } } },
+          "response": {
+            "jsonrpc": "2.0", "id": 20,
+            "result": {
+              "content": [{ "type": "text", "text": "{\"messages\":[{\"text\":\"It's a wooden mug.\",\"actor\":\"guybrush\"}]}" }],
+              "structuredContent": {
+                "messages": [{ "text": "It's a wooden mug.", "actor": "guybrush" }],
+                "inventory_added": [],
+                "inventory_removed": []
+              }
+            }
+          }
+        },
+        {
+          "description": "Use one object on another",
+          "request":  { "jsonrpc": "2.0", "id": 21, "method": "tools/call", "params": { "name": "act", "arguments": { "verb": "use", "target1": "key", "target2": "door" } } }
+        },
+        {
+          "description": "Walk to a named walk-box / hotspot",
+          "request":  { "jsonrpc": "2.0", "id": 22, "method": "tools/call", "params": { "name": "act", "arguments": { "verb": "walk_to", "target1": "archway" } } }
+        },
+        {
+          "description": "Talk to an actor, which returns a question with choices",
+          "request":  { "jsonrpc": "2.0", "id": 23, "method": "tools/call", "params": { "name": "act", "arguments": { "verb": "talk_to", "target1": "pirate" } } },
+          "response": {
+            "jsonrpc": "2.0", "id": 23,
+            "result": {
+              "content": [{ "type": "text", "text": "..." }],
+              "structuredContent": {
+                "messages": [{ "text": "Arr, what do ye want?", "actor": "pirate" }],
+                "question": {
+                  "choices": [
+                    { "id": 1, "label": "I want to be a pirate!" },
+                    { "id": 2, "label": "Have you seen the Governor?" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "answer",
+      "type": "streaming",
+      "description": "Select a dialog choice by 1-based index. Only valid when state.question is present. Streams SSE notifications as the conversation plays out; returns a state-change summary when complete.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "description": "1-based choice index from state.question.choices[].id" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/definitions/stateChanges"
+      },
+      "examples": [
+        {
+          "description": "Select the first dialog choice",
+          "request":  { "jsonrpc": "2.0", "id": 30, "method": "tools/call", "params": { "name": "answer", "arguments": { "id": 1 } } }
+        }
+      ]
+    },
+
+    {
+      "name": "walk",
+      "type": "streaming",
+      "description": "Walk the player character to an explicit pixel coordinate. Out-of-bounds values are clamped to room bounds. Streams SSE notifications until the walk completes; returns a state-change summary.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "x": { "type": "integer", "description": "Target X pixel coordinate (auto-clamped to [0, roomWidth-1])" },
+          "y": { "type": "integer", "description": "Target Y pixel coordinate (auto-clamped to [0, roomHeight-1])" }
+        },
+        "required": ["x", "y"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/definitions/stateChanges"
+      },
+      "examples": [
+        {
+          "description": "Walk to screen-centre",
+          "request":  { "jsonrpc": "2.0", "id": 40, "method": "tools/call", "params": { "name": "walk", "arguments": { "x": 160, "y": 120 } } }
+        },
+        {
+          "description": "Out-of-bounds coordinates are clamped automatically",
+          "request":  { "jsonrpc": "2.0", "id": 41, "method": "tools/call", "params": { "name": "walk", "arguments": { "x": 99999, "y": -50 } } },
+          "note": "Clamped to (roomWidth-1, 0) before the walk is issued"
+        }
+      ]
+    }
+  ],
+
+  "definitions": {
+    "stateChanges": {
+      "type": "object",
+      "description": "State changes that occurred while the action ran",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text":  { "type": "string" },
+              "actor": { "type": "string" },
+              "type":  { "type": "string", "enum": ["dialog", "system"] }
+            }
+          },
+          "description": "Dialog lines spoken during the action"
+        },
+        "inventory_added":   { "type": "array", "items": { "type": "string" }, "description": "Items added to inventory" },
+        "inventory_removed": { "type": "array", "items": { "type": "string" }, "description": "Items removed from inventory" },
+        "room_changed": { "type": "integer", "description": "New room number (only present if the room changed)" },
+        "position": {
+          "type": "object",
+          "properties": { "x": { "type": "integer" }, "y": { "type": "integer" } },
+          "description": "Final player position"
+        },
+        "question": {
+          "type": "object",
+          "properties": {
+            "choices": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id":    { "type": "integer" },
+                  "label": { "type": "string" }
+                }
+              }
+            }
+          },
+          "description": "Present if a dialog choice is pending after the action"
+        }
+      }
+    }
+  }
+}

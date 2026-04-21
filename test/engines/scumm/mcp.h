@@ -22,7 +22,9 @@ public:
 		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("close"),   "close");
 		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("give"),    "give");
 		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("walk_to"), "walk_to");
+		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("look_at"), "look_at");
 		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("pick_up"), "pick_up");
+		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("talk_to"), "talk_to");
 	}
 
 	// --- normalizeActionName: case folding and whitespace trimming ---

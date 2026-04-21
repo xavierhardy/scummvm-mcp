@@ -12,15 +12,25 @@ This fork adds an **MCP (Model Context Protocol) server** that exposes SCUMM eng
 
 ### Setup
 
-Enable the server by adding `monkey_mcp=true` to the game's section in `scummvm.ini`, then launch with debug flags:
+Enable the server by adding `mcp=true` to the game's section in `scummvm.ini`:
 
 ```ini
 [monkey1]
-monkey_mcp=true
+mcp=true
 ```
 
+Then launch ScummVM normally (add `--debuglevel=1` for verbose MCP logs):
+
 ```bash
-scummvm --debugflags=monkey_mcp --debuglevel=1 monkey1
+scummvm --debuglevel=1 monkey1
+```
+
+To use a custom port (default is **23456**), add `mcp_port` to the same section:
+
+```ini
+[monkey1]
+mcp=true
+mcp_port=12345
 ```
 
 The server listens on TCP port **23456** and speaks the [MCP Streamable HTTP protocol (2025-03-26)](https://modelcontextprotocol.io/).
@@ -56,13 +66,13 @@ Returns a snapshot of the current game state:
 
 #### `act` — Perform an action
 
-Executes a verb on an object and blocks (via SSE streaming) until the action completes, then returns what changed:
+Executes a verb on an object or actor and blocks (via SSE streaming) until the action completes, then returns what changed:
 
 ```json
-{ "verb": "look_at", "object1": "mug" }
-{ "verb": "use", "object1": "key", "object2": "door" }
-{ "verb": "walk_to", "object1": "archway" }
-{ "verb": "walk_to", "x": 200, "y": 150 }
+{ "verb": "look_at", "target1": "mug" }
+{ "verb": "use", "target1": "key", "target2": "door" }
+{ "verb": "walk_to", "target1": "archway" }
+{ "verb": "talk_to", "target1": "pirate" }
 ```
 
 ```json
@@ -75,7 +85,17 @@ Executes a verb on an object and blocks (via SSE streaming) until the action com
 }
 ```
 
-Verb names are case-insensitive and accept common aliases: `walk` → `walk_to`, `look` → `look_at`, `pick` / `pickup` → `pick_up`, `talk` → `talk_to`. Object names and IDs come from `state`. Prefer `object1` over `x`/`y` when the target is a named object or actor.
+Verb names are case-insensitive and accept common aliases: `walk` → `walk_to`, `look` → `look_at`, `pick` / `pickup` → `pick_up`, `talk` → `talk_to`. Object and actor names (and numeric IDs) come from `state`. To walk to explicit pixel coordinates, use the `walk` tool.
+
+#### `walk` — Walk to pixel coordinates
+
+Walks the player character to an explicit screen position and blocks until the walk completes:
+
+```json
+{ "x": 200, "y": 150 }
+```
+
+Out-of-bounds values are automatically clamped to the current room dimensions. Returns the same state-change structure as `act`.
 
 #### `answer` — Select a dialog choice
 
@@ -108,7 +128,10 @@ Returns the same state-change structure as `act`. Only valid when `state.questio
 
 ### Architecture
 
-The server runs inside the ScummVM game loop, implemented in `engines/scumm/monkey_mcp.cpp`. It accepts HTTP/MCP connections on port 23456, uses SSE to stream action progress, and integrates with the SCUMM engine's verb, object, actor, and script systems directly.
+The server is split across two modules:
+
+- `backends/networking/mcp/mcp_server.cpp` — engine-agnostic transport layer (TCP listener, HTTP parser, JSON-RPC dispatch, SSE streaming, session management). Runs inside the ScummVM game loop on port 23456.
+- `engines/scumm/mcp.cpp` — SCUMM bridge (tool implementations, entity resolution, verb lookup, action-completion detection, dialog message capture). Integrates with the SCUMM engine's verb, object, actor, and script systems directly.
 
 ## About ScummVM
 

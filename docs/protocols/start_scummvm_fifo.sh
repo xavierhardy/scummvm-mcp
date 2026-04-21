@@ -23,7 +23,7 @@ fi
 # should open the FIFOs from the other side (or use tail/head) to avoid blocking.
 
 echo "Starting ScummVM with stdin <$IN_FIFO and stdout >$OUT_FIFO"
-"$SCUMMVM_BIN" -c "$SCUMMVM_INI" --debugflags monkey_mcp,scumm --debuglevel 11 < "$IN_FIFO" > "$OUT_FIFO" &
+"$SCUMMVM_BIN" -c "$SCUMMVM_INI" --debugflags mcp,scumm --debuglevel 11 < "$IN_FIFO" > "$OUT_FIFO" &
 SCUMMVM_PID=$!
 
 echo "ScummVM started (pid $SCUMMVM_PID)."

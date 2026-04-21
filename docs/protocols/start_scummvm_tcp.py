@@ -43,10 +43,10 @@ def forward_stdout(proc, conn):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='0.0.0.0')
-    parser.add_argument('--port', type=int, default=12345)
+    parser.add_argument('--port', type=int, default=23456)
     parser.add_argument('--scummvm', required=True, help='Path to scummvm binary')
     parser.add_argument('--ini', required=True, help='Path to scummvm.ini')
-    parser.add_argument('--debugflags', default='monkey_mcp,scumm')
+    parser.add_argument('--debugflags', default='mcp,scumm')
     parser.add_argument('--debuglevel', default='11')
     args = parser.parse_args()
 
