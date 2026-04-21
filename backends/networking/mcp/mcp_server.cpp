@@ -46,6 +46,10 @@ extern "C" {
 #ifndef SO_REUSEADDR
 #define SO_REUSEADDR 0x0004
 #endif
+// SO_REUSEPORT is required on BSD/macOS to reclaim ports in TIME_WAIT state.
+#ifndef SO_REUSEPORT
+#define SO_REUSEPORT 0x0200
+#endif
 #ifndef O_NONBLOCK
 #define O_NONBLOCK 0x0004
 #endif
@@ -58,6 +62,9 @@ extern "C" {
 #endif
 #ifndef SO_REUSEADDR
 #define SO_REUSEADDR 2
+#endif
+#ifndef SO_REUSEPORT
+#define SO_REUSEPORT 15
 #endif
 #ifndef O_NONBLOCK
 #define O_NONBLOCK 04000
@@ -334,9 +341,13 @@ McpServer::McpServer(int port, const Common::String &serverName,
 		return;
 	}
 	_listenFd = socket(AF_INET, SOCK_STREAM, 0);
-	if (_listenFd < 0) return;
+	if (_listenFd < 0) {
+		warning("mcp: socket() failed errno=%d — server disabled", errno);
+		return;
+	}
 	int opt = 1;
-	setsockopt(_listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+	setsockopt(_listenFd, SOL_SOCKET, SO_REUSEADDR,  &opt, sizeof(opt));
+	setsockopt(_listenFd, SOL_SOCKET, SO_REUSEPORT,  &opt, sizeof(opt));
 	struct sockaddr_in addr;
 	memset(&addr, 0, sizeof(addr));
 #if defined(__APPLE__) || defined(__MACH__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
@@ -345,22 +356,23 @@ McpServer::McpServer(int port, const Common::String &serverName,
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons((unsigned short)_port);
 	if (inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) != 1) {
+		warning("mcp: inet_pton failed — server disabled");
 		close(_listenFd); _listenFd = -1;
 		return;
 	}
 	if (bind(_listenFd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-		debug(1, "mcp: bind() failed errno=%d", errno);
+		warning("mcp: bind() failed on port %d (errno=%d) — is port already in use? Server disabled.", _port, errno);
 		close(_listenFd); _listenFd = -1;
 		return;
 	}
 	if (listen(_listenFd, 16) != 0) {
-		debug(1, "mcp: listen() failed");
+		warning("mcp: listen() failed (errno=%d) — server disabled", errno);
 		close(_listenFd); _listenFd = -1;
 		return;
 	}
 	int lf = fcntl(_listenFd, F_GETFL, 0);
 	if (lf >= 0) fcntl(_listenFd, F_SETFL, lf | O_NONBLOCK);
-	debug(1, "mcp: listening on 127.0.0.1:%d (fd=%d)", _port, _listenFd);
+	warning("mcp: listening on 127.0.0.1:%d", _port);
 #endif
 }
 
@@ -455,6 +467,7 @@ void McpServer::writeHttpResponse(int status, const Common::String &contentType,
 	if (!contentType.empty())
 		response += "Content-Type: " + contentType + "\r\n";
 	response += Common::String::format("Content-Length: %d\r\n", (int)body.size());
+	response += "Access-Control-Allow-Origin: *\r\n";
 	if (!extraHeaders.empty())
 		response += extraHeaders;
 	response += "\r\n";

@@ -63,7 +63,6 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	if (!_vm) return;
 
 	_enabled = ConfMan.getBool("mcp");
-	debug(1, "mcp: enabled=%d", (int)_enabled);
 	if (!_enabled) return;
 
 	int port = ConfMan.hasKey("mcp_port") ? ConfMan.getInt("mcp_port") : 23456;
