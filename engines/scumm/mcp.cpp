@@ -549,9 +549,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 				errorOut = Common::String("act: unknown ") + param + " '" + v->asString() + "'";
 				return false;
 			}
-			// Pass actor IDs directly to doSentence; don't convert to object IDs.
-			// Actors are identified by their actor number, not their room object ID.
-			out = ent.numId;
+			out = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
 			return true;
 		}
 		errorOut = Common::String("act: ") + param + " must be a string name or integer id";
@@ -576,12 +574,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseStuckAtFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
-	// For actor targets, pass as targetB (right-click target) not targetA (left-click target).
-	if (targetA > 0 && _vm->isValidActor(targetA)) {
-		_vm->doSentence(verbId, 0, targetA);
-	} else {
-		_vm->doSentence(verbId, targetA, targetB);
-	}
+	_vm->doSentence(verbId, targetA, targetB);
 	_server->startStreaming();
 	return true;
 }
