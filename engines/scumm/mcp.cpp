@@ -576,7 +576,12 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseStuckAtFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
-	_vm->doSentence(verbId, targetA, targetB);
+	// For actor targets, pass as targetB (right-click target) not targetA (left-click target).
+	if (targetA > 0 && _vm->isValidActor(targetA)) {
+		_vm->doSentence(verbId, 0, targetA);
+	} else {
+		_vm->doSentence(verbId, targetA, targetB);
+	}
 	_server->startStreaming();
 	return true;
 }
