@@ -996,6 +996,43 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 	return s;
 }
 
+// Map of verb canonical names for looking up by label
+static const struct {
+	const char *canonical;
+	const char *label;
+} kVerbMap[] = {
+	{"talk_to", "Talk to"},
+	{"talk_to", "talk_to"},
+	{"look_at", "Look at"},
+	{"look_at", "look_at"},
+	{"pick_up", "Pick up"},
+	{"pick_up", "pick_up"},
+	{"walk_to", "Walk to"},
+	{"walk_to", "walk_to"},
+	{"open", "Open"},
+	{"open", "open"},
+	{"close", "Close"},
+	{"close", "close"},
+	{"use", "Use"},
+	{"use", "use"},
+	{"give", "Give"},
+	{"give", "give"},
+	{"push", "Push"},
+	{"push", "push"},
+	{"pull", "Pull"},
+	{"pull", "pull"},
+	{nullptr, nullptr}
+};
+
+// Check if a verb bar label matches the canonical action
+static bool verbLabelMatches(const Common::String &rawLabel, const Common::String &canonicalAction) {
+	for (int i = 0; kVerbMap[i].canonical; ++i) {
+		if (rawLabel == kVerbMap[i].label && canonicalAction == kVerbMap[i].canonical)
+			return true;
+	}
+	return false;
+}
+
 void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const {
 	entities.clear();
 
@@ -1131,50 +1168,40 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		if (vs.saveid != 0) continue;
 		if (!ptr) continue;
 		if (rawLabel.empty()) continue;
-		// Try normalized match first, then case-insensitive raw match as fallback
-		if (normLabel == normalized || normLabel.contains(normalized)) {
-			// Matched normalized form
-		} else {
-			// Try case-insensitive match on raw label
-			Common::String lowerLabel = rawLabel;
-			lowerLabel.toLowercase();
-			Common::String lowerAction = action;
-			lowerAction.toLowercase();
-			if (lowerLabel != lowerAction && !lowerLabel.contains(lowerAction)) continue;
+		// Match label against verb variants
+		if (!verbLabelMatches(rawLabel, normalized)) continue;
+
+		// For talk_to, accept the verb bar match even without entrypoints; dialog
+		// may not use the verb entrypoint system.
+		if (normalized == "talk_to") {
+			verbId = vs.verbid;
+			debug(1, "mcp: resolveVerb found verbid=%d via label match (talk_to)", verbId);
+			return true;
 		}
-		if (true) {  // Placeholder after the if/else above
-			// For talk_to, accept the verb bar match even without entrypoints; dialog
-			// may not use the verb entrypoint system.
-			if (normalized == "talk_to") {
-				verbId = vs.verbid;
-				debug(1, "mcp: resolveVerb found verbid=%d via label match (talk_to)", verbId);
-				return true;
+		// For other verbs, verify the verb has an actual entrypoint; skip if not
+		// (the verb bar text might be reused or mislabeled).
+		bool hasEntrypoint = false;
+		for (int oi = 1; _vm->_objs && oi < _vm->_numLocalObjects; ++oi) {
+			if (!_vm->_objs[oi].obj_nr) continue;
+			if (_vm->getVerbEntrypoint(_vm->_objs[oi].obj_nr, vs.verbid) != 0) {
+				hasEntrypoint = true;
+				break;
 			}
-			// For other verbs, verify the verb has an actual entrypoint; skip if not
-			// (the verb bar text might be reused or mislabeled).
-			bool hasEntrypoint = false;
-			for (int oi = 1; _vm->_objs && oi < _vm->_numLocalObjects; ++oi) {
-				if (!_vm->_objs[oi].obj_nr) continue;
-				if (_vm->getVerbEntrypoint(_vm->_objs[oi].obj_nr, vs.verbid) != 0) {
+		}
+		if (!hasEntrypoint) {
+			for (int ii = 0; _vm->_inventory && ii < _vm->_numInventory; ++ii) {
+				int obj = _vm->_inventory[ii];
+				if (!obj) continue;
+				if (_vm->getVerbEntrypoint(obj, vs.verbid) != 0) {
 					hasEntrypoint = true;
 					break;
 				}
 			}
-			if (!hasEntrypoint) {
-				for (int ii = 0; _vm->_inventory && ii < _vm->_numInventory; ++ii) {
-					int obj = _vm->_inventory[ii];
-					if (!obj) continue;
-					if (_vm->getVerbEntrypoint(obj, vs.verbid) != 0) {
-						hasEntrypoint = true;
-						break;
-					}
-				}
-			}
-			if (hasEntrypoint) {
-				verbId = vs.verbid;
-				debug(1, "mcp: resolveVerb found verbid=%d via label match", verbId);
-				return true;
-			}
+		}
+		if (hasEntrypoint) {
+			verbId = vs.verbid;
+			debug(1, "mcp: resolveVerb found verbid=%d via label match", verbId);
+			return true;
 		}
 	}
 	if (normalized == "walk_to") {
