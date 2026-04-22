@@ -470,7 +470,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	Common::JSONArray choiceList;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1 || vs.imgindex != 0) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
 		byte textBuf[256];
@@ -611,7 +611,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	int chosenSlot = -1;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1 || vs.imgindex != 0) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
 		byte textBuf[256];
@@ -893,7 +893,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		Common::JSONArray choiceList;
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
-			if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+			if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1 || vs.imgindex != 0) continue;
 			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 			if (!ptr) continue;
 			byte textBuf[256];
@@ -940,6 +940,10 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		// Skip image-based (OBIM) verb slots — they are graphical UI elements, not
+		// text choices, but their key=0 would incorrectly set hasUnkeyed=true and
+		// prevent Indy4-style numeric-key dialog detection.
+		if (vs.imgindex != 0) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
 		byte textBuf[256];
