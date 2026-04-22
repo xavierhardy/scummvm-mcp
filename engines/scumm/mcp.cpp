@@ -549,7 +549,9 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 				errorOut = Common::String("act: unknown ") + param + " '" + v->asString() + "'";
 				return false;
 			}
-			out = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
+			// Pass actor IDs directly to doSentence; don't convert to object IDs.
+			// Actors are identified by their actor number, not their room object ID.
+			out = ent.numId;
 			return true;
 		}
 		errorOut = Common::String("act: ") + param + " must be a string name or integer id";
