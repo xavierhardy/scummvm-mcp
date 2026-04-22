@@ -1131,8 +1131,18 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		if (vs.saveid != 0) continue;
 		if (!ptr) continue;
 		if (rawLabel.empty()) continue;
-		// Accept verb bar label if normalized form matches
+		// Try normalized match first, then case-insensitive raw match as fallback
 		if (normLabel == normalized || normLabel.contains(normalized)) {
+			// Matched normalized form
+		} else {
+			// Try case-insensitive match on raw label
+			Common::String lowerLabel = rawLabel;
+			lowerLabel.toLowercase();
+			Common::String lowerAction = action;
+			lowerAction.toLowercase();
+			if (lowerLabel != lowerAction && !lowerLabel.contains(lowerAction)) continue;
+		}
+		if (true) {  // Placeholder after the if/else above
 			// For talk_to, accept the verb bar match even without entrypoints; dialog
 			// may not use the verb entrypoint system.
 			if (normalized == "talk_to") {
