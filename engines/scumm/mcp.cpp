@@ -1088,17 +1088,22 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 
 bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) const {
 	Common::String normalized = normalizeActionName(action);
+	debug(1, "mcp: resolveVerb '%s' (normalized='%s')", action.c_str(), normalized.c_str());
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0) continue;
+		if (!vs.verbid) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-		if (!ptr) continue;
-		byte textBuf[256];
-		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		byte textBuf[256] = {};
+		if (ptr) _vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 		Common::String label = normalizeActionName((const char *)textBuf);
+		debug(1, "mcp:   slot=%d verbid=%d saveid=%d curmode=%d key=%d label='%s'",
+		      slot, vs.verbid, vs.saveid, vs.curmode, vs.key, label.c_str());
+		if (vs.saveid != 0) continue;
+		if (!ptr) continue;
 		if (label.empty()) continue;
 		if (label == normalized || label.contains(normalized)) {
 			verbId = vs.verbid;
+			debug(1, "mcp: resolveVerb found verbid=%d via label match", verbId);
 			return true;
 		}
 	}
