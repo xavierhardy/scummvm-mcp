@@ -169,7 +169,7 @@ void ScummMcpBridge::registerTools() {
 		objectsArray.setVal("items", new Common::JSONValue(objectItem));
 		outputProps.setVal("objects", new Common::JSONValue(objectsArray));
 
-		outputProps.setVal("actors", makeStringArray());
+		// actors[] removed — NPCs now appear in objects[] with compatible_verbs
 
 		Common::JSONObject msgItemProps;
 		msgItemProps.setVal("text",  mcpProp("string", "Message text"));
@@ -201,9 +201,12 @@ void ScummMcpBridge::registerTools() {
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "state";
 		spec.description =
-		    "Returns the current game state: room, position, inventory, scene objects, "
-		    "actors in room, active verbs, latest messages (cleared after reading), "
-		    "and pending dialog question if any.";
+		    "Returns the current game state: room, position, inventory, scene objects "
+		    "(including NPCs with their compatible_verbs — always includes talk_to), "
+		    "active verbs, latest messages (cleared after reading), "
+		    "and pending dialog question if any. "
+		    "Invisible objects and the player character are never listed. "
+		    "Use act(verb='talk_to', target1=<npc_name>) to speak to an NPC.";
 		spec.inputSchema  = mcpObjectSchema(inputProps);
 		spec.outputSchema = mcpObjectSchema(outputProps);
 		spec.streaming    = false;
@@ -233,8 +236,9 @@ void ScummMcpBridge::registerTools() {
 		Common::JSONObject props;
 		props.setVal("verb",    mcpProp("string", "Verb name (e.g. 'open', 'use', 'look_at', 'walk_to'). Required."));
 		props.setVal("target1", mcpPropOneOf("string", "integer",
-		    "Primary target: name or numeric id of an object/actor/inventory item "
-		    "currently present in state (objects[], actors[], or inventory[]). "
+		    "Primary target: name or numeric id of an object/inventory item "
+		    "currently present in state (objects[] or inventory[]). "
+		    "NPCs appear in objects[] and can be targeted by name. "
 		    "For 'use X on Y', this is X."));
 		props.setVal("target2", mcpPropOneOf("string", "integer",
 		    "Secondary target for 'use X on Y' (Y): name or numeric id, "
@@ -380,7 +384,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	Common::Array<NamedEntity> entities;
 	buildEntityMap(entities);
 
-	Common::JSONArray inventory, objects, actors;
+	Common::JSONArray inventory, objects;
 	for (uint i = 0; i < entities.size(); ++i) {
 		const NamedEntity &ne = entities[i];
 		Common::String safe = mcpSanitizeString(ne.displayName);
@@ -416,14 +420,31 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			objects.push_back(new Common::JSONValue(obj));
 			break;
 		}
-		case NamedEntity::kActor:
-			actors.push_back(mcpJsonString(safe));
+		case NamedEntity::kActor: {
+			int actorObjId = _vm->actorToObj(ne.numId);
+			Common::JSONArray compatVerbs;
+			bool hasTalkTo = false;
+			for (uint k = 0; k < activeVerbs.size(); ++k) {
+				if (_vm->getVerbEntrypoint(actorObjId, activeVerbs[k].verbId) != 0) {
+					compatVerbs.push_back(mcpJsonString(activeVerbs[k].name));
+					if (activeVerbs[k].name == "talk_to") hasTalkTo = true;
+				}
+			}
+			if (!hasTalkTo) compatVerbs.push_back(mcpJsonString("talk_to"));
+			Common::JSONObject actorObj;
+			actorObj.setVal("id",               mcpJsonInt(actorObjId));
+			actorObj.setVal("name",             mcpJsonString(safe));
+			actorObj.setVal("state",            mcpJsonInt(_vm->getState(actorObjId)));
+			actorObj.setVal("visible",          mcpJsonBool(true));
+			actorObj.setVal("pathway",          mcpJsonBool(false));
+			actorObj.setVal("compatible_verbs", new Common::JSONValue(compatVerbs));
+			objects.push_back(new Common::JSONValue(actorObj));
 			break;
+		}
 		}
 	}
 	out.setVal("inventory", new Common::JSONValue(inventory));
 	out.setVal("objects",   new Common::JSONValue(objects));
-	out.setVal("actors",    new Common::JSONValue(actors));
 
 	Common::JSONArray msgsArr;
 	for (uint i = 0; i < _messages.size(); ++i) {
@@ -518,12 +539,29 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 					param, out, _vm->_numGlobalObjects - 1);
 				return false;
 			}
+			// Reject invisible local-room objects specified by numeric ID.
+			for (int oi = 1; _vm->_objs && oi < _vm->_numLocalObjects; ++oi) {
+				const ObjectData &od = _vm->_objs[oi];
+				if (od.obj_nr != out) continue;
+				bool visible = (od.state & 0xF) != 0;
+				if (visible && od.parent != 0 && od.parent < _vm->_numLocalObjects)
+					visible = ((_vm->_objs[od.parent].state & 0xF) == od.parentstate);
+				if (!visible) {
+					errorOut = Common::String::format("act: %s id %d is not visible", param, out);
+					return false;
+				}
+				break;
+			}
 			return true;
 		}
 		if (v->isString()) {
 			NamedEntity ent;
 			if (!resolveEntityByName(v->asString(), ent)) {
 				errorOut = Common::String("act: unknown ") + param + " '" + v->asString() + "'";
+				return false;
+			}
+			if (ent.kind == NamedEntity::kObject && !ent.visible) {
+				errorOut = Common::String("act: ") + param + " '" + v->asString() + "' is not visible";
 				return false;
 			}
 			out = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
@@ -974,6 +1012,24 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		e.visible = (od.state & 0xF) != 0;
 		if (e.visible && od.parent != 0 && od.parent < _vm->_numLocalObjects)
 			e.visible = ((_vm->_objs[od.parent].state & 0xF) == od.parentstate);
+		// Invisible objects are hidden from the AI unless they are a pathway
+		// (walk_to is their sole verb handler among active verb-bar slots).
+		if (!e.visible) {
+			bool hasWalkTo = false, hasOther = false;
+			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+				const VerbSlot &vs = _vm->_verbs[slot];
+				if (!vs.verbid || vs.saveid != 0) continue;
+				if (_vm->getVerbEntrypoint(e.numId, vs.verbid) == 0) continue;
+				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+				if (!ptr) continue;
+				byte textBuf[256];
+				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+				Common::String label = normalizeActionName((const char *)textBuf);
+				if (label == "walk_to") hasWalkTo = true;
+				else hasOther = true;
+			}
+			if (!(hasWalkTo && !hasOther)) continue;
+		}
 		if (!name.empty()) {
 			bool hasCtrl = false;
 			for (uint ci = 0; ci < e.baseName.size(); ++ci)
@@ -983,9 +1039,11 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		raw.push_back(e);
 	}
 
+	int egoNum = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : -1;
 	for (int i = 1; _vm->_actors && i < _vm->_numActors; ++i) {
 		Actor *a = _vm->_actors[i];
 		if (!a || !a->_visible || !a->isInCurrentRoom()) continue;
+		if (a->_number == egoNum) continue;
 		int objId = _vm->actorToObj(a->_number);
 		Common::String name = getObjName(this, objId);
 		RawEntry e;
