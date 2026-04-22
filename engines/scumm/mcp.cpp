@@ -57,6 +57,7 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	  _sseStartFrame(0),
 	  _sseDoneAtFrame(0),
 	  _sseStuckAtFrame(0),
+	  _sseEgoMoved(false),
 	  _ssePreRoom(0),
 	  _ssePrePosX(0),
 	  _ssePrePosY(0) {
@@ -571,6 +572,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseStartFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
+	_sseEgoMoved = false;
 	_sseMessages.clear();
 	_vm->doSentence(verbId, targetA, targetB);
 	_server->startStreaming();
@@ -629,6 +631,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	_sseStartFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
+	_sseEgoMoved = false;
 	_sseMessages.clear();
 	_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
 	_server->startStreaming();
@@ -683,6 +686,7 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	_sseStartFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
+	_sseEgoMoved = false;
 	_sseMessages.clear();
 	ego->startWalkActor(wx, wy, -1);
 	_server->startStreaming();
@@ -718,6 +722,13 @@ void ScummMcpBridge::pumpStream() {
 
 	emitPendingMessages();
 
+	// Track whether ego moved at any point during this stream.
+	{
+		Actor *ego = getEgoActor();
+		if (ego && ego->_moving)
+			_sseEgoMoved = true;
+	}
+
 	// Early-exit: stuck (ego idle, no speech, user-put locked) for 90 frames.
 	{
 		Actor *ego = getEgoActor();
@@ -749,10 +760,14 @@ void ScummMcpBridge::pumpStream() {
 	if (done) {
 		if (_sseDoneAtFrame == 0) {
 			_sseDoneAtFrame = _frameCounter;
-			debug(1, "mcp: action looks done at frame %d, settling", _frameCounter);
+			debug(1, "mcp: action looks done at frame %d, settling (egoMoved=%d)",
+			      _frameCounter, _sseEgoMoved);
 		}
 		bool questionReady = hasPendingQuestion();
-		bool settled = _frameCounter - _sseDoneAtFrame >= 15;
+		// After a walk the sentence script needs several extra frames to face the
+		// actor and set up dialog choices; use a 45-frame window in that case.
+		uint32 settleFrames = _sseEgoMoved ? 45 : 15;
+		bool settled = _frameCounter - _sseDoneAtFrame >= settleFrames;
 		if (questionReady || settled) {
 			debug(1, "mcp: closing stream at frame %d (question=%d, settled=%d)",
 				_frameCounter, questionReady, settled);
