@@ -764,9 +764,9 @@ void ScummMcpBridge::pumpStream() {
 			      _frameCounter, _sseEgoMoved);
 		}
 		bool questionReady = hasPendingQuestion();
-		// After a walk the sentence script needs several extra frames to face the
-		// actor and set up dialog choices; use a 45-frame window in that case.
-		uint32 settleFrames = _sseEgoMoved ? 45 : 15;
+		// Sentence scripts need time to set up dialog choices; use a 45-frame window
+		// to allow for both dialog creation and actor facing animations.
+		uint32 settleFrames = 45;
 		bool settled = _frameCounter - _sseDoneAtFrame >= settleFrames;
 		if (questionReady || settled) {
 			debug(1, "mcp: closing stream at frame %d (question=%d, settled=%d)",
