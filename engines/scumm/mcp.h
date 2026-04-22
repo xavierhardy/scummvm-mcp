@@ -58,6 +58,7 @@ private:
 		int numId;
 		Common::String displayName;
 		bool visible;
+		bool isPathway = false;
 	};
 
 	struct ObjStateSnap {

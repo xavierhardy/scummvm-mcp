@@ -560,7 +560,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 				errorOut = Common::String("act: unknown ") + param + " '" + v->asString() + "'";
 				return false;
 			}
-			if (ent.kind == NamedEntity::kObject && !ent.visible) {
+			if (ent.kind == NamedEntity::kObject && !ent.visible && !ent.isPathway) {
 				errorOut = Common::String("act: ") + param + " '" + v->asString() + "' is not visible";
 				return false;
 			}
@@ -984,6 +984,7 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		int numId;
 		Common::String baseName;
 		bool visible = false;
+		bool isPathway = false;
 	};
 	Common::Array<RawEntry> raw;
 
@@ -1029,6 +1030,7 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 				else hasOther = true;
 			}
 			if (!(hasWalkTo && !hasOther)) continue;
+			e.isPathway = true;
 		}
 		if (!name.empty()) {
 			bool hasCtrl = false;
@@ -1066,6 +1068,7 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		ne.numId       = raw[i].numId;
 		ne.displayName = raw[i].baseName;
 		ne.visible     = raw[i].visible;
+		ne.isPathway   = raw[i].isPathway;
 		entities.push_back(ne);
 	}
 }
@@ -1074,12 +1077,14 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 	Common::String normalized = normalizeActionName(name);
 	Common::Array<NamedEntity> entities;
 	buildEntityMap(entities);
+	// Prefer actors: an actor and its room object share a name; kActor is authoritative.
+	int firstMatch = -1;
 	for (uint i = 0; i < entities.size(); ++i) {
-		if (entities[i].displayName == normalized) {
-			out = entities[i];
-			return true;
-		}
+		if (entities[i].displayName != normalized) continue;
+		if (entities[i].kind == NamedEntity::kActor) { out = entities[i]; return true; }
+		if (firstMatch < 0) firstMatch = (int)i;
 	}
+	if (firstMatch >= 0) { out = entities[firstMatch]; return true; }
 	return false;
 }
 
