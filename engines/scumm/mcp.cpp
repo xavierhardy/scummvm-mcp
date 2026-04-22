@@ -764,6 +764,16 @@ void ScummMcpBridge::pumpStream() {
 			_sseDoneAtFrame = _frameCounter;
 			debug(1, "mcp: action looks done at frame %d, settling (egoMoved=%d)",
 			      _frameCounter, _sseEgoMoved);
+			// Dump all verb slots to diagnose dialog creation
+			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+				const VerbSlot &vs = _vm->_verbs[slot];
+				if (!vs.verbid) continue;
+				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+				byte textBuf[256] = {};
+				if (ptr) _vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+				debug(1, "mcp:   verb[%d] id=%d saveid=%d curmode=%d key=%d imgindex=%d text='%s'",
+					slot, vs.verbid, vs.saveid, vs.curmode, vs.key, vs.imgindex, (const char *)textBuf);
+			}
 		}
 		bool questionReady = hasPendingQuestion();
 		// Sentence scripts need time to set up dialog choices; use a 45-frame window
