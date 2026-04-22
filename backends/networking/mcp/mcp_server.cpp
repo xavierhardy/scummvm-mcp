@@ -237,10 +237,74 @@ void logMessage(const char *prefix, int clientId, uint32 msgId, const char *data
 		size_t bodyLen = len - hdrLen;
 		debug(5, "%s(%d,%06x) [headers]: %.*s", prefix, clientId, msgId, (int)hdrLen, data);
 		if (bodyLen > 0)
-			debug("%s(%d,%06x): %.*s", prefix, clientId, msgId, (int)bodyLen, sep + 4);
+			debug(5, "%s(%d,%06x): %.*s", prefix, clientId, msgId, (int)bodyLen, sep + 4);
 	} else {
-		debug("%s(%d,%06x): %.*s", prefix, clientId, msgId, (int)len, data);
+		debug(5, "%s(%d,%06x): %.*s", prefix, clientId, msgId, (int)len, data);
 	}
+}
+
+static Common::String formatArgs(const Common::JSONValue &args) {
+	if (!args.isObject()) return args.stringify();
+	const Common::JSONObject &obj = args.asObject();
+	Common::String out;
+	for (Common::JSONObject::const_iterator it = obj.begin(); it != obj.end(); ++it) {
+		if (!out.empty()) out += ", ";
+		out += it->_key + "=";
+		const Common::JSONValue *v = it->_value;
+		if (v->isString()) out += "\"" + v->asString() + "\"";
+		else                out += v->stringify();
+	}
+	return out.empty() ? "(empty)" : out;
+}
+
+static Common::String summarizeResult(const Common::JSONValue &r) {
+	if (!r.isObject()) return r.stringify();
+	const Common::JSONObject &obj = r.asObject();
+	Common::String out;
+
+	// state result fields
+	if (obj.contains("room"))
+		out += "room=" + Common::String::format("%d", (int)obj["room"]->asIntegerNumber());
+	if (obj.contains("position") && obj["position"]->isObject()) {
+		const Common::JSONObject &pos = obj["position"]->asObject();
+		out += " pos=(" + Common::String::format("%d", (int)pos["x"]->asIntegerNumber())
+		     + "," + Common::String::format("%d", (int)pos["y"]->asIntegerNumber()) + ")";
+	}
+	if (obj.contains("objects") && obj["objects"]->isArray())
+		out += " objects=" + Common::String::format("%u", (uint)obj["objects"]->asArray().size());
+	if (obj.contains("inventory") && obj["inventory"]->isArray()) {
+		const Common::JSONArray &inv = obj["inventory"]->asArray();
+		out += " inv=[";
+		for (uint i = 0; i < inv.size(); ++i) {
+			if (i) out += ",";
+			out += inv[i]->isString() ? inv[i]->asString() : inv[i]->stringify();
+		}
+		out += "]";
+	}
+	if (obj.contains("messages") && obj["messages"]->isArray() && !obj["messages"]->asArray().empty())
+		out += " msgs=" + Common::String::format("%u", (uint)obj["messages"]->asArray().size());
+	if (obj.contains("question"))
+		out += " [question]";
+
+	// streaming changes fields
+	if (obj.contains("room_changed"))
+		out += " room->" + Common::String::format("%d", (int)obj["room_changed"]->asIntegerNumber());
+	if (obj.contains("inventory_added") && obj["inventory_added"]->isArray()) {
+		const Common::JSONArray &added = obj["inventory_added"]->asArray();
+		if (!added.empty()) {
+			out += " inv+=[";
+			for (uint i = 0; i < added.size(); ++i) {
+				if (i) out += ",";
+				out += added[i]->isString() ? added[i]->asString() : added[i]->stringify();
+			}
+			out += "]";
+		}
+	}
+	if (obj.contains("objects_changed") && obj["objects_changed"]->isArray() && !obj["objects_changed"]->asArray().empty())
+		out += " objs_changed=" + Common::String::format("%u", (uint)obj["objects_changed"]->asArray().size());
+
+	out.trim();
+	return out.empty() ? "(ok)" : out;
 }
 
 // Parse HTTP headers from a buffer; return true if a complete request was found.
@@ -811,9 +875,12 @@ Common::JSONValue *McpServer::handleToolCall(const Common::JSONValue &req, bool 
 		return wrapStructured(new Common::JSONValue(err));
 	}
 
+	debug(1, "mcp: \xe2\x86\x90 %s(%s)", name.c_str(), formatArgs(*argsVal).c_str());
+
 	// Enter tool-call dispatch context so startStreaming() knows what to do.
 	_inToolCall = true;
 	_toolCallClientId = _activeClientId;
+	_streamingToolName = name;
 	delete _toolCallId;
 	_toolCallId = id ? new Common::JSONValue(*id) : nullptr;
 
@@ -836,17 +903,20 @@ Common::JSONValue *McpServer::handleToolCall(const Common::JSONValue &req, bool 
 		// Streaming tool rejected the call during validation.
 		// Use -32602 (Invalid params) and set startedStream=true so handleJsonRpc
 		// short-circuits and does not emit a second "Method not found" response.
+		debug(1, "mcp: \xe2\x86\x92 %s ERROR: %s", name.c_str(), errMsg.c_str());
 		writeJsonRpcError(id, -32602, errMsg.empty() ? "tool rejected" : errMsg);
 		startedStream = true;
 		return nullptr;
 	}
 
 	if (!result) {
+		debug(1, "mcp: \xe2\x86\x92 %s ERROR: %s", name.c_str(), errMsg.c_str());
 		Common::JSONObject err;
 		err.setVal("error", mcpJsonString(errMsg.empty() ? "tool error" : errMsg));
 		return wrapStructured(new Common::JSONValue(err));
 	}
 
+	debug(1, "mcp: \xe2\x86\x92 %s: %s", name.c_str(), summarizeResult(*result).c_str());
 	return wrapStructured(result);
 }
 
@@ -893,6 +963,12 @@ void McpServer::endStream(Common::JSONValue *structuredResult, bool success,
 		delete structuredResult;
 		return;
 	}
+
+	if (success)
+		debug(1, "mcp: \xe2\x86\x92 %s: %s", _streamingToolName.c_str(),
+		      structuredResult ? summarizeResult(*structuredResult).c_str() : "(ok)");
+	else
+		debug(1, "mcp: \xe2\x86\x92 %s ERROR: %s", _streamingToolName.c_str(), errorMsg.c_str());
 
 	if (success) {
 		Common::JSONValue *wrapped = wrapStructured(structuredResult); // takes ownership

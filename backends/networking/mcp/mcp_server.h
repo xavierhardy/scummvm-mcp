@@ -141,6 +141,7 @@ private:
 	int _sseClientId;
 	Common::JSONValue *_ssePendingId;
 	uint32 _sseLastHeartbeatFrame;
+	Common::String _streamingToolName;
 
 	// Set to true while a tool handler is being dispatched (so startStreaming()
 	// can attribute the stream to the correct client / request id).
