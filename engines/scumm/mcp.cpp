@@ -559,6 +559,13 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	if (!resolveTarget("target1", targetA)) return false;
 	if (!resolveTarget("target2", targetB)) return false;
 
+	debug(1, "mcp: act verb='%s' verbId=%d targetA=%d targetB=%d",
+	      verbStr.c_str(), verbId, targetA, targetB);
+	if (targetA != 0) {
+		int ep = _vm->getVerbEntrypoint(targetA, verbId);
+		debug(1, "mcp: act entrypoint for obj %d verb %d = %d", targetA, verbId, ep);
+	}
+
 	snapshotPreAction();
 	_streaming = true;
 	_sseStartFrame = _frameCounter;
@@ -1060,6 +1067,13 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 	Common::String normalized = normalizeActionName(name);
 	Common::Array<NamedEntity> entities;
 	buildEntityMap(entities);
+	debug(1, "mcp: resolveEntityByName '%s' (normalized='%s'), %u entities in map",
+	      name.c_str(), normalized.c_str(), (uint)entities.size());
+	for (uint i = 0; i < entities.size(); ++i) {
+		debug(1, "mcp:   entity[%u] kind=%d id=%d name='%s' visible=%d",
+		      i, (int)entities[i].kind, entities[i].numId,
+		      entities[i].displayName.c_str(), entities[i].visible);
+	}
 	// Prefer actors: an actor and its room object share a name; kActor is authoritative.
 	int firstMatch = -1;
 	for (uint i = 0; i < entities.size(); ++i) {
@@ -1068,6 +1082,7 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 		if (firstMatch < 0) firstMatch = (int)i;
 	}
 	if (firstMatch >= 0) { out = entities[firstMatch]; return true; }
+	debug(1, "mcp: resolveEntityByName '%s' not found", name.c_str());
 	return false;
 }
 
