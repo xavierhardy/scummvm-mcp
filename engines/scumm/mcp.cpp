@@ -471,6 +471,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
+		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 		if (vs.curmode != 0 && vs.curmode != 1) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
@@ -613,6 +615,8 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
+		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 		if (vs.curmode != 0 && vs.curmode != 1) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
@@ -906,6 +910,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
+		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 		if (vs.curmode != 0 && vs.curmode != 1) continue;
 			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 			if (!ptr) continue;
@@ -953,12 +959,13 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0) continue;
-		// Accept curmode 0 or 1: dialog slots are created with curmode=0, then enabled later.
-		if (vs.curmode != 0 && vs.curmode != 1) continue;
 		// Skip OBIM verb slots (verbid=1) — they are graphical UI elements, not text
 		// choices, but their key=0 would incorrectly set hasUnkeyed=true and prevent
 		// Indy4-style numeric-key dialog detection.
 		if (vs.verbid == 1) continue;
+		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
+		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
+		if (vs.curmode != 0 && vs.curmode != 1) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
 		byte textBuf[256];
