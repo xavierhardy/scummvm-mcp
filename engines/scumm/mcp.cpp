@@ -1124,19 +1124,47 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		byte textBuf[256] = {};
 		if (ptr) _vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-		Common::String label = normalizeActionName((const char *)textBuf);
+		Common::String rawLabel((const char *)textBuf);
+		Common::String normLabel = normalizeActionName(rawLabel);
 		debug(1, "mcp:   slot=%d verbid=%d saveid=%d curmode=%d key=%d label='%s'",
-		      slot, vs.verbid, vs.saveid, vs.curmode, vs.key, label.c_str());
+		      slot, vs.verbid, vs.saveid, vs.curmode, vs.key, rawLabel.c_str());
 		if (vs.saveid != 0) continue;
 		if (!ptr) continue;
-		if (label.empty()) continue;
-		if (label == normalized || label.contains(normalized)) {
-			// Accept verb bar match as-is; the verb bar is the game's source of truth
-			// for what verbs are available. Don't require entrypoints since some verbs
-			// (like dialog) may not use the entrypoint system.
-			verbId = vs.verbid;
-			debug(1, "mcp: resolveVerb found verbid=%d via label match", verbId);
-			return true;
+		if (rawLabel.empty()) continue;
+		// Accept verb bar label if normalized form matches
+		if (normLabel == normalized || normLabel.contains(normalized)) {
+			// For talk_to, accept the verb bar match even without entrypoints; dialog
+			// may not use the verb entrypoint system.
+			if (normalized == "talk_to") {
+				verbId = vs.verbid;
+				debug(1, "mcp: resolveVerb found verbid=%d via label match (talk_to)", verbId);
+				return true;
+			}
+			// For other verbs, verify the verb has an actual entrypoint; skip if not
+			// (the verb bar text might be reused or mislabeled).
+			bool hasEntrypoint = false;
+			for (int oi = 1; _vm->_objs && oi < _vm->_numLocalObjects; ++oi) {
+				if (!_vm->_objs[oi].obj_nr) continue;
+				if (_vm->getVerbEntrypoint(_vm->_objs[oi].obj_nr, vs.verbid) != 0) {
+					hasEntrypoint = true;
+					break;
+				}
+			}
+			if (!hasEntrypoint) {
+				for (int ii = 0; _vm->_inventory && ii < _vm->_numInventory; ++ii) {
+					int obj = _vm->_inventory[ii];
+					if (!obj) continue;
+					if (_vm->getVerbEntrypoint(obj, vs.verbid) != 0) {
+						hasEntrypoint = true;
+						break;
+					}
+				}
+			}
+			if (hasEntrypoint) {
+				verbId = vs.verbid;
+				debug(1, "mcp: resolveVerb found verbid=%d via label match", verbId);
+				return true;
+			}
 		}
 	}
 	if (normalized == "walk_to") {
