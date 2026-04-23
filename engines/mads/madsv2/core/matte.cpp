@@ -226,8 +226,7 @@ void matte_deallocate_series(int id, int free_memory) {
 	sprite_free(&series_list[id], free_memory);
 	series_list[id] = NULL;
 
-	/* Protect against memory fragmentation */
-
+	// Protect against memory fragmentation
 	if (id < SERIES_LIST_SIZE) {
 		if (id == series_list_marker - 1) {
 			series_list_marker--;
@@ -328,34 +327,33 @@ void bound_matte(MattePtr matte, int xs, int ys, int maxx, int maxy) {
 	}
 #endif
 
-	x2 = matte->x + xs - 1;               /* Determine right most point */
-	matte->x = MAX(0, matte->x);         /* Scale coordinates to work  */
+	x2 = matte->x + xs - 1;  // Determine right most point
+	matte->x = MAX(0, matte->x);  // Scale coordinates to work
 	x2 = MAX(0, x2);
 	x2 = MIN((maxx - 1), x2);
-	matte->xs = (x2 - matte->x) + 1;      /* Determine horizontal size  */
+	matte->xs = (x2 - matte->x) + 1;  // Determine horizontal size
 
-	matte->xh = matte->xs >> 1;                           /* Set half-width  */
-	matte->xc = matte->x + (((matte->xs + 1) >> 1) - 1); /* Set center mark */
+	matte->xh = matte->xs >> 1;  // Set half-width
+	matte->xc = matte->x + (((matte->xs + 1) >> 1) - 1);  // Set center mark
 
-	y2 = matte->y + ys - 1;               /* Determine lower most point */
-	matte->y = MAX(0, matte->y);         /* Scale coordinates to work  */
+	y2 = matte->y + ys - 1;  // Determine lower most point
+	matte->y = MAX(0, matte->y);  // Scale coordinates to work
 	y2 = MAX(0, y2);
 	y2 = MIN((maxy - 1), y2);
-	matte->ys = (y2 - matte->y) + 1;      /* Determine vertical size    */
+	matte->ys = (y2 - matte->y) + 1;  // Determine vertical size
 
-	matte->yh = matte->ys >> 1;                           /* Set half-height */
-	matte->yc = matte->y + (((matte->ys + 1) >> 1) - 1); /* Set center mark */
+	matte->yh = matte->ys >> 1;  // Set half-height
+	matte->yc = matte->y + (((matte->ys + 1) >> 1) - 1);  // Set center mark
 
 	matte->valid = true;
+	matte->linked_matte = nullptr;
 }
 
-/*
-/* static make_matte (ImagePtr image, MattePtr matte)
-/*
-/* Proposes a matte-ing scheme (matte) for the specified image.  This
-/* initial matte is the smallest possible rectangle which will completely
-/* enclose its sprite.
-*/
+/**
+ * Proposes a matte-ing scheme (matte) for the specified image.  This
+ * initial matte is the smallest possible rectangle which will completely
+ * enclose its sprite.
+ */
 static void make_matte(ImagePtr image, MattePtr matte) {
 	SpritePtr sprite;
 	int xs, ys;
@@ -393,49 +391,39 @@ static void make_message_matte(int handle, MattePtr matte) {
 		scr_work.x, scr_work.y);
 }
 
-/*
-/* static int check_collisions (MattePtr matte1, MattePtr matte2)
-/*
-/*      matte1, matte2  = pointers to mattes to be checked for
-/*                        collisions (i.e. overlapping areas).
-/*
-/* Returns TRUE if the two specified mattes overlap and need to be
-/* combined into one big matte.
-/*
-/* (Algorithm: overlap if on each axis the distance between the centers
-/*  of the mattes is less-than/equal-to the sum of the half widths)
-*/
+/**
+ * matte1, matte2  = pointers to mattes to be checked for
+ * collisions (i.e. overlapping areas).
+ * Returns TRUE if the two specified mattes overlap and need to be
+ * combined into one big matte.
+ * (Algorithm: overlap if on each axis the distance between the centers
+ * of the mattes is less-than/equal-to the sum of the half widths)
+ */
 static int check_collisions(MattePtr matte1, MattePtr matte2) {
 	return (ABS(matte1->xc - matte2->xc) <= (matte1->xh + matte2->xh)) &&
 		(ABS(matte1->yc - matte2->yc) <= (matte1->yh + matte2->yh));
 }
 
-/*
-/* static int combine_mattes (MattePtr matte1, MattePtr matte2)
-/*
-/*      matte1, matte2  = pointers to the mattes to be merged (matte1
-/*                        will receive the combined matte).
-/*
-*/
+/**
+ * matte1, matte2  = pointers to the mattes to be merged (matte1
+ * will receive the combined matte).
+ */
 static void combine_mattes(MattePtr matte1, MattePtr matte2) {
 	int highx, highy;
 
-	/* Get the maximum x and y values (+1) of the two mattes */
-
+	// Get the maximum x and y values (+1) of the two mattes
 	highx = MAX((matte1->x + matte1->xs), (matte2->x + matte2->xs));
 	highy = MAX((matte1->y + matte1->ys), (matte2->y + matte2->ys));
 
-	/* Get the minimum x and y values of the two mattes; these will */
-	/* serve as the x/y base position of the combined matte.        */
-
+	// Get the minimum x and y values of the two mattes; these will
+	// serve as the x/y base position of the combined matte.
 	matte1->x = MIN(matte1->x, matte2->x);
 	matte1->y = MIN(matte1->y, matte2->y);
 
-	/* Subtract the minimums from the maximums+1 to get the new matte's    */
-	/* size.  Then, compute the half heights/widths and the center points. */
-	/* Note that since we are doing integer "division", we must adjust to  */
-	/* make sure that lost bits do not result in a failed collision test.  */
-
+	// Subtract the minimums from the maximums+1 to get the new matte's
+	// size.  Then, compute the half heights/widths and the center points.
+	// Note that since we are doing integer "division", we must adjust to
+	// make sure that lost bits do not result in a failed collision test.
 	matte1->xs = highx - matte1->x;
 	matte1->xh = matte1->xs >> 1;
 	matte1->xc = matte1->x + (((matte1->xs + 1) >> 1) - 1);
@@ -444,88 +432,58 @@ static void combine_mattes(MattePtr matte1, MattePtr matte2) {
 	matte1->yh = matte1->ys >> 1;
 	matte1->yc = matte1->y + (((matte1->ys + 1) >> 1) - 1);
 
-	/* Mark matte2 as EMPTY, but leave behind a pointer to matte1 */
-
+	// Mark matte2 as EMPTY, but leave behind a pointer to matte1
 	matte2->valid = false;
-	matte2->y = (int)matte1;
+	matte2->linked_matte = matte1;
 
-	/* Set matte1's update flag TRUE; we need to redraw everything in */
-	/* this matte.                                                    */
-
+	// Set matte1's update flag TRUE; we need to redraw everything in
+	// this matte.
 	matte1->changed = true;
 }
 
-/*
-/* static void filter_matte_list (MattePtr matte, int size, int base_index)
-/*
-/*      size            length of the matte list to be filtered
-/*      base_index      index at which unfiltered mattes begin.
-/*
-/* Filters the matte list, resolving any collisions by combining
-/* the two mattes into one big matte.  Since the filter iterates until
-/* no collisions are found, the combined matte could again collide
-/* with another matte, and so forth (so the worst case is one BIG
-/* matte for all of the active series).  Note that there is no need
-/* to combine two overlapping mattes when *neither* has its changed
-/* flag set.  The "size" parameter is used to specify whether to
-/* filter mattes from this round only, or to merge in the old matte
-/* list from last round (which is used to perform erasures).  "Base_index"
-/* can be used when merging an unfiltered list into a pre-filtered list
-/* in order to avoid checking the originals against each other all over
-/* again.
-*/
 void filter_matte_list(MattePtr matte, int size, int base_index) {
 	int index1, index2, any_more;
 	MattePtr matte1;
 	MattePtr matte2;
 
-	/* Loop until we make a perfect pass (no collisions) through list */
-
+	// Loop until we make a perfect pass (no collisions) through list
 	for (any_more = true; any_more;) {
 		any_more = false;
 
-		/* Outer index counts through unfiltered mattes only */
-
+		// Outer index counts through unfiltered mattes only
 		matte1 = &matte[base_index] - 1;
 		for (index1 = base_index; index1 < size; index1++) {
 			matte1++;
 
-			/* Ignore empty matte blocks */
-
+			// Ignore empty matte blocks
 			if (matte1->valid) {
 
-				/* Inner index counts through all mattes with lower indices */
-				/* than our current outer index.                            */
-
+				// Inner index counts through all mattes with lower indices
+				// than our current outer index.
 				matte2 = matte - 1;
 				for (index2 = 0; index2 < index1; index2++) {
 					matte2++;
 
-					/* Again, ignore empty matte blocks */
-
+					// Again, ignore empty matte blocks
 					if (matte2->valid) {
 
-						/* We've got two real mattes; check for collisions */
-
+						// We've got two real mattes; check for collisions
 						if (check_collisions(matte1, matte2)) {
 
-							/* Mattes overlap; check if either has changed flag set */
-
+							// Mattes overlap; check if either has changed flag set
 							if (matte1->changed || matte2->changed) {
 
-								/* Active ("changed") matte triggers collision; combine into */
-								/* one big messy matte.                                      */
-
+								// Active ("changed") matte triggers collision; combine into
+								// one big messy matte.
 								combine_mattes(matte1, matte2);
 
-								/* Mark that this is no longer a perfect pass; we'll have to */
-								/* loop through the whole thing again.                       */
-
+								// Mark that this is no longer a perfect pass; we'll have to
+								// loop through the whole thing again.
 								any_more = true;
 
-								/* And now, for your pleasure, we have no less */
-								/* than EIGHT consecutive close braces!!! What */
-								/* fun! Whoopee! This is C's finest hour!      */
+								// And now, for your pleasure, we have no less
+								// than EIGHT consecutive close braces!!! What
+								// fun! Whoopee! This is C's finest hour!
 							}
 						}
 					}
@@ -546,7 +504,7 @@ static void matte_quick_to_black(byte *special_pal, int ticks) {
 	source = special_pal;
 	dest = increments;
 
-	/* Build increment table: each entry is ceil(source[i] / 4), minimum 1 */
+	// Build increment table: each entry is ceil(source[i] / 4), minimum 1
 	for (int i = 0; i < 768; i++)
 	{
 		byte inc = (source[i] >> 2) + ((source[i] & 3) ? 1 : 0);
@@ -596,7 +554,7 @@ static void matte_quick_from_black(byte *special_pal, int ticks) {
 	special = increments;
 	dest = special_pal;
 
-	/* Build increment table from master palette: ceil(source[i] / 4), minimum 1 */
+	// Build increment table from master palette: ceil(source[i] / 4), minimum 1
 	for (int i = 0; i < 768; i++) {
 		byte inc = (source[i] >> 2) + ((source[i] & 3) ? 1 : 0);
 		if (inc == 0)
@@ -609,16 +567,16 @@ static void matte_quick_from_black(byte *special_pal, int ticks) {
 		fade_clock = timer_read_600() + ticks;
 
 		for (int i = 0; i < 768; i++) {
-			byte current = dest[i];       /* current fading value (starts at black) */
-			byte target = source[i];     /* master palette ceiling for this channel */
+			byte current = dest[i];  // current fading value (starts at black)
+			byte target = source[i];  // master palette ceiling for this channel
 			byte inc = special[i];
 
 			if ((int)current + inc >= target)
-				current = target;         /* clamp to target; channel is done */
+				current = target;  // clamp to target; channel is done
 			else
 			{
 				current += inc;
-				going = true;             /* still short of target, keep going */
+				going = true;  // still short of target, keep going
 			}
 
 			dest[i] = current;
@@ -673,8 +631,7 @@ static void matte_special_effect(int special_effect, int full_screen) {
 		if (special_effect == MATTE_FX_FADE_THRU_BLACK) {
 			mcga_getpal(&special_pal);
 			matte_quick_to_black(&special_pal[0].r, 1);
-			/* magic_fade_to_grey (special_pal, NULL, 0, 256, 0, 1, 1, 16); */
-
+			// magic_fade_to_grey (special_pal, NULL, 0, 256, 0, 1, 1, 16);
 			buffer_fill(scr_live, 0);
 		}
 
@@ -686,7 +643,7 @@ static void matte_special_effect(int special_effect, int full_screen) {
 			work_screen->x, work_screen->y);
 
 		matte_quick_from_black(&special_pal[0].r, 1);
-		/* magic_fade_from_grey (special_pal, master_palette, 0, 256, 0, 1, 1, 16); */
+		// magic_fade_from_grey (special_pal, master_palette, 0, 256, 0, 1, 1, 16);
 		break;
 
 	case MATTE_FX_CORNER_LOWER_LEFT:
@@ -772,7 +729,7 @@ void matte_frame(int special_effect, int full_screen) {
 	int count;
 #endif
 
-	/* Make sure work buffer is mapped into the page frame */
+	// Make sure work buffer is mapped into the page frame
 	matte_map_work_screen();
 
 	any_refresh = false;
@@ -823,12 +780,12 @@ void matte_frame(int special_effect, int full_screen) {
 	for (id = image_marker; id < FIRST_MESSAGE_MATTE; id++) {
 		matte->valid = false;
 		matte++;
-		/* matte_list[id].valid = false; */
+		// matte_list[id].valid = false;
 	}
 
 	message = message_list;
 	for (id = 0; id < MESSAGE_LIST_SIZE; id++) {
-		/* index = id + FIRST_MESSAGE_MATTE; */
+		// index = id + FIRST_MESSAGE_MATTE;
 		if ((message->status < 0) && message->active) {
 			matte->changed = true;
 			make_message_matte(id, matte);
@@ -839,8 +796,7 @@ void matte_frame(int special_effect, int full_screen) {
 		matte++;
 	}
 
-	/* Erasures */
-
+	// Erasures
 	if (!any_refresh) {
 		filter_matte_list(matte_list, MATTE_LIST_SIZE, 1);
 
@@ -897,29 +853,26 @@ void matte_frame(int special_effect, int full_screen) {
 		message++;
 	}
 
-	/* Check our new matte list for collisions */
-
+	// Check our new matte list for collisions
 	if (!any_refresh) filter_matte_list(matte_list, MATTE_LIST_SIZE, 1);
 
-	/* Now, create the depth list for our currently active series.  Only */
-	/* create depth list entries for those images which belong to mattes */
-	/* that have their "changed" flags set (i.e. mattes which need to be */
-	/* redrawn this round.                                               */
-
+	// Now, create the depth list for our currently active series.  Only
+	// create depth list entries for those images which belong to mattes
+	// that have their "changed" flags set (i.e. mattes which need to be
+	// redrawn this round.
 	image = image_list;
 	matte = matte_list;
 	for (id = depth_size = 0; id < (int)image_marker; id++) {
 
 		if (image->flags >= IMAGE_STATIC) {
 
-			/* Search through the matte list to find the matte of which this */
-			/* image is a part.                                              */
+			// Search through the matte list to find the matte of which this
+			// image is a part.
+			for (matte2 = matte; !matte2->valid; matte2 = matte2->linked_matte) {
+			}
 
-			for (matte2 = matte; !matte2->valid; matte2 = (MattePtr)matte2->y);
-
-			/* If its matte is being updated, make a depth list entry for    */
-			/* our sprite.                                                   */
-
+			// If its matte is being updated, make a depth list entry for
+			// our sprite.
 			if (matte2->changed || any_refresh) {
 				depth_list_id[depth_size] = (byte)id;
 				depth_list[depth_size] = 16 - image->depth;
@@ -930,22 +883,18 @@ void matte_frame(int special_effect, int full_screen) {
 		image++;
 	}
 
-	/* Sort the depth list so that "deeper" sprites will be drawn first */
-	/* and thus appear "behind" the other "nearer" sprites.             */
-
+	// Sort the depth list so that "deeper" sprites will be drawn first
+	// and thus appear "behind" the other "nearer" sprites.
 	sort_insertion_16(depth_size, depth_list_id, depth_list);
 
-	/* Now, run through our depth list, and for each entry, draw the    */
-	/* indicated sprite into the work buffer.                           */
-
+	// Now, run through our depth list, and for each entry, draw the
+	// indicated sprite into the work buffer.
 	for (id = 0; id < depth_size; id++) {
 
-		/* Get the index for the series for this depth list entry */
-
+		// Get the index for the series for this depth list entry
 		id2 = depth_list_id[id];
 
-		/* Draw the sprite into the work buffer at the appropriate depth */
-
+		// Draw the sprite into the work buffer at the appropriate depth
 		if (image_list[id2].scale >= 100) {
 			if (image_list[id2].scale == IMAGE_UNSCALED) {
 				x = image_list[id2].x - picture_map.pan_x;
@@ -981,13 +930,14 @@ void matte_frame(int special_effect, int full_screen) {
 		}
 	}
 
-	/* Now draw any messages that need to be updated */
-
+	// Now draw any messages that need to be updated
 	message = message_list;
 	matte = &matte_list[FIRST_MESSAGE_MATTE];
 	for (id = 0; id < MESSAGE_LIST_SIZE; id++) {
 		if (message->active && (message->status >= 0)) {
-			for (matte2 = matte; !matte2->valid; matte2 = (MattePtr)matte2->y);
+			for (matte2 = matte; !matte2->valid; matte2 = matte2->linked_matte) {
+			}
+
 			if (matte2->changed || any_refresh) {
 				high_color = (byte)message->main_color;
 				low_color = (byte)(message->main_color >> 8);
@@ -1005,19 +955,18 @@ void matte_frame(int special_effect, int full_screen) {
 		matte++;
 	}
 
-	/* Finally, run through our combined matte list, and update any */
-	/* areas of the screen flagged as "changed" by copying from the */
-	/* work screen to the live video screen.                        */
-
+	// Finally, run through our combined matte list, and update any
+	// areas of the screen flagged as "changed" by copying from the
+	// work screen to the live video screen.
 	mouse_set_work_buffer(scr_work.data, scr_work.x);
 	mouse_set_view_port_loc(viewing_at_x, viewing_at_y,
 		viewing_at_x + scr_work.x - 1,
 		viewing_at_y + scr_work.y - 1);
 
-	mouse_freeze();                                /* Lock out mouse driver  */
+	mouse_freeze();  // Lock out mouse driver
 
 	if ((video_mode != ega_mode) && !special_effect) {
-		beware_the_mouse = mouse_refresh_view_port(); /* Prepare cursor overlay */
+		beware_the_mouse = mouse_refresh_view_port();  // Prepare cursor overlay
 	}
 
 	if (!matte_disable_screen_update) {
@@ -1030,16 +979,14 @@ void matte_frame(int special_effect, int full_screen) {
 
 				for (id = 0; id < MATTE_LIST_SIZE; id++) {
 
-					/* Get next matte */
-
+					// Get next matte
 #ifdef show_mattes
 					sprintf(temp_buf, "(%d, %d) => (%d, %d)   valid: %d   changed: %d      ",
 						matte->x, matte->y, matte->xs, matte->ys, matte->valid, matte->changed);
 					screen_show(temp_buf, 0, id);
 #endif
 
-					/* Ignore empty mattes, or images which did not change */
-
+					// Ignore empty mattes, or images which did not change
 					if (matte->valid && matte->changed && (matte->xs > 0) && (matte->ys > 0)) {
 
 						video_update(&scr_work,
@@ -1063,8 +1010,8 @@ void matte_frame(int special_effect, int full_screen) {
 
 #ifdef sixteen_colors
 			if (video_mode == ega_mode) {
-				beware_the_mouse = mouse_refresh_view_port(); /* Prepare cursor overlay */
-				video_flush_ega(viewing_at_y, scr_work.y);    /* Update the EGA screen  */
+				beware_the_mouse = mouse_refresh_view_port();  // Prepare cursor overlay
+				video_flush_ega(viewing_at_y, scr_work.y);  // Update the EGA screen
 			}
 #endif
 		} else {
@@ -1078,13 +1025,12 @@ void matte_frame(int special_effect, int full_screen) {
 #endif
 
 	if (beware_the_mouse) {
-		mouse_refresh_done();       /* Remove cursor image from work buffer */
+		mouse_refresh_done();  // Remove cursor image from work buffer
 	}
 
-	mouse_thaw();                 /* Release the mouse driver             */
+	mouse_thaw();  // Release the mouse driver
 
-	/* Delete erasures from image list */
-
+	// Delete erasures from image list
 	new_marker = 0;
 	image = image_list;
 	image2 = image_list;
@@ -1100,8 +1046,7 @@ void matte_frame(int special_effect, int full_screen) {
 	}
 	image_marker = new_marker;
 
-	/* Delete erasures from message list */
-
+	// Delete erasures from message list
 	message = message_list;
 	for (id = 0; id < MESSAGE_LIST_SIZE; id++) {
 		if (message->status < 0) {
@@ -1180,7 +1125,7 @@ static void make_inter_matte(ImageInterPtr image, MattePtr matte) {
 
 
 void matte_inter_frame(int update_live, int clear_chaff) {
-	register int id;
+	int id;
 	int x, y;
 	int flags;
 	word mirror;
@@ -1188,8 +1133,8 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 	SeriesPtr series;
 	int beware_the_mouse = false;
 	byte new_marker;
-	register MattePtr matte;
-	register MattePtr matte2;
+	MattePtr matte;
+	MattePtr matte2;
 	MattePtr i_am_the_dog_master = NULL;
 	ImageInter *image;
 	ImageInter *image2;
@@ -1198,12 +1143,11 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 	int count;
 #endif
 
-	/* Make sure work buffer is mapped into the page frame */
+	// Make sure work buffer is mapped into the page frame
 	matte_map_work_screen();
 
-	/* Before performing erasures, make a matte for each potential erasure */
-	/* image.                                                              */
-
+	// Before performing erasures, make a matte for each potential erasure
+	// image.
 	image = image_inter_list;
 	matte = matte_inter_list;
 	for (id = 0; id < (int)image_inter_marker; id++) {
@@ -1227,8 +1171,7 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 
 	if (i_am_the_dog_master != NULL) i_am_the_dog_master->valid = true;
 
-	/* Erasures */
-
+	// Erasures
 	matte = matte_inter_list;
 	image = image_inter_list;
 	for (id = 0; id < (int)image_inter_marker; id++) {
@@ -1269,23 +1212,21 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 		image++;
 	}
 
-	/* Check our new matte list for collisions */
-
+	// Check our new matte list for collisions
 	filter_matte_list(matte_inter_list, (int)image_inter_marker, 1);
 
-	/* Now, run through our depth list, and for each entry, draw the    */
-	/* indicated sprite into the work buffer.                           */
-
+	// Now, run through our depth list, and for each entry, draw the
+	// indicated sprite into the work buffer.
 	image = image_inter_list;
 	matte = matte_inter_list;
 	for (id = 0; id < (int)image_inter_marker; id++) {
 
 		if ((image->flags >= IMAGE_STATIC) && !(image->flags & IMAGE_UPDATE_READY)) {
 
-			/* Search through the matte list to find the matte of which this */
-			/* image is a part.                                              */
-
-			for (matte2 = matte; !matte2->valid; matte2 = (MattePtr)matte2->y);
+			// Search through the matte list to find the matte of which this
+			// image is a part.
+			for (matte2 = matte; !matte2->valid; matte2 = matte2->linked_matte) {
+			}
 
 			if (matte2->changed) {
 				series = series_list[image->series_id];
@@ -1310,32 +1251,29 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 
 	if (update_live) {
 
-		/* Finally, run through our combined matte list, and update any */
-		/* areas of the screen flagged as "changed" by copying from the */
-		/* work screen to the live video screen.                        */
-
+		// Finally, run through our combined matte list, and update any
+		// areas of the screen flagged as "changed" by copying from the
+		// work screen to the live video screen.
 		mouse_set_work_buffer(scr_inter.data, scr_inter.x);
 		mouse_set_view_port_loc(0, inter_viewing_at_y, 319, inter_viewing_at_y + scr_inter.y - 1);
 
-		mouse_freeze();                                /* Lock out mouse driver  */
+		mouse_freeze();  // Lock out mouse driver
 
 		if (video_mode != ega_mode) {
-			beware_the_mouse = mouse_refresh_view_port(); /* Prepare cursor overlay */
+			beware_the_mouse = mouse_refresh_view_port();  // Prepare cursor overlay
 		}
 
 		matte = matte_inter_list;
 		for (id = 0; id < (int)image_inter_marker; id++) {
 
-			/* Get next matte */
-
+			// Get next matte
 #ifdef show_mattes
 			sprintf(temp_buf, "(%d, %d) => (%d, %d)   valid: %d   changed: %d      ",
 				matte->x, matte->y, matte->xs, matte->ys, matte->valid, matte->changed);
 			screen_show(temp_buf, 0, id);
 #endif
 
-			/* Ignore empty mattes, or images which did not change */
-
+			// Ignore empty mattes, or images which did not change
 			if (matte->valid && matte->changed && (matte->xs > 0) && (matte->ys > 0)) {
 
 				video_update(&scr_inter,
@@ -1350,8 +1288,8 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 
 #ifdef sixteen_colors
 		if (video_mode == ega_mode) {
-			beware_the_mouse = mouse_refresh_view_port(); /* Prepare cursor overlay */
-			video_flush_ega(inter_viewing_at_y, scr_inter.y);    /* Update the EGA screen  */
+			beware_the_mouse = mouse_refresh_view_port();  // Prepare cursor overlay
+			video_flush_ega(inter_viewing_at_y, scr_inter.y);  // Update the EGA screen
 		}
 #endif
 
@@ -1360,14 +1298,13 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 #endif
 
 		if (beware_the_mouse) {
-			mouse_refresh_done();       /* Remove cursor image from work buffer */
+			mouse_refresh_done();  // Remove cursor image from work buffer
 		}
 
-		mouse_thaw();                 /* Release the mouse driver             */
+		mouse_thaw();  // Release the mouse driver
 	}
 
-	/* Delete erasures from image list */
-
+	// Delete erasures from image list
 	new_marker = 0;
 	image = image_inter_list;
 	image2 = image_inter_list;

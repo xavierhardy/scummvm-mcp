@@ -301,6 +301,7 @@ static void global_menu_save_restore(int save) {
 
 		case f4_key:
 			kernel.activate_menu = GAME_SCORE_MENU;
+			break;
 
 		case f5_key:
 			kernel.activate_menu = GAME_OPTIONS_MENU;
@@ -325,14 +326,10 @@ static void global_menu_save_restore(int save) {
 				Common::strcpy_s(save_game_name, GAME_MAX_SAVE_LENGTH, menu_quote(quote_menu_unnamed));
 			}
 			status = global_save(selection);
-			game_write_save_directory();
+
 		} else {
 			status = global_restore(selection);
 		}
-	}
-
-	if (save) {
-		game_write_save_directory();
 	}
 
 	if (status >= 0) {
@@ -507,7 +504,6 @@ static void global_menu_options() {
 
 static void global_menu_difficulty() {
 	PopupItem *easy_item;
-	PopupItem *hard_item;
 	PopupItem *result;
 
 	popup_dialog_create(game_menu_popup, GAME_DIALOG_HEAP, 20);
@@ -521,7 +517,7 @@ static void global_menu_difficulty() {
 
 	popup_blank(SPACE_BETWEEN);
 
-	hard_item = popup_menu(menu_quote(quote_difficulty_item2),
+	(void)popup_menu(menu_quote(quote_difficulty_item2),
 		POPUP_CENTER, POPUP_FILL, MAIN_MENU_ITEM_WIDTH, 0,
 		0, 0, 0);
 

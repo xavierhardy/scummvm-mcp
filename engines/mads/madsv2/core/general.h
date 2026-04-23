@@ -86,8 +86,6 @@ extern long _timer_clock;
 #define timer_speed_300       3920    /* 300/s */
 #define timer_speed_60        19600   /* 60/s  */
 
-#define wait_state()          _asm {jmp short $+2}
-
 
 /* video defines */
 

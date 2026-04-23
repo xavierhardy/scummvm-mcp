@@ -39,6 +39,16 @@ extern word explode(
 	word (*write_buff)(char *buffer, word *size),
 	char *work_buff);
 
+/*
+ * CRC32
+ * Standard CRC-32 (ISO 3309, polynomial 0xEDB88320, reflected).
+ * Not present in the two ASM files but declared in the shared header.
+ *
+ * @param buffer	
+ * @param size	
+ * @param old_crc	
+ * @return 
+ */
 extern long crc32(unsigned char *buffer, word *size, long *old_crc);
 
 

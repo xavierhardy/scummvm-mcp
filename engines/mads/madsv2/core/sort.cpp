@@ -45,11 +45,12 @@ void sort_insertion(int elements, int *id, long *value) {
 				for (count2 = 0; (count2 < elements - 1) && !going; count2++) {
 					going = (my_value < value[count2]);
 				}
-				/* After the loop, count2 has been post-incremented one step past
-				 * the found insertion position.  If going was set to true inside
-				 * the loop (i.e. we found a value[count2-1] > my_value), the for
-				 * loop's count2++ still fired, so the real target index is
-				 * count2-1.  Decrement to correct for this. */
+
+				// After the loop, count2 has been post-incremented one step past
+				// the found insertion position.  If going was set to true inside
+				// the loop (i.e. we found a value[count2-1] > my_value), the for
+				// loop's count2++ still fired, so the real target index is
+				// count2-1.  Decrement to correct for this.
 				if (going) {
 					count2--;
 				}
@@ -71,50 +72,50 @@ void sort_insertion_16(int elements, byte *id, word *value) {
 	word my_value;
 	byte my_id;
 
-	while (1) { /* restart_sort */
+	while (1) {  // restart_sort
 		int si = restart_mark;
 		int limit = elements - 1;
 
-		/* search_loop: scan forward from restart_mark for an out-of-order pair */
+		// search_loop: scan forward from restart_mark for an out-of-order pair
 		while (si < limit) {
 			if (value[si + 1] < value[si])
-				break; /* found_anomaly */
+				break;  // found_anomaly
 
 			si++;
 			restart_mark = si;
 		}
 
 		if (si >= limit)
-			break; /* sort_done */
+			break;  // sort_done
 
-		/* found_anomaly: save the out-of-order element at si+1 */
+		// found_anomaly: save the out-of-order element at si+1
 		my_value = value[si + 1];
 		my_id = id[si + 1];
 
-		/* Delete element at si+1 by shifting everything above it down one.
-		   Value array uses word (2-byte) elements; id array uses bytes. */
+		// Delete element at si+1 by shifting everything above it down one.
+		// Value array uses word (2-byte) elements; id array uses bytes.
 		int deletion = limit - si - 1;
 		if (deletion > 0) {
 			memmove(&value[si + 1], &value[si + 2], deletion * sizeof(word));
 			memmove(&id[si + 1], &id[si + 2], deletion * sizeof(byte));
 		}
 
-		/* quest_loop: find correct insertion point for my_value in [0..limit-1] */
+		// quest_loop: find correct insertion point for my_value in [0..limit-1]
 		int count2 = 0;
 		while (count2 < limit) {
 			if (my_value <= value[count2])
-				break; /* found_spot */
+				break;  // found_spot
 			count2++;
 		}
 
-		/* found_spot: shift right from count2 to make room */
+		// found_spot: shift right from count2 to make room
 		int insertion = limit - count2;
 		if (insertion > 0) {
 			memmove(&value[count2 + 1], &value[count2], insertion * sizeof(word));
 			memmove(&id[count2 + 1], &id[count2], insertion * sizeof(byte));
 		}
 
-		/* Insert saved element at its correct position */
+		// Insert saved element at its correct position
 		value[count2] = my_value;
 		id[count2] = my_id;
 	}
@@ -125,54 +126,54 @@ void sort_insertion_8(int elements, byte *id, byte *value) {
 	byte my_value;
 	byte my_id;
 
-	while (1) { /* restart_sort */
+	while (1) {  // restart_sort
 		int si = restart_mark;
 		int limit = elements - 1;
 
-		/* search_loop: scan forward from restart_mark for an out-of-order pair */
+		// search_loop: scan forward from restart_mark for an out-of-order pair
 		while (si < limit) {
 			if (value[si + 1] < value[si])
-				break; /* found_anomaly */
+				break;  // found_anomaly
 
 			si++;
 			restart_mark = si;
 		}
 
 		if (si >= limit)
-			break; /* sort_done */
+			break;  // sort_done
 
-		/* found_anomaly: save the out-of-order element at si+1 */
+		// found_anomaly: save the out-of-order element at si+1
 		my_value = value[si + 1];
 		my_id = id[si + 1];
 
-		/* Delete element at si+1 by shifting everything above it down one */
+		// Delete element at si+1 by shifting everything above it down one
 		int deletion = limit - si - 1;
 		if (deletion > 0) {
 			memmove(&value[si + 1], &value[si + 2], deletion * sizeof(byte));
 			memmove(&id[si + 1], &id[si + 2], deletion * sizeof(byte));
 		}
 
-		/* quest_loop: find correct insertion point for my_value in [0..limit-1] */
+		// quest_loop: find correct insertion point for my_value in [0..limit-1]
 		int count2 = 0;
 		while (count2 < limit) {
 			if (my_value <= value[count2])
-				break; /* found_spot */
+				break;  // found_spot
 			count2++;
 		}
 
-		/* found_spot: shift right from count2 to make room */
+		// found_spot: shift right from count2 to make room
 		int insertion = limit - count2;
 		if (insertion > 0) {
-			/* shift backwards (std / rep movsb in original) */
+			// shift backwards (std / rep movsb in original)
 			memmove(&value[count2 + 1], &value[count2], insertion * sizeof(byte));
 			memmove(&id[count2 + 1], &id[count2], insertion * sizeof(byte));
 		}
 
-		/* Insert saved element at its correct position */
+		// Insert saved element at its correct position
 		value[count2] = my_value;
 		id[count2] = my_id;
 
-		/* restart_sort: loop back and try again from restart_mark */
+		// restart_sort: loop back and try again from restart_mark
 	}
 }
 

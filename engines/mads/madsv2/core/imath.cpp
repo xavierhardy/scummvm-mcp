@@ -43,23 +43,22 @@ int imath_distance(int side_A, int side_B, int thresh) {
 	dx = ABS(side_A);
 	dy = ABS(side_B);
 
-	/* Ensure dx >= dy for the approximation formula. */
+	// Ensure dx >= dy for the approximation formula.
 	if (dx < dy) {
 		int tmp = dx; dx = dy; dy = tmp;
 	}
 
-	/* Base approximation: ds = dx + dy/4 */
+	// Base approximation: ds = dx + dy/4
 	ds = dx + (dy >> 2);
 
-	/* Correction term if 2*dy >= dx: ds += (2*dy - dx) * 3/16 */
+	// Correction term if 2*dy >= dx: ds += (2*dy - dx) * 3/16
 	if (2 * dy > dx) {
 		ds += ((2 * dy - dx) * 3) >> 4;
 	}
 
-	/* Subtract ~3% to ensure result is a lower bound. */
-	ds -= (ds >> 6);  /* ds -= ds/64, approximately 1.5% ... */
-	/* Note: assembly uses shr cx,6 but comment says 3% - see below */
-
+	// Subtract ~3% to ensure result is a lower bound.
+	ds -= (ds >> 6);  // ds -= ds/64, approximately 1.5% ...
+	// Note: assembly uses shr cx,6 but comment says 3% - see below
 	if (ds < thresh)
 		return imath_hypot(side_A, side_B);
 

@@ -180,14 +180,12 @@ int kernel_load_vocab() {
 	long before, after;
 #endif
 
-	/* Load all main command verbs */
-
+	// Load all main command verbs
 	for (count = 0; count < INTER_COMMANDS; count++) {
 		vocab_make_active(command[count].id);
 	}
 
-	/* Load all object names, and all verbs associated with objects */
-
+	// Load all object names, and all verbs associated with objects
 	for (count = 0; count < num_objects; count++) {
 		vocab_make_active(object[count].vocab_id);
 
@@ -196,8 +194,7 @@ int kernel_load_vocab() {
 		}
 	}
 
-	/* Load vocabulary for this room's hot spots */
-
+	// Load vocabulary for this room's hot spots
 	for (count = 0; count < room_num_spots; count++) {
 		vocab_make_active(room_spots[count].vocab);
 		if (room_spots[count].verb > 0) {
@@ -233,26 +230,21 @@ void kernel_game_shutdown() {
 
 	vocab_unload_active();
 
-	/* Drop cursor */
-
+	// Drop cursor
 	if (cursor != NULL) mem_free(cursor);
 	cursor = NULL;
 
-	/* Free main video work buffer */
-
+	// Free main video work buffer
 	pack_set_special_buffer(NULL, NULL);
 
 	object_unload();
-	/* inter_deallocate_objects(); */
-
+	// inter_deallocate_objects();
 	popup_available = false;
 
-	/* Remove special keyboard handler */
-
+	// Remove special keyboard handler
 	keys_remove();
 
-	/* Unload interface fonts */
-
+	// Unload interface fonts
 	if (font_misc != NULL) mem_free(font_misc);
 	if (font_menu != NULL) mem_free(font_menu);
 	if (font_conv != NULL) mem_free(font_conv);
@@ -261,29 +253,24 @@ void kernel_game_shutdown() {
 
 	font_main = font_conv = font_inter = NULL;
 
-	/* Deallocate main screen buffer */
-
+	// Deallocate main screen buffer
 	if (work_screen_ems_handle < 0)
 		buffer_free(&scr_main);
 
-	/* Turn of speech system */
-
+	// Turn of speech system
 	if (speech_system_active)
 		speech_shutdown();
 
-	/* Return video to text mode */
-
+	// Return video to text mode
 	mouse_hide();
 	check_mode = video_mode;
 	mouse_init(false, text_mode);
 	video_init(text_mode, (check_mode != text_mode));
 
-	/* Deallocate EMS/XMS memory */
-
+	// Deallocate EMS/XMS memory
 	himem_shutdown();
 
-	/* Remove timer interrupt stuff */
-
+	// Remove timer interrupt stuff
 	timer_activate_low_priority(NULL);
 
 	timer_remove();
@@ -317,8 +304,7 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 	int error_code = 0;
 #endif
 
-	/* Set up EMS/XMS paging system, if any */
-
+	// Set up EMS/XMS paging system, if any
 	himem_startup();
 
 	speech_init();
@@ -383,17 +369,13 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 		}
 	}
 
-	/* Some preliminary copy protection stuff */
-
-	/* lock_preliminary_check(); */
-
-	/* Initialize sound driver jump table */
-
-	/* pl sound_driver_null(); */
+	// Some preliminary copy protection stuff
+	// lock_preliminary_check();
+	// Initialize sound driver jump table
+	// pl sound_driver_null();
 	timer_set_sound_flag(0);
 
-	/* Video initialization */
-
+	// Video initialization
 	screen_dominant_mode(game_video_mode);
 	video_init(game_video_mode, (game_video_mode != text_mode));
 	mouse_init(true, game_video_mode);
@@ -402,8 +384,7 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 		mcga_compute_retrace_parameters();
 	}
 
-	/* Initialize the main screen work buffer & its sub-buffers */
-
+	// Initialize the main screen work buffer & its sub-buffers
 	if (work_screen_ems_handle >= 0) {
 		scr_main.x = video_x;
 		scr_main.y = video_y;
@@ -456,14 +437,12 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 		keys_install();
 	}
 
-	/* Log in demo copy */
-
+	// Log in demo copy
 #ifdef demo
 	if (game_video_mode != text_mode) demo_log_in(release_version, release_date);
 #endif
 
-	/* Mention EMS paging situation */
-
+	// Mention EMS paging situation
 #ifdef demo
 	if (ems_paging_active) {
 		ltoa(((long)ems_pages * EMS_PAGE_SIZE) >> 10, temp_buf, 10);
@@ -512,7 +491,7 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 		}
 
 		// Load cursor sprite series
-		cursor = sprite_series_load("*CURSOR.SS", PAL_MAP_RESERVED /* | PAL_MAP_DEFINE_RESERVED*/);
+		cursor = sprite_series_load("*CURSOR.SS", PAL_MAP_RESERVED);
 		if (cursor == NULL) {
 #ifndef disable_error_check
 			error_code = ERROR_KERNEL_NO_CURSOR;
@@ -559,8 +538,7 @@ void kernel_section_shutdown() {
 int kernel_section_startup(int newSection) {
 	int error_flag = true;
 
-	/* Make note of new section number */
-
+	// Make note of new section number
 	previous_section = section_id;
 	section_id = newSection;
 
@@ -581,15 +559,14 @@ void kernel_room_shutdown() {
 		buffer_free(&scr_inter_orig);
 	}
 
-	/* Dump the room hot spots */
+	// Dump the room hot spots
 	if (room_spots != NULL) {
 		mem_free(room_spots);
 		room_spots = NULL;
 		room_num_spots = 0;
 	}
 
-	/* Remove our palette shadowing list */
-
+	// Remove our palette shadowing list
 	pal_activate_shadow(NULL);
 
 	if (room != NULL) {
@@ -613,44 +590,36 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 	int error_data = 0;
 #endif
 
-	/* Make a note of the new room number & variant */
-
+	// Make a note of the new room number & variant
 	previous_room = room_id;
 	room_id = newRoom;
 	room_variant = initial_variant;
 
 	scr_inter_orig.data = nullptr;
 
-	/* Start a brand new palette, reserving the proper # of colors */
+	// Start a brand new palette, reserving the proper # of colors
 	if (new_palette)
 		pal_init(KERNEL_RESERVED_LOW_COLORS, KERNEL_RESERVED_HIGH_COLORS);
 
 	pal_white(master_palette);
 
-	/* Load up popup box frame */
-
-	/*
-	if (popup_box_load()) {
-	  error_code = ERROR_KERNEL_NO_POPUP;
-	  goto done;
+	// Load up popup box frame
+	if (g_engine->getGameID() == GType_Phantom && popup_box_load()) {
+		error_code = ERROR_KERNEL_NO_POPUP;
+		goto done;
 	}
-	*/
 
-	/* Initialize the matteing system */
-
+	// Initialize the matteing system
 	matte_init(false);
 
-	/* Initialize graphics sequence data structures */
-
+	// Initialize graphics sequence data structures
 	kernel_seq_init();
 	kernel_message_init();
 
-	/* Activate the main shadow list */
-
+	// Activate the main shadow list
 	pal_activate_shadow(&kernel_shadow_main);
 
-	/* Load header, picture, and attribute screen for this room */
-
+	// Load header, picture, and attribute screen for this room
 	load_flags = ROOM_LOAD_HARD_SHADOW;
 	if (kernel.translating) load_flags |= ROOM_LOAD_TRANSLATE;
 
@@ -677,35 +646,29 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 	tile_pan(&picture_map, picture_view_x, picture_view_y);
 	tile_pan(&depth_map, picture_view_x, picture_view_y);
 
-	/* Set up color cycling table for this room */
-
+	// Set up color cycling table for this room
 	cycle_init(&room->cycle_list, false);
 
-	/* Initialize rail-system parameters for this room */
-
+	// Initialize rail-system parameters for this room
 	rail_num_nodes = room->num_rails + 2;
 	rail_base = &room->rail[0];
 
 	rail_connect_all_nodes();
 
-	/* Make preliminary scaling computations */
-
+	// Make preliminary scaling computations
 	kernel_room_bound_dif = room->front_y - room->back_y;
 	kernel_room_scale_dif = room->front_scale - room->back_scale;
 
-	/* Initialize the graphics image lists */
-
+	// Initialize the graphics image lists
 	image_marker = 1;
 	image_list[0].flags = IMAGE_REFRESH;
 	image_list[0].segment_id = KERNEL_SEGMENT_SYSTEM;
 
-	/* Set up graphics window locations */
-
+	// Set up graphics window locations
 	viewing_at_y = 0;
 	inter_viewing_at_y = inter_base_y;
 
-	/* Mark the boundary between interface and room sprite series */
-
+	// Mark the boundary between interface and room sprite series
 	kernel_room_series_marker = series_list_marker;
 
 	if (barebones) {
@@ -762,8 +725,7 @@ done:
 void kernel_unload_all_series() {
 	int count;
 
-	/* Unload all series (but don't unload those for the interface background) */
-
+	// Unload all series (but don't unload those for the interface background)
 	for (count = series_list_marker - 1; count >= kernel_room_series_marker; count--) {
 		if (series_user[count] > 1) series_user[count] = 1;
 		matte_deallocate_series(count, true);
@@ -787,13 +749,6 @@ int kernel_load_series(const char *name, int load_flags) {
 	return handle;
 }
 
-/*
-/*      kernel_flip_hotspot()
-/*
-/*      Toggles an interface hotspot (referenced by its vocabulary word)
-/*      on or off.  Hotspots that are off do not interact with the mouse
-/*      cursor.
-*/
 void kernel_flip_hotspot(int vocab_code, int active) {
 	int count;
 
@@ -1012,7 +967,6 @@ void kernel_synch(int slave_type, int slave_id, int master_type, int master_id) 
 		master_time = player.clock;
 		break;
 	}
-
 
 	switch (slave_type) {
 	case KERNEL_SERIES:
@@ -1686,9 +1640,11 @@ static void kernel_hot_check(int hot, int id, int seg_id) {
 		if (seg_id == (int)kernel_dynamic_hot[hot].auto_segment[count]) {
 
 			scale = image_list[id].scale;
+			int spriteIndex = (image_list[id].sprite_id & SPRITE_MASK) - 1;
+
 			if (scale == IMAGE_UNSCALED) {
-				xs = series_list[image_list[id].series_id]->index[image_list[id].sprite_id - 1].xs;
-				ys = series_list[image_list[id].series_id]->index[image_list[id].sprite_id - 1].ys;
+				xs = series_list[image_list[id].series_id]->index[spriteIndex].xs;
+				ys = series_list[image_list[id].series_id]->index[spriteIndex].ys;
 				x = image_list[id].x;
 				y = image_list[id].y;
 				x1 = x;
@@ -1696,8 +1652,8 @@ static void kernel_hot_check(int hot, int id, int seg_id) {
 				x2 = x + xs - 1;
 				y2 = y + ys - 1;
 			} else {
-				xs = (series_list[image_list[id].series_id]->index[image_list[id].sprite_id - 1].xs * image_list[id].scale) / 200;
-				ys = (series_list[image_list[id].series_id]->index[image_list[id].sprite_id - 1].ys * image_list[id].scale) / 100;
+				xs = (series_list[image_list[id].series_id]->index[spriteIndex].xs * image_list[id].scale) / 200;
+				ys = (series_list[image_list[id].series_id]->index[spriteIndex].ys * image_list[id].scale) / 100;
 				x = image_list[id].x;
 				y = image_list[id].y;
 				x1 = x - xs;
@@ -1773,7 +1729,7 @@ static void kernel_process_animation(int handle, int asynchronous) {
 
 	if (!asynchronous) {
 		if (kernel_anim[handle].anim->frame[kernel_anim[handle].frame].sound) {
-			/* pl sound_play(kernel_anim[handle].anim->frame[kernel_anim[handle].frame].sound); */
+			// pl sound_play(kernel_anim[handle].anim->frame[kernel_anim[handle].frame].sound);
 		}
 
 		if ((kernel_anim[handle].anim->misc_peel_x != 0) || (kernel_anim[handle].anim->misc_peel_y != 0)) {
@@ -1841,18 +1797,15 @@ static void kernel_process_animation(int handle, int asynchronous) {
 
 				seg_id = image_list[id].segment_id;
 
-				/* image_list[id].segment_id += KERNEL_SEGMENT_ANIMATION; */
+				// image_list[id].segment_id += KERNEL_SEGMENT_ANIMATION;
 				image_list[id].segment_id = (byte)(KERNEL_SEGMENT_ANIMATION + handle);
 				image_list[id].flags = series_list[image_list[id].series_id]->delta_series ? IMAGE_DELTA : IMAGE_UPDATE;
-				/*
-				if (kernel_anim[handle].anim->misc_any_packed) {
-				  if (image_list[id].series_id == (byte)kernel_anim[handle].anim->series_id[kernel_anim[handle].anim->misc_packed_series]) {
-					series_id = image_list[id].series_id;
-					sprite_data_load (series_list[series_id], image_list[id].sprite_id, series_list[series_id]->arena);
-				  }
-				}
-				*/
-
+				// if (kernel_anim[handle].anim->misc_any_packed) {
+				// if (image_list[id].series_id == (byte)kernel_anim[handle].anim->series_id[kernel_anim[handle].anim->misc_packed_series]) {
+				// series_id = image_list[id].series_id;
+				// sprite_data_load (series_list[series_id], image_list[id].sprite_id, series_list[series_id]->arena);
+				// }
+				// }
 				if (hot >= 0) {
 					kernel_hot_check(hot, id, seg_id);
 				}
@@ -2743,8 +2696,7 @@ int kernel_generate_random_message(int chance_major, int chance_minor) {
 	for (count = 0; count < random_max_messages; count++) {
 		if (random_message_handle[count] < 0) {
 
-			/* Don't allow two phrases to teletype at once */
-
+			// Don't allow two phrases to teletype at once
 			bad = false;
 			for (scan = 0; scan < random_max_messages; scan++) {
 				if (random_message_handle[scan] >= 0) {
@@ -2754,12 +2706,10 @@ int kernel_generate_random_message(int chance_major, int chance_minor) {
 				}
 			}
 
-			/* Check random chance for message to appear */
-
+			// Check random chance for message to appear
 			if ((imath_random(1, chance_major) <= chance_minor) && !bad) {
 
-				/* Pick randomly from our list of allowable quotes */
-
+				// Pick randomly from our list of allowable quotes
 				do {
 					idx = imath_random(0, random_quote_list_size - 1);
 					quote = random_quote_list[idx];
@@ -2773,12 +2723,10 @@ int kernel_generate_random_message(int chance_major, int chance_minor) {
 
 				random_message_quote[count] = quote;
 
-				/* Put message in a random location */
-
+				// Put message in a random location
 				message_x = imath_random(random_min_x, random_max_x);
 
-				/* Be sure Y values are properly spaced */
-
+				// Be sure Y values are properly spaced
 				crash_timeout = 0;
 
 				do {
@@ -2796,8 +2744,7 @@ int kernel_generate_random_message(int chance_major, int chance_minor) {
 					}
 				} while (bad);
 
-				/* Put our new message in the list */
-
+				// Put our new message in the list
 				random_message_handle[count] =
 					kernel_message_add(quote_string(kernel.quotes, random_message_quote[count]),
 						message_x, message_y, random_message_color, random_message_duration,
@@ -2840,21 +2787,18 @@ void kernel_set_interface_mode(int mode) {
 	image_inter_list[0].flags = IMAGE_REFRESH;
 	image_inter_list[0].segment_id = (byte)-1;
 
-	/* Set up interface animation clock */
-
+	// Set up interface animation clock
 	inter_base_time = timer_read();
 
 	left_command = -1;
 	left_action = -1;
 	left_inven = -1;
 
-	/* Initialize interface work area */
-
+	// Initialize interface work area
 	if (!viewing_at_y) {
 		buffer_rect_copy(scr_inter_orig, scr_inter, 0, 0, video_x, inter_size_y);
 
-		/* Initialize interface grammar driver */
-
+		// Initialize interface grammar driver
 		if (kernel_mode == KERNEL_ACTIVE_CODE) matte_inter_frame(false, false);
 	}
 
@@ -2879,12 +2823,10 @@ void kernel_room_scale(int front_y, int front_scale,
 }
 
 void kernel_background_shutdown() {
-	/* Remove our palette shadowing list */
-
+	// Remove our palette shadowing list
 	pal_activate_shadow(NULL);
 
-	/* Dump the picture & attribute buffers, along with the room header */
-
+	// Dump the picture & attribute buffers, along with the room header
 	if (room != NULL) {
 		room_unload(room,
 			&scr_orig,
@@ -2903,32 +2845,26 @@ int kernel_background_startup(int newRoom, int initial_variant) {
 	int error_code = 0;
 	int error_data = 0;
 
-	/* Make a note of the new room number & variant */
-
+	// Make a note of the new room number & variant
 	previous_room = room_id;
 	room_id = newRoom;
 	room_variant = initial_variant;
 
-	/* Start a brand new palette, reserving the proper # of colors */
-
+	// Start a brand new palette, reserving the proper # of colors
 	pal_init(KERNEL_RESERVED_LOW_COLORS, KERNEL_RESERVED_HIGH_COLORS);
 	pal_white(master_palette);
 
-	/* Initialize the matteing system */
-
+	// Initialize the matteing system
 	matte_init(false);
 
-	/* Initialize graphics sequence data structures */
-
+	// Initialize graphics sequence data structures
 	kernel_seq_init();
 	kernel_message_init();
 
-	/* Activate the main shadow list */
-
+	// Activate the main shadow list
 	pal_activate_shadow(&kernel_shadow_main);
 
-	/* Load header, picture, and attribute screen for this room */
-
+	// Load header, picture, and attribute screen for this room
 	load_flags = ROOM_LOAD_HARD_SHADOW;
 	if (kernel.translating) load_flags |= ROOM_LOAD_TRANSLATE;
 
@@ -2953,18 +2889,15 @@ int kernel_background_startup(int newRoom, int initial_variant) {
 	tile_pan(&picture_map, picture_view_x, picture_view_y);
 	tile_pan(&depth_map, picture_view_x, picture_view_y);
 
-	/* Set up color cycling table for this room */
-
+	// Set up color cycling table for this room
 	cycle_init(&room->cycle_list, false);
 
-	/* Initialize the graphics image lists */
-
+	// Initialize the graphics image lists
 	image_marker = 1;
 	image_list[0].flags = IMAGE_REFRESH;
 	image_list[0].segment_id = KERNEL_SEGMENT_SYSTEM;
 
-	/* Mark the boundary between interface and room sprite series */
-
+	// Mark the boundary between interface and room sprite series
 	kernel_room_series_marker = series_list_marker;
 
 	error_flag = false;

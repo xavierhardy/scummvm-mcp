@@ -36,12 +36,10 @@ typedef struct {
 	long size;			/* Free space remaining         */
 } Heap;
 
-/* heap_1.c */
 int heap_create(Heap *heap, int module_id, long heap_size, const char *heap_name);
 void heap_destroy(Heap *heap);
 void heap_declare(Heap *heap, int module_id, char *buffer, long heap_size);
 
-/* heap_1.c */
 void *heap_get(Heap *heap, long size);
 
 } // namespace MADSV2

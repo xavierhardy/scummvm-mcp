@@ -28,13 +28,10 @@
 namespace MADS {
 namespace MADSV2 {
 
-/* lbm_1.c */
 void lbm_read_page(const char *filename, byte *image, Palette *pal);
 
-/* lbm_2.c */
 Buffer lbm_read_buffer(const char *filename, Palette *pal, CycleListPtr cycle);
 
-/* lbm_3.c */
 int lbm_read_buffer_main(const char *name, Buffer *target, int reserved_flag,
 	CycleListPtr cycle_list);
 

@@ -81,7 +81,6 @@ extern long env_get_file_size(Common::SeekableReadStream *handle);
 extern char *env_get_path(char *madspath, const char *infile);
 extern char *env_catint(char *out, int value, int digits);
 extern char *env_fill_path(char *path, int env_mode, int env_room);
-extern char *env_dos_error_name(char *error_buf);
 extern char *env_get_level_path(char *out, int item_type, const char *file_spec,
 	int first_level, int second_level);
 extern Common::SeekableReadStream *env_open_level(int item_type, const char *file_spec,

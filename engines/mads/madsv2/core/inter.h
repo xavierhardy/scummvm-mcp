@@ -272,13 +272,54 @@ extern char inter_object_buf[20];
 extern void (*inter_object_routine)();
 
 
-/* inter_1.c */
+/*
+ * inter_prepare_background()
+ * Writes all relevant words to the interface work buffer.
+ */
 extern void inter_prepare_background(void);
+/*
+ * inter_setup_hotspots()
+ * Sets up the hotspot list for the interface module.  Hotspots only
+ * need to be set up once for each room.
+ */
 extern void inter_setup_hotspots(void);
+/*
+ * inter_set_active_inven()
+ * Picks a new active object from the inventory list.  This involves
+ * changing the list of object-specific verbs.
+ *
+ * @param new_active	
+ */
 extern void inter_set_active_inven(int inven_id);
+/*
+ * inter_give_to_player ()
+ * Adds the specified object to the player's inventory.
+ *
+ * @param this_	
+ */
 extern void inter_give_to_player(int this_);
+/*
+ * inter_move_object()
+ * Moves an object to a new location, taking into account any
+ * player_inventory problems.
+ *
+ * @param object_id	
+ * @param location	
+ */
 extern void inter_move_object(int object_id, int location);
+/*
+ * inter_init_sentence()
+ * Begins accepting a new sentence.
+ */
 extern void inter_init_sentence(void);
+/*
+ * inter_main_loop()
+ * The main interface loop.  Called by run-time kernel to perform one
+ * round of interface checking.  Provides mouse interface for the whole
+ * program.
+ *
+ * @param allow_input	
+ */
 extern void inter_main_loop(int allow_input);
 
 extern void inter_screen_update(void);
@@ -291,7 +332,6 @@ extern void inter_deallocate_objects(void);
 extern void inter_reset_dialog(void);
 extern int inter_add_dialog(char *string, int result);
 
-/* inter_2.c */
 extern int inter_load_background(const char *name, Buffer *target);
 
 } // namespace MADSV2

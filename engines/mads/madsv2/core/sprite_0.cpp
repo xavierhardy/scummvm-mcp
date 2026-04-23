@@ -1,73 +1,63 @@
 /*
-/*      sprite_0.c        by Brian Reynolds       24-Jul-91
-/*
-/*      Master sprite draw include file.  Include as main body of each
-/*      desired sprite routine, defining macros as appropriate to generate
-/*      the correct algorithm:
-/*
-/*      Set "three_d"     to true for 3d depth coding
-/*      Set "bresenham"   to true for Bresenham scaling
-/*      Set "packed_attr" to true for packed attribute screen (PANNING rooms)
-/*      Set "translate"   to true for 16 color translation version
-/*
-/*      Set "interface"   to true for special interface version (exclusive
-/*                        of all other options)
-/*
-/*      Define "attribute" to draw to attribute page (in depth code) instead.
-/*      Define "monodraw"  to draw in monochrome color
-/*
-/*      Define "on_black"  to draw only on top of "zero" pixels.
-/*
-/*      If "packed_attr" is true, then "three_d" MUST be true also.
-/*
-/*      Parameters required:
-/*
-/*      NAME            TYPE            USAGE           DESCRIPTION
-/*      ===================================================================
-/*      series          SeriesPtr       (all)           Series handle
-/*      id              int             (all)           Sprite #
-/*      buf             buffer *        (all)           Target buffer
-/*      target_x        int             (all)           Sprite base X
-/*      target_y        int             (all)           Sprite base Y
-/*
-/*      attr            buffer *        (three_d)       Attribute Buffer
-/*      target_depth    int             (three_d)       Sprite depth code
-/*
-/*      view_port_x     int             (packed_attr)   Work/Orig X mapping
-/*      view_port_y     int             (packed_attr)   Work/Orig Y mapping
-/*
-/*      scale_factor    int             (bresenham)     Scale % size (10-100)
-/*
-/*      <Set high bit of sprite "id" for mirror imaging>
-/*
-/*
-/*      DRAW ROUTINES                      three_d  packattr  bres.  trans.
-/*      ====================================================================
-/*      sprite_draw()                         -        -        -      -
-/*      sprite_draw_3d()                      *        -        -      -
-/*      sprite_draw_3d_scaled()               *        -        *      -
-/*      sprite_draw_3d_big()                  *        *        -      -
-/*      sprite_draw_3d_scaled_big()           *        *        *      -
-/*      sprite_draw_x16()                     -        -        -      *
-/*      sprite_draw_3d_x16()                  *        -        -      *
-/*      sprite_draw_3d_scaled_x16()           *        -        *      *
-/*      sprite_draw_3d_big_x16()              *        *        -      *
-/*      sprite_draw_3d_scaled_big_x16()       *        *        *      *
-/*
-/*      sprite_draw_interface()
-/*
-/*
-/*      INCLUDE FILES REQUIRED:
-/*      #include <stdlib.h>        /* Bresenham only */
-/*      #include <general.mac>
-/*      #include <color.mac>
-/*      #include "sprite.mac"
-/*
-*/
+ *      Master sprite draw include file.  Include as main body of each
+ *      desired sprite routine, defining macros as appropriate to generate
+ *      the correct algorithm:
+ *
+ *      Set "three_d"     to true for 3d depth coding
+ *      Set "bresenham"   to true for Bresenham scaling
+ *      Set "packed_attr" to true for packed attribute screen (PANNING rooms)
+ *      Set "translate"   to true for 16 color translation version
+ *
+ *      Set "interface"   to true for special interface version (exclusive
+ *                        of all other options)
+ *
+ *      Define "attribute" to draw to attribute page (in depth code) instead.
+ *      Define "monodraw"  to draw in monochrome color
+ *
+ *      Define "on_black"  to draw only on top of "zero" pixels.
+ *
+ *      If "packed_attr" is true, then "three_d" MUST be true also.
+ *
+ *      Parameters required:
+ *
+ *      NAME            TYPE            USAGE           DESCRIPTION
+ *      ===================================================================
+ *      series          SeriesPtr       (all)           Series handle
+ *      id              int             (all)           Sprite #
+ *      buf             buffer *        (all)           Target buffer
+ *      target_x        int             (all)           Sprite base X
+ *      target_y        int             (all)           Sprite base Y
+ *
+ *      attr            buffer *        (three_d)       Attribute Buffer
+ *      target_depth    int             (three_d)       Sprite depth code
+ *
+ *      view_port_x     int             (packed_attr)   Work/Orig X mapping
+ *      view_port_y     int             (packed_attr)   Work/Orig Y mapping
+ *
+ *      scale_factor    int             (bresenham)     Scale % size (10-100)
+ *
+ *      <Set high bit of sprite "id" for mirror imaging>
+ *
+ *
+ *      DRAW ROUTINES                      three_d  packattr  bres.  trans.
+ *      ====================================================================
+ *      sprite_draw()                         -        -        -      -
+ *      sprite_draw_3d()                      *        -        -      -
+ *      sprite_draw_3d_scaled()               *        -        *      -
+ *      sprite_draw_3d_big()                  *        *        -      -
+ *      sprite_draw_3d_scaled_big()           *        *        *      -
+ *      sprite_draw_x16()                     -        -        -      *
+ *      sprite_draw_3d_x16()                  *        -        -      *
+ *      sprite_draw_3d_scaled_x16()           *        -        *      *
+ *      sprite_draw_3d_big_x16()              *        *        -      *
+ *      sprite_draw_3d_scaled_big_x16()       *        *        *      *
+ *
+ *      sprite_draw_interface()
+ */
 
 /*
-/*    Filter out illegal compile combinations
-*/
+ *    Filter out illegal compile combinations
+ */
 
 #if packed_attr
 #if !three_d
@@ -89,8 +79,8 @@
 
 
 /*
-/*    Local variables common to all versions
-*/
+ *    Local variables common to all versions
+ */
 
 byte *sprite_ptr;
 byte *target_ptr;
@@ -114,8 +104,8 @@ byte *attr_ptr;
 #define huge_code (packed_attr && translate)
 
 /*
-/*    Local variables for "packed_attr" large attribute screens
-*/
+ *    Local variables for "packed_attr" large attribute screens
+ */
 
 #if packed_attr
 int attr_wrap;
@@ -123,8 +113,8 @@ int attr_start;
 #endif
 
 /*
-/*    Local variables for "bresenham" sprite scaling
-*/
+ *    Local variables for "bresenham" sprite scaling
+ */
 
 #if bresenham
 #define   max_bresenham_entries     320
@@ -134,8 +124,8 @@ int       temp_x, temp_y;
 #endif
 
 /*
-/*    Local variables for "translate" 16 color thatching translations
-*/
+ *    Local variables for "translate" 16 color thatching translations
+ */
 
 #if translate
 byte thatch_base;
@@ -143,19 +133,20 @@ byte thatch_flag;
 #endif
 
 /*
-/*    In certain configurations, the main draw routine does not need
-/*    all of the registers for computations; for those variations,
-/*    certain commonly used variables (skip_x & stop_x) are aliased
-/*    for clarity. These were originally aliased to CPU registers.
-*/
+ * In certain configurations, the main draw routine does not need
+ * all of the registers for computations; for those variations,
+ * certain commonly used variables (skip_x & stop_x) are aliased
+ * for clarity. These were originally aliased to CPU registers.
+ */
 
 /* SKIP_X and STOP_X were originally aliased to registers (cx, di)
-   in certain configurations to save memory accesses. In C they are
-   always the plain variables. */
+ * in certain configurations to save memory accesses. In C they are
+ * always the plain variables.
+ */
 #define SKIP_X  skip_x
 #define STOP_X  stop_x
 
-   /* Get maximum clipping coordinates */
+/* Get maximum clipping coordinates */
 max_x = buf->x - 1;
 max_y = buf->y - 1;
 
@@ -196,12 +187,12 @@ ys = sprite->ys;
 #endif
 
 /*
-/*    BRESENHAM TABLE
-/*
-/*    Generate a Bresenham table useable for both X and Y checks.
-/*    Each entry is true if that source pixel maps to a drawn pixel
-/*    at the given scale factor.
-*/
+ *    BRESENHAM TABLE
+ *
+ *    Generate a Bresenham table useable for both X and Y checks.
+ *    Each entry is true if that source pixel maps to a drawn pixel
+ *    at the given scale factor.
+ */
 
 #if bresenham
 {
@@ -234,11 +225,11 @@ ys = sprite->ys;
 
 
 /*
-/*    SPRITE CLIPPING
-/*
-/*    Clip the sprite into the target buffer's boundaries.
-/*    Generates skip_x, skip_y, draw_x, draw_y, stop_x, stop_y.
-*/
+ *    SPRITE CLIPPING
+ *
+ *    Clip the sprite into the target buffer's boundaries.
+ *    Generates skip_x, skip_y, draw_x, draw_y, stop_x, stop_y.
+ */
 
 /* X clipping */
 {
@@ -309,14 +300,14 @@ ys = sprite->ys;
 
 
 /*
-/*    POINTER SETUP
-/*
-/*    Compute the flat starting offset into target (and attr) buffers,
-/*    accounting for target_y rows and target_x+skip_x columns.
-/*    The original code used 16-bit real-mode segment:offset arithmetic
-/*    with 32k wrap-around tricks; in a flat memory model we simply use
-/*    integer offsets.
-*/
+ *    POINTER SETUP
+ *
+ *    Compute the flat starting offset into target (and attr) buffers,
+ *    accounting for target_y rows and target_x+skip_x columns.
+ *    The original code used 16-bit real-mode segment:offset arithmetic
+ *    with 32k wrap-around tricks; in a flat memory model we simply use
+ *    integer offsets.
+ */
 
 #if translate
 {
@@ -353,24 +344,24 @@ ys = sprite->ys;
 
 
 /*
-/*    MAIN DRAW LOOP
-/*
-/*    Processes the sprite stream row by row.
-/*
-/*    draw_y_pos  - vertical draw counter (counts pixels actually drawn/clipped,
-/*                  excluding Bresenham-squeezed rows)
-/*    scan_y      - vertical scan counter for Bresenham (indexes bresenham_table)
-/*    target_row  - pointer to start of current target row
-/*    attr_row    - pointer to start of current attr row  (packed_attr only)
-/*
-/*    Per row:
-/*    draw_x_pos  - horizontal draw counter
-/*    scan_x      - horizontal scan counter for Bresenham
-/*    run_count   - RLE run counter
-/*    sprite_byte - current byte read from sprite stream
-/*    depth_code  - depth of current sprite pixel (three_d only)
-/*    draw_depth  - depth at which we are drawing  (three_d only)
-*/
+ *    MAIN DRAW LOOP
+ *
+ *    Processes the sprite stream row by row.
+ *
+ *    draw_y_pos  - vertical draw counter (counts pixels actually drawn/clipped,
+ *                  excluding Bresenham-squeezed rows)
+ *    scan_y      - vertical scan counter for Bresenham (indexes bresenham_table)
+ *    target_row  - pointer to start of current target row
+ *    attr_row    - pointer to start of current attr row  (packed_attr only)
+ *
+ *    Per row:
+ *    draw_x_pos  - horizontal draw counter
+ *    scan_x      - horizontal scan counter for Bresenham
+ *    run_count   - RLE run counter
+ *    sprite_byte - current byte read from sprite stream
+ *    depth_code  - depth of current sprite pixel (three_d only)
+ *    draw_depth  - depth at which we are drawing  (three_d only)
+ */
 
 {
 	/* Absolute starting skip_x, adjusted for mirror direction */

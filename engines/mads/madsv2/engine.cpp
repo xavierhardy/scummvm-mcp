@@ -257,5 +257,9 @@ void MADSV2Engine::stopSpeech() {
 	_mixer->stopHandle(_speechHandle);
 }
 
+SaveStateList MADSV2Engine::listSaves() const {
+	return getMetaEngine()->listSaves(_targetName.c_str());
+}
+
 } // namespace MADSV2
 } // namespace MADS

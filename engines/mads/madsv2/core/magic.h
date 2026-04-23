@@ -61,6 +61,16 @@ extern int magic_special_center_y;
 extern void magic_get_grey_values(Palette *pal, byte *grey_value,
 	int base_color, int num_colors);
 extern void magic_grey_palette(Palette *pal);
+/*
+ * magic_grey_popularity()
+ * Given a "grey_list" containing "num_colors" grey values (0-63),
+ * produces a 64-byte "grey_table" containing the number of grey
+ * values of each intensity level.
+ *
+ * @param grey_list	
+ * @param grey_table	
+ * @param num_colors	
+ */
 extern void magic_grey_popularity(byte *grey_list, byte *grey_table, int num_colors);
 extern void magic_set_color_flags(byte r, byte g, byte b);
 extern void magic_set_color_values(byte r, byte g, byte b);
@@ -72,12 +82,63 @@ extern void magic_fade_to_grey(Palette pal, byte *map_pointer,
 	int tick_delay, int steps);
 extern void magic_fade_from_grey(RGBcolor *pal, Palette target, int base_color,
 	int num_colors, int base_grey, int num_greys, int tick_delay, int steps);
+/*
+ * magic_screen_change_corner()
+ * Picture-to-picture transition in which one of the screen
+ * corners is pulled diagonally across the screen to bring in
+ * the new view.
+ *
+ * @param new_screen	
+ * @param pal	
+ * @param corner_id	
+ * @param buffer_base_x	
+ * @param buffer_base_y	
+ * @param screen_base_x	
+ * @param screen_base_y	
+ * @param thru_black	
+ * @param set_palette	
+ * @param tick_delay	
+ */
 extern void magic_screen_change_corner(Buffer *new_screen, Palette pal, int corner_id,
 	int buffer_base_x, int buffer_base_y, int screen_base_x, int screen_base_y,
 	int thru_black, int set_palette, int tick_delay);
+/*
+ * magic_screen_change_edge()
+ * Picture-to-picture transition in which the new picture sweeps
+ * in from either the right or left edge.
+ *
+ * @param new_screen	
+ * @param pal	
+ * @param edge_id	
+ * @param buffer_base_x	
+ * @param buffer_base_y	
+ * @param screen_base_x	
+ * @param screen_base_y	
+ * @param thru_black	
+ * @param set_palette	
+ * @param tick_delay	
+ */
 extern void magic_screen_change_edge(Buffer *new_screen, Palette pal, int edge_id,
 	int buffer_base_x, int buffer_base_y, int screen_base_x, int screen_base_y,
 	int thru_black, int set_palette, int tick_delay);
+/*
+ * magic_screen_change_circle()
+ * Picture-to-picture transition in which the new picture is
+ * brought in with either expanding or contracting concentric
+ * circles.
+ *
+ * @param new_screen	
+ * @param pal	
+ * @param inward_flag	
+ * @param buffer_base_x	
+ * @param buffer_base_y	
+ * @param screen_base_x	
+ * @param screen_base_y	
+ * @param thru_black	
+ * @param set_palette	
+ * @param tick_delay	
+ * @param pixel_rate	
+ */
 extern void magic_screen_change_circle(Buffer *new_screen, Palette pal,
 	int inward_flag, int buffer_base_x, int buffer_base_y,
 	int screen_base_x, int screen_base_y, int thru_black, int set_palette,

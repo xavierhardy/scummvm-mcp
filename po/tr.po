@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ScummVM 2.3.0git\n"
 "Report-Msgid-Bugs-To: scummvm-devel@lists.scummvm.org\n"
-"POT-Creation-Date: 2026-04-20 05:31+0000\n"
+"POT-Creation-Date: 2026-04-23 00:52+0000\n"
 "PO-Revision-Date: 2024-10-10 12:33+0000\n"
 "Last-Translator: Eugene Sandulenko <sev@scummvm.org>\n"
 "Language-Team: Turkish <https://translations.scummvm.org/projects/scummvm/"
@@ -65,7 +65,7 @@ msgid "Available engines:"
 msgstr "Etkin motorlar:"
 
 #. I18N: Close dialog button
-#: gui/about.cpp:531 gui/about.cpp:663 gui/downloadpacksdialog.cpp:298
+#: gui/about.cpp:516 gui/about.cpp:648 gui/downloadpacksdialog.cpp:298
 #: gui/downloadpacksdialog.cpp:389 gui/integrity-dialog.cpp:354
 #: gui/gui-manager.cpp:168 gui/helpdialog.cpp:128 gui/imagealbum-dialog.cpp:133
 #: gui/textviewer.cpp:56 gui/unknown-game-dialog.cpp:53
@@ -1629,7 +1629,7 @@ msgid "Unknown Year"
 msgstr "Bilinmeyen hata"
 
 #. I18N: Group for All items
-#: gui/launcher.cpp:1640 gui/widgets/groupedlist.cpp:81
+#: gui/launcher.cpp:1640 gui/widgets/groupedlist.cpp:82
 msgid "All"
 msgstr ""
 
@@ -2821,7 +2821,7 @@ msgstr "Kayıt"
 msgid "Playback"
 msgstr "Oynatma"
 
-#: gui/recorderdialog.cpp:76 gui/widgets/grid.cpp:336
+#: gui/recorderdialog.cpp:76 gui/widgets/grid.cpp:338
 msgid "Edit"
 msgstr "Düzenle"
 
@@ -3040,11 +3040,11 @@ msgstr ""
 msgid "Clear value"
 msgstr "Değeri sil"
 
-#: gui/widgets/grid.cpp:330
+#: gui/widgets/grid.cpp:332
 msgid "Play"
 msgstr ""
 
-#: gui/widgets/grid.cpp:333
+#: gui/widgets/grid.cpp:335
 #, fuzzy
 msgid "Saves"
 msgstr "Kaydet"
@@ -3976,33 +3976,33 @@ msgstr ""
 msgid "AdLib emulator"
 msgstr "AdLib emülatörü:"
 
-#: audio/fmopl.cpp:84
+#: audio/fmopl.cpp:85
 #, fuzzy
 msgid "MAME OPL emulator"
 msgstr "AdLib emülatörü:"
 
-#: audio/fmopl.cpp:86
+#: audio/fmopl.cpp:88
 msgid "DOSBox OPL emulator"
 msgstr ""
 
-#: audio/fmopl.cpp:89
+#: audio/fmopl.cpp:91
 #, fuzzy
 msgid "Nuked OPL emulator"
 msgstr "AdLib emülatörü:"
 
-#: audio/fmopl.cpp:92
+#: audio/fmopl.cpp:94
 msgid "ALSA Direct FM"
 msgstr ""
 
-#: audio/fmopl.cpp:95
+#: audio/fmopl.cpp:97
 msgid "OPL2LPT"
 msgstr ""
 
-#: audio/fmopl.cpp:96
+#: audio/fmopl.cpp:98
 msgid "OPL3LPT"
 msgstr ""
 
-#: audio/fmopl.cpp:99
+#: audio/fmopl.cpp:101
 msgid "RetroWave OPL3"
 msgstr ""
 
@@ -14364,7 +14364,7 @@ msgstr ""
 msgid "Go to end of save / load menu"
 msgstr ""
 
-#: engines/tinsel/tinsel.cpp:1058
+#: engines/tinsel/tinsel.cpp:1061
 msgid "Discworld Noir needs ScummVM with TinyGL enabled"
 msgstr ""
 

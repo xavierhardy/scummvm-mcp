@@ -129,8 +129,7 @@ int color_list_update(ColorListPtr list, Buffer *scan_buf, Palette *scan_pal, by
 		color_flags[count] = (byte)true;
 	}
 
-	/* First, deal with any colors involved in cycling */
-
+	// First, deal with any colors involved in cycling
 	if (cycle != NULL) {
 		for (cycle_count = 0; cycle_count < cycle->num_cycles; cycle_count++) {
 			lo = cycle->table[cycle_count].first_palette_color;
@@ -168,8 +167,7 @@ int color_list_update(ColorListPtr list, Buffer *scan_buf, Palette *scan_pal, by
 		}
 	}
 
-	/* Now deal with any other colors used in the picture */
-
+	// Now deal with any other colors used in the picture
 	scan = (byte *)mem_normalize(scan_buf->data);
 
 	for (row = 0; row < scan_buf->y; row++) {
@@ -219,9 +217,8 @@ int color_list_update(ColorListPtr list, Buffer *scan_buf, Palette *scan_pal, by
 		scan = (byte *)mem_check_overflow(scan);
 	}
 
-	/* Sort color list so that cycle colors appear first */
-	/* The various tables must also be corrected.        */
-
+	// Sort color list so that cycle colors appear first
+	// The various tables must also be corrected.
 	if (cycle != NULL) {
 		for (count = 0; count < list->num_colors; count++) {
 			cycle_value = list->table[count].cycle;
@@ -247,8 +244,7 @@ int color_list_update(ColorListPtr list, Buffer *scan_buf, Palette *scan_pal, by
 		}
 		memcpy(list, &temp_list, sizeof(ColorList));
 
-		/* Switch cycle list color #'s from palette to list */
-
+		// Switch cycle list color #'s from palette to list
 		for (cycle_count = 0; cycle_count < cycle->num_cycles; cycle_count++) {
 			found = false;
 			for (count = 0; !found && (count < list->num_colors); count++) {
@@ -301,12 +297,10 @@ int color_list_palette(ColorListPtr list, Buffer *scan_buf, Palette *scan_pal, i
 	Color *c1ptr;
 	Palette out_pal;
 
-	/* Make a copy of our starting palette */
-
+	// Make a copy of our starting palette
 	memcpy(out_pal, *scan_pal, sizeof(RGBcolor) * 256);
 
-	/* Mark all list colors as unmapped */
-
+	// Mark all list colors as unmapped
 	for (count = 0; count < 256; count++) {
 		flags[count] = (byte)false;
 	}

@@ -288,7 +288,7 @@ char *env_get_path(char *madspath, const char *infile) {
 			}
 			Common::strcat_s(madspath, 65536, CONCAT_EXT);
 
-			/* returns 'global.hag', 'section9.hag', etc */
+			// returns 'global.hag', 'section9.hag', etc
 		}
 	}
 
@@ -321,7 +321,7 @@ Common::SeekableReadStream *env_open(const char *filename, const char *options) 
 
 	mads_strupr(file_path);
 
-	/* if CD version and checking RAW or RAC file */
+	// If CD version and checking RAW or RAC file
 	if (env_search_cd && (strstr(file_path, ".RAW") || strstr(file_path, ".RAC"))) {
 		Common::strcpy_s(check_buf, env_speech1_string);
 		Common::strcat_s(check_buf, env_slash_string);
@@ -331,7 +331,7 @@ Common::SeekableReadStream *env_open(const char *filename, const char *options) 
 		} else {
 			Common::strcat_s(check_buf, file_path);
 		}
-		/* Common::strcat_s (check_buf, temp_buf); */
+
 		Common::strcpy_s(load_file, check_buf);
 
 		if (fileio_exist(load_file)) {
@@ -355,7 +355,6 @@ Common::SeekableReadStream *env_open(const char *filename, const char *options) 
 				Common::strcat_s(check_buf, file_path);
 			}
 
-			/* Common::strcat_s (check_buf, temp_buf); */
 			Common::strcpy_s(load_file, check_buf);
 
 			if (fileio_exist(load_file)) {
@@ -379,17 +378,16 @@ Common::SeekableReadStream *env_open(const char *filename, const char *options) 
 		Common::strcpy_s(temp_buf, mark);
 		mads_strupr(temp_buf);
 
-		/* load_file = 'global.hag' */
+		// Load_file = 'global.hag'
 		if (art_hags_are_on_hd) {
 			Common::strcpy_s(index_file, load_file);
 		} else {
 			fileio_new_ext(index_file, load_file, "IDX");
 		}
-		/* index_file = 'global.idx' */
-
+		// Index_file = 'global.idx'
 		if (env_search_cd && !art_hags_are_on_hd) {
 			if (fileio_exist(index_file)) {
-				/* if 'global.idx' exists */
+				// If 'global.idx' exists
 				Common::File *f = new Common::File();
 				f->open(index_file);
 				assert(f->isOpen());
@@ -404,7 +402,7 @@ Common::SeekableReadStream *env_open(const char *filename, const char *options) 
 
 		if (!fileio_exist(load_file)) {
 			if (env_verify()) {
-				/* 'MADS' is set in DOS environment */
+				// 'MADS' is set in DOS environment
 				Common::strcpy_s(temp_file, load_file);
 				Common::strcpy_s(load_file, ConfMan.get(MADS_ENV).c_str());
 				Common::strcat_s(load_file, "\\");
@@ -486,7 +484,7 @@ int env_exist(const char *filename) {
 	Common::strcpy_s(file_name, filename);
 	mads_strupr(file_name);
 
-	/* if CD version and checking RAW or RAC file */
+	// If CD version and checking RAW or RAC file
 	if (env_search_cd && (strstr(file_name, ".RAW") || strstr(file_name, ".RAC"))) {
 
 		Common::strcpy_s(check_buf, env_speech1_string);
@@ -530,44 +528,6 @@ int env_exist(const char *filename) {
 	return exist;
 }
 
-char *env_dos_error_name(char *error_buf) {
-	switch (errno) {
-	case EEXIST:
-		Common::strcpy_s(error_buf, 65536, "File already exists.");
-		break;
-
-	case EINVAL:
-		Common::strcpy_s(error_buf, 65536, "Invalid argument.");
-		break;
-
-	case EMFILE:
-		Common::strcpy_s(error_buf, 65536, "Too many open files.");
-		break;
-
-	case ENOENT:
-		Common::strcpy_s(error_buf, 65536, "No such file or directory.");
-		break;
-
-	case ENOSPC:
-		Common::strcpy_s(error_buf, 65536, "Disk full.");
-		break;
-
-	case EACCES:
-		Common::strcpy_s(error_buf, 65536, "Permission denied.");
-		break;
-
-	case EBADF:
-		Common::strcpy_s(error_buf, 65536, "Bad file number.");
-		break;
-
-	default:
-		Common::sprintf_s(error_buf, 65536, "Error Code %d.", errno);
-		break;
-	}
-
-	return error_buf;
-}
-
 char *env_get_level_path(char *out, int item_type, const char *file_spec, int first_level, int second_level) {
 	char temp_buf[80];
 	char *result;
@@ -577,7 +537,7 @@ char *env_get_level_path(char *out, int item_type, const char *file_spec, int fi
 	if ((item_type == SECTION) || (item_type == ROOM)) {
 		if ((item_type == ROOM) && (first_level == 0)) {
 			first_level = second_level / 100;
-			/* first_level = room_get_section (second_level); */
+			// first_level = room_get_section (second_level);
 		}
 	}
 
@@ -656,12 +616,12 @@ char *env_next(char *variable) {
 }
 
 char *env_find_end(char *environment) {
-	/* Scan through variables */
+	// Scan through variables
 	while (*environment) {
 		environment = env_next(environment);
 	}
 
-	/* Scan past load name if exists */
+	// Scan past load name if exists
 	if ((*(environment + 1) == 1) && (*(environment + 2) == 0)) {
 		environment += 3;
 		while (*environment) {
@@ -669,7 +629,7 @@ char *env_find_end(char *environment) {
 		}
 	}
 
-	/* Point to byte after everything */
+	// Point to byte after everything
 	environment++;
 
 	return environment;
@@ -744,22 +704,21 @@ int env_insert(char *environment, char *variable, char *value) {
 	Common::strcpy_s(var_name, variable);
 	mads_strupr(var_name);
 
-	/* Delete any previous copy of this variable */
+	// Delete any previous copy of this variable
 	env_delete(environment, var_name);
 
-	/* Prepare full string for insertion */
+	// Prepare full string for insertion
 	Common::strcpy_s(var_string, var_name);
 	Common::strcat_s(var_string, "=");
 	Common::strcat_s(var_string, value);
 
-	/* Get size of string & check of there is space in the environment */
+	// Get size of string & check of there is space in the environment
 	new_size = strlen(var_string) + 1;
 	free = env_free(environment);
 	if (new_size > free) goto done;
 
-	/* Find end of environment (for new string).  Also find end of whole */
-	/* environment structure (must be moved out of the way).             */
-
+	// Find end of environment (for new string).  Also find end of whole
+	// environment structure (must be moved out of the way).
 	target = environment;
 	while (*target) {
 		target = env_next(target);
@@ -769,7 +728,7 @@ int env_insert(char *environment, char *variable, char *value) {
 	copy_size = bottom - target;
 	new_home = target + new_size;
 
-	/* Insert string */
+	// Insert string
 	memmove(new_home, target, copy_size);
 	memmove(target, var_string, new_size);
 

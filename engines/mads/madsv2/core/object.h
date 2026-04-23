@@ -106,7 +106,6 @@ extern void object_unload(void);
 extern int object_named(int vocab_id);
 extern int object_is_here(int object_id);
 
-/* object_3.cpp */
 extern int object_has_quality(int object_id, int quality_id);
 extern long object_check_quality(int object_id, int quality_id);
 extern void object_set_quality(int object_id, int quality_id, long quality_value);

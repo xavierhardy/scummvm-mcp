@@ -101,7 +101,7 @@ static int copy_pop_and_ask() {
 	CopyProt copy_prot;
 	Common::SeekableReadStream *handle = NULL;
 
-	box_param.erase_on_first = false; /* Allow keep of first letter */
+	box_param.erase_on_first = false;  // Allow keep of first letter
 
 	if (copy_load(&copy_prot)) goto finish;
 
@@ -186,7 +186,7 @@ finish:
 	error_flag = COPY_SUCCEED;
 
 done:
-	box_param.erase_on_first = true; /* Reset */
+	box_param.erase_on_first = true;  // Reset
 
 	delete handle;
 	if (load_buffer != NULL)

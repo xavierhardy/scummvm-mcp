@@ -41,7 +41,7 @@ extern word xms_umb_list[XMS_MAX_UMB];
 extern word xms_umb_mark;
 
 inline int xms_detect() { return 0; }
-inline long xms_umb_get_avail() {}
+inline long xms_umb_get_avail() { return 0;}
 inline void *xms_umb_get(long mem_to_get) { return nullptr; }
 inline void xms_umb_free(void *mem_to_free) {}
 inline void xms_umb_purge() {}

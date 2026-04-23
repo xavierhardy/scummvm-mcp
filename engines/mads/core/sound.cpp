@@ -542,7 +542,7 @@ void ASound::pollActiveChannel() {
 		if (--_activeChannelPtr->_activeCount <= 0) {
 			for (;;) {
 				byte *pSrc = chan->_pSrc;
-				if (!chan->_ptr1) {
+				if (!chan->_ptr1 || !pSrc) {
 					warning("pollActiveChannel(): No data found for sound channel");
 					break;
 				}

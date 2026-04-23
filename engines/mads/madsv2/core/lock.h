@@ -32,32 +32,23 @@ extern char *lock_search_mark;
 extern int  lock_search_length;
 extern word *lock_hash_value;
 
-/* lock_2.cpp */
 word lock_get_disk_hash(void);
 
-/* lock_3.cpp */
 long lock_search_hash_offset(void);
 
-/* lock_4.cpp */
 void lock_write_new_hash(void);
 
-/* lock_5.cpp */
 int lock_get_copy_code(void);
 
-/* lock_6.cpp */
 void lock_short_protection_check(void);
 
-/* lock_7.cpp */
 int  lock_verification(void);
 void lock_sabotage(void);
 
-/* lock_8.cpp */
 void lock_long_protection_check(void);
 
-/* lock_9.cpp */
 void lock_secret_protection_check(void);
 
-/* lock_a.cpp */
 void lock_preliminary_check(void);
 
 } // namespace MADSV2

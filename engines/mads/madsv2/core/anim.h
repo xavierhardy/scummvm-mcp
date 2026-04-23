@@ -425,7 +425,6 @@ typedef AnimInter *AnimInterPtr;
 
 extern int anim_error;
 
-/* anim_1.cpp */
 int anim_load_background(AnimFile *anim_in,
 	Buffer *this_orig,
 	Buffer *this_depth,
@@ -438,7 +437,6 @@ int anim_load_background(AnimFile *anim_in,
 	int load_flags, int star_search);
 
 
-/* anim_2.cpp */
 void    anim_unload(AnimPtr anim);
 
 AnimPtr anim_load(const char *file_name,
@@ -450,17 +448,14 @@ AnimPtr anim_load(const char *file_name,
 	RoomPtr *room, CycleListPtr cycle_list,
 	int load_flags);
 
-/* anim_3.cpp */
 int anim_get_sound_info(char *file_name,
 	char *sound_file_buffer,
 	int *sound_load_flag);
 
-/* anim_4.cpp */
 int anim_get_header_info(char *file_name,
 	AnimFile *anim_in);
 
 
-/* anim_5.cpp */
 int anim_himem_preload(char *name, int level);
 
 } // namespace MADSV2

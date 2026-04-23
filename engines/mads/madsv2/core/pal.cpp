@@ -96,8 +96,8 @@ void pal_init(int reserve_bottom, int reserve_top) {
 		flag_used[count] = false;
 	}
 
-	flag_used[0] = true;            /* Flag[0] is RESERVED status */
-	flag_used[1] = true;            /* Flag[1] is CYCLE status    */
+	flag_used[0] = true;  // Flag[0] is RESERVED status
+	flag_used[1] = true;  // Flag[1] is CYCLE status
 
 	palette_locked = false;
 
@@ -144,8 +144,7 @@ int pal_deallocate(int use_flag) {
 	if (!kidney) {
 		if ((use_flag >= PAL_MAXFLAGS) || (use_flag <= 0)) goto done;
 
-		/* Get a mask of everything but our special bit */
-
+		// Get a mask of everything but our special bit
 		mask = ~(1L << (dword)use_flag);
 
 		for (count = 0; count < 256; count++) {
@@ -245,8 +244,7 @@ static int pal_get_new_flag() {
 	int return_code;
 	int count;
 
-	/* First, we need to find an available color handle for the new list */
-
+	// First, we need to find an available color handle for the new list
 	return_code = PAL_ERR_OUTOFFLAGS;
 
 	for (count = 0; (count < PAL_MAXFLAGS); count++) {
@@ -256,8 +254,7 @@ static int pal_get_new_flag() {
 		}
 	}
 
-	/* If no handles left to allocate: */
-
+	// If no handles left to allocate:
 	if (return_code < 0) {
 #ifndef disable_error_check
 		error_report(ERROR_NO_MORE_PALETTE_FLAGS, ERROR, MODULE_PAL, PAL_MAXFLAGS, 100);
@@ -330,21 +327,17 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 	search_start = MAX(search_start, palette_low_search_limit);
 	search_stop = MIN(search_stop, palette_high_search_limit);
 
-	/* Get a new color handle */
-
+	// Get a new color handle
 	return_code = pal_get_new_flag();
 	if (return_code < 0) goto done;
 
-	/* Set up the proper masking bit for our chosen color handle */
-
+	// Set up the proper masking bit for our chosen color handle
 	mask = 1L << (dword)return_code;
 
-	/* Check if we are defining a new background picture */
-
+	// Check if we are defining a new background picture
 	defining_background = pal_flags & PAL_MAP_BACKGROUND;
 
-	/* If a shadowing description was passed, enable shadow checking */
-
+	// If a shadowing description was passed, enable shadow checking
 	shadowing_enabled = (shadow_list != NULL);
 	shadowing_special = false;
 	if (shadowing_enabled) {
@@ -356,26 +349,23 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 		}
 	}
 
-	/* If we are mapping shadow colors, we need to make a list of all     */
-	/* shadowable colors in our color list and then sort it by intensity. */
-
+	// If we are mapping shadow colors, we need to make a list of all
+	// shadowable colors in our color list and then sort it by intensity.
 	if (shadowing_enabled) {
 		pal_init_shadow(&incoming_shadow, new_list);
 		pal_shadow_sort(&incoming_shadow, new_list);
 	}
 
-	/* Get a count of totally free colors in the palette */
-
+	// Get a count of totally free colors in the palette
 	free_colors = pal_free_colors(&first_free);
 
 	first_free = MAX(first_free, search_start);
 
-	/* Sort the color list so that all cycle colors remain at the beginning   */
-	/* of the list but that all colors which are allowed to use inexact RGB   */
-	/* mappings are placed at the bottom of the list.  That way, colors which */
-	/* require an exact RGB mapping are given the first chance to allocate    */
-	/* free color space.                                                      */
-
+	// Sort the color list so that all cycle colors remain at the beginning
+	// of the list but that all colors which are allowed to use inexact RGB
+	// mappings are placed at the bottom of the list.  That way, colors which
+	// require an exact RGB mapping are given the first chance to allocate
+	// free color space.
 	for (count = 0; count < new_list->num_colors; count++) {
 		reordering_index[count] = (byte)count;
 		reordering_hash[count] = 0;
@@ -394,9 +384,8 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 		reserved_mask = 0xfffffffe;
 	}
 
-	/* Now, for each color in our color list, find an appropriate mapping or */
-	/* create a new one from available color space.                          */
-
+	// Now, for each color in our color list, find an appropriate mapping or
+	// create a new one from available color space.
 	for (search_color = 0; search_color < new_list->num_colors; search_color++) {
 
 		list_color = reordering_index[search_color];
@@ -404,17 +393,15 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 		found = false;
 		best_target_color = -1;
 
-		/* Don't insert colors that are being forced to skip codes */
-
+		// Don't insert colors that are being forced to skip codes
 		if (new_list->table[list_color].group & COLOR_GROUP_FORCE_TO_SKIP) {
 			found = true;
 			best_target_color = SS_SKIP;
 		}
 
-		/* If we are doing shadowing, check to see if our color is one of the   */
-		/* shadow colors.  If so, just map it right to the corresponding shadow */
-		/* color in the master palette, without regard for RGB match.           */
-
+		// If we are doing shadowing, check to see if our color is one of the
+		// shadow colors.  If so, just map it right to the corresponding shadow
+		// color in the master palette, without regard for RGB match.
 		if (shadowing_enabled) {
 			if (new_list->table[list_color].group & COLOR_GROUP_MAP_TO_SHADOW) {
 				for (shadow = 0; !found && (shadow < incoming_shadow.num_shadow_colors); shadow++) {
@@ -445,17 +432,15 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 			cycle_mask = PAL_CYCLE;
 		}
 
-		/* Now decide if we should search the existing palette for an already */
-		/* existing mapping.  The only reasons not to are  A) if we have      */
-		/* found a (shadowing) match; and  B) if we are defining an initial   */
-		/* background and therefore should not have any matches.              */
-
+		// Now decide if we should search the existing palette for an already
+		// existing mapping.  The only reasons not to are  A) if we have
+		// found a (shadowing) match; and  B) if we are defining an initial
+		// background and therefore should not have any matches.
 		conduct_search = !found && !defining_background && cycle_mask != 0;
 
 		if (conduct_search) {
-			/* Now, decide whether we need an exact match or are willing to just */
-			/* take the closest.                                                 */
-
+			// Now, decide whether we need an exact match or are willing to just
+			// take the closest.
 			if ((new_list->table[list_color].group & COLOR_GROUP_FORCE_TO_CLOSEST) ||
 				(((pal_flags & PAL_MAP_ANY_TO_CLOSEST) || (new_list->table[list_color].group & COLOR_GROUP_MAP_TO_CLOSEST)) &&
 					((pal_flags & PAL_MAP_ALL_TO_CLOSEST) || (!free_colors)))
@@ -466,8 +451,7 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 			}
 
 
-			/* Search through the existing palette for an appropriate color */
-
+			// Search through the existing palette for an appropriate color
 			for (target_color = search_start; target_color < search_stop; target_color++) {
 
 				if (color_status[target_color]) {
@@ -476,8 +460,8 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 							if (best_hash > 1) {
 								hash = pal_get_hash((RGBcolor *) & new_list->table[list_color], &master_palette[target_color]);
 							} else {
-								/* This is a little hack (or "optimization") to compare the 3 RGB bytes much */
-								/* more quickly when we are looking for an exact match only.                 */
+								// This is a little hack (or "optimization") to compare the 3 RGB bytes much
+								// more quickly when we are looking for an exact match only.
 								hash = ((*(word *) & new_list->table[list_color] == *(word *) & master_palette[target_color]) &&
 									(*(((byte *) & new_list->table[list_color]) + 2) == *(((byte *) & master_palette[target_color]) + 2))) ? 0 : 1;
 							}
@@ -492,11 +476,10 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 			}
 		}
 
-		/* Now, decide if we should insert a new color into the palette.  We  */
-		/* need to if we have not yet found a match, but we must also check   */
-		/* to see if we are allowed to create a new color for this color list */
-		/* item (we are not if the item is being forced to map to closest).   */
-
+		// Now, decide if we should insert a new color into the palette.  We
+		// need to if we have not yet found a match, but we must also check
+		// to see if we are allowed to create a new color for this color list
+		// item (we are not if the item is being forced to map to closest).
 		conduct_insert = (!found) &&
 			(!((pal_flags & PAL_MAP_ALL_TO_CLOSEST) &&
 				((new_list->table[list_color].group & (COLOR_GROUP_MAP_TO_CLOSEST | COLOR_GROUP_FORCE_TO_CLOSEST)) ||
@@ -511,15 +494,14 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 					found = true;
 					best_target_color = target_color;
 					*(RGBcolor *) &master_palette[target_color].r = *(RGBcolor *) & new_list->table[list_color].r;
-					/* memcpy(&(master_palette[target_color].r), &(new_list->table[list_color].r), 3); */
+					// memcpy(&(master_palette[target_color].r), &(new_list->table[list_color].r), 3);
 				}
 			}
 		}
 
-		/* If we found a mapping for this color, flag our handle for it and */
-		/* make a note of the list-to-palette mapping for this color in the */
-		/* "x16" slot of the color list item.                               */
-
+		// If we found a mapping for this color, flag our handle for it and
+		// make a note of the list-to-palette mapping for this color in the
+		// "x16" slot of the color list item.
 		if (found) {
 			bonus = (defining_background && (new_list->table[list_color].cycle != 0)) ? PAL_CYCLE : 0;
 			color_status[best_target_color] |= (mask | bonus);
@@ -547,11 +529,10 @@ done:
 	return return_code;
 }
 
-int pal_get_flags()
-/*
-	   Returns number of available flags - checksum use
-*/
-{
+/**
+ * Returns number of available flags - checksum use
+ */
+int pal_get_flags() {
 	int a, out;
 
 	out = 0;
@@ -561,11 +542,10 @@ int pal_get_flags()
 	return(out);
 }
 
-int pal_get_colors()
 /*
-	   Returns number of colors available in palette
-*/
-{
+ * Returns number of colors available in palette
+ */
+int pal_get_colors() {
 	int a, out;
 
 	out = 0;
@@ -644,7 +624,7 @@ int pal_get_color(RGBcolor color, int color_handle, int override_reserved, int *
 	dword mask;
 
 	if (color_handle < 0) {
-		result = PAL_ERR_OUTOFFLAGS;       /* Default if next loop fails */
+		result = PAL_ERR_OUTOFFLAGS;  // Default if next loop fails
 
 		for (count = 0; count < PAL_MAXFLAGS; count++) {
 			if (!flag_used[count]) {
@@ -657,7 +637,7 @@ int pal_get_color(RGBcolor color, int color_handle, int override_reserved, int *
 #ifndef disable_error_check
 			error_report(ERROR_NO_MORE_PALETTE_FLAGS, ERROR, MODULE_PAL, PAL_MAXFLAGS, 1);
 #endif
-			return result;            /* No flags left to allocate */
+			return result;  // No flags left to allocate
 		}
 	} else {
 		result = color_handle;

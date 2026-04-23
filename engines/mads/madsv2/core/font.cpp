@@ -150,23 +150,23 @@ int font_write(FontPtr font, Buffer *target, const char *out_string,
 	screen_loc = x;
 
 	for (char *str = temp_buf; *str != '\0'; str++) {
-		/* char_loop: decrement character for pointer (original did dec dl / jns),
-		   so '\0' (0) decrements to -1 (negative) and exits. Characters are
-		   1-based indices into the font table. */
+		// char_loop: decrement character for pointer (original did dec dl / jns),
+		// so '\0' (0) decrements to -1 (negative) and exits. Characters are
+		// 1-based indices into the font table.
 		byte ch_idx = (byte)(*str - 1);
 
 		byte char_width = font->width[ch_idx];
 
 		if (char_width == 0)
-			continue; /* char_next with zero width: no spacing applied */
+			continue;  // char_next with zero width: no spacing applied
 
 		screen_loc += char_width;
 		if (screen_loc >= target_wrap)
-			break; /* terminate */
+			break;  // Terminate
 
-		/* Locate the character's pixel data in the font, skipping clipped rows.
-		   Each row of a character is packed 4 pixels per byte, so row stride
-		   is ceil(char_width / 4) = (char_width - 1) / 4 + 1 = (char_width + 3) >> 2 */
+		// Locate the character's pixel data in the font, skipping clipped rows.
+		// Each row of a character is packed 4 pixels per byte, so row stride
+		// is ceil(char_width / 4) = (char_width - 1) / 4 + 1 = (char_width + 3) >> 2
 		byte *glyph = font->data[ch_idx];
 
 		if (skip_top > 0) {
@@ -174,20 +174,20 @@ int font_write(FontPtr font, Buffer *target, const char *out_string,
 			glyph += skip_top * row_stride;
 		}
 
-		/* Draw the character glyph */
+		// Draw the character glyph
 		byte *row_ptr = target_ptr;
 
 		for (int row = 0; row < height; row++) {
 			byte *pixel_ptr = row_ptr;
 			int   pixels_left = char_width;
 			byte  data = *glyph++;
-			int   pack_count = 4;  /* 4 pixels packed per byte, 2 bits each */
+			int   pack_count = 4;  // 4 pixels packed per byte, 2 bits each
 
 			while (pixels_left > 0) {
-				/* Shift next 2-bit color index into the high bits of AX,
-				   then read into the low byte. Original: xor ah,ah / shl ax,2
-				   with AL holding the packed byte - shifts top 2 bits of AL
-				   into AH as the color index (0-3). */
+				// Shift next 2-bit color index into the high bits of AX,
+				// then read into the low byte. Original: xor ah,ah / shl ax,2
+				// with AL holding the packed byte - shifts top 2 bits of AL
+				// into AH as the color index (0-3).
 				byte color_idx = (data >> 6) & 0x03;
 				data <<= 2;
 
@@ -211,12 +211,12 @@ int font_write(FontPtr font, Buffer *target, const char *out_string,
 			row_ptr += target_wrap;
 		}
 
-		/* char_next: advance target pointer by character width + autospacing */
+		// char_next: advance target pointer by character width + autospacing
 		target_ptr += char_width + auto_spacing;
 		screen_loc += auto_spacing;
 	}
 
-	/* Return value is the final X coordinate reached */
+	// Return value is the final X coordinate reached
 	return_value = (int)(target_ptr - buffer_pointer(target, x, y)) + x;
 
 finish:

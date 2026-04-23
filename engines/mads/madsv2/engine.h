@@ -92,6 +92,7 @@ public:
 	}
 	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave) override;
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
+	SaveStateList listSaves() const;
 
 	virtual void global_init_code() = 0;
 	virtual void section_music(int section_num) = 0;

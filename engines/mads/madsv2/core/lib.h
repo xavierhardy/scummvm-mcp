@@ -35,7 +35,6 @@ extern char mads_dev_lib_version[5];
 extern char mads_dev_lib_date[11];
 #endif
 
-/* lib.c */
 void lib_show_version(void);
 
 } // namespace MADSV2

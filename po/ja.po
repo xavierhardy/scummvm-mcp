@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ScummVM 2.3.0git\n"
 "Report-Msgid-Bugs-To: scummvm-devel@lists.scummvm.org\n"
-"POT-Creation-Date: 2026-04-20 05:31+0000\n"
-"PO-Revision-Date: 2026-04-15 08:22+0000\n"
+"POT-Creation-Date: 2026-04-23 00:52+0000\n"
+"PO-Revision-Date: 2026-04-23 00:22+0000\n"
 "Last-Translator: VAN-Gluon <van.gluonp@gmail.com>\n"
 "Language-Team: Japanese <https://translations.scummvm.org/projects/scummvm/"
 "scummvm/ja/>\n"
@@ -62,7 +62,7 @@ msgid "Available engines:"
 msgstr "利用可能なエンジン："
 
 #. I18N: Close dialog button
-#: gui/about.cpp:531 gui/about.cpp:663 gui/downloadpacksdialog.cpp:298
+#: gui/about.cpp:516 gui/about.cpp:648 gui/downloadpacksdialog.cpp:298
 #: gui/downloadpacksdialog.cpp:389 gui/integrity-dialog.cpp:354
 #: gui/gui-manager.cpp:168 gui/helpdialog.cpp:128 gui/imagealbum-dialog.cpp:133
 #: gui/textviewer.cpp:56 gui/unknown-game-dialog.cpp:53
@@ -1615,7 +1615,7 @@ msgid "Unknown Year"
 msgstr "年(不明)"
 
 #. I18N: Group for All items
-#: gui/launcher.cpp:1640 gui/widgets/groupedlist.cpp:81
+#: gui/launcher.cpp:1640 gui/widgets/groupedlist.cpp:82
 msgid "All"
 msgstr "すべて"
 
@@ -1624,12 +1624,13 @@ msgid "Icons per row:"
 msgstr "1行のアイコン："
 
 #: gui/launcher.cpp:1869
-#, fuzzy, c-format
-#| msgid "Do you really want to remove this game configuration?"
+#, c-format
 msgid ""
 "Do you really want to remove the following %d game configurations?\n"
 "\n"
-msgstr "このゲームはリストから削除してもよろしいですか？"
+msgstr ""
+"以下%d個のゲーム設定を削除してもよろしいですか?\n"
+"\n"
 
 #: gui/massadd.cpp:77 gui/massadd.cpp:80
 msgid "... progress ..."
@@ -2717,16 +2718,12 @@ msgid "Print"
 msgstr "印刷"
 
 #: gui/printing-dialog.cpp:56
-#, fuzzy
-#| msgid "Save Image"
 msgid "Save as image"
-msgstr "画像を保存"
+msgstr "画像として保存"
 
 #: gui/printing-dialog.cpp:58
-#, fuzzy
-#| msgid "First page"
 msgid "Fit to page"
-msgstr "最初のページ"
+msgstr "ページに合わせる"
 
 #: gui/printing-dialog.cpp:60 backends/graphics/opengl/opengl-graphics.cpp:315
 #: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:127
@@ -2735,16 +2732,12 @@ msgid "Center"
 msgstr "中央"
 
 #: gui/printing-dialog.cpp:63
-#, fuzzy
-#| msgid "Pointer Speed:"
 msgid "Printer:"
-msgstr "ポインターの速度："
+msgstr "プリンター："
 
 #: gui/printing-dialog.cpp:88
-#, fuzzy
-#| msgid "Next action"
 msgid "Orientation:"
-msgstr "次の行動"
+msgstr "オリエンテーション："
 
 #: gui/recorderdialog.cpp:66
 msgid "Recorder or Playback Gameplay"
@@ -2764,7 +2757,7 @@ msgstr "記録"
 msgid "Playback"
 msgstr "再生"
 
-#: gui/recorderdialog.cpp:76 gui/widgets/grid.cpp:336
+#: gui/recorderdialog.cpp:76 gui/widgets/grid.cpp:338
 msgid "Edit"
 msgstr "編集"
 
@@ -2974,11 +2967,11 @@ msgstr ""
 msgid "Clear value"
 msgstr "クリア"
 
-#: gui/widgets/grid.cpp:330
+#: gui/widgets/grid.cpp:332
 msgid "Play"
 msgstr "再生"
 
-#: gui/widgets/grid.cpp:333
+#: gui/widgets/grid.cpp:335
 msgid "Saves"
 msgstr "セーブ"
 
@@ -3509,10 +3502,8 @@ msgid "~O~ptions"
 msgstr "設定(~O~)"
 
 #: engines/dialogs.cpp:79
-#, fuzzy
-#| msgid "~H~elp"
 msgid "Game ~H~elp"
-msgstr "ヘルプ(~H~)"
+msgstr "ゲームヘルプ(~H~)"
 
 #: engines/dialogs.cpp:83
 msgid "~H~elp"
@@ -3605,10 +3596,8 @@ msgid "Could not apply filtering setting."
 msgstr "フィルターの設定を適用できませんでした。"
 
 #: engines/engine.cpp:418
-#, fuzzy
-#| msgid "Could not apply filtering setting."
 msgid "Could not apply shader setting."
-msgstr "フィルターの設定を適用できませんでした。"
+msgstr "シェーダー設定を適用できませんでした。"
 
 #: engines/engine.cpp:528
 msgid "Error"
@@ -3647,13 +3636,7 @@ msgid "Skip autosave"
 msgstr "オートセーブをスキップ"
 
 #: engines/engine.cpp:644
-#, fuzzy, c-format
-#| msgid ""
-#| "WARNING: The autosave slot contains a saved game named %S, and an "
-#| "autosave is pending.\n"
-#| "Please move this saved game to a new slot, or delete it if it's no longer "
-#| "needed.\n"
-#| "Alternatively, you can skip the autosave (will prompt again in 5 minutes)."
+#, c-format
 msgid ""
 "WARNING: The autosave slot contains a saved game named %s, and an autosave "
 "is pending.\n"
@@ -3661,9 +3644,9 @@ msgid ""
 "needed.\n"
 "Alternatively, you can skip the autosave (will prompt again in 5 minutes)."
 msgstr ""
-"警告：オートセーブスロットに%Sのデータが存在するため、保留されています。\n"
+"警告：オートセーブスロットに%sのデータが存在するため、保留中です。\n"
 "新しいスロットへこのセーブを移動するか、不要な場合は削除して下さい。\n"
-"あるいは、オートセーブをスキップできます(5分後に再度表示)。"
+"あるいは、オートセーブをスキップできます(5分後に再度通知)。"
 
 #: engines/engine.cpp:654
 msgid "ERROR: Could not copy the savegame to a new slot"
@@ -3786,8 +3769,6 @@ msgid "Game not implemented"
 msgstr "未実装のゲーム"
 
 #: engines/metaengine.cpp:75 engines/saga/metaengine.cpp:267
-#, fuzzy
-#| msgid "Default game keymap"
 msgid "Default game keymappings"
 msgstr "キーマッピング(デフォルト)"
 
@@ -3935,31 +3916,31 @@ msgstr "OpenGL(シェーダー)"
 msgid "AdLib emulator"
 msgstr "AdLibエミュレーター："
 
-#: audio/fmopl.cpp:84
+#: audio/fmopl.cpp:85
 msgid "MAME OPL emulator"
 msgstr "MAME OPL エミュレーター"
 
-#: audio/fmopl.cpp:86
+#: audio/fmopl.cpp:88
 msgid "DOSBox OPL emulator"
 msgstr "DOSBox OPL エミュレーター"
 
-#: audio/fmopl.cpp:89
+#: audio/fmopl.cpp:91
 msgid "Nuked OPL emulator"
 msgstr "Nuked OPL エミュレーター"
 
-#: audio/fmopl.cpp:92
+#: audio/fmopl.cpp:94
 msgid "ALSA Direct FM"
 msgstr "ALSA(ダイレクトFM)"
 
-#: audio/fmopl.cpp:95
+#: audio/fmopl.cpp:97
 msgid "OPL2LPT"
 msgstr "OPL2LPT"
 
-#: audio/fmopl.cpp:96
+#: audio/fmopl.cpp:98
 msgid "OPL3LPT"
 msgstr "OPL3LPT"
 
-#: audio/fmopl.cpp:99
+#: audio/fmopl.cpp:101
 msgid "RetroWave OPL3"
 msgstr "OPL3"
 
@@ -4323,32 +4304,22 @@ msgid "Right mouse button"
 msgstr "マウスの右ボタン"
 
 #: backends/keymapper/hardware-input.cpp:246
-#, fuzzy
-#| msgid "Middle Mouse Button"
 msgid "Middle mouse button"
 msgstr "マウスの中ボタン"
 
 #: backends/keymapper/hardware-input.cpp:247
-#, fuzzy
-#| msgid "Mouse Wheel Up"
 msgid "Mouse wheel up"
 msgstr "マウスホイール(上)"
 
 #: backends/keymapper/hardware-input.cpp:248
-#, fuzzy
-#| msgid "Mouse Wheel Down"
 msgid "Mouse wheel down"
 msgstr "マウスホイール(下)"
 
 #: backends/keymapper/hardware-input.cpp:249
-#, fuzzy
-#| msgid "X1 Mouse Button"
 msgid "X1 mouse button"
 msgstr "マウスの追加ボタン1"
 
 #: backends/keymapper/hardware-input.cpp:250
-#, fuzzy
-#| msgid "X2 Mouse Button"
 msgid "X2 mouse button"
 msgstr "マウスの追加ボタン2"
 
@@ -4369,46 +4340,32 @@ msgid "Joy Y"
 msgstr "Yボタン"
 
 #: backends/keymapper/hardware-input.cpp:259
-#, fuzzy
-#| msgid "Joy Back"
 msgid "Joy back"
-msgstr "戻るボタン"
+msgstr "戻る"
 
 #: backends/keymapper/hardware-input.cpp:260
-#, fuzzy
-#| msgid "Joy Guide"
 msgid "Joy guide"
-msgstr "ガイドボタン"
+msgstr "ガイド"
 
 #: backends/keymapper/hardware-input.cpp:261
-#, fuzzy
-#| msgid "Joy Start"
 msgid "Joy start"
-msgstr "スタートボタン"
+msgstr "スタート"
 
 #: backends/keymapper/hardware-input.cpp:262
-#, fuzzy
-#| msgid "Left Stick"
 msgid "Left stick"
 msgstr "左スティック"
 
 #: backends/keymapper/hardware-input.cpp:263
-#, fuzzy
-#| msgid "Right Stick"
 msgid "Right stick"
 msgstr "右スティック"
 
 #: backends/keymapper/hardware-input.cpp:264 engines/dragons/metaengine.cpp:206
-#, fuzzy
-#| msgid "Left Shoulder"
 msgid "Left shoulder"
-msgstr "LBボタン"
+msgstr "LB"
 
 #: backends/keymapper/hardware-input.cpp:265 engines/dragons/metaengine.cpp:212
-#, fuzzy
-#| msgid "Right Shoulder"
 msgid "Right shoulder"
-msgstr "RBボタン"
+msgstr "RB"
 
 #: backends/keymapper/hardware-input.cpp:266
 #: backends/platform/3ds/osystem-events.cpp:55
@@ -4418,8 +4375,6 @@ msgstr "RBボタン"
 #: backends/platform/sdl/opendingux/opendingux.cpp:64
 #: backends/platform/sdl/ps3/ps3.cpp:57 backends/platform/sdl/psp2/psp2.cpp:56
 #: backends/platform/sdl/switch/switch.cpp:48
-#, fuzzy
-#| msgid "D-pad Up"
 msgid "D-pad up"
 msgstr "十字キー(上)"
 
@@ -4431,8 +4386,6 @@ msgstr "十字キー(上)"
 #: backends/platform/sdl/opendingux/opendingux.cpp:65
 #: backends/platform/sdl/ps3/ps3.cpp:58 backends/platform/sdl/psp2/psp2.cpp:57
 #: backends/platform/sdl/switch/switch.cpp:49
-#, fuzzy
-#| msgid "D-pad Down"
 msgid "D-pad down"
 msgstr "十字キー(下)"
 
@@ -4444,8 +4397,6 @@ msgstr "十字キー(下)"
 #: backends/platform/sdl/opendingux/opendingux.cpp:66
 #: backends/platform/sdl/ps3/ps3.cpp:59 backends/platform/sdl/psp2/psp2.cpp:58
 #: backends/platform/sdl/switch/switch.cpp:50
-#, fuzzy
-#| msgid "D-pad Left"
 msgid "D-pad left"
 msgstr "十字キー(左)"
 
@@ -4457,26 +4408,18 @@ msgstr "十字キー(左)"
 #: backends/platform/sdl/opendingux/opendingux.cpp:67
 #: backends/platform/sdl/ps3/ps3.cpp:60 backends/platform/sdl/psp2/psp2.cpp:59
 #: backends/platform/sdl/switch/switch.cpp:51
-#, fuzzy
-#| msgid "D-pad Right"
 msgid "D-pad right"
 msgstr "十字キー(右)"
 
 #: backends/keymapper/hardware-input.cpp:270
-#, fuzzy
-#| msgid "D-pad Center"
 msgid "D-pad center"
 msgstr "十字キー(中央)"
 
 #: backends/keymapper/hardware-input.cpp:275
-#, fuzzy
-#| msgid "Left Trigger"
 msgid "Left trigger"
 msgstr "左トリガー"
 
 #: backends/keymapper/hardware-input.cpp:276
-#, fuzzy
-#| msgid "Right Trigger"
 msgid "Right trigger"
 msgstr "右トリガー"
 
@@ -4484,35 +4427,27 @@ msgstr "右トリガー"
 #: backends/platform/sdl/opendingux/opendingux.cpp:78
 #: backends/platform/sdl/ps3/ps3.cpp:67 backends/platform/sdl/psp2/psp2.cpp:64
 #: backends/platform/sdl/switch/switch.cpp:58
-#, fuzzy
-#| msgid "Left Stick X"
 msgid "Left stick X"
-msgstr "左スティック横"
+msgstr "左スティックX軸"
 
 #: backends/keymapper/hardware-input.cpp:278
 #: backends/platform/sdl/opendingux/opendingux.cpp:79
 #: backends/platform/sdl/ps3/ps3.cpp:68 backends/platform/sdl/psp2/psp2.cpp:65
 #: backends/platform/sdl/switch/switch.cpp:59
-#, fuzzy
-#| msgid "Left Stick Y"
 msgid "Left stick Y"
-msgstr "左スティック縦"
+msgstr "左スティックY軸"
 
 #: backends/keymapper/hardware-input.cpp:279
 #: backends/platform/sdl/ps3/ps3.cpp:69 backends/platform/sdl/psp2/psp2.cpp:66
 #: backends/platform/sdl/switch/switch.cpp:60
-#, fuzzy
-#| msgid "Right Stick X"
 msgid "Right stick X"
-msgstr "右スティック横"
+msgstr "右スティックX軸"
 
 #: backends/keymapper/hardware-input.cpp:280
 #: backends/platform/sdl/ps3/ps3.cpp:70 backends/platform/sdl/psp2/psp2.cpp:67
 #: backends/platform/sdl/switch/switch.cpp:61
-#, fuzzy
-#| msgid "Right Stick Y"
 msgid "Right stick Y"
-msgstr "右スティック縦"
+msgstr "右スティックY軸"
 
 #: backends/keymapper/hardware-input.cpp:281
 msgid "Hat X"
@@ -4852,16 +4787,12 @@ msgid "R"
 msgstr "R"
 
 #: backends/platform/3ds/osystem-events.cpp:63
-#, fuzzy
-#| msgid "Circle"
 msgid "Circle Pad X"
-msgstr "○"
+msgstr "スライドパッド(X軸)"
 
 #: backends/platform/3ds/osystem-events.cpp:64
-#, fuzzy
-#| msgid "Circle"
 msgid "Circle Pad Y"
-msgstr "○"
+msgstr "スライドパッド(Y軸)"
 
 #: backends/platform/3ds/osystem-events.cpp:69
 #: backends/platform/ds/osystem_ds.cpp:197
@@ -9508,75 +9439,71 @@ msgstr "画像ウィンドウが切り替わりました\n"
 
 #: engines/glk/dialogs.cpp:141
 msgid "white"
-msgstr ""
+msgstr "白"
 
 #: engines/glk/dialogs.cpp:142
 msgid "green"
-msgstr ""
+msgstr "緑"
 
 #: engines/glk/dialogs.cpp:143
-#, fuzzy
-#| msgid "Proceed"
 msgid "red"
-msgstr "進む"
+msgstr "赤"
 
 #: engines/glk/dialogs.cpp:144
 msgid "blue"
-msgstr ""
+msgstr "青"
 
 #: engines/glk/dialogs.cpp:145
 msgid "black"
-msgstr ""
+msgstr "黒"
 
 #: engines/glk/dialogs.cpp:146
 msgid "grey"
-msgstr ""
+msgstr "灰"
 
 #: engines/glk/dialogs.cpp:195
 msgid "Monospace Regular"
-msgstr ""
+msgstr "等幅フォント(標準)"
 
 #: engines/glk/dialogs.cpp:196
 msgid "Monospace Bold"
-msgstr ""
+msgstr "等幅フォント(太字)"
 
 #: engines/glk/dialogs.cpp:197
 msgid "Monospace Italic"
-msgstr ""
+msgstr "等幅フォント(斜体)"
 
 #: engines/glk/dialogs.cpp:198
 msgid "Monospace Bold Italic"
-msgstr ""
+msgstr "等幅フォント(太字斜体)"
 
 #: engines/glk/dialogs.cpp:199
 msgid "Proportional Regular"
-msgstr ""
+msgstr "可変幅フォント(標準)"
 
 #: engines/glk/dialogs.cpp:200
 msgid "Proportional Bold"
-msgstr ""
+msgstr "可変幅フォント(太字)"
 
 #: engines/glk/dialogs.cpp:201
 msgid "Proportional Italic"
-msgstr ""
+msgstr "可変幅フォント(斜体)"
 
 #: engines/glk/dialogs.cpp:202
 msgid "Proportional Bold Italic"
-msgstr ""
+msgstr "可変幅フォント(太字斜体)"
 
 #: engines/glk/dialogs.cpp:210
-#, fuzzy
-#| msgid "SoundFont:"
 msgid "Font"
-msgstr "SoundFont："
+msgstr "フォント"
 
 #: engines/glk/dialogs.cpp:212 engines/glk/dialogs.cpp:222
 msgid "Text:"
-msgstr ""
+msgstr "テキスト："
 
 #: engines/glk/dialogs.cpp:212
 msgid "Font for the text"
-msgstr ""
+msgstr "テキストフォント"
 
 #: engines/glk/dialogs.cpp:216 engines/glk/dialogs.cpp:227
 msgid "Grid:"
@@ -9588,30 +9515,26 @@ msgstr ""
 
 #: engines/glk/dialogs.cpp:220
 msgid "Color"
-msgstr ""
+msgstr "色"
 
 #: engines/glk/dialogs.cpp:222
-#, fuzzy
-#| msgid "Go to next object"
 msgid "Color of the interactive text"
-msgstr "次のオブジェクトへ"
+msgstr "インタラクティブテキストの色"
 
 #: engines/glk/dialogs.cpp:225 engines/glk/dialogs.cpp:230
 #: engines/glk/dialogs.cpp:236 engines/glk/dialogs.cpp:242
 #: engines/glk/dialogs.cpp:254 engines/glk/dialogs.cpp:260
 #: engines/glk/dialogs.cpp:269
 msgid "<custom>"
-msgstr ""
+msgstr "<カスタム>"
 
 #: engines/glk/dialogs.cpp:227
 msgid "Color for drawn graphics such as maps, diagrams, puzzles, etc"
 msgstr ""
 
 #: engines/glk/dialogs.cpp:232
-#, fuzzy
-#| msgid "Window"
 msgid "Window:"
-msgstr "ウインドウ"
+msgstr "ウインドウ："
 
 #: engines/glk/dialogs.cpp:232
 #, fuzzy
@@ -9620,10 +9543,8 @@ msgid "Color of the window (background)"
 msgstr "高速モードの切り替え"
 
 #: engines/glk/dialogs.cpp:238
-#, fuzzy
-#| msgid "New kid"
 msgid "Border:"
-msgstr "新しい子供"
+msgstr "ボーダー："
 
 #: engines/glk/dialogs.cpp:238
 #, fuzzy
@@ -15379,7 +15300,7 @@ msgstr "セーブ/ロードメニューへ"
 msgid "Go to end of save / load menu"
 msgstr "セーブ/ロードメニューへ"
 
-#: engines/tinsel/tinsel.cpp:1058
+#: engines/tinsel/tinsel.cpp:1061
 msgid "Discworld Noir needs ScummVM with TinyGL enabled"
 msgstr ""
 
@@ -17972,26 +17893,18 @@ msgid "Chapayev's action"
 msgstr "Chapayevのアクション"
 
 #: engines/wintermute/keymapper_tables.h:1619
-#, fuzzy
-#| msgid "Dialogue answer 1"
 msgid "Dialog answer 1"
 msgstr "回答ダイアログ1"
 
 #: engines/wintermute/keymapper_tables.h:1624
-#, fuzzy
-#| msgid "Dialogue answer 2"
 msgid "Dialog answer 2"
 msgstr "回答ダイアログ2"
 
 #: engines/wintermute/keymapper_tables.h:1629
-#, fuzzy
-#| msgid "Dialogue answer 3"
 msgid "Dialog answer 3"
 msgstr "回答ダイアログ3"
 
 #: engines/wintermute/keymapper_tables.h:1634
-#, fuzzy
-#| msgid "Dialogue answer 4"
 msgid "Dialog answer 4"
 msgstr "回答ダイアログ4"
 
@@ -18120,10 +18033,8 @@ msgid "Use MPEG video from the DVD version instead of lower resolution AVI"
 msgstr "低解像度なAVIファイルを、DVD版のMPEGファイルで代替する"
 
 #: engines/zvision/metaengine.cpp:102
-#, fuzzy
-#| msgid "Game id not supported"
 msgid "Enable widescreen support"
-msgstr "未対応のゲームID"
+msgstr "ワイド画面を有効化"
 
 #: engines/zvision/metaengine.cpp:103
 msgid ""
@@ -18132,16 +18043,12 @@ msgid ""
 msgstr ""
 
 #: engines/zvision/metaengine.cpp:114
-#, fuzzy
-#| msgid "Enable hit point bar graphs"
 msgid "Enable high quality panoramas"
-msgstr "HPバーの表示を有効にする"
+msgstr "高品質なパノラマを有効化"
 
 #: engines/zvision/metaengine.cpp:115
-#, fuzzy
-#| msgid "Apply bilinear filtering to individual sprites"
 msgid "Apply bilinear filtering to panoramic backgrounds"
-msgstr "スプライト単位でバイリニアフィルタリングを適用"
+msgstr "パノラマ背景にバイリニアフィルタリングを適用"
 
 #: engines/zvision/metaengine.cpp:258
 msgid "Spellbook"

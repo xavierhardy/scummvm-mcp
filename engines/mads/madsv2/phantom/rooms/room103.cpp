@@ -1342,8 +1342,8 @@ void room_103_parser(void) {
 			case 2:
 				player.walker_visible = true;
 				kernel_synch(KERNEL_PLAYER, 0, KERNEL_SERIES, seq[fx_take_6]);
-				player_walk(WALK_TO_X_OPEN_DOOR, WALK_TO_Y_OPEN_DOOR, FACING_WEST);
-				kernel_timing_trigger(THREE_SECONDS, 3);
+				player_walk(WALK_TO_X_OPEN_DOOR, WALK_TO_Y_OPEN_DOOR, FACING_EAST);
+				kernel_timing_trigger(TWO_SECONDS, 3);
 				break;
 
 			case 3:

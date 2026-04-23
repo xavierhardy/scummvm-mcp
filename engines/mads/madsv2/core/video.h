@@ -29,7 +29,6 @@ namespace MADSV2 {
 
 extern byte video_mode;
 
-/* video.asm */
 void video_init(int mode, int set_mode);
 
 void video_update(Buffer *from, int from_x, int from_y,

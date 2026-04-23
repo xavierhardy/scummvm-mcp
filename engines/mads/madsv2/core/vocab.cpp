@@ -129,11 +129,7 @@ int vocab_load(int allocation_flag) {
 						result = VC_ERR_READMAINFILE;
 					}
 				} else {
-					if (errno == ENOENT) {
-						vocab_exist = false;
-					} else {
-						result = VC_ERR_OPENMAINFILE;
-					}
+					vocab_exist = false;
 				}
 			} else {
 				result = VC_ERR_READHARDFILE;
@@ -205,7 +201,7 @@ int vocab_load(int allocation_flag) {
 						} else {
 							result = VC_ERR_WORDTOOLONG;
 						}
-					}					
+					}
 				}
 
 				delete handle;
@@ -280,7 +276,7 @@ int vocab_write_file(const char *last_word) {
 }
 
 void vocab_report_error(int number) {
-	char temp_buf_1[80], temp_buf_2[80], temp_buf_3[80];
+	char temp_buf_1[80], temp_buf_2[80];
 	int dos_flag;
 
 	dos_flag = false;
@@ -354,8 +350,7 @@ void vocab_report_error(int number) {
 	}
 
 	if (dos_flag) {
-		env_dos_error_name(temp_buf_3);
-		dialog_alert_ok(temp_buf_1, temp_buf_2, temp_buf_3, NULL);
+		dialog_alert_ok(temp_buf_1, temp_buf_2, "Error", NULL);
 	} else {
 		dialog_alert_ok(temp_buf_1, NULL, NULL, NULL);
 	}
@@ -547,7 +542,7 @@ void vocab_maint_exec() {
 		} else {
 
 			Common::strcpy_s(word_buf, dialog_read_list(dialog, word_item));
-			/* _fstrlwr (word_buf); */
+			// _fstrlwr (word_buf);
 			fileio_purge_trailing_spaces(word_buf);
 
 			vocab_code = vocab_get_code(word_buf);
@@ -655,26 +650,26 @@ char *vocab_string(int vocab_id) {
 	int bx = vocab_id - 1;
 
 	if (bx != 0) {
-		/* Search for the bx-th null terminator to find the bx-th string.
-		   repne scasb scans forward decrementing cx; if cx hits zero before
-		   finding the null, the id is out of range and we fall back to the
-		   first string. */
+		// Search for the bx-th null terminator to find the bx-th string.
+		// repne scasb scans forward decrementing cx; if cx hits zero before
+		// finding the null, the id is out of range and we fall back to the
+		// first string.
 		int cx = vocab_size;
 		while (bx > 0) {
-			/* Find next null terminator */
+			// Find next null terminator
 			while (cx > 0 && *p != '\0') {
 				p++;
 				cx--;
 			}
 			if (cx == 0)
-				return vocab_text; /* aint_got_it: out of range, return first */
-			p++;   /* step past the null */
+				return vocab_text;  // aint_got_it: out of range, return first
+			p++;  // step past the null
 			cx--;
 			bx--;
 		}
 	}
 
-	return p; /* got_it */
+	return p;  // got_it
 }
 
 } // namespace MADSV2

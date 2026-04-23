@@ -152,8 +152,6 @@ static void game_main(int argc, const char **argv) {
 	int count;
 	int mads_mode;
 	const char *scan;
-	long mem_you_got;
-	long mem_required;
 
 	pack_enable_pfab_explode();
 
@@ -231,9 +229,6 @@ static void game_main(int argc, const char **argv) {
 	}
 #endif
 	himem_startup();
-
-	mem_required = 30L * 16384L;
-	mem_you_got = mem_required * 2;
 
 	himem_shutdown();
 

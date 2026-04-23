@@ -45,7 +45,6 @@ extern int buffer_restore_keep_flag;
 extern word pattern_control_value;
 extern int  auto_pattern;
 
-/* buffer_1.cpp */
 
 /**
  * Allocates space for a buffer, and fills in embedded data.

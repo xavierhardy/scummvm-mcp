@@ -100,33 +100,27 @@ int room_read_def(int room_code, char *room_file, char *picture_base, int mads_m
 			Common::strcpy_s(picture_base, 65536, roomdef.picture_base);
 
 	} else {
-		if (errno == ENOENT) {
+		roomdef.num_hotspots = 0;
+		roomdef.num_rails = 0;
 
-			roomdef.num_hotspots = 0;
-			roomdef.num_rails = 0;
-
-			for (count = 0; count < 10; count++) {
-				roomdef.misc[count] = 0;
-			}
-
-			roomdef.front_y = display_y - 1;
-			roomdef.back_y = 0;
-			roomdef.front_scale = 100;
-			roomdef.back_scale = 100;
-
-			for (count = 0; count < 16; count++) {
-				roomdef.depth_table[count] = 0;
-			}
-
-			roomdef.shadow.num_shadow_colors = 0;
-
-			Common::strcpy_s(roomdef.picture_base, picture_base);
-
-			result = 0;
-
-		} else {
-			result = -1;
+		for (count = 0; count < 10; count++) {
+			roomdef.misc[count] = 0;
 		}
+
+		roomdef.front_y = display_y - 1;
+		roomdef.back_y = 0;
+		roomdef.front_scale = 100;
+		roomdef.back_scale = 100;
+
+		for (count = 0; count < 16; count++) {
+			roomdef.depth_table[count] = 0;
+		}
+
+		roomdef.shadow.num_shadow_colors = 0;
+
+		Common::strcpy_s(roomdef.picture_base, picture_base);
+
+		result = 0;
 	}
 
 done:
@@ -160,14 +154,12 @@ RoomPtr room_load(int id, int variant, const char *base_path, Buffer *picture,
 
 	room_unload(NULL, picture, depth, walk, special, picMap, depthMap);
 
-	/* Initialize structures */
-
+	// Initialize structures
 	mem_last_alloc_loader = MODULE_ROOM_LOADER;
 
 	load_handle.open = false;
 
-	/* Open the room data file */
-
+	// Open the room data file
 	room_resolve_base(base, temp_buf, id, base_path);
 
 	if (loader_open(&load_handle, temp_buf, "rb", true)) {
@@ -175,7 +167,7 @@ RoomPtr room_load(int id, int variant, const char *base_path, Buffer *picture,
 		goto done;
 	}
 
-	/* Load room header block */
+	// Load room header block
 	{
 		byte buffer[RoomFile::SIZE];
 		if (!loader_read(buffer, RoomFile::SIZE, 1, &load_handle)) {
@@ -190,8 +182,7 @@ RoomPtr room_load(int id, int variant, const char *base_path, Buffer *picture,
 	Common::strcpy_s(block_name, "$ROOM");
 	env_catint(block_name, id, 3);
 
-	/* Determine size needed for room data structure (based on # of rails) */
-
+	// Determine size needed for room data structure (based on # of rails)
 	mem_needed = (sizeof(Room) - sizeof(Rail)) + (sizeof(Rail) * (roomfile.num_rails + 2));
 	roomPtr = (RoomPtr)mem_get_name(mem_needed, block_name);
 	if (roomPtr == NULL) {
@@ -222,7 +213,7 @@ RoomPtr room_load(int id, int variant, const char *base_path, Buffer *picture,
 		picResource,
 		picMap,
 		picture,
-		NULL, /* &color_list, */
+		NULL,  // &color_list,
 		&roomPtr->cycle_list,
 		picture_ems_handle,
 		load_flags)) {
@@ -443,48 +434,42 @@ int room_read_pict(int room_code, char *room_file, int mads_mode) {
 		result = !fileio_fread_f(&roompict, sizeof(RoomPict), 1, &handle);
 		roompict.id = room_code;
 	} else {
-		if (errno == ENOENT) {
+		roompict.id = room_code;
+		roompict.picture_id = room_code;
+		roompict.format = ROOM_FORMAT_NORMAL;
 
-			roompict.id = room_code;
-			roompict.picture_id = room_code;
-			roompict.format = ROOM_FORMAT_NORMAL;
+		roompict.xs = video_x;
+		roompict.ys = display_y;
 
-			roompict.xs = video_x;
-			roompict.ys = display_y;
-
-			for (count = 0; count < 10; count++) {
-				roompict.misc[count] = 0;
-			}
-
-			roompict.num_series = 0;
-			roompict.num_images = 0;
-
-			roompict.num_variants = 0;
-			roompict.num_translated = 0;
-
-			roompict.color_list.num_colors = 0;
-			roompict.cycle_list.num_cycles = 0;
-
-			Common::strcpy_s(roompict.variant_desc[0], "The One True Variant");
-			Common::strcpy_s(roompict.variant_desc[1], "False Variant");
-			Common::strcpy_s(roompict.variant_desc[2], "Blasphemous Variant");
-			Common::strcpy_s(roompict.variant_desc[3], "Heretical Variant");
-			Common::strcpy_s(roompict.variant_desc[4], "Usurper Variant");
-			Common::strcpy_s(roompict.variant_desc[5], "Untrue Variant");
-			Common::strcpy_s(roompict.variant_desc[6], "Most Untrue Variant");
-			Common::strcpy_s(roompict.variant_desc[7], "Why so many variants, eh, boy?");
-			Common::strcpy_s(roompict.variant_desc[8], "Geez, guys! C'moff it already!");
-			Common::strcpy_s(roompict.variant_desc[9], "And THAT is absolutely IT, dammit!");
-
-			if (!mads_mode) {
-				Common::strcpy_s(roompict.artwork_file, room_file);
-			}
-
-			result = 0;
-
-		} else {
-			result = -1;
+		for (count = 0; count < 10; count++) {
+			roompict.misc[count] = 0;
 		}
+
+		roompict.num_series = 0;
+		roompict.num_images = 0;
+
+		roompict.num_variants = 0;
+		roompict.num_translated = 0;
+
+		roompict.color_list.num_colors = 0;
+		roompict.cycle_list.num_cycles = 0;
+
+		Common::strcpy_s(roompict.variant_desc[0], "The One True Variant");
+		Common::strcpy_s(roompict.variant_desc[1], "False Variant");
+		Common::strcpy_s(roompict.variant_desc[2], "Blasphemous Variant");
+		Common::strcpy_s(roompict.variant_desc[3], "Heretical Variant");
+		Common::strcpy_s(roompict.variant_desc[4], "Usurper Variant");
+		Common::strcpy_s(roompict.variant_desc[5], "Untrue Variant");
+		Common::strcpy_s(roompict.variant_desc[6], "Most Untrue Variant");
+		Common::strcpy_s(roompict.variant_desc[7], "Why so many variants, eh, boy?");
+		Common::strcpy_s(roompict.variant_desc[8], "Geez, guys! C'moff it already!");
+		Common::strcpy_s(roompict.variant_desc[9], "And THAT is absolutely IT, dammit!");
+
+		if (!mads_mode) {
+			Common::strcpy_s(roompict.artwork_file, room_file);
+		}
+
+		result = 0;
 	}
 
 done:
@@ -517,11 +502,11 @@ void room_himem_preload(int roomNum, int level) {
 	himem_preload_series(kernel_full_name(roomNum, 0, -1, NULL, KERNEL_DAT), level);
 	himem_preload_series(kernel_full_name(roomNum, 0, -1, NULL, KERNEL_HH), level);
 
-	/* himem_preload_series (kernel_full_name (room, 0, -1, NULL, KERNEL_TT),  level); */
+	// himem_preload_series (kernel_full_name (room, 0, -1, NULL, KERNEL_TT),  level);
 	himem_preload_series(kernel_full_name(roomNum, 0, -1, NULL, KERNEL_MM), level);
 	himem_preload_series(kernel_full_name(roomNum, 0, -1, NULL, KERNEL_WW), level);
 
-	/* himem_preload_series (kernel_full_name (room, 0, 0, NULL, KERNEL_TT),  level); */
+	// himem_preload_series (kernel_full_name (room, 0, 0, NULL, KERNEL_TT),  level);
 	himem_preload_series(kernel_full_name(roomNum, 0, 0, NULL, KERNEL_MM), level);
 	himem_preload_series(kernel_full_name(roomNum, 0, 0, NULL, KERNEL_WW), level);
 }
@@ -559,8 +544,7 @@ int room_picture_load(int roomId, Buffer *picture, int load_flags) {
 		goto done;
 	}
 
-	/* memcpy (&room->cycle_list, &art.cycle_list, sizeof(CycleList)); */
-
+	// memcpy (&room->cycle_list, &art.cycle_list, sizeof(CycleList));
 	if (!(load_flags & ROOM_LOAD_TRANSLATE)) {
 		color_handle = pal_allocate(&art.color_list, NULL, (load_flags & PAL_MAP_MASK));
 		if (color_handle < 0) {
@@ -633,30 +617,29 @@ static void room_buffer_invert(Buffer *buffer, byte *work, int granularity) {
 		byte *src, *dst;
 		int i;
 
-		/* Copy row into work buffer. */
+		// Copy row into work buffer.
 		memcpy(work, scan, wrap);
 
 		src = work;
-		dst = scan + wrap - 1;   /* dst walks right-to-left through scan */
+		dst = scan + wrap - 1;  // dst walks right-to-left through scan
 
 		for (i = 0; i < wrap; i++) {
 			byte al = *src++;
 
 			if (granularity == 8) {
-				/* Reverse all 8 bits. */
+				// Reverse all 8 bits.
 				byte ah = 0;
 				int b;
 				for (b = 0; b < 8; b++) {
-					ah = (ah >> 1) | (al << 7);  /* rcr ah,1 / shl al,1 pair */
+					ah = (ah >> 1) | (al << 7);  // rcr ah,1 / shl al,1 pair
 					al <<= 1;
 				}
 				al = ah;
 			} else if (granularity == 2) {
-				/* Swap the two nibbles. */
-				al = (al >> 4) | (al << 4);   /* ror al,4 */
+				// Swap the two nibbles.
+				al = (al >> 4) | (al << 4);  // ror al,4
 			}
-			/* granularity == 1: byte value is used as-is */
-
+			// granularity == 1: byte value is used as-is
 			*dst-- = al;
 		}
 

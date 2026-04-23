@@ -336,7 +336,6 @@ struct KernelGame {
 #define kernel_dialog(q)     inter_add_dialog(quote_string(kernel.quotes, q), q)
 
 
-/* kernel_1.cpp */
 extern RoomPtr room;            /* Pointer to current room's data */
 extern int room_id;             /* Current room #                 */
 extern int section_id;          /* Current section #              */
@@ -459,6 +458,15 @@ extern void kernel_unload_all_series();
  */
 extern int kernel_load_series(const char *name, int load_flags);
 
+/*
+ * kernel_flip_hotspot()
+ * Toggles an interface hotspot (referenced by its vocabulary word)
+ * on or off.  Hotspots that are off do not interact with the mouse
+ * cursor.
+ *
+ * @param vocab_code	
+ * @param active	
+ */
 extern void kernel_flip_hotspot(int vocab_code, int active);
 
 /**

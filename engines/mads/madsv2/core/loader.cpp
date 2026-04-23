@@ -92,10 +92,7 @@ int loader_open(LoadHandle handle, const char *filename, const char *options, in
 		handle->pack_list_marker = 0;
 		handle->reading = true;
 
-		/*
-		printf ("Opened %d with xms handle %d\n", found_himem, himem_directory_entry->xms_handle);
-		*/
-
+		// printf ("Opened %d with xms handle %d\n", found_himem, himem_directory_entry->xms_handle);
 		for (count = 0; count < (int)handle->pack.num_records; count++) {
 			handle->pack.strategy[count].type = PACK_NONE;
 			handle->pack.strategy[count].size = himem_directory_entry->packet_size[count];
@@ -173,14 +170,14 @@ int loader_close(LoadHandle handle) {
 			handle->ems_page_marker = -1;
 			handle->ems_page_offset = EMS_PAGE_SIZE;
 			handle->xms_offset = 0;
-			/* if (ems_paging_active) ems_unmap_all(); */
+			// if (ems_paging_active) ems_unmap_all();
 		} else {
 			if (!handle->reading) {
 #ifdef TODO
 				handle->handle->seek(0);
 				error_flag = !fileio_fwrite_f(&handle->pack, sizeof(PackList), 1, handle->handle);
 #else
-				error("TODO: loader_closer for writing");
+				error("TODO: loader_close for writing");
 #endif
 			}
 
@@ -230,10 +227,7 @@ long loader_read(void *target, long record_size, long record_count, LoadHandle h
 	} else if (handle->mode == LOADER_XMS) {
 		result = 0;
 
-		/*
-		printf ("Reading (%d) at %ld for size %ld\n", handle->xms_handle, handle->xms_offset, total_size);
-		*/
-
+		// printf ("Reading (%d) at %ld for size %ld\n", handle->xms_handle, handle->xms_offset, total_size);
 		if (xms_copy(total_size,
 			handle->xms_handle, (XMS)handle->xms_offset,
 			MEM_CONV, target)) goto done;
@@ -297,9 +291,7 @@ done:
 	}
 }
 
-
-long loader_write(void *target, long record_size, long record_count,
-	LoadHandle handle) {
+long loader_write(void *target, long record_size, long record_count, LoadHandle handle) {
 	long total_size, result = 0;
 	long file_pos;
 	int packing_flag;
@@ -342,7 +334,6 @@ long loader_write(void *target, long record_size, long record_count,
 
 	return (result / record_size);
 }
-
 
 long loader_write_2(Common::WriteStream *source_handle, long total_size, LoadHandle handle) {
 	long result;

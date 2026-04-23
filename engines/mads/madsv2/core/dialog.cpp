@@ -115,6 +115,8 @@ int dialog_read_dir_to_list(ListPtr target, const char *wild, int dirflag) {
  * Appends a list of valid drive letters to the end of the specified
  * list structure.  This is done by attempting to "change drive" to
  * each drive letter beginning with "A", and stopping when an attempt fails.
+ *
+ * @param dirslist		Directory list structure
  */
 static void dialog_read_drives_to_list(ListPtr dirslist) {
 	char *myptr;
@@ -126,33 +128,32 @@ static void dialog_read_drives_to_list(ListPtr dirslist) {
 
 /**
  * Loads directory (and subdirectory list w/ drives) for a filename item
+ *
+ * @param dialog	Dialog
+ * @param item		Filename item
  */
 static void dialog_load_directory(DialogPtr dialog, ItemPtr item) {
 	ItemPtr fileitem, dirsitem;
 	ListPtr filelist, dirslist;
 
-	/* Get our file list item and dirs list item */
-
+	// Get our file list item and dirs list item
 	fileitem = &dialog->item[item->status];
 	dirsitem = &dialog->item[fileitem->id + 1];
 
-	/* Get the associated list structures */
-
+	// Get the associated list structures
 	filelist = &dialog->lists[fileitem->buf_id];
 	dirslist = &dialog->lists[dirsitem->buf_id];
 
 	filelist->elements = 0;
 	dirslist->elements = 0;
 
-	/* Try to read them in */
-
+	// Try to read them in
 	dialog_read_dir_to_list(dirslist, "*.*", true);
 	dialog_read_dir_to_list(filelist, dialog->buffer[item->buf_id], false);
 
 	dialog_read_drives_to_list(dirslist);
 
-	/* Reset window cursors */
-
+	// Reset window cursors
 	filelist->base_entry = 0;
 	dirslist->base_entry = 0;
 
@@ -163,7 +164,12 @@ static void dialog_load_directory(DialogPtr dialog, ItemPtr item) {
 /**
  * Item to determine the proper X and Y values for an item based
  * on the X and Y values passed by the user (handles the various
- *  special codes).
+ * special codes).
+ *
+ * @param dialog	Dialog
+ * @param item		Filename item
+ * @param x			X position
+ * @param y			Y position
  */
 static void item_locate(DialogPtr dialog, ItemPtr item, int x, int y) {
 	switch (x) {
@@ -209,6 +215,10 @@ static void item_locate(DialogPtr dialog, ItemPtr item, int x, int y) {
 /**
  * Attempts to allocate a new item handle from the dialog box's
  * item array. Returns NULL if fails.
+ *
+ * @param dialog	Dialog	Dialog
+ * @param item_type		Item type
+ * @return	New item
  */
 static ItemPtr item_allocate(DialogPtr dialog, int item_type) {
 	ItemPtr item;
@@ -244,6 +254,9 @@ done:
 /**
  * Attempts to allocate one of the dialog box's string buffers.
  * Returns -1 if no buffer was available.
+ *
+ * @param dialog	Dialog
+ * @return	Buffer handle
  */
 static int buffer_allocate(DialogPtr dialog) {
 	int my_buffer = -1;
@@ -269,6 +282,9 @@ done:
 /**
  * Attempts to allocate one of the dialog box's list window structures.
  * Returns -1 if all are in use.
+ *
+ * @param dialog	Dialog
+ * @return	List window structure handle
  */
 static int list_allocate(DialogPtr dialog) {
 	int my_list;
@@ -288,6 +304,9 @@ static int list_allocate(DialogPtr dialog) {
  * Returns the "hotkey" keystroke value, if any, for the
  * passed string.  Returns 0 if no hotkey found.  Hotkeys
  * are marked by preceding "~" characters.
+ *
+ * @param prompt	Prompt
+ * @return	Keystroke value
  */
 static int get_keystroke(const char *prompt) {
 	const char *key_finder;
@@ -325,9 +344,8 @@ ItemPtr dialog_add_button(DialogPtr dialog, int x, int y, const char *prompt) {
 
 		item->x2 = -1;
 
-		/* Adjust cursor location to appear over the first letter (not */
-		/* over a space).                                              */
-
+		// Adjust cursor location to appear over the first letter (not
+		// over a space).
 		for (space_look = 0; ((unsigned)space_look < strlen(prompt)) && (item->x2 < 0); space_look++) {
 			if (prompt[space_look] != ' ') item->x2 = space_look + 1;
 		}
@@ -372,7 +390,7 @@ ItemPtr dialog_add_checkbox(DialogPtr dialog, int x, int y, const char *prompt,
 		item_locate(dialog, item, x, y);
 
 		item->x2 = 1;
-		item->status = (!!default_val) & DD_CHECK_TRUE; /* (sic) */
+		item->status = (!!default_val) & DD_CHECK_TRUE;  // (sic)
 
 		dialog->width = MAX<short>(dialog->width, (item->x + item->width + 1));
 
@@ -447,8 +465,7 @@ ItemPtr dialog_add_string(DialogPtr dialog, int x, int y, const char *prompt,
 
 		item->x2 = strlen(prompt) + 1;
 
-		/* Account for any hotkey stroke in setting proper cursor location */
-
+		// Account for any hotkey stroke in setting proper cursor location
 		if (strchr(prompt, '~') != NULL) {
 			item->width--;
 			item->x2--;
@@ -460,8 +477,7 @@ ItemPtr dialog_add_string(DialogPtr dialog, int x, int y, const char *prompt,
 		item->prompt = space;
 		Common::strcpy_s(item->prompt, 65536, prompt);
 
-		/* Set up a buffer in the dialog's buffer space */
-
+		// Set up a buffer in the dialog's buffer space
 		item->buf_width = width;
 		item->buf_id = buffer_allocate(dialog);
 
@@ -472,8 +488,7 @@ ItemPtr dialog_add_string(DialogPtr dialog, int x, int y, const char *prompt,
 
 		} else {
 
-			/* Copy the default value (if any) into the buffer */
-
+			// Copy the default value (if any) into the buffer
 			if (default_val != NULL) {
 				Common::strcpy_s(dialog->buffer[item->buf_id], 65536, default_val);
 				if (strlen(default_val) > (unsigned)width) {
@@ -485,8 +500,7 @@ ItemPtr dialog_add_string(DialogPtr dialog, int x, int y, const char *prompt,
 				default_val = &dialog->buffer[item->buf_id][0];
 			}
 
-			/* Mark the entire buffer contents as "selected" */
-
+			// Mark the entire buffer contents as "selected"
 			dialog->buf_status[item->buf_id] = 0;
 			dialog->buf_base_x[item->buf_id] = item->x2;
 			if (strlen(default_val) > 0) {
@@ -511,12 +525,10 @@ ItemPtr dialog_add_listbased(DialogPtr dialog, int x, int y, const char *prompt,
 	int listnum;
 	int temp_width;
 
-	/* First, just add the normal string entry area part */
-
+	// First, just add the normal string entry area part
 	item = dialog_add_string(dialog, x, y, prompt, default_val, width);
 
-	/* Then, do all the additional stuff for a list window */
-
+	// Then, do all the additional stuff for a list window
 	if (item != NULL) {
 		item->type = DD_I_LISTBASED;
 
@@ -555,8 +567,7 @@ ItemPtr dialog_add_listbased(DialogPtr dialog, int x, int y, const char *prompt,
 				list->picked_entry = -1;
 				list->thumb = -1;
 
-				/* Set items up to point at one another */
-
+				// Set items up to point at one another
 				item->status = listitem->id;
 				listitem->status = item->id;
 				listitem->buf_id = listnum;
@@ -585,12 +596,10 @@ ItemPtr dialog_append_list(DialogPtr dialog, int x, int y, ItemPtr base_string,
 	int listnum;
 	int temp_width;
 
-	/* First, just add the normal string entry area part */
-
+	// First, just add the normal string entry area part
 	item = base_string;
 
-	/* Then, do all the additional stuff for a list window */
-
+	// Then, do all the additional stuff for a list window
 	if (item != NULL) {
 		listitem = item_allocate(dialog, DD_I_LIST);
 
@@ -627,8 +636,7 @@ ItemPtr dialog_append_list(DialogPtr dialog, int x, int y, ItemPtr base_string,
 				list->picked_entry = -1;
 				list->thumb = -1;
 
-				/* Set items up to point at one another */
-
+				// Set items up to point at one another
 				listitem->status = item->id;
 				listitem->buf_id = listnum;
 
@@ -659,7 +667,7 @@ ItemPtr dialog_add_filename(DialogPtr dialog, int x, int y, const char *prompt,
 	char mypath2[80];
 	int mydrive;
 
-	dialog->status |= DD_FILEMENU; /* Note that we do in fact use files */
+	dialog->status |= DD_FILEMENU;  // Note that we do in fact use files
 
 	base_item = dialog->num_items;
 
@@ -783,8 +791,7 @@ void dialog_set_string_space(DialogPtr dialog, char *space, long size) {
 DialogPtr dialog_create(DialogPtr dialog, int ul_x, int ul_y, int width,
 	int normal_color, int select_color, int hilite_color) {
 
-	/* Allocate memory for dialog if necessary */
-
+	// Allocate memory for dialog if necessary
 	if (dialog == NULL) {
 		dialog = (DialogPtr)mem_get(sizeof(struct DialogBox));
 		dialog->status = DD_DYNAMIC;
@@ -938,12 +945,13 @@ void dialog_set_checkbox_callback(DialogPtr dialog, void (*(callback))()) {
 }
 
 /**
- *
  * Computes all necessary item coordinates and sizes => resolves
  * all "indefinite" coordinates (i.e. centered dialogs, etc) into
  * proper absolute screen coordinates (or dialog-relative coordinates)
  * in preparation for actually executing the dialog.
-*/
+ *
+ * @param dialog	Dialog
+ */
 static void dialog_compute_window(DialogPtr dialog) {
 	int height;
 	int count;
@@ -954,8 +962,7 @@ static void dialog_compute_window(DialogPtr dialog) {
 	ItemPtr item;
 	ListPtr list;
 
-	/* Find out if there's anything scheduled for the "button row" */
-
+	// Find out if there's anything scheduled for the "button row"
 	dialog->button_flag = false;
 	extra_height = 2;
 
@@ -966,7 +973,7 @@ static void dialog_compute_window(DialogPtr dialog) {
 		}
 	}
 
-	/* Figure out which checkbox items are in the same class as another */
+	// Figure out which checkbox items are in the same class as another
 	for (count = 0; count < dialog->num_items; count++) {
 		if (dialog->item[count].type == DD_I_CHECKBOX) {
 			for (count2 = 0; count2 < dialog->num_items; count2++) {
@@ -982,13 +989,11 @@ static void dialog_compute_window(DialogPtr dialog) {
 		}
 	}
 
-	/* Conform the dialog to the width of the button row, if necessary */
-
+	// Conform the dialog to the width of the button row, if necessary
 	button_width = (dialog->button_left + abs(dialog->button_right) + 1);
 	dialog->width = MAX<short>(dialog->width, button_width);
 
-	/* Center the dialog box, if requested */
-
+	// Center the dialog box, if requested
 	if (dialog->window.ul_x == DD_CENTER) {
 		center = screen_center_x ? screen_center_x : ((screen_max_x + 1) >> 1);
 		dialog->window.ul_x = (center - ((dialog->width + 3) >> 1));
@@ -1003,13 +1008,11 @@ static void dialog_compute_window(DialogPtr dialog) {
 		dialog->base_y = dialog->window.ul_y + 1;
 	}
 
-	/* Get the lower left dialog coordinates */
-
+	// Get the lower left dialog coordinates
 	dialog->window.lr_x = dialog->window.ul_x + dialog->width + 1;
 	dialog->window.lr_y = dialog->window.ul_y + height - 1;
 
-	/* Resolve any right-margin relative items and compute all list windows */
-
+	// Resolve any right-margin relative items and compute all list windows
 	for (count = 0; count < dialog->num_items; count++) {
 		item = &dialog->item[count];
 
@@ -1078,6 +1081,9 @@ char *dialog_read_filepath(DialogPtr dialog, ItemPtr item) {
 
 /**
  * Updates the status of a dialog box based on its status flag
+ *
+ * @param dialog	Dialog
+ * @param item	
  */
 static void dialog_update_checkbox(DialogPtr dialog, ItemPtr item) {
 	char temp1[2];
@@ -1105,6 +1111,9 @@ static void dialog_update_checkbox(DialogPtr dialog, ItemPtr item) {
 /**
  * Displays the specified dialog string item's buffer, highlighting
  * any selected text if the item is currently active.
+ *
+ * @param dialog	Dialog
+ * @param item		Item
  */
 static void dialog_update_string(DialogPtr dialog, ItemPtr item) {
 	int buf;
@@ -1124,8 +1133,7 @@ static void dialog_update_string(DialogPtr dialog, ItemPtr item) {
 	screenptr = screen + screen_char_add(cx, cy);
 	textptr = dialog->buffer[buf];
 
-	/* First, output as much of the string as we can */
-
+	// First, output as much of the string as we can
 	while ((*textptr != 0) && (out_count < item->buf_width)) {
 		*(screenptr++) = *(textptr++);
 		if (dialog->buf_select[buf] && (item->id == dialog->active_item) &&
@@ -1138,8 +1146,7 @@ static void dialog_update_string(DialogPtr dialog, ItemPtr item) {
 		out_count++;
 	}
 
-	/* Then, be sure the rest of the entry area is cleared */
-
+	// Then, be sure the rest of the entry area is cleared
 	while (out_count < item->buf_width) {
 		*(screenptr++) = 0x20;
 		if (dialog->buf_select[buf] &&
@@ -1157,6 +1164,9 @@ static void dialog_update_string(DialogPtr dialog, ItemPtr item) {
 
 /**
  * Updates the list window associated with an item.
+ *
+ * @param dialog	Dialog
+ * @param item		Item
  */
 static void dialog_update_window(DialogPtr dialog, ItemPtr item) {
 	int row, col;
@@ -1180,24 +1190,20 @@ static void dialog_update_window(DialogPtr dialog, ItemPtr item) {
 
 	list = &dialog->lists[item->buf_id];
 
-	/* Clear our old cursor off by wipe-ing the window in a single color */
-
+	// Clear our old cursor off by wipe-ing the window in a single color
 	window_color(&list->window, dialog->normal_color);
 
-	/* Now, go through the rows and columns one by one, displaying each entry */
-
+	// Now, go through the rows and columns one by one, displaying each entry
 	for (col = 0; col < list->columns; col++) {
 		for (row = 0; row < list->rows; row++) {
 			screenptr = screen + screen_char_add(list->base_x + (col * (list->entry_width + 1)),
 				list->base_y + row);
 			id = list->base_entry + row + (col * list->rows);
 
-			/* Point at the text for this entry */
-
+			// Point at the text for this entry
 			textptr = list->list + (id * list->element_offset);
 
-			/* Check if the cursor is on this item */
-
+			// Check if the cursor is on this item
 			if (id != list->picked_entry) {
 				my_color = dialog->normal_color;
 			} else {
@@ -1230,9 +1236,8 @@ static void dialog_update_window(DialogPtr dialog, ItemPtr item) {
 	}
 
 
-	/* Update the thumb mark in a scroll bar; routine is different */
-	/* depending on whether bar is vertical or horizontal          */
-
+	// Update the thumb mark in a scroll bar; routine is different
+	// depending on whether bar is vertical or horizontal
 	temp_pick = list->picked_entry;
 	if (temp_pick < 0) temp_pick = 0;
 
@@ -1293,6 +1298,10 @@ static void dialog_update_window(DialogPtr dialog, ItemPtr item) {
  * currently being picked by the mouse.  Otherwise, the angle
  * brackets are automatically highlighted if the button is the
  * active button.
+ *
+ * @param dialog	Dialog
+ * @param item		Button item
+ * @param selected	Selected flag
  */
 static void dialog_show_button(DialogPtr dialog, ItemPtr item, int selected) {
 	int angle_color, text_color, hi_color;
@@ -1329,6 +1338,9 @@ static void dialog_show_button(DialogPtr dialog, ItemPtr item, int selected) {
 /**
  * Outputs a dialog message string at the appropriate location
  * in the dialog box.
+ *
+ * @param dialog	Dialog
+ * @param item		Message string
  */
 static void dialog_show_message(DialogPtr dialog, ItemPtr item) {
 	mouse_hide();
@@ -1348,6 +1360,9 @@ static void dialog_show_message(DialogPtr dialog, ItemPtr item) {
  * Currently, the only kind of message that could change (and thus
  * need to be cleared) is the pathname for file items, which is
  * handled internally.
+ *
+ * @param dialog	Dialog
+ * @param item		Message item
  */
 static void dialog_clear_message(DialogPtr dialog, ItemPtr item) {
 	int cx, cy;
@@ -1368,6 +1383,9 @@ static void dialog_clear_message(DialogPtr dialog, ItemPtr item) {
 
 /**
  * Displays (and updates) a checkbox item
+ *
+ * @param dialog	Dialog
+ * @param item		Checkbox item
  */
 static void dialog_show_checkbox(DialogPtr dialog, ItemPtr item) {
 	int cx;
@@ -1402,6 +1420,9 @@ static void dialog_show_checkbox(DialogPtr dialog, ItemPtr item) {
 
 /**
  * Displays (and updates) a string item
+ *
+ * @param dialog	Dialog
+ * @param item		String item
  */
 static void dialog_show_string(DialogPtr dialog, ItemPtr item) {
 	int cx;
@@ -1421,6 +1442,9 @@ static void dialog_show_string(DialogPtr dialog, ItemPtr item) {
 
 /**
  * Displays (and updates) a list-based item (including file lists)
+ *
+ * @param dialog	Dialog
+ * @param item		List-based item
  */
 static void dialog_show_window(DialogPtr dialog, ItemPtr item) {
 	ListPtr list;
@@ -1451,6 +1475,9 @@ static void dialog_show_window(DialogPtr dialog, ItemPtr item) {
 /**
  * Displays the item whose handle is passed, no matter what type
  * of item it is (calls the appropriate one of the above routines)
+ *
+ * @param dialog	Dialog
+ * @param item		Item
  */
 static void dialog_show_any(DialogPtr dialog, ItemPtr item) {
 	switch (item->type) {
@@ -1522,6 +1549,10 @@ void dialog_show_all(DialogPtr dialog) {
 /**
  * Routine to update the item whose handle is passed to it, no matter
  * what type of item it is.
+ *
+ * @param dialog	Dialog
+ * @param item		Item
+ * @param mouse_button_flag		Mouse button flag
  */
 static void dialog_update_any(DialogPtr dialog, ItemPtr item, int mouse_button_flag) {
 	switch (item->type) {
@@ -1553,6 +1584,8 @@ static void dialog_update_any(DialogPtr dialog, ItemPtr item, int mouse_button_f
 /**
  * Moves the cursor to the active item, at the appropriate place
  * within that item (appropriate place depends on item type)
+ *
+ * @param dialog	Dialog
  */
 static void dialog_update_cursor(DialogPtr dialog) {
 	ListPtr list;
@@ -1603,14 +1636,15 @@ static void dialog_update_cursor(DialogPtr dialog) {
 /**
  * Routine to update & move the cursor to the active item, after
  * possibly changing the active item.
- *
- * displace = "displacement" by which to change the active item #.
- *            0 to leave active item unchanged.  Item #'s will loop
- *            around.
- *
  * If active item changes, then the old active item will be
  * updated also, to make sure its appearance conforms to its
  * new, inactive, status.
+ *
+ * @param dialog				Dialog
+ * @param displace				"Displacement" by which to change the active
+ * item #. 0 to leave active item unchanged.  Item #'s will loop around.
+ * @param mouse_button_flag		Mouse button flag
+ * @param out_of_class			Out of class flag
  */
 static void dialog_update_active(DialogPtr dialog, int displace, int mouse_button_flag, int out_of_class) {
 	int old_item;
@@ -1762,6 +1796,8 @@ done:
 /**
  * If a sub-string was being selected in the dialog box, cancel
  * that selection.
+ *
+ * @param dialog	Dialog
  */
 static void dialog_cancel_selection(DialogPtr dialog) {
 	ItemPtr item;
@@ -1782,6 +1818,8 @@ static void dialog_cancel_selection(DialogPtr dialog) {
 
 /**
  * If a substring was being selected in the dialog, erase that substring.
+ *
+ * @param dialog	Dialog
  */
 static void dialog_wipe_selection(DialogPtr dialog) {
 	ItemPtr item;
@@ -1825,6 +1863,9 @@ static void dialog_wipe_selection(DialogPtr dialog) {
 
 /**
  * Routine to move the cursor within a string item
+ *
+ * @param dialog	Dialog
+ * @param displace	Displacement amount
  */
 static void dialog_move_cursor(DialogPtr dialog, int displace) {
 	ItemPtr item;
@@ -1858,6 +1899,9 @@ static void dialog_move_cursor(DialogPtr dialog, int displace) {
 /**
  * Routine to insert a character into the active string item,
  * at the current cursor location.
+ *
+ * @param dialog	Dialog
+ * @param mykey		Character
  */
 static void dialog_string_insert(DialogPtr dialog, int mykey) {
 	ItemPtr item;
@@ -1915,6 +1959,8 @@ static void dialog_string_insert(DialogPtr dialog, int mykey) {
 /**
  * Routine to delete a character or selection from the active
  * string item, at the current cursor location.
+ *
+ * @param dialog	Dialog
  */
 static void dialog_string_delete(DialogPtr dialog) {
 	ItemPtr item;
@@ -1939,6 +1985,8 @@ static void dialog_string_delete(DialogPtr dialog) {
 /**
  * Routine to execute the "backspace key" function on the active
  * string item
+ *
+ * @param dialog	Dialog
  */
 static void dialog_string_backspace(DialogPtr dialog) {
 	ItemPtr item;
@@ -1975,6 +2023,10 @@ static void dialog_string_backspace(DialogPtr dialog) {
  * Routine to check if two strings are equivalent for at least
  * the entire length of the second, shorter, string.  Compare
  * is done without regard for case.
+ *
+ * @param big		Big string
+ * @param little	Substring
+ * @return Comparison result
  */
 static int dialog_quick_compare(const char *big, const char *little) {
 	int biglen, litlen;
@@ -2000,6 +2052,11 @@ static int dialog_quick_compare(const char *big, const char *little) {
 /**
  * Routine to find the item in a list window that most closely matches
  * a given string.
+ *
+ * @param dialog	Dialog
+ * @param item		Item
+ * @param checkstring	Matching string
+ * @return	Item index
  */
 static int dialog_quick_search(DialogPtr dialog, ItemPtr item, const char *checkstring) {
 	ListPtr list;
@@ -2029,6 +2086,9 @@ done:
  * extra text of the found entry is loaded to the right of the cursor
  * and is "selected" so that if the user types another letter key the
  * extraneous text will be automatically removed.
+ *
+ * @param dialog	Dialog
+ * @param item		Item
  */
 static void dialog_do_search(DialogPtr dialog, ItemPtr item) {
 	ItemPtr listitem;
@@ -2049,8 +2109,7 @@ static void dialog_do_search(DialogPtr dialog, ItemPtr item) {
 
 	match = dialog_quick_search(dialog, listitem, dialog->buffer[buf]);
 
-	/* Get an appropriate view of the window which will make our entry visible */
-
+	// Get an appropriate view of the window which will make our entry visible
 	if (match >= 0) {
 		if ((match >= list->base_entry) && (match < (list->base_entry + (list->rows * list->columns)))) {
 			list->picked_entry = match;
@@ -2090,9 +2149,8 @@ static void dialog_do_search(DialogPtr dialog, ItemPtr item) {
 
 		newlen = strlen(dialog->buffer[buf]);
 
-		/* Now, "case magic" attempts to conform the case of the searched-in */
-		/* string to the case format that the user is typing.                */
-
+		// Now, "case magic" attempts to conform the case of the searched-in
+		// string to the case format that the user is typing.
 		case_magic = false;
 
 		if (mylen > 0) {
@@ -2132,6 +2190,9 @@ static void dialog_do_search(DialogPtr dialog, ItemPtr item) {
 
 /**
  * Routine to change the directory of the filename window
+ *
+ * @param dialog	Dialog
+ * @param item		Item
  */
 static void dialog_set_new_directory(DialogPtr dialog, ItemPtr item) {
 	int buf;
@@ -2146,7 +2207,7 @@ static void dialog_set_new_directory(DialogPtr dialog, ItemPtr item) {
 	pathitem = dialog->path_item;
 #ifdef TODO
 	if (temp_buf[1] == ':') {
-		/* Change to a new drive, if requested */
+		// Change to a new drive, if requested
 		newdrive = ((int)temp_buf[0]) - 64;
 		mads_chdrive(newdrive);
 
@@ -2156,7 +2217,7 @@ static void dialog_set_new_directory(DialogPtr dialog, ItemPtr item) {
 		Common::strcpy_s(pathitem->prompt, 65536, temp_buf);
 
 	} else {
-		/* otherwise, change to a new directory */
+		// otherwise, change to a new directory
 		mads_chdir(temp_buf);
 
 		dialog_clear_message(dialog, pathitem);
@@ -2169,8 +2230,7 @@ static void dialog_set_new_directory(DialogPtr dialog, ItemPtr item) {
 		}
 	}
 
-	/* Load a wildcard into the entry area */
-
+	// Load a wildcard into the entry area
 	if ((strchr(dialog->buffer[buf], '*') == NULL) &&
 		(strchr(dialog->buffer[buf], '?') == NULL)) {
 		Common::strcpy_s(dialog->buffer[buf], "*.*");
@@ -2180,8 +2240,7 @@ static void dialog_set_new_directory(DialogPtr dialog, ItemPtr item) {
 		dialog->buf_seltarget[buf] = 3;
 	}
 
-	/* Load up the new directory and display */
-
+	// Load up the new directory and display
 	dialog_load_directory(dialog, baseitem);
 	dialog_show_any(dialog, pathitem);
 	dialog_update_any(dialog, baseitem, false);
@@ -2196,6 +2255,10 @@ static void dialog_set_new_directory(DialogPtr dialog, ItemPtr item) {
 /**
  * Routine to handle scrolling around in a list window.  Used to
  * drive both mouse and cursor scroll routines.
+ *
+ * @param dialog	Dialog
+ * @param item		Item
+ * @param direction	Scroll direction
  */
 static void dialog_scroll_list(DialogPtr dialog, ItemPtr item, int direction) {
 	int my_dif, my_col, my_row;
@@ -2331,6 +2394,10 @@ static void dialog_scroll_list(DialogPtr dialog, ItemPtr item, int direction) {
 
 /**
  * Routine to allow keyboard scrolling within a list window
+ *
+ * @param dialog	Dialog
+ * @param item		Item
+ * @param mykey		Scrolling character
  */
 static void dialog_key_exec_list(DialogPtr dialog, ItemPtr item, int mykey) {
 	ItemPtr baseitem;
@@ -2387,6 +2454,10 @@ static void dialog_key_exec_list(DialogPtr dialog, ItemPtr item, int mykey) {
 
 /**
  * Returns true if the mouse is in the specified item.
+ *
+ * @param dialog	Dialog
+ * @param count		Item index
+ * @return True if mouse is within the item
  */
 static int in_item(DialogPtr dialog, int count) {
 	ItemPtr item;
@@ -2446,6 +2517,10 @@ static int in_item(DialogPtr dialog, int count) {
 /**
  * If the mouse has been pressed within a scroll bar area, returns
  * the proper type of action to be taken.
+ *
+ * @param list		Listbox
+ * @param button	Button number
+ * @return	Action to be taken
  */
 static int in_scroll_box(ListPtr list, int button) {
 	int result;
@@ -2496,6 +2571,9 @@ static int in_scroll_box(ListPtr list, int button) {
 
 /**
  * Routine to handle selection of a substring with the mouse
+ *
+ * @param dialog	Dialog
+ * @param item		String item
  */
 static void dialog_exec_mouse_string(DialogPtr dialog, ItemPtr item) {
 	int buf;
@@ -2525,6 +2603,9 @@ static void dialog_exec_mouse_string(DialogPtr dialog, ItemPtr item) {
 /**
  * Routine to deal with the mouse when it is doing something
  * in a list window (clicking, double-clicking, or dragging).
+ *
+ * @param dialog	Dialog
+ * @param item		Item
  */
 static void dialog_exec_mouse_list(DialogPtr dialog, ItemPtr item) {
 	ListPtr list;
@@ -2549,8 +2630,7 @@ static void dialog_exec_mouse_list(DialogPtr dialog, ItemPtr item) {
 	} else {
 		looking = true;
 
-		/* Find out which list entry is being picked */
-
+		// Find out which list entry is being picked
 		for (col = 0; (col < list->columns) && (looking); col++) {
 			for (row = 0; (row < list->rows) && (looking); row++) {
 				look_x = list->base_x + ((list->entry_width + 1) * col);
@@ -2575,8 +2655,7 @@ static void dialog_exec_mouse_list(DialogPtr dialog, ItemPtr item) {
 
 					abort = false;
 
-					/* Handle double-click if any */
-
+					// Handle double-click if any
 					if (mouse_start_stroke && (old_pick == list->picked_entry)) {
 						if ((long)timer_read_dos() <= mouse_list_timing + MOUSE_DOUBLE_TIMING) {
 							if (item->type == DD_I_DIRSLIST) {
@@ -2602,8 +2681,7 @@ static void dialog_exec_mouse_list(DialogPtr dialog, ItemPtr item) {
 			}
 		}
 
-		/* Handle click-and-drag */
-
+		// Handle click-and-drag
 		if (looking && (mouse_start_stroke || ((long)timer_read_dos() >= mouse_drag_timing))) {
 			mouse_override = true;
 			mouse_drag_timing = (long)timer_read_dos() + MOUSE_TIMING_TWO;
@@ -2634,6 +2712,9 @@ static void dialog_exec_mouse_list(DialogPtr dialog, ItemPtr item) {
  * Deals with the mouse when it is in a scroll bar.  Calls
  * dialog_scroll_list () for most functions, but handles click-and-drag
  * on the thumb mark itself.
+ *
+ * @param dialog	Dialog
+ * @param item		Item
  */
 static void dialog_exec_mouse_scroll(DialogPtr dialog, ItemPtr item) {
 	ListPtr list;
@@ -2723,6 +2804,8 @@ void dialog_set_stroke_type(DialogPtr dialog, int type, int toggle) {
  * Called whenever a mouse stroke is detected; loops until the
  * mouse button is released.  Performs whatever actions are necessary
  * to execute the mouse function.
+ *
+ * @param dialog	Dialog
  */
 static void dialog_exec_mouse(DialogPtr dialog) {
 	int count, count2;
@@ -2734,7 +2817,7 @@ static void dialog_exec_mouse(DialogPtr dialog) {
 
 	mouse_init_cycle();
 
-	mouse_stroke_going = false;   /* (so that "start stroke" will be true) */
+	mouse_stroke_going = false;  // (so that "start stroke" will be true)
 
 	mouse_stroke_type = DD_MC_NONE;
 	mouse_override = false;
@@ -3220,7 +3303,6 @@ ItemPtr dialog_execute(DialogPtr dialog, ItemPtr active_item, ItemPtr default_bu
 	return item;
 }
 
-
 char *dialog_select_file(const char *prompt, const char *path, const char *filespec, char *output) {
 	DialogPtr dialog;
 	ItemPtr ok, first_item, result;
@@ -3266,7 +3348,7 @@ char *dialog_enter_string(char *reply, const char *top_prompt, const char *left_
 	ItemPtr string, ok, cancel, result;
 
 	if (strlen(my_default) > (size_t)maxlen)
-		my_default[maxlen - 1] = 0;         /* Trim default */
+		my_default[maxlen - 1] = 0;  // Trim default
 
 	if (left_prompt == NULL)
 		Common::strcpy_s(work, "~Reply: ");

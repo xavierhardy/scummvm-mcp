@@ -27,13 +27,10 @@
 namespace MADS {
 namespace MADSV2 {
 
-/* sort_1.cpp */
 extern void sort_insertion(int elements, int *id, long *value);
 
-/* sort_2.cpp */
 extern void sort_insertion_16(int elements, byte *id, word *value);
 
-/* sort_3.cpp */
 extern void sort_insertion_8(int elements, byte *id, byte *value);
 
 } // namespace MADSV2

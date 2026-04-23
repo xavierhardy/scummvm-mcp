@@ -37,6 +37,16 @@ namespace MADSV2 {
 #define CMP_ABORT              4
 
 
+/*
+ * Public API: pFABcomp
+ *
+ * @param read_buff	
+ * @param write_buff	
+ * @param work_buff	
+ * @param type	
+ * @param dsize	
+ * @return 
+ */
 extern word pFABcomp(
 	word (*read_buff)(char *buffer, word *size),
 	word (*write_buff)(char *buffer, word *size),
@@ -54,6 +64,19 @@ extern word pFABexp1(
 	char *write_buf,
 	char *work_buff);
 
+/*
+ * pFABexp2  --  memory-to-memory decompressor  (PFABEXP2.ASM)
+ * read_buf  points to compressed data.
+ * write_buf points to destination buffer (must be large enough).
+ * work_buff must be at least 4 bytes (for the output length result),
+ * or NULL to query required size.
+ * Returns 0 on success.  Decompressed byte count stored at work_buff[0..3].
+ *
+ * @param read_buf	
+ * @param write_buf	
+ * @param work_buff	
+ * @return 
+ */
 extern word pFABexp2(
 	byte *read_buf,
 	byte *write_buf,

@@ -236,9 +236,7 @@ static int scan_past(const char **myscan, char scan) {
 
 void flag_parse(const char **myscan) {
 	long mem_max;
-	/* long mem_avail; */
-
-
+	// long mem_avail;
 	if (kernel.cheating == (byte)kernel_cheating_forbidden) {
 		if (scumm_stricmp(*myscan, kernel_cheating_password) == 0) {
 			kernel.cheating = (byte)kernel_cheating_allowed;
@@ -256,22 +254,19 @@ void flag_parse(const char **myscan) {
 		}
 		break;
 
-		/*
-		case 'A':
-		  if (scan_past(myscan, ':')) {
-		   abort_value = atoi(*myscan);
-		   scan_past(myscan, 0);
-		  }
-		  break;
-		*/
-
+		// case 'A':
+		// if (scan_past(myscan, ':')) {
+		// abort_value = atoi(*myscan);
+		// scan_past(myscan, 0);
+		// }
+		// break;
 	case 'C':
 		if (scan_past(myscan, ':')) {
 			kernel.sound_card = **myscan;
 			if (scan_past(myscan, ',')) {
-				/* pl sound_board_address = xtoi(*myscan); */
+				// pl sound_board_address = xtoi(*myscan);
 				if (scan_past(myscan, ',')) {
-					/* pl sound_board_type  = xtoi(*myscan); */
+					// pl sound_board_type  = xtoi(*myscan);
 					scan_past(myscan, 0);
 				}
 			}
@@ -320,8 +315,8 @@ void flag_parse(const char **myscan) {
 
 	case 'K':
 		inter_report_hotspots = true;
-		/* config_file.interface_hotspots = INTERFACE_BRAINDEAD; */
-		/* inter_report_hotspots = !inter_report_hotspots;       */
+		// config_file.interface_hotspots = INTERFACE_BRAINDEAD;
+		// inter_report_hotspots = !inter_report_hotspots;
 		break;
 
 	case 'L':
@@ -334,19 +329,17 @@ void flag_parse(const char **myscan) {
 		if (scan_past(myscan, ':')) {
 			mem_max = atol(*myscan);
 			mem_get_name(mem_max, "$HIDE$");
-			/*
-			mem_avail = mem_get_avail() - mem_program_block();
-			if (mem_avail > mem_max) {
-			  mem_get_name(mem_avail - mem_max, "$HIDE$");
-			}
-			*/
+			// mem_avail = mem_get_avail() - mem_program_block();
+			// if (mem_avail > mem_max) {
+			// mem_get_name(mem_avail - mem_max, "$HIDE$");
+			// }
 			scan_past(myscan, 0);
 		}
 		break;
 
 	case 'O':
-		/* config_file.inventory_mode = INVENTORY_SQUAT; */
-		/* inter_spinning_objects = false;               */
+		// config_file.inventory_mode = INVENTORY_SQUAT;
+		// inter_spinning_objects = false;
 		break;
 
 	case 'P':
@@ -392,7 +385,7 @@ void flag_parse(const char **myscan) {
 		break;
 
 	case 'Y':
-		/* *lock_hash_value = 0; */
+		// lock_hash_value = 0;
 		break;
 
 	case 'Z':
@@ -450,8 +443,8 @@ void show_version() {
 	echo(global_release_copyright, false);
 	echo(" by Sanctuary Woods Multimedia Corp.", true);
 	echo(" ", true);
-	/* echo ("  FOR INTERNAL USE ONLY", true); */
-	/* echo (" ", true); */
+	// echo ("  FOR INTERNAL USE ONLY", true);
+	// echo (" ", true);
 }
 
 
@@ -538,10 +531,10 @@ static void game_player_status() {
 	popup_alert(20, "PLAYER GRAPHICS STATUS",
 		"  ",
 		temp_buf_3,
-		/* temp_buf, */
-		/* temp_buf_2, */
-		/* temp_buf_4, */
-		/* temp_buf_5, */
+		// temp_buf,
+		// temp_buf_2,
+		// temp_buf_4,
+		// temp_buf_5,
 		NULL);
 }
 
@@ -574,10 +567,10 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case ctrl_d_key:
-			/* temp = game.difficulty; */
-			/* if (!popup_get_number (&temp, "CHANGE DIFFICULTY FACTOR", "New Factor:", 3)) { */
-			  /* game.difficulty = (byte)temp; */
-			/* } */
+			// temp = game.difficulty;
+			// if (!popup_get_number (&temp, "CHANGE DIFFICULTY FACTOR", "New Factor:", 3)) {
+			  // game.difficulty = (byte)temp;
+			// }
 			break;
 
 		case ctrl_e_key:
@@ -633,7 +626,7 @@ int game_parse_keystroke(int mykey) {
 					move_target = object[move_object].location;
 					popup_get_number(&move_target, "MOVE OBJ TO", "Loc:", 3);
 					inter_move_object(move_object, move_target);
-					/* kernel.force_restart = true; */
+					// kernel.force_restart = true;
 				}
 			}
 			break;
@@ -647,26 +640,23 @@ int game_parse_keystroke(int mykey) {
 			game_set_camera_speed();
 			switch (kernel_panning_speed) {
 			case PANNING_INSTANT:
-				/* popup_alert (22, "Pan INS", NULL); */
+				// popup_alert (22, "Pan INS", NULL);
 				break;
 
 			case PANNING_MEDIUM:
-				/* popup_alert (22, "Pan MEDIUM.", NULL); */
+				// popup_alert (22, "Pan MEDIUM.", NULL);
 				break;
 
 			case PANNING_SMOOTH:
 			default:
-				/* popup_alert (22, "Panning = SMOOTH.", NULL); */
+				// popup_alert (22, "Panning = SMOOTH.", NULL);
 				break;
 			}
 			break;
 
-			/*
-			case ctrl_r_key:
-			 box_param.font_spacing = 1 - box_param.font_spacing;
-			 break;
-			*/
-
+			// case ctrl_r_key:
+			// box_param.font_spacing = 1 - box_param.font_spacing;
+			// break;
 		case ctrl_t_key:
 			popup_get_number(&new_room, "TELEPORT", "New Room:", 3);
 			kernel.teleported_in = (byte)(mykey == ctrl_t_key);
@@ -687,10 +677,10 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case ctrl_w_key:
-			/* popup_get_string (player.series_name, "WALKER SERIES", "Series:", 8); */
-			/* player.force_series = (byte)strlen(player.series_name); */
-			/* if (!scumm_stricmp(player.series_name, "NULL")) player.series_name[0] = 0; */
-			/* kernel.force_restart = true; */
+			// popup_get_string (player.series_name, "WALKER SERIES", "Series:", 8);
+			// player.force_series = (byte)strlen(player.series_name);
+			// if (!scumm_stricmp(player.series_name, "NULL")) player.series_name[0] = 0;
+			// kernel.force_restart = true;
 			break;
 
 		case ctrl_z_key:
@@ -698,9 +688,9 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case alt_b_key:
-			/* if (!popup_get_string (box_param.name, "POPUP BOX SERIES", "Series:", 16)) { */
-			  /* kernel.force_restart = true; */
-			/* } */
+			// if (!popup_get_string (box_param.name, "POPUP BOX SERIES", "Series:", 16)) {
+			  // kernel.force_restart = true;
+			// }
 			break;
 
 		case ctrl_y_key:
@@ -790,23 +780,23 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case alt_a_key:
-			/*       if (debugger_watch < DEBUGGER_MAX_WATCH) {
-					 temp = -1;
-					 if (debugger_watch > 0) temp = debugger_watch_index[debugger_watch - 1];
-					 if (!popup_get_number (&temp, "ADD GLOBAL WATCH", "Variable #:", 3)) {
-					   if ((temp >= 0) && (temp < 500)) {
-						 for (count = 0; count < debugger_watch; count++) {
-						   if (debugger_watch_index[count] == temp) {
-							 temp = -1;
-						   }
-						 }
-
-						 if (temp > 0) {
-						   debugger_watch_index[debugger_watch++] = temp;
-						 }
-					   }
-					 }
-				   } */
+			//       if (debugger_watch < DEBUGGER_MAX_WATCH) {
+			// temp = -1;
+			// if (debugger_watch > 0) temp = debugger_watch_index[debugger_watch - 1];
+			// if (!popup_get_number (&temp, "ADD GLOBAL WATCH", "Variable #:", 3)) {
+			// if ((temp >= 0) && (temp < 500)) {
+			// for (count = 0; count < debugger_watch; count++) {
+			// if (debugger_watch_index[count] == temp) {
+			// temp = -1;
+			// }
+			// }
+			//
+			// if (temp > 0) {
+			// debugger_watch_index[debugger_watch++] = temp;
+			// }
+			// }
+			// }
+			// }
 			break;
 
 		case alt_e_key:
@@ -861,13 +851,13 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case alt_w_key:
-			/* player.walk_freedom  = !player.walk_freedom; */
-			/* player.walk_anywhere = player.walk_freedom; */
-			/* if (player.walk_freedom) { */
-			  /* popup_alert (26, "Player walks anywhere.", NULL); */
-			/* } else { */
-			  /* popup_alert (26, "Player walk restricted.", NULL); */
-			/* } */
+			// player.walk_freedom  = !player.walk_freedom;
+			// player.walk_anywhere = player.walk_freedom;
+			// if (player.walk_freedom) {
+			  // popup_alert (26, "Player walks anywhere.", NULL);
+			// } else {
+			  // popup_alert (26, "Player walk restricted.", NULL);
+			// }
 			break;
 
 		case alt_v_key:
@@ -909,7 +899,7 @@ int game_parse_keystroke(int mykey) {
 				Common::strcat_s(temp_buf_2, temp_buf);
 				Common::strcat_s(temp_buf_2, ".rac");
 
-				/* if exist RAC file */
+				// if exist RAC file
 				if (env_exist(temp_buf_2)) {
 					digi_play(temp_buf, 1);
 					digi_trigger_dialog = false;
@@ -919,7 +909,7 @@ int game_parse_keystroke(int mykey) {
 					Common::strcat_s(temp_buf_2, temp_buf);
 					Common::strcat_s(temp_buf_2, ".raw");
 
-					/* if exist RAW */
+					// if exist RAW
 					if (env_exist(temp_buf_2)) {
 						digi_play(temp_buf, 1);
 						digi_trigger_dialog = false;
@@ -1050,7 +1040,7 @@ int game_parse_keystroke(int mykey) {
 
 	switch (mykey) {
 	case space_key:
-		global[3] = true; /* player_hyperwalked */
+		global[3] = true;  // player_hyperwalked
 		if (!kernel.paused) {
 			if (player.walking && (new_room == room_id) && (player.walk_off_edge == 0)) {
 				if (!kernel.disable_fastwalk || (kernel.cheating == (byte)kernel_cheating_allowed)) {
@@ -1094,7 +1084,7 @@ int game_parse_keystroke(int mykey) {
 		break;
 
 	case f4_key:
-		/* kernel.activate_menu = GAME_SCORE_MENU; */
+		// kernel.activate_menu = GAME_SCORE_MENU;
 		break;
 
 	case f5_key:
@@ -1128,7 +1118,7 @@ int game_parse_keystroke(int mykey) {
 
 	case ctrl_k_key:
 		inter_report_hotspots = !inter_report_hotspots;
-		/* config_file.interface_hotspots = inter_report_hotspots ? INTERFACE_BRAINDEAD : INTERFACE_MACINTOSH; */
+		// config_file.interface_hotspots = inter_report_hotspots ? INTERFACE_BRAINDEAD : INTERFACE_MACINTOSH;
 		inter_init_sentence();
 		break;
 
@@ -1150,19 +1140,18 @@ int game_parse_keystroke(int mykey) {
 			NULL);
 		break;
 
-		/* case I_key: */
-		/* case B_key: */
-		/* case i_key: */
-		/* case b_key: */
-		  /* if (room_id != 199 && section_id != 9 && */
-			  /* player.commands_allowed && */
-			  /* !kernel.trigger && */
-			  /* inter_input_mode == INTER_LIMITED_SENTENCES && */
-	/*          !global[2]) {*/  /* inventory_is_displayed */
-			/* display_inventory(); */
-		  /* } */
-		  /* break; */
-
+		// case I_key:
+		// case B_key:
+		// case i_key:
+		// case b_key:
+		  // if (room_id != 199 && section_id != 9 &&
+			  // player.commands_allowed &&
+			  // !kernel.trigger &&
+			  // inter_input_mode == INTER_LIMITED_SENTENCES &&
+	//          !global[2]) {*/  /* inventory_is_displayed
+			// display_inventory();
+		  // }
+		  // break;
 	case 0:
 		break;
 
@@ -1212,11 +1201,6 @@ void game_pause_mode() {
 
 
 
-/*
-/*      game_error_service ()
-/*
-/*      Handle fatal error situations
-*/
 void game_error_service() {
 	if (inter_spinning_objects || inter_animation_running) {
 		if (mem_last_alloc_failed) {
@@ -1254,21 +1238,12 @@ void game_set_camera_speed() {
 	}
 }
 
-/*
-/*      game_control()
-/*
-/*      This is the main outer control structure for the game, that
-/*      determines which section and room level information should be
-/*      loaded into and out of memory.
-*/
-
 void game_control() {
 	int count, color;
 	int result = COPY_SUCCEED;
 	bool aborted_conv = true;
 
-	/* Start up game level functions */
-
+	// Start up game level functions
 	error_service_routine_2 = game_error_service;
 
 	if (game_mouse_cursor_fix) {
@@ -1292,9 +1267,9 @@ void game_control() {
 			game.going = false;
 			force_chain = true;
 			game_restore_flag = false;
-			/* new_room    = 804;                  */
-			/* global_init_code();                 */
-			/* global[copy_protect_failed] = true; */
+			// new_room    = 804;
+			// global_init_code();
+			// global[copy_protect_failed] = true;
 			error_report(ERROR_COPY_PROTECTION, SEVERE, MODULE_LOCK, 0, 0);
 		} else if (result == COPY_ESCAPE) {
 			game.going = false;
@@ -1309,9 +1284,9 @@ void game_control() {
 	}
 
 	if (!game_restore_flag && (result != COPY_FAIL) && (result != COPY_ESCAPE)) {
-		/* Get difficulty level if new game */
+		// Get difficulty level if new game
 		if (!kernel.teleported_in && (game.difficulty == -1)) {
-			/* Difficulty menu */
+			// Difficulty menu
 			if (g_engine->getGameID() == GType_Phantom)
 				kernel.activate_menu = GAME_DIFFICULTY_MENU;
 			game_exec_function(game_menu_routine);
@@ -1350,14 +1325,12 @@ void game_control() {
 		}
 	}
 
-	/* Game level control loop */
-
+	// Game level control loop
 	int_sprite[fx_int_journal] = -1;
 
 	while (game.going) {
 
-		/* Start up next section */
-
+		// Start up next section
 		kernel_mode = KERNEL_SECTION_PRELOAD;
 
 		global_sound_driver();
@@ -1369,7 +1342,7 @@ void game_control() {
 
 		game.going = (byte)!kernel_section_startup(new_section);
 
-		/* Load sound driver */
+		// Load sound driver
 		kernel_load_sound_driver(kernel.sound_driver, kernel.sound_card, sound_board_address, sound_board_type, sound_board_irq);
 
 		kernel_mode = KERNEL_SECTION_INIT;
@@ -1379,12 +1352,10 @@ void game_control() {
 		matte_init(true);
 
 
-		/* Section level control loop */
-
+		// Section level control loop
 		while ((new_section == section_id) && game.going) {
 
-			/* Load up next room */
-
+			// Load up next room
 			kernel_mode = KERNEL_ROOM_PRELOAD;
 
 			// Return of the Phantom has this hardcoded true, due to text cutscenes like
@@ -1393,8 +1364,7 @@ void game_control() {
 				!player.walker_is_loaded);
 
 			quote_emergency = false;
-			/* vocab_emergency = false; */
-
+			// vocab_emergency = false;
 			game_wait_cursor();
 
 #ifdef demo
@@ -1403,7 +1373,7 @@ void game_control() {
 
 			kernel.quotes = NULL;
 
-			/* vocab_init_active(); */
+			// vocab_init_active();
 			kernel_init_dynamic();
 
 			game_exec_function(section_room_constructor);
@@ -1417,8 +1387,7 @@ void game_control() {
 
 			player_discover_room(new_room);
 
-			/* Reset interface mode */
-
+			// Reset interface mode
 			inter_input_mode = INTER_BUILDING_SENTENCES;
 			inter_force_rescan = true;
 
@@ -1494,8 +1463,7 @@ void game_control() {
 			for (count = 0; count < master_shadow->num_shadow_colors; count++) {
 				color = PAL_FORCE_SHADOW + count;
 				color_status[color] = 0;
-				/* error_watch_point ("color_status", count, 0); */
-
+				// error_watch_point ("color_status", count, 0);
 			}
 
 
@@ -1507,20 +1475,18 @@ void game_control() {
 
 			sound_queue_hold();
 
-			/* Load current player walker set */
-
+			// Load current player walker set
 			if (!player.walker_is_loaded) {
 				game.going |= !player_load_series(NULL);
 				player.walker_loaded_first = false;
 			}
 
-			/* Set up control structures for new room */
-
+			// Set up control structures for new room
 			mouse_init_cycle();
 
-			left_command = -1;          /* Left mouse main verb       */
-			left_inven = -1;          /* Left mouse inventory       */
-			left_action = -1;          /* Left mouse secondary verb  */
+			left_command = -1;  // Left mouse main verb
+			left_inven = -1;  // Left mouse inventory
+			left_action = -1;  // Left mouse secondary verb
 
 			inter_init_sentence();
 
@@ -1531,16 +1497,15 @@ void game_control() {
 
 			kernel_mode = KERNEL_ROOM_INIT;
 
-			/* Use a graphics fade in for room transition */
-
+			// Use a graphics fade in for room transition
 			if (kernel_screen_fade == SCREEN_FADE_SMOOTH) {
-				/* kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW; */
+				// kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW;
 				kernel.fx = MATTE_FX_FADE_THRU_BLACK;
 			} else if (kernel_screen_fade == SCREEN_FADE_FAST) {
-				/* kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW; */
+				// kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW;
 				kernel.fx = MATTE_FX_FAST_THRU_BLACK;
 			} else {
-				/* kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW; */
+				// kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW;
 				kernel.fx = MATTE_FX_FAST_AND_FANCY;
 			}
 
@@ -1565,16 +1530,16 @@ void game_control() {
 
 			game_exec_function(room_init_code_pointer);
 #if 0
-			/* paul - oh no! magic numbers! */
+			// paul - oh no! magic numbers!
 			stamp_sprite_to_interface(BP_X, BP_Y, 1, int_sprite[fx_int_backpack]);
-			if (global[5]) { /* candle_is_on */
+			if (global[5]) {  // candle_is_on
 				stamp_sprite_to_interface(CANDLE_X, CANDLE_Y, 1, int_sprite[fx_int_candle_on]);
 			} else {
 				stamp_sprite_to_interface(CANDLE_X, CANDLE_Y, 1, int_sprite[fx_int_candle]);
 			}
 			stamp_sprite_to_interface(DOOR_X, DOOR_Y, 1, int_sprite[fx_int_exit]);
 
-			if (room_id != 199) {   /* Taranjeet, if this is not journal room */
+			if (room_id != 199) {  // Taranjeet, if this is not journal room
 				stamp_sprite_to_interface(JOURNAL_X, JOURNAL_Y, 1, int_sprite[fx_int_journal]);
 			}
 #endif
@@ -1584,8 +1549,7 @@ void game_control() {
 				buffer_rect_fill(scr_main, 0, viewing_at_y + scr_work.y, video_x, video_y, 0);
 			}
 
-			/* pl conv_restore_running = -1; */
-
+			// pl conv_restore_running = -1;
 			player.target_x = player.x;
 			player.target_y = player.y;
 			player.target_facing = player.turn_to_facing = player.facing;
@@ -1596,8 +1560,7 @@ void game_control() {
 
 			player.special_code = attr_special(&scr_special, player.x, player.y);
 
-			/* Reset player clock to make sure walker appears in first frame */
-
+			// Reset player clock to make sure walker appears in first frame
 			player.clock = kernel.clock;
 			player_stationary_update();
 
@@ -1607,12 +1570,10 @@ void game_control() {
 				inter_turn_off_object();
 			}
 
-			/* Just in case something goes horribly wrong. */
-
+			// Just in case something goes horribly wrong.
 			error_service_routine = game_emergency_save;
 
-			/* Call main loop as long as player remains in same room */
-
+			// Call main loop as long as player remains in same room
 			kernel_mode = KERNEL_ACTIVE_CODE;
 
 			kernel.teleported_in = false;
@@ -1629,12 +1590,9 @@ void game_control() {
 
 			game_control_loop();
 
-			/* ********************************************************************************************** */
-
-													   /* LEAVE ROOM */
-
-			/* ********************************************************************************************** */
-
+			// **********************************************************************************************
+													   // LEAVE ROOM
+			// **********************************************************************************************
 			if (speech_system_active && speech_on)
 				   speech_all_off();
 
@@ -1647,8 +1605,7 @@ emergency:
 				aborted_conv = conv_control.running;
 			conv_abort();
 
-			/* Shutdown the current room structures */
-
+			// Shutdown the current room structures
 			if (kernel.quotes != NULL)
 				mem_free(kernel.quotes);
 
@@ -1672,8 +1629,7 @@ emergency:
 
 			new_section = new_room / 100;
 
-			/* Flush all EMS/XMS preloads at the room level */
-
+			// Flush all EMS/XMS preloads at the room level
 			himem_flush(ROOM);
 
 			if (!game.going && !win_status) {
@@ -1709,47 +1665,36 @@ emergency:
 
 		game_wait_cursor();
 
-		/* pl kernel_unload_sound_driver(); */
-
-		/* Shut down current section */
-
+		// pl kernel_unload_sound_driver();
+		// Shut down current section
 		kernel_section_shutdown();
 
-		/* Flush all EMS/XMS preloads at the section level */
-
+		// Flush all EMS/XMS preloads at the section level
 		himem_flush(SECTION);
 	}
 
-	/* Shut down the game */
-
+	// Shut down the game
 	game_exec_function(game_menu_exit);
 
 	kernel_game_shutdown();
 
-	/* pl conv_system_cleanup(); */
-
+	// pl conv_system_cleanup();
 	mcga_reset();
 }
 
-
-/*
-/*      Execute a function-pointer routine.
-*/
 void game_exec_function(void (*(target))()) {
 	if (target)
 		target();
 }
 
-/*
-/*      game_system_maintenance()
-/*
-/*      Perform any system maintenance for this frame.  Mostly involves
-/*      reading the keyboard.
-*/
+/**
+ * Perform any system maintenance for this frame.  Mostly involves
+ * reading the keyboard.
+ */
 static void game_system_maintenance() {
 	int unparsed_key = false;
 
-	global[3] = false; /* player_hyperwalked */
+	global[3] = false;  // player_hyperwalked
 
 	if (keys_any()) {
 		game_any_keystroke = true;
@@ -1761,7 +1706,7 @@ static void game_system_maintenance() {
 
 	if (section_id != 9 && room_id != 199) {
 		if (((mouse_status & 3) == 3) && player.commands_allowed) {
-			/* kernel.force_restart = true; */
+			// kernel.force_restart = true;
 			kernel.activate_menu = GAME_MAIN_MENU;
 			inter_init_sentence();
 			inter_sentence_ready = false;
@@ -1786,8 +1731,7 @@ void do_interface_for_ouaf() {
 		inter_input_mode == INTER_LIMITED_SENTENCES &&
 		!global[2]  /* inventory_is_displayed */
 		/* pl conv_control.running < 0 */) {
-
-		if (room_id == 199) {  /* Taranjeet's Journal */
+		if (room_id == 199) {  // Taranjeet's Journal
 
 			leave_journal();
 
@@ -1810,18 +1754,16 @@ void do_interface_for_ouaf() {
 }
 
 
-/*
-/*      game_daemon_code()
-/*
-/*      Calls, in proper order, all daemon code for this framing round.
-*/
+/**
+ * Calls, in proper order, all daemon code for this framing round.
+ */
 static void game_daemon_code() {
 #if 0
-	global[4] = -1; /* turn off global[player_selected_object] */
+	global[4] = -1;  // turn off global[player_selected_object]
 
 	digi_read_another_chunk();
 
-	if (global[9]) midi_loop();  /* please loop the damn music */
+	if (global[9]) midi_loop();  // please loop the damn music
 
 	if (section_id != 9) {
 		do_interface_for_ouaf();
@@ -1841,34 +1783,29 @@ static void game_daemon_code() {
 }
 
 
-/*
-/*      game_handle_preparse()
-/*
-/*      Handles incoming player commands BEFORE any walk action can take
-/*      place.  Player walk for the command can be postponed by setting
-/*      player.ready_to_walk to false, and then returning it to true when
-/*      ready for the walk to begin (additional player commands are auto-
-/*      matically disabled during the interim period).  Player walk for
-/*      the command can be cancelled permanently by setting the value of
-/*      player.need_to_walk to false.
-*/
+/**
+ * Handles incoming player commands BEFORE any walk action can take
+ * place.  Player walk for the command can be postponed by setting
+ * player.ready_to_walk to false, and then returning it to true when
+ * ready for the walk to begin (additional player commands are auto-
+ * matically disabled during the interim period).  Player walk for
+ * the command can be cancelled permanently by setting the value of
+ * player.need_to_walk to false.
+ */
 static void game_handle_preparse() {
-	/* if (global[4] >= 0 || global[5]) player.command_ready = true; */
-	/* if (global[4] >= 0 || global[5]) player.command_error = false; */
-
-	/* if (global[4] >= 0 ) player.command_ready = true; */
-	/* if (global[4] >= 0 ) player.command_error = false; */
-
+	// if (global[4] >= 0 || global[5]) player.command_ready = true;
+	// if (global[4] >= 0 || global[5]) player.command_error = false;
+	// if (global[4] >= 0 ) player.command_ready = true;
+	// if (global[4] >= 0 ) player.command_error = false;
 	if ((inter_input_mode == INTER_BUILDING_SENTENCES) ||
 		(inter_input_mode == INTER_LIMITED_SENTENCES)) {
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_PREPARSE;
 
-		/* if (global[4] >= 0) { */
-		  /* player_verb = -1; */
-		  /* player_main_noun = -1; */
-		  /* player_second_noun = -1; */
-		/* } */
-
+		// if (global[4] >= 0) {
+		  // player_verb = -1;
+		  // player_main_noun = -1;
+		  // player_second_noun = -1;
+		// }
 		global_pre_parser_code();
 		game_exec_function(section_pre_parser_code_pointer);
 		game_exec_function(room_pre_parser_code_pointer);
@@ -1881,12 +1818,10 @@ static void game_handle_preparse() {
 
 
 
-/*
-/*      game_handle_command()
-/*
-/*      Handles incoming player commands -- they are filtered down through
-/*      various levels of parser code and error code.
-*/
+/**
+ * Handles incoming player commands -- they are filtered down through
+ * various levels of parser code and error code.
+ */
 static void game_handle_command() {
 	int handled_this_one;
 	int kernel_trigger_in;
@@ -1912,7 +1847,7 @@ static void game_handle_command() {
 		error_report(ERROR_ORPHANED_TRIGGER, WARNING, MODULE_KERNEL, kernel.trigger, 0);
 	}
 
-	if (!player.command_error && 
+	if (!player.command_error &&
 			(player.command_ready || kernel.trigger)) {
 		game_exec_function(room_parser_code_pointer);
 
@@ -1967,74 +1902,70 @@ done:
 	}
 }
 
-
 void do_looping_sounds() {
 	switch (room_id) {
 	case 304:
-		/* do water trickle */
+		// do water trickle
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 107);  /* PLAY_MORE_TRICKLE */
+		kernel_timing_trigger(1, 107);  // PLAY_MORE_TRICKLE
 		break;
 
 	case 305:
-		/* do bird crowd */
+		// do bird crowd
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 109);  /* DO_CROWD */
+		kernel_timing_trigger(1, 109);  // DO_CROWD
 		break;
 
 	case 306:
-		/* if global[phineas_status] <= PHIN_IS_IN_CONTROL_AGAIN) { */
+		// if global[phineas_status] <= PHIN_IS_IN_CONTROL_AGAIN) {
 		if (global[66] <= 2) {
-			/* bird crowd talking */
+			// bird crowd talking
 			kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-			kernel_timing_trigger(1, 117); /* DO_CROWD */
+			kernel_timing_trigger(1, 117);  // DO_CROWD
 		} else {
-			/* water flowing */
+			// water flowing
 			kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-			kernel_timing_trigger(1, 118); /* DO_WATER */
+			kernel_timing_trigger(1, 118);  // DO_WATER
 		}
 		break;
 
 	case 401:
-		/* do dragon noise */
+		// do dragon noise
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 106);  /* DRAGON_NOISE */
+		kernel_timing_trigger(1, 106);  // DRAGON_NOISE
 		break;
 
 	case 403:
-		/* do water noise */
+		// do water noise
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 105);  /* WATER */
+		kernel_timing_trigger(1, 105);  // WATER
 		break;
 
 	case 404:
-		/* do dragon noise */
+		// do dragon noise
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 110);  /* DRAGON_NOISE */
+		kernel_timing_trigger(1, 110);  // DRAGON_NOISE
 		break;
 
 	case 405:
-		/* do dragon noise */
+		// do dragon noise
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 106);  /* DRAGON_NOISE */
+		kernel_timing_trigger(1, 106);  // DRAGON_NOISE
 		break;
 
 	case 210:
-		/* rush MORE_RUSH_RUSH */
+		// rush MORE_RUSH_RUSH
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 109);  /* MORE_RUSH_RUSH */
+		kernel_timing_trigger(1, 109);  // MORE_RUSH_RUSH
 		break;
 
 	}
 }
 
-
-/*
-/*      game_main_loop()
-/*
-/*      This is the main inner graphics control loop for the game,
-/*      and is executed once for each framing round.
-*/
+/**
+ * This is the main inner graphics control loop for the game,
+ * and is executed once for each framing round.
+ */
 static void game_main_loop() {
 	int id;
 	int preparse_flag = false;
@@ -2049,12 +1980,12 @@ static void game_main_loop() {
 	static char temp_buf_4[20];
 
 #if 0
-	/* these 3 are for the background efx */
+	// these 3 are for the background efx
 	int yy;
 	long dif;
-	if (global[10]) { /* please play the damn targets */
+	if (global[10]) {  // please play the damn targets
 
-		/* this is for the background sound efx */
+		// this is for the background sound efx
 		dif = kernel.clock - noise_clock;
 		if ((dif >= 0) && (dif <= 4)) {
 			noise_timer += dif;
@@ -2066,11 +1997,11 @@ static void game_main_loop() {
 		if (noise_length == -1) {
 			if (room_id == 220 || room_id == 221 || room_id == 307 || room_id == 322 || room_id == 420 ||
 				room_id == 308 || room_id == 204 || room_id == 211) {
-				/* night time */
+				// night time
 				noise_length = imath_random(50, 80);
 
 			} else {
-				/* day time */
+				// day time
 				noise_length = imath_random(150, 220);
 			}
 		}
@@ -2078,35 +2009,32 @@ static void game_main_loop() {
 		if (noise_timer >= (noise_length + global[13])) {
 			if (room_id == 220 || room_id == 221 || room_id == 307 || room_id == 322 || room_id == 420 ||
 				room_id == 308 || room_id == 204 || room_id == 211) {
-				/* night time */
-				/* digi_initial_volume (75); */
+				// night time
+				// digi_initial_volume (75);
 				digi_trigger_effect = false;
-				digi_play_build(220, '_', 5, 2);  /* EFFECT */
-				/* digi_trigger_ambiance = false; */
-
+				digi_play_build(220, '_', 5, 2);  // EFFECT
+				// digi_trigger_ambiance = false;
 			} else {
-				/* day time */
-
+				// day time
 				yy = imath_random(1, 6);
 				while (last_bird_sound == (byte)yy) yy = imath_random(1, 6);
 
 				last_bird_sound = (byte)yy;
 
-				/* digi_initial_volume (imath_random (25, 100)); */
-
+				// digi_initial_volume (imath_random (25, 100));
 				digi_trigger_effect = false;
 
 				switch (yy) {
-				case 1: digi_play_build(321, '_', 500, 2); break; /* EFFECT */
-				case 2: digi_play_build(321, '_', 501, 2); break; /* EFFECT */
-				case 3: digi_play_build(321, '_', 502, 2); break; /* EFFECT */
-				case 4: digi_play_build(321, '_', 503, 2); break; /* EFFECT */
-				case 5: digi_play_build(321, '_', 504, 2); break; /* EFFECT */
-				case 6: digi_play_build(321, '_', 505, 2); break; /* EFFECT */
+				case 1: digi_play_build(321, '_', 500, 2); break;  // EFFECT
+				case 2: digi_play_build(321, '_', 501, 2); break;  // EFFECT
+				case 3: digi_play_build(321, '_', 502, 2); break;  // EFFECT
+				case 4: digi_play_build(321, '_', 503, 2); break;  // EFFECT
+				case 5: digi_play_build(321, '_', 504, 2); break;  // EFFECT
+				case 6: digi_play_build(321, '_', 505, 2); break;  // EFFECT
 
 				}
 			}
-			/* digi_trigger_ambiance = false; */
+			// digi_trigger_ambiance = false;
 			noise_length = -1;
 			noise_timer = 0;
 		}
@@ -2122,7 +2050,7 @@ static void game_main_loop() {
 
 	if (move_your_butt_enabled) {
 
-		/* this is for the background sound efx */
+		// this is for the background sound efx
 		dif = kernel.clock - move_your_butt_clock;
 		if ((dif >= 0) && (dif <= 4)) {
 			move_your_butt_timer += dif;
@@ -2175,18 +2103,18 @@ static void game_main_loop() {
 
 			switch (move_your_butt_anim_frame) {
 
-			case 24: /* ab in a 2 */
-			case 28: /* ab in a 2 */
-				/* AB we need to keep moving, michelle needs those herbs */
+			case 24:  // ab in a 2
+			case 28:  // ab in a 2
+				// AB we need to keep moving, michelle needs those herbs
 				digi_trigger_dialog = false;
 				digi_play_build_ii('b', 4, 1);
-				/* digi_send_dialog_trigger = false; */
+				// digi_send_dialog_trigger = false;
 				kernel_reset_animation(move_your_butt_anim_handle, 0);
 				move_your_butt_anim_frame = 0;
 				break;
 
-			case 20: /* end of talking */
-				/* end AB we need to keep moving, michelle needs those herbs */
+			case 20:  // end of talking
+				// end AB we need to keep moving, michelle needs those herbs
 				dont_frag_the_palette();
 				kernel_abort_animation(move_your_butt_anim_handle);
 				move_your_butt_anim_handle = -1;
@@ -2206,7 +2134,7 @@ static void game_main_loop() {
 	}
 
 
-	/* Clear any remaining player command message from screen */
+	// Clear any remaining player command message from screen
 #endif
 
 	if (inter_sentence_ready || !player.commands_allowed) {
@@ -2214,27 +2142,21 @@ static void game_main_loop() {
 		inter_sentence_ready = false;
 	}
 
-	/* Interface processing -- accept new commands */
-
-
-
+	// Interface processing -- accept new commands
 	if (!kernel.trigger && !player.trigger) {
 		if (kernel_dynamic_changed) kernel_refresh_dynamic();
 		inter_main_loop(player.commands_allowed && !player.need_to_walk && !kernel.fx);
 	}
 
-	/* Get official timing clock (in 60th/sec) for this round */
-
+	// Get official timing clock (in 60th/sec) for this round
 	if (!kernel.fx) {
 		kernel.clock = timer_read();
 	}
 
-	/* Update camera view if necessary */
-
+	// Update camera view if necessary
 	camera_update();
 
-	/* If new command came in, accept it and set up to perform any necessary walking */
-
+	// If new command came in, accept it and set up to perform any necessary walking
 	if (inter_sentence_ready &&
 		player.commands_allowed &&
 		!player.need_to_walk &&
@@ -2256,7 +2178,7 @@ static void game_main_loop() {
 
 	player_new_walk();
 
-	/* Handle parser commands and parser triggers */
+	// Handle parser commands and parser triggers
 	if ((player.command_ready && !player.walking && !player.need_to_walk && (player.facing == player.turn_to_facing) && !kernel.trigger) ||
 		(kernel.trigger && (kernel.trigger_mode == KERNEL_TRIGGER_PARSER))/* ||
 		global[4] >= 0*/) {
@@ -2269,10 +2191,9 @@ static void game_main_loop() {
 		goto skip_frame;
 	}
 
-	/* Execute daemon code, and do system maintenance */
-
+	// Execute daemon code, and do system maintenance
 	if (!kernel.trigger || (kernel.trigger_mode == KERNEL_TRIGGER_DAEMON)) {
-		game_daemon_code();  /* interface, room,sect,global daemon */
+		game_daemon_code();  // interface, room,sect,global daemon
 	}
 
 	game_system_maintenance();
@@ -2283,7 +2204,7 @@ static void game_main_loop() {
 		goto skip_frame;
 	}
 
-	/* Update all active conversations */
+	// Update all active conversations
 	if (!kernel.trigger) {
 		if (conv_control.running >= 0) {
 			if (!camera_x.panning && !camera_y.panning) {
@@ -2292,8 +2213,7 @@ static void game_main_loop() {
 		}
 	}
 
-	/* Update the player image, if it is time to do so */
-
+	// Update the player image, if it is time to do so
 	if ((kernel.clock >= player.clock) && !kernel.trigger) {
 
 		player.clock = kernel.clock + player.frame_delay;
@@ -2308,7 +2228,8 @@ static void game_main_loop() {
 		player_set_image();
 	}
 
-	cursor_id = 1; /* here */
+	cursor_id = 1;
+
 	if ((inter_awaiting == AWAITING_COMMAND) && !mouse_button) {
 		if (inter_spot_class == STROKE_INTERFACE) {
 			id = inter_spot_index - spot_base[STROKE_INTERFACE - 1];
@@ -2336,15 +2257,13 @@ static void game_main_loop() {
 	}
 
 
-	/* Update any active graphics sequences */
-
+	// Update any active graphics sequences
 	kernel_seq_update_all();
 
-	/* Update any active animations */
-
+	// Update any active animations
 	kernel_process_all_animations();
 
-	/* Special mouse cursor update mode */
+	// Special mouse cursor update mode
 	if (kernel.mouse_cursor_point) {
 		Common::strcpy_s(temp_buf, "(");
 		mads_itoa(mouse_x, &temp_buf[1], 10);
@@ -2354,39 +2273,33 @@ static void game_main_loop() {
 		temp_message = kernel_message_add(temp_buf, 5, 5, 515, 1, 0, 0);
 	}
 
-	/* if (kernel.memory_tracking) { */
-	  /* Common::strcpy_s (temp_buf_2, "(Mem: "); */
-	  /* ltoa (mem_get_avail(), &temp_buf_2[6], 10); */
-	  /* Common::strcat_s (temp_buf_2, ") "); */
-	  /* temp_message_2 = kernel_message_add (temp_buf_2, 315, 5, 515, 1, 0, KERNEL_MESSAGE_RIGHT); */
-	/* } */
-
-	/* if (kernel.player_tracking) { */
-	  /* Common::strcpy_s (temp_buf_3, "(Plyr: "); */
-	  /* mads_itoa (player.x, &temp_buf_3[strlen(temp_buf_3)], 10); */
-	  /* Common::strcat_s (temp_buf_3, ","); */
-	  /* mads_itoa (player.y, &temp_buf_3[strlen(temp_buf_3)], 10); */
-	  /* Common::strcat_s (temp_buf_3, ")"); */
-	  /* yy = 5; */
-	  /* if (kernel.mouse_cursor_point) yy += 15; */
-	  /* temp_message_3 = kernel_message_add (temp_buf_3, 5, yy, 515, 1, 0, 0); */
-
-	  /* Common::strcpy_s (temp_buf_4, "Scale %"); */
-	  /* mads_itoa (player.scale, &temp_buf_4[strlen(temp_buf_4)], 10); */
-
-	  /* yy += 15; */
-	  /* temp_message_4 = kernel_message_add (temp_buf_4, 5, yy, 515, 1, 0, 0); */
-	/* } */
-
-	/* Update any messages */
-
+	// if (kernel.memory_tracking) {
+	  // Common::strcpy_s (temp_buf_2, "(Mem: ");
+	  // ltoa (mem_get_avail(), &temp_buf_2[6], 10);
+	  // Common::strcat_s (temp_buf_2, ") ");
+	  // temp_message_2 = kernel_message_add (temp_buf_2, 315, 5, 515, 1, 0, KERNEL_MESSAGE_RIGHT);
+	// }
+	// if (kernel.player_tracking) {
+	  // Common::strcpy_s (temp_buf_3, "(Plyr: ");
+	  // mads_itoa (player.x, &temp_buf_3[strlen(temp_buf_3)], 10);
+	  // Common::strcat_s (temp_buf_3, ",");
+	  // mads_itoa (player.y, &temp_buf_3[strlen(temp_buf_3)], 10);
+	  // Common::strcat_s (temp_buf_3, ")");
+	  // yy = 5;
+	  // if (kernel.mouse_cursor_point) yy += 15;
+	  // temp_message_3 = kernel_message_add (temp_buf_3, 5, yy, 515, 1, 0, 0);
+	  // Common::strcpy_s (temp_buf_4, "Scale %");
+	  // mads_itoa (player.scale, &temp_buf_4[strlen(temp_buf_4)], 10);
+	  // yy += 15;
+	  // temp_message_4 = kernel_message_add (temp_buf_4, 5, yy, 515, 1, 0, 0);
+	// }
+	// Update any messages
 	if (!kernel.trigger) {
 		if (kernel.force_restart || (new_room != room_id)) kernel_message_purge();
 		kernel_message_update_all();
 	}
 
-	/* Matte out the next graphics frame */
-
+	// Matte out the next graphics frame
 	if (!viewing_at_y) {
 		matte_inter_frame(!kernel.fx, kernel.fx);
 		if (kernel.fx) {
@@ -2426,8 +2339,7 @@ static void game_main_loop() {
 
 skip_frame:
 
-	/* if (mcga_shakes) mcga_shake(); */
-
+	// if (mcga_shakes) mcga_shake();
 	if (kernel.fx) {
 		cycling_active = true;
 	}
@@ -2438,7 +2350,6 @@ skip_frame:
 
 	while ((mouse_clock == timer_read()) && !kernel.trigger);
 }
-
 
 static void game_control_loop() {
 	game_any_keystroke = false;
@@ -2473,88 +2384,32 @@ static void game_control_loop() {
 	if (debugger) game_exec_function(debugger_reset);
 }
 
-
 void chain_execute() {
 	error("TODO: chain_execute");
 }
 
-
-/*
-/*      game_read_save_directory()
-/*
-/*      Reads the list of save files.
-*/
+/**
+ * Reads the list of save files.
+ */
 static void game_read_save_directory() {
-	int error_flag = true;
-	int mem_to_read;
-	Common::SeekableReadStream *handle = NULL;
+	SaveStateList list = g_engine->listSaves();
+	memset(game_save_directory, 0, GAME_MAX_SAVE_SLOTS * (GAME_MAX_SAVE_LENGTH + 1));
 
-	mem_to_read = GAME_SAVE_SLOT_MEMORY;
-
-	handle = env_open(game_save_file, "rb");
-	if (handle == NULL) goto done;
-
-	if (!fileio_fread_f(game_save_directory, mem_to_read, 1, handle)) goto done;
-
-	error_flag = false;
-
-done:
-	delete handle;
-	if (error_flag) {
-		memset(game_save_directory, 0, mem_to_read);
+	for (auto it = list.begin(); it != list.end(); ++it) {
+		char *slot = game_save_directory + it->getSaveSlot() * (GAME_MAX_SAVE_LENGTH + 1);
+		Common::strcpy_s(slot, GAME_MAX_SAVE_LENGTH + 1, it->getDescription().c_str());
 	}
 }
 
-
-/*
-/*      game_write_save_directory()
-/*
-/*      Writes the list of save files.
-*/
-void game_write_save_directory() {
-#ifdef TODO
-	int error_flag = true;
-	int mem_to_write;
-	Common::SeekableReadStream *handle = NULL;
-
-	mem_to_write = GAME_SAVE_SLOT_MEMORY;
-
-	handle = env_open(game_save_file, "wb");
-	if (handle == NULL) goto done;
-
-	if (!fileio_fwrite_f(game_save_directory, mem_to_write, 1, handle)) goto done;
-
-	error_flag = false;
-
-done:
-	if (handle != NULL) fclose(handle);
-
-	if (error_flag) {
-		error_report(ERROR_WRITE_SAVE_DIRECTORY, WARNING, MODULE_GAME_MENU, mem_to_write, 0);
-	}
-#else
-	error("TODO: game_write_save_directory");
-#endif
-}
-
-
-
-/*
-/*      game_menu_setup()
-/*
-/*      Sets up for the main menu routines to run--this mainly involves
-/*      getting enough memory to hold the save directory and menu heap.
-*/
 void game_menu_setup() {
 	long mem_to_get;
 
 	game_preserve_handle = BUFFER_NOT_PRESERVED;
 	game_menu_heap.base = NULL;
 
-	/* Get enough memory to work with.  If none available from the */
-	/* main heap, attempt to preserve the depth buffer and steal   */
-	/* its memory temporarily.                                     */
-
+	// Get enough memory to work with.  If none available from the
+	// main heap, attempt to preserve the depth buffer and steal
+	// its memory temporarily.
 	if (mem_get_avail() >= GAME_MENU_HEAP) {
 		heap_create(&game_menu_heap, MODULE_GAME_MENU, GAME_MENU_HEAP, "MENUHEAP");
 	} else if (scr_depth.data != NULL) {
@@ -2571,18 +2426,15 @@ void game_menu_setup() {
 		error_report(ERROR_NO_MORE_MEMORY, SEVERE, MODULE_GAME_MENU, GAME_MENU_HEAP, 2);
 	}
 
-	/* Get memory for save slots */
-
+	// Get memory for save slots
 	mem_to_get = (long)GAME_MAX_SAVE_SLOTS * (GAME_MAX_SAVE_LENGTH + 1);
 	game_save_directory = (char *)heap_get(&game_menu_heap, mem_to_get);
 
-	/* Get memory for popup */
-
+	// Get memory for popup
 	mem_to_get = GAME_DIALOG_HEAP;
 	game_menu_popup = (Popup *)heap_get(&game_menu_heap, mem_to_get);
 
-	/* Read the save list */
-
+	// Read the save list
 	game_read_save_directory();
 
 	cursor_id = 1;
@@ -2593,11 +2445,6 @@ void game_menu_setup() {
 	}
 }
 
-/*
-/*      game_menu_shutdown()
-/*
-/*      Tells the menu structures to bite down hard.
-*/
 void game_menu_shutdown() {
 	heap_destroy(&game_menu_heap);
 
@@ -2607,11 +2454,9 @@ void game_menu_shutdown() {
 	}
 }
 
-
 static void debugger_name(const char *name, int where) {
 	screen_printf(where, 0, "%s", name);
 }
-
 
 static void game_file_show(const char *filename, int show_at) {
 	Common::SeekableReadStream *handle = NULL;
@@ -2631,8 +2476,6 @@ done:
 	delete handle;
 }
 
-
-
 void game_debugger_reset() {
 	//screen = mono_text_video;
 
@@ -2643,8 +2486,6 @@ void game_debugger_reset() {
 
 	debugger_previous = DEBUGGER_NONE;
 }
-
-
 
 static void game_main_update() {
 	char temp_buf[80];
@@ -2658,8 +2499,7 @@ static void game_main_update() {
 	screen_printf(0, 2, "%-3d, %-3d Mem: %-6ld Min: %-6ld", room_id, previous_room, mem_get_avail(), mem_min_free);
 
 	screen_printf(0, 4, "%s @ %3d, %3d Dpt: %d   ", player.series_name, player.x, player.y, player.depth);
-	/* screen_printf (0, 5, "        Series: %d   Sprite: %-2d   Mirror: %-2d   Frame Rate: %d    ", player.series, player.sprite, player.mirror, player.frame_delay); */
-
+	// screen_printf (0, 5, "        Series: %d   Sprite: %-2d   Mirror: %-2d   Frame Rate: %d    ", player.series, player.sprite, player.mirror, player.frame_delay);
 	screen_printf(0, 7, "Sc: %-3d  Fr %d => %d%, Bk %d => %d%", player.scale, room->front_y, room->front_scale, room->back_y, room->back_scale);
 
 	if (!player.walker_visible) {
@@ -2817,8 +2657,8 @@ static void game_palette_update() {
 			delta = old_free - free;
 		}
 
-		/* screen_printf (0, 22, "Free: %-3d", free); */
-		/* screen_printf (0, 23, "Previous: %-3d", old_free); */
+		// screen_printf (0, 22, "Free: %-3d", free);
+		// screen_printf (0, 23, "Previous: %-3d", old_free);
 		screen_printf(0, 24, "Added: %-3d", delta);
 
 
@@ -2848,8 +2688,6 @@ top:
 	}
 }
 
-
-
 static void game_scratch_update() {
 	int count;
 
@@ -2870,7 +2708,6 @@ static void game_scratch_update() {
 			game.scratch[count + 9]);
 	}
 }
-
 
 static void game_global_update() {
 	int count;
@@ -2893,16 +2730,11 @@ static void game_global_update() {
 	}
 }
 
-
-
-
 static void game_help_update() {
 	debugger_name("5", 23);
 
 	game_file_show("*HELP.DB", 2);
 }
-
-
 
 static void game_conversation() {
 	int x, y;
@@ -2998,7 +2830,6 @@ done:
 	;
 }
 
-
 static void game_matte() {
 	int count;
 	int image_max;
@@ -3021,23 +2852,23 @@ static void game_matte() {
 		if (count < image_max) {
 			switch (image_list[count].flags) {
 			case IMAGE_UPDATE:
-				/* Common::strcpy_s (flags_buf, "Update"); */
+				// Common::strcpy_s (flags_buf, "Update");
 				break;
 
 			case IMAGE_STATIC:
-				/* Common::strcpy_s (flags_buf, "Static"); */
+				// Common::strcpy_s (flags_buf, "Static");
 				break;
 
 			case IMAGE_ERASE:
-				/* Common::strcpy_s (flags_buf, "Erase"); */
+				// Common::strcpy_s (flags_buf, "Erase");
 				break;
 
 			case IMAGE_REFRESH:
-				/* Common::strcpy_s (flags_buf, "Refresh"); */
+				// Common::strcpy_s (flags_buf, "Refresh");
 				break;
 
 			case IMAGE_DELTA:
-				/* Common::strcpy_s (flags_buf, "Delta"); */
+				// Common::strcpy_s (flags_buf, "Delta");
 				break;
 
 			default:
@@ -3161,8 +2992,6 @@ static void game_state() {
 	}
 }
 
-
-
 void game_debugger() {
 	if (debugger_state != debugger_previous) game_debugger_reset();
 
@@ -3203,7 +3032,7 @@ void game_debugger() {
 		game_memory();
 		break;
 
-	case 8:  /* DEBUGGER_STATE */
+	case 8:  // DEBUGGER_STATE
 		game_state();
 		break;
 	}

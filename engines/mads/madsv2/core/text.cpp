@@ -252,8 +252,7 @@ static void text_noun(char **source, char **dest, int noun_id) {
 
 	syntax = (noun_id != 2) ? player.main_syntax : player.second_syntax;
 
-	/* Check if a simple substitution of word */
-
+	// Check if a simple substitution of word
 	if (**source != ':') {
 		if (syntax >= SYNTAX_SINGULAR_MASC) text_capitalization = TEXT_AS_IS;
 		text_copy_vocab(dest, player2.words[noun_id], (noun_id != 2) ? text_command_noun1 : text_command_noun2);
@@ -275,29 +274,25 @@ static void text_noun(char **source, char **dest, int noun_id) {
 		}
 	}
 
-	/* Check for subject pronoun */
-
+	// Check for subject pronoun
 	if (!scumm_strnicmp(*source, text_command_subject, strlen(text_command_subject))) {
 		text_copy_string(dest, istring_subject_pronoun[syntax]);
 		goto done;
 	}
 
-	/* Check for object pronoun */
-
+	// Check for object pronoun
 	if (!scumm_strnicmp(*source, text_command_object, strlen(text_command_object))) {
 		text_copy_string(dest, istring_object_pronoun[syntax]);
 		goto done;
 	}
 
-	/* Check for demonstrative */
-
+	// Check for demonstrative
 	if (!scumm_strnicmp(*source, text_command_demonstrative, strlen(text_command_demonstrative))) {
 		text_copy_string(dest, istring_demonstrative[syntax]);
 		goto done;
 	}
 
-	/* Try for a custom substitution */
-
+	// Try for a custom substitution
 	if (scumm_strnicmp(*source, text_command_custom, strlen(text_command_custom))) {
 		goto done;
 	}
@@ -400,8 +395,8 @@ static void text_icon(char *my_text, SeriesPtr *icon, int *id) {
 
 		idd = object_named(player_main_noun);
 
-		if (idd == 9) {  /* if == polystone */
-			if (global[128] != -1) {  /* and it's imitating, make icon == what it's imitating */
+		if (idd == 9) {  // if == polystone
+			if (global[128] != -1) {  // and it's imitating, make icon == what it's imitating
 				Common::strcpy_s(name, "*OB0");
 				env_catint(name, global[128], 2);
 				Common::strcat_s(name, ".ss");
@@ -467,7 +462,7 @@ int text_show(long id) {
 			} else if (*scan == TEXT_CLOSE_COMMAND) {
 				if (brackets_on) {
 					*cmd = 0;
-					/* mads_strupr(command_buf); */
+					// mads_strupr(command_buf);
 					if (text_compare(command_buf, text_command_center, &more)) {
 						center = true;
 					} else if (text_compare(command_buf, text_command_title, &more)) {

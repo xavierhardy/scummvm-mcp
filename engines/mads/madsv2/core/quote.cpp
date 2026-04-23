@@ -159,7 +159,7 @@ void quote_split_string(const char *source, char *target1, char *target2) {
 
 	while (*mark == ' ') mark++;
 
-	/* *(target1++) = '"'; */
+	// (target1++) = '"';
 	*(target1++) = 0;
 
 	do {

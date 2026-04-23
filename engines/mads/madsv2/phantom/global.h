@@ -231,7 +231,7 @@ enum {
 #define YES_AND_CHASE		3
 
 // chris_kicked_raoul_out
-#define CHRIS_KICKED_YES		-1
+#define CHRIS_KICKED_YES		1
 #define CAME_INTO_EMPTY_113		3
 
 // madame_giry_loc

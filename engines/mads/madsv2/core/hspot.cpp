@@ -80,20 +80,17 @@ int hspot_pop() {
 	return(yes);
 }
 
-/**
- * Packs the hotspot list by removing any blank entries
- */
 void hspot_pack() {
 	int from, unto;
 
 	unto = 0;
 
 	for (from = 1; from <= numspots; from++) {
-		if (spot[from].num != HS_DEATH)      /* If it's still alive */
-		{
+		// If it's still alive
+		if (spot[from].num != HS_DEATH) {
 			unto++;
-			if (from != unto)           /* If it's actually going to move */
-				spot[unto] = spot[from]; /* Shift spot down */
+			if (from != unto)  // If it's actually going to move
+				spot[unto] = spot[from];  // Shift spot down
 		}
 	}
 
@@ -104,7 +101,7 @@ void hspot_pack() {
 int hspot_remove(int class_, int num) {
 	int a, cleared;
 
-	/* Clear ALL hotspots */
+	// Clear ALL hotspots
 	if (class_ == HS_ALL) {
 		a = numspots;
 		numspots = 0;

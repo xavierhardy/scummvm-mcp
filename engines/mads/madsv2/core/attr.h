@@ -37,16 +37,12 @@ namespace MADSV2 {
 #define ATTR_PACKED_WALK_MASK  0x02
 #define ATTR_PACKED_DEPTH_MASK 0x01
 
-/* attr_1.cpp */
 extern int attr_walk(Buffer *attr, int x, int y);
 
-/* attr_2.cpp */
 extern int attr_depth(TileMapHeader *depth_map, int x, int y);
 
-/* attr_3.cpp */
 extern int attr_special(Buffer *attr, int x, int y);
 
-/* attr_4.c */
 extern int attr_load(char *base_name, int item_type, int variant,
 	Buffer *target, int size_x, int size_y);
 

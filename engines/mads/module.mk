@@ -33,7 +33,6 @@ MODULE_OBJS := \
 	core/hag.o \
 	core/hotspots.o \
 	core/inventory.o \
-	core/mads.o \
 	core/menu_views.o \
 	core/messages.o \
 	core/msurface.o \

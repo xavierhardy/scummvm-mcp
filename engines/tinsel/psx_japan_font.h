@@ -19,25 +19,23 @@
  *
  */
 
-#ifndef MADS_CORE_BTYPE_H
-#define MADS_CORE_BTYPE_H
+#ifndef TINSEL_PSX_JAPAN_FONT_H
+#define TINSEL_PSX_JAPAN_FONT_H
 
-#include "common/scummsys.h"
+#include "tinsel/dw.h"
 
-namespace MADS {
-namespace MADSV2 {
+namespace Tinsel {
 
-byte upcaseb(byte inp);
+struct IMAGE;
+struct DRAWOBJECT;
 
-int  upcasei(int inp);
+void OpenPsxJapanFont();
+void ClosePsxJapanFont();
+SCNHANDLE GetPsxJapanFontCharHandle(uint32 charIndex);
+bool IsPsxJapanFontChar(SCNHANDLE offset);
+const IMAGE *GetPsxJapanFontCharImage(SCNHANDLE offset);
+void DrawPsxJapanFontChar(DRAWOBJECT *pObj, uint8 *destP);
 
-int xtoi(char *string);
-
-int btoi(char *string);
-
-int stoi(char *string);
-
-} // namespace MADSV2
-} // namespace MADS
+} // End of namespace Tinsel
 
 #endif

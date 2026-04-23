@@ -135,22 +135,30 @@ struct CompWork {
 	byte  wbuff[WBlen];
 };
 
-/* Required size of work_buff.  Paragraph-align to match original.        */
+/**
+ * Required size of work_buff.  Paragraph-align to match original.
+ */
 static unsigned comp_work_size(void) {
 	return (unsigned)(sizeof(CompWork) + 15u);
 }
 
-/* Obtain aligned pointer to CompWork inside work_buff.                   */
+/**
+ * Obtain aligned pointer to CompWork inside work_buff.
+ */
 static CompWork *get_comp_work(char *work_buff) {
-	unsigned long addr = (unsigned long)(byte *)work_buff;
+	intptr addr = (intptr)(byte *)work_buff;
 	addr = (addr + 15u) & ~15u;
 	return (CompWork *)(byte *)addr;
 }
 
-/* ---- internal helpers ------------------------------------------------- */
+/*
+ * ---- internal helpers -------------------------------------------------
+ *
+ * @param w	
+ */
 
 static void wb_out(CompWork *w) {
-	unsigned cnt = w->wb_ptr;           /* bytes written since last flush  */
+	unsigned cnt = w->wb_ptr;  // bytes written since last flush
 	w->wb_ptr = 0;
 	w->wb_cnt = WBlen;
 	w->rwlen = (word)cnt;
@@ -164,9 +172,11 @@ static void wb_put(CompWork *w, byte byte) {
 		wb_out(w);
 }
 
-/* Flush the current Huffman packet to the output stream.                 */
+/**
+ * Flush the current Huffman packet to the output stream.
+ */
 static void pkt_flush(CompWork *w) {
-	/* write packet[0..huffptr-1]: control word then data bytes           */
+	// write packet[0..huffptr-1]: control word then data bytes
 	w->packet[0] = (byte)(w->huffman & 0xFF);
 	w->packet[1] = (byte)(w->huffman >> 8);
 
@@ -176,23 +186,25 @@ static void pkt_flush(CompWork *w) {
 
 	w->huffbit = 1;
 	w->huffman = 0;
-	w->huffptr = 2;                    /* skip the two control-word bytes */
+	w->huffptr = 2;  // skip the two control-word bytes
 }
 
-/* Append one Huffman control bit (0 or non-0).                           */
+/**
+ * Append one Huffman control bit (0 or non-0).
+ */
 static void huff1(CompWork *w, int bit) {
 	if (bit)
 		w->huffman |= w->huffbit;
 	w->huffbit <<= 1;
 	if (w->huffbit == 0) {
-		/* control word is full (16 bits) - flush packet                  */
-		/* The packet array already contains the data bytes at [2..ptr)   */
-		/* write everything out now                                       */
+		// control word is full (16 bits) - flush packet
+		// The packet array already contains the data bytes at [2..ptr)
+		// write everything out now
 		byte tmp_ctrl0 = (byte)(w->huffman & 0xFF);
 		byte tmp_ctrl1 = (byte)(w->huffman >> 8);
 		unsigned save_ptr = w->huffptr;
 
-		/* emit control bytes then data bytes                             */
+		// emit control bytes then data bytes
 		wb_put(w, tmp_ctrl0);
 		wb_put(w, tmp_ctrl1);
 		for (unsigned i = 2; i < save_ptr; i++)
@@ -204,34 +216,39 @@ static void huff1(CompWork *w, int bit) {
 	}
 }
 
-/* Append one literal/copy data byte to the current packet buffer.        */
+/**
+ * Append one literal/copy data byte to the current packet buffer.
+ */
 static void push1(CompWork *w, byte byte) {
 	w->packet[w->huffptr++] = byte;
 }
 
-/* ---- rb_in: fill the read buffer -------------------------------------- */
-
+/**
+ * ---- rb_in: fill the read buffer --------------------------------------
+ */
 static unsigned rb_in(CompWork *w) {
 	w->rb_ptr = 0;
 	w->rwlen = (word)RBlen;
 	unsigned got = w->zread((char *)w->rbuff, &w->rwlen);
-	w->rb_cnt = got + 1;                /* +1 so the main loop pre-decrements */
+	w->rb_cnt = got + 1;  // +1 so the main loop pre-decrements
 	return got;
 }
 
 /* ---- dictionary link/unlink ------------------------------------------- */
 
-/*
+/**
  * Hash(inword) = (word & (HASH-1)) + LEMPEL + 1
  * All indices into hash[]/undo[] are in units of unsigned (words).
  * In the assembly, indices are byte offsets and the arrays are word arrays,
  * hence the frequent shl/shr 1.  Here we use word indices throughout.
+ *
+ * @param w	
+ * @param di	
  */
-
 static void dict_link(CompWork *w, unsigned di) {
-	unsigned word = w->lempel[di] | ((unsigned)w->lempel[(di + 1) & (LEMPEL - 1)] << 8);
-	unsigned key = (word & (HASH - 1)) + LEMPEL + 1; /* key index       */
-	unsigned di2 = di;                                /* word index = di */
+	unsigned dictWord = w->lempel[di] | ((unsigned)w->lempel[(di + 1) & (LEMPEL - 1)] << 8);
+	unsigned key = (dictWord & (HASH - 1)) + LEMPEL + 1;  // key index
+	unsigned di2 = di;  // word index = di
 
 	unsigned bx = w->hash[key];
 	w->hash[di2] = bx;
@@ -248,21 +265,22 @@ static void dict_unlink(CompWork *w, unsigned si) {
 	}
 }
 
-/* ---- match: find the longest match at lempel[di] ---------------------- */
-
+/**
+ * ---- match: find the longest match at lempel[di] ----------------------
+ */
 static void match(CompWork *w, unsigned di) {
-	/* Compute hash key for the 2-byte word at lempel[di]                 */
+	// Compute hash key for the 2-byte word at lempel[di]
 	unsigned inword = w->lempel[di]
 		| ((unsigned)w->lempel[(di + 1) & (LEMPEL - 1)] << 8);
 	unsigned key = (inword & (HASH - 1)) + LEMPEL + 1;
 
 	int   best_len = 0;
 	unsigned best_pos = 0;
-	int   rem = ZIV - 1;          /* chars still to match           */
+	int   rem = ZIV - 1;  // chars still to match
 
 	unsigned chain = w->hash[key];
 	while (chain != NIL) {
-		/* compare lempel[chain+1 .. chain+ZIV-1] with lempel[di+1 ..]   */
+		// compare lempel[chain+1 .. chain+ZIV-1] with lempel[di+1 ..]
 		unsigned ms = (chain + 1) & (LEMPEL - 1);
 		unsigned md = (di + 1) & (LEMPEL - 1);
 		int matched = 0;
@@ -271,10 +289,10 @@ static void match(CompWork *w, unsigned di) {
 			md = (md + 1) & (LEMPEL - 1);
 			matched++;
 		}
-		int this_len = matched + 1;     /* +1 for the hashed first char   */
+		int this_len = matched + 1;  // +1 for the hashed first char
 
 		if (matched == ZIV - 1) {
-			/* full ZIV match */
+			// full ZIV match
 			best_len = ZIV;
 			best_pos = chain;
 			break;
@@ -290,13 +308,13 @@ static void match(CompWork *w, unsigned di) {
 	w->qlen = best_len;
 
 	if (best_len > 0) {
-		/* offset = di - best_pos (mod LEMPEL), stored negative           */
+		// offset = di - best_pos (mod LEMPEL), stored negative
 		int off = (int)di - (int)best_pos;
 		off &= (LEMPEL - 1);
 		w->qoff = -off;
 	}
 
-	/* Also link di into the hash table (same as Match does at the end)   */
+	// Also link di into the hash table (same as Match does at the end)
 	unsigned di2 = di;
 	unsigned bx = w->hash[key];
 	unsigned di_hash = di2;
@@ -306,39 +324,40 @@ static void match(CompWork *w, unsigned di) {
 	w->undo[di_hash] = key;
 }
 
-/* ---- Fabrice: main LZ compression loop -------------------------------- */
-
+/**
+ * ---- Fabrice: main LZ compression loop --------------------------------
+ */
 static unsigned long fabrice(CompWork *w) {
 	unsigned si = 0;
 
-	/* Initialise I/O state                                               */
-	w->rb_cnt = 1;                      /* force first read               */
+	// Initialise I/O state
+	w->rb_cnt = 1;  // force first read
 	w->wb_ptr = 0;
 	w->wb_cnt = WBlen;
 
-	/* Initialise dictionary                                              */
-	memset(w->undo, 0xFF, sizeof(w->undo));   /* NIL = 0xFFFF (LEMPEL*2)*/
+	// Initialise dictionary
+	memset(w->undo, 0xFF, sizeof(w->undo));  // NIL = 0xFFFF (LEMPEL*2)
 	memset(w->hash, 0xFF, sizeof(w->hash));
 	memset(w->lempel, 0, sizeof(w->lempel));
 	memset(w->ziv, 0, sizeof(w->ziv));
 
-	/* Initialise Huffman packet                                          */
+	// Initialise Huffman packet
 	w->huffbit = 1;
 	w->huffman = 0;
-	w->huffptr = 2;                     /* reserve two bytes for ctrl word */
+	w->huffptr = 2;  // reserve two bytes for ctrl word
 
 	w->norms = 0;
 	w->delta = 0;
 	w->paraz = 0;
 	w->zsize = 0;
 
-	/* Write the 4-byte "FAB" header                                      */
+	// Write the 4-byte "FAB" header
 	wb_put(w, 'F');
 	wb_put(w, 'A');
 	wb_put(w, 'B');
 	wb_put(w, (byte)DICT);
 
-	/* Read first ZIV bytes into the top of the Lempel buffer             */
+	// Read first ZIV bytes into the top of the Lempel buffer
 	unsigned di = (unsigned)(LEMPEL - ZIV);
 	unsigned cx = ZIV;
 
@@ -354,18 +373,18 @@ static unsigned long fabrice(CompWork *w) {
 
 	unsigned read_so_far = ZIV - cx;
 	if (read_so_far == 0)
-		goto lz_exit;                   /* empty input */
+		goto lz_exit;  // empty input
 
 	w->zlen = (int)read_so_far;
 
-	di = (unsigned)(LEMPEL - ZIV);    /* encode pointer                  */
-	si = 0;                   /* end-of-ziv pointer              */
+	di = (unsigned)(LEMPEL - ZIV);  // encode pointer
+	si = 0;  // end-of-ziv pointer
 
 	match(w, di);
 
-	/* ---- main encoding loop ------------------------------------------ */
+	// ---- main encoding loop ------------------------------------------
 	for (;;) {
-		/* clip qlen to zlen */
+		// clip qlen to zlen
 		if (w->qlen > w->zlen)
 			w->qlen = w->zlen;
 
@@ -376,7 +395,7 @@ static unsigned long fabrice(CompWork *w) {
 		int qoff = w->qoff;
 
 		if (qlen < 2 || (qlen == 2 && qoff >= -0x100)) {
-			/* LITERAL: control bit = 1, then data byte */
+			// LITERAL: control bit = 1, then data byte
 			w->qlen = 1;
 			huff1(w, 1);
 			push1(w, w->lempel[di]);
@@ -384,16 +403,16 @@ static unsigned long fabrice(CompWork *w) {
 			huff1(w, 0);
 
 			if (qlen <= 5 && qoff > -0x100) {
-				/* SHORT COPY: <00XY>, offset_byte  (length 2-5, dist 1-255) */
+				// SHORT COPY: <00XY>, offset_byte  (length 2-5, dist 1-255)
 				huff1(w, 0);
-				int enc_len = qlen - 2;         /* 0..3                   */
+				int enc_len = qlen - 2;  // 0..3
 				huff1(w, enc_len & 2);
 				huff1(w, enc_len & 1);
-				push1(w, (byte)qoff);  /* qoff is negative; byte cast = low 8 */
+				push1(w, (byte)qoff);  // qoff is negative; byte cast = low 8
 			} else {
-				/* LONG COPY: <01>, vector_word */
+				// LONG COPY: <01>, vector_word
 				huff1(w, 1);
-				push1(w, (byte)qoff);  /* low byte of offset     */
+				push1(w, (byte)qoff);  // low byte of offset
 
 				byte hi = (byte)((unsigned)(-qoff) >> 8);
 				int zb = 16 - DICT;
@@ -404,21 +423,21 @@ static unsigned long fabrice(CompWork *w) {
 					hi |= (byte)(qlen - 2);
 					push1(w, hi);
 				} else {
-					/* LONG COPY with extra length byte */
+					// LONG COPY with extra length byte
 					push1(w, hi);
 					push1(w, (byte)(qlen - 1));
 				}
 			}
 		}
 
-		/* Update delta/paraz counters (track EXPLODE segment boundaries) */
+		// Update delta/paraz counters (track EXPLODE segment boundaries)
 		w->delta -= w->qlen;
 		while (w->delta < 0) {
 			w->paraz++;
 			w->delta += 16;
 		}
 
-		/* Insert NORMALIZE marker every 40KB of output */
+		// Insert NORMALIZE marker every 40KB of output
 		w->norms += w->qlen;
 		if (w->norms >= 0xA000) {
 			huff1(w, 0);
@@ -432,7 +451,7 @@ static unsigned long fabrice(CompWork *w) {
 		di = (unsigned)save_di;
 		si = (unsigned)save_si;
 
-		/* Advance the dictionary window by qlen positions                */
+		// Advance the dictionary window by qlen positions
 		int advance = w->qlen;
 		while (advance-- > 0) {
 			dict_link(w, di);
@@ -448,7 +467,7 @@ static unsigned long fabrice(CompWork *w) {
 				byte c = w->rbuff[w->rb_ptr++];
 				w->lempel[si] = c;
 				if (si < (unsigned)(ZIV - 1))
-					w->ziv[si] = c;     /* mirror first ZIV-1 chars       */
+					w->ziv[si] = c;  // mirror first ZIV-1 chars
 			}
 skip_byte:
 			si = (si + 1) & (LEMPEL - 1);
@@ -462,14 +481,14 @@ skip_byte:
 	}
 
 lz_exit:
-	/* Write EXIT marker: <01>, 0x00, 0x00, 0x00                          */
+	// Write EXIT marker: <01>, 0x00, 0x00, 0x00
 	huff1(w, 0);
 	huff1(w, 1);
 	push1(w, 0);
 	push1(w, 0);
 	push1(w, 0);
 
-	/* Flush final packet and output buffer                               */
+	// Flush final packet and output buffer
 	pkt_flush(w);
 	if (w->wb_ptr > 0)
 		wb_out(w);
@@ -477,12 +496,9 @@ lz_exit:
 	return w->zsize;
 }
 
-/* -------------------------------------------------------------------------
- *  Public API: pFABcomp
- * ---------------------------------------------------------------------- */
 word pFABcomp(ReadFn read_buff, WriteFn write_buff, char *work_buff,
 	word *type, word *dsize) {
-	/* If work_buff is NULL, return required buffer size                   */
+	// If work_buff is NULL, return required buffer size
 	if (!work_buff)
 		return comp_work_size();
 
@@ -493,13 +509,13 @@ word pFABcomp(ReadFn read_buff, WriteFn write_buff, char *work_buff,
 
 	unsigned long csize = fabrice(w);
 
-	/* Return compressed size via dsize (two 16-bit words = 32-bit size)  */
+	// Return compressed size via dsize (two 16-bit words = 32-bit size)
 	if (dsize) {
 		((word *)dsize)[0] = (word)(csize & 0xFFFF);
 		((word *)dsize)[1] = (word)(csize >> 16);
 	}
 
-	return 0;   /* CMP_NO_ERROR */
+	return 0;  // CMP_NO_ERROR
 }
 
 
@@ -546,7 +562,9 @@ struct ExpIO {
 	unsigned long out_count;            /* total bytes decompressed       */
 };
 
-/* ---- Buffered-read helpers ------------------------------------------- */
+/*
+ * ---- Buffered-read helpers -------------------------------------------
+ */
 
 static byte exp_getbyte(ExpIO *io) {
 	if (io->from_file) {
@@ -568,7 +586,9 @@ static unsigned exp_getword(ExpIO *io) {
 	return lo | (hi << 8);
 }
 
-/* ---- Buffered-write helpers ------------------------------------------ */
+/*
+ * ---- Buffered-write helpers ------------------------------------------
+ */
 
 static void exp_flush_wbuf(ExpIO *io, int force_all) {
 	if (!io->to_file || io->wbuf_pos == 0)
@@ -584,7 +604,7 @@ static void exp_flush_wbuf(ExpIO *io, int force_all) {
 	io->wfun((char *)base, &sz);
 	io->out_count += len;
 
-	/* Shift remaining bytes to front                                     */
+	// Shift remaining bytes to front
 	unsigned remain = io->wbuf_pos - len;
 	if (remain)
 		memmove(base, base + len, remain);
@@ -602,39 +622,39 @@ static void exp_putbyte(ExpIO *io, byte b) {
 	}
 }
 
-/* ---- read a byte from the output window (back-reference) ------------- */
-
+/**
+ * ---- read a byte from the output window (back-reference) -------------
+ */
 static byte exp_readback(ExpIO *io, int dist, unsigned long total_out) {
-	/* dist = 1..LEMPEL (positive, 1 = most recent byte written)          */
+	// dist = 1..LEMPEL (positive, 1 = most recent byte written)
 	if (!io->to_file) {
-		/* Simple: just look behind in the output buffer                  */
+		// Simple: just look behind in the output buffer
 		return *(io->wptr - dist);
 	} else {
-		/* For file-to-file we maintain a sliding window in wbuf.         */
-		/* wbuf is used as circular output; wbuf_pos is the current head. */
+		// For file-to-file we maintain a sliding window in wbuf.
+		// wbuf is used as circular output; wbuf_pos is the current head.
 		unsigned idx = (io->wbuf_pos + 4096u - (unsigned)dist) & (4096u - 1u);
 		return io->wbuf[idx];
 	}
 }
 
-/* ---- Core decompressor ----------------------------------------------- */
-
+/**
+ * ---- Core decompressor -----------------------------------------------
+ */
 static unsigned long fab_explode(ExpIO *io) {
 	io->out_count = 0;
 
-	/* ---- Verify FAB header ------------------------------------------ */
+	// ---- Verify FAB header ------------------------------------------
 	if (exp_getbyte(io) != 'F') return 0;
 	if (exp_getbyte(io) != 'A') return 0;
 	if (exp_getbyte(io) != 'B') return 0;
-	byte shiftVal = exp_getbyte(io);    /* dict bits, e.g. 12             */
+	byte shiftVal = exp_getbyte(io);  // dict bits, e.g. 12
 
-	/*
-	 * Derive the same masks FabDecompressor uses:
-	 *   copyOfsShift = 16 - shiftVal          (e.g. 4)
-	 *   copyOfsMask  = 0xFF << (shiftVal - 8) (e.g. 0xF0) -- sign-extends
-	 *                                          the high offset nibble
-	 *   copyLenMask  = (1 << copyOfsShift) - 1 (e.g. 0x0F)
-	 */
+	// Derive the same masks FabDecompressor uses:
+	//   copyOfsShift = 16 - shiftVal          (e.g. 4)
+	//   copyOfsMask  = 0xFF << (shiftVal - 8) (e.g. 0xF0) -- sign-extends
+	//                                          the high offset nibble
+	//   copyLenMask  = (1 << copyOfsShift) - 1 (e.g. 0x0F)
 	byte copyOfsShift = (byte)(16 - shiftVal);
 	byte copyOfsMask = (byte)(0xFF << (shiftVal - 8));
 	byte copyLenMask = (byte)((1 << copyOfsShift) - 1);
@@ -656,18 +676,18 @@ static unsigned long fab_explode(ExpIO *io) {
 		return bit;
 	};
 
-	/* ---- Decode loop ------------------------------------------------- */
+	// ---- Decode loop -------------------------------------------------
 	for (;;) {
 		int bit0 = get_ctrl_bit();
 
 		if (bit0 == 1) {
-			/* LITERAL: copy one byte straight through */
+			// LITERAL: copy one byte straight through
 			byte c = exp_getbyte(io);
 			exp_putbyte(io, c);
 			continue;
 		}
 
-		/* bit0 == 0 */
+		// bit0 == 0
 		int bit1 = get_ctrl_bit();
 
 		if (bit1 == 0) {
@@ -738,11 +758,11 @@ word pFABexp0(ReadFn read_buff, WriteFn write_buff, char *work_buff) {
 
 	unsigned long out_len = fab_explode(&io);
 
-	/* Return decompressed size in work_buff[0..3]                        */
+	// Return decompressed size in work_buff[0..3]
 	((word *)work_buff)[0] = (word)(out_len & 0xFFFF);
 	((word *)work_buff)[1] = (word)(out_len >> 16);
 
-	return 0;   /* CMP_NO_ERROR */
+	return 0;  // CMP_NO_ERROR
 }
 
 
@@ -771,7 +791,7 @@ word pFABexp1(ReadFn read_buff, char *write_buf, char *work_buff) {
 
 	unsigned long out_len = fab_explode(&io);
 
-	/* Return decompressed size in work_buff[0..3]                        */
+	// Return decompressed size in work_buff[0..3]
 	((word *)work_buff)[0] = (word)(out_len & 0xFFFF);
 	((word *)work_buff)[1] = (word)(out_len >> 16);
 
@@ -779,18 +799,9 @@ word pFABexp1(ReadFn read_buff, char *write_buf, char *work_buff) {
 }
 
 
-/* =========================================================================
- *  pFABexp2  --  memory-to-memory decompressor  (PFABEXP2.ASM)
- *
- *  read_buf  points to compressed data.
- *  write_buf points to destination buffer (must be large enough).
- *  work_buff must be at least 4 bytes (for the output length result),
- *            or NULL to query required size.
- *  Returns 0 on success.  Decompressed byte count stored at work_buff[0..3].
- * ====================================================================== */
 word pFABexp2(byte *read_buf, byte *write_buf, char *work_buff) {
 	if (!work_buff)
-		return 4u;                      /* original returned 4            */
+		return 4u;  // original returned 4
 
 	ExpIO io;
 	memset(&io, 0, sizeof(io));
@@ -802,7 +813,7 @@ word pFABexp2(byte *read_buf, byte *write_buf, char *work_buff) {
 
 	unsigned long out_len = fab_explode(&io);
 
-	/* Return decompressed size in work_buff[0..3]                        */
+	// Return decompressed size in work_buff[0..3]
 	((word *)work_buff)[0] = (word)(out_len & 0xFFFF);
 	((word *)work_buff)[1] = (word)(out_len >> 16);
 

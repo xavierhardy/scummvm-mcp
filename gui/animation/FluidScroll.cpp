@@ -96,21 +96,25 @@ FluidScroller::FluidScroller() :
 	_scrollPosRaw(0.0f), 
 	_animationOffset(0.0f), 
 	_maxScroll(0.0f), 
+	_stepSize(1.0f),
 	_viewportHeight(0),
+	_lastWheelTime(0),
 	_initialVelocity(0.0f),
 	_lambda(0.0f),
 	_stretchDistance(0.0f),
 	_impactVelocity(0.0f) {
 }
 
-void FluidScroller::setBounds(float maxScroll, int viewportHeight) {
+void FluidScroller::setBounds(float maxScroll, int viewportHeight, float stepSize) {
 	_maxScroll = maxScroll;
 	_viewportHeight = viewportHeight;
+	_stepSize = stepSize;
 }
 
 void FluidScroller::reset() {
 	_mode = kModeNone;
 	_startTime = 0;
+	_lastWheelTime = 0;
 	_initialVelocity = 0.0f;
 	_scrollPosRaw = 0.0f;
 	_velocityTracker.reset();
@@ -134,8 +138,10 @@ float FluidScroller::setPosition(float pos, bool checkBound) {
 }
 
 void FluidScroller::startFling() {
-	float velocity = _velocityTracker.calculateVelocity();
-	
+	startFling(_velocityTracker.calculateVelocity());
+}
+
+void FluidScroller::startFling(float velocity) {
 	if (fabsf(velocity) < 0.1f) {
 		checkBoundaries();
 		return;
@@ -145,6 +151,33 @@ void FluidScroller::startFling() {
 	_startTime = g_system->getMillis();
 	_initialVelocity = velocity;
 	_animationOffset = _scrollPosRaw;
+}
+
+void FluidScroller::feedWheel(uint32 time, float deltaY) {
+	uint32 dt = time - _lastWheelTime;
+	_lastWheelTime = time;
+
+	/*
+	 * Cap the duration to prevent extreme high/low velocity
+	 * Otherwise use the actual interval
+	 */ 
+	uint32 effectiveDt = dt;
+	if (dt > 200)
+		effectiveDt = 200;
+	else if (dt < 20)
+		effectiveDt = 20;
+
+	float velocity = deltaY / (float)effectiveDt;
+	startFling(velocity);
+}
+
+void FluidScroller::handleMouseWheel(int direction, float multiplier) {
+	float stepping = _stepSize * (float)direction * multiplier;
+	if (stepping == 0.0f)
+		return;
+
+	stopAnimation();
+	feedWheel(g_system->getMillis(), stepping);
 }
 
 void FluidScroller::absorb(float velocity, float distance) {

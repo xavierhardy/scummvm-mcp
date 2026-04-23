@@ -96,7 +96,7 @@ private:
 	int commandMusic2();   // sub_11F0E  – starts at 0x3688
 	int commandMusic3();   // sub_11F36  – starts at 0x3D52
 
-	int command0();
+	int command0() override;
 	int command1();
 	int command2();
 	int command3();
@@ -143,7 +143,7 @@ private:
 	typedef int (ASound2::*CommandPtr)();
 	static const CommandPtr _commandList[73];
 
-	int command0();
+	int command0() override;
 	int command1();
 	int command2();
 	int command3();
@@ -201,7 +201,7 @@ private:
 	// Called by command34 which then adds ch8.
 	void sub11CC6();
 
-	int command0();
+	int command0() override;
 	int command1();
 	int command2();
 	int command3();
@@ -261,7 +261,7 @@ private:
 	typedef int (ASound4::*CommandPtr)();
 	static const CommandPtr _commandList[71];
 
-	int command0();
+	int command0() override;
 	int command1();
 	int command2();
 	int command3();
@@ -311,7 +311,7 @@ private:
 	typedef int (ASound5::*CommandPtr)();
 	static const CommandPtr _commandList[79];
 
-	int command0();
+	int command0() override;
 	int command1();
 	int command2();
 	int command3();
@@ -362,7 +362,7 @@ public:
 class ASound9 : public PhantomASound {
 private:
 	typedef int (ASound9:: *CommandPtr)();
-	int command0();
+	int command0() override;
 	int command1();
 	int command2();
 	int command3();

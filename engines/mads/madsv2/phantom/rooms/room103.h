@@ -134,7 +134,7 @@ typedef struct {        /* Room local variables */
 #define WALK_TO_X_FROM_105          252
 #define WALK_TO_Y_FROM_105          134
 
-#define WALK_TO_X_OPEN_DOOR         295
+#define WALK_TO_X_OPEN_DOOR         320
 #define WALK_TO_Y_OPEN_DOOR         132
 
 #define OFF_SCREEN_X_FROM_102       -20

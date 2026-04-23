@@ -215,7 +215,7 @@ int object_examine(int number, long message, int speech) {
 	//SeriesPtr object_series = NULL;
 	RGBcolor top_eight[8];
 
-	/* Wait cursor */
+	// Wait cursor
 	cursor_id = 2;
 	if (cursor_id != cursor_last) {
 		mouse_cursor_sprite(cursor, cursor_id);
@@ -227,52 +227,44 @@ int object_examine(int number, long message, int speech) {
 
 	memcpy(top_eight, &master_palette[248].r, 8 * sizeof(RGBcolor));
 
-	/* Use attribute buffer to cheat on memory requirements a bit */
-
+	// Use attribute buffer to cheat on memory requirements a bit
 	old_master_palette = scr_depth.data;
 	greyed_master_palette = scr_depth.data + sizeof(Palette);
 	old_color_status = (dword *) (greyed_master_palette + sizeof(Palette));
 
 	sprite_force_memory = ((byte *)old_color_status) + (sizeof(dword) * 256);
-	sprite_force_size = 22400; /* Use rest of attribute buffer, at most */
+	sprite_force_size = 22400;  // Use rest of attribute buffer, at most
 
-	/* Notify "magic" that we intend to do a grey scale on all guns */
-
+	// Notify "magic" that we intend to do a grey scale on all guns
 	for (count = 0; count < 3; count++) {
 		magic_color_flags[count] = true;
 	}
 
-	/* Turn off all cycling */
-
+	// Turn off all cycling
 	cycling_save = cycling_active;
 	cycling_active = false;
 
-	/* Get sprite series name */
-
+	// Get sprite series name
 	Common::strcpy_s(sprite_name, "*OB");
 	env_catint(sprite_name, number, 3);
 	Common::strcat_s(sprite_name, ".SS");
 
-	/* Prepare for flicker-free mouse updates */
-
+	// Prepare for flicker-free mouse updates
 	mouse_set_work_buffer(scr_main.data, video_x);
 	mouse_set_view_port_loc(0, 0, video_x - 1, video_y - 1);
 
-	/* Save a copy of our work buffer somewhere (probably in EMS) */
-
+	// Save a copy of our work buffer somewhere (probably in EMS)
 	matte_map_work_screen();
 	object_preserve_handle = buffer_preserve(&scr_main, object_ems_handle, work_screen_ems_handle,
 		0, 0, video_x, video_y);
 	matte_map_work_screen();
 
-	/* Save a copy of current palette structure */
-
+	// Save a copy of current palette structure
 	memcpy(old_master_palette, master_palette, sizeof(Palette));
 	memcpy(old_color_status, color_status, sizeof(dword) << 8);
 	memcpy(old_flag_used, flag_used, sizeof(int) * PAL_MAXFLAGS);
 
-	/* Clear out all non-reserved colors in the palette */
-
+	// Clear out all non-reserved colors in the palette
 	num_colors = 256 - (KERNEL_RESERVED_LOW_COLORS + KERNEL_RESERVED_HIGH_COLORS);
 
 	for (count = 0; count < 256; count++) {
@@ -288,28 +280,24 @@ int object_examine(int number, long message, int speech) {
 		flag_used[count] = 0;
 	}
 
-	/* Fade to a grey-scale picture */
-
+	// Fade to a grey-scale picture
 	magic_fade_to_grey(master_palette, &map[KERNEL_RESERVED_LOW_COLORS],
 		KERNEL_RESERVED_LOW_COLORS, num_colors,
 		OBJECT_GREY_BASE, OBJECT_GREY_COLORS,
 		OBJECT_GREY_SPEED, OBJECT_GREY_STEPS);
 
-	/* Need to save a copy of greyed out palette */
-
+	// Need to save a copy of greyed out palette
 	memcpy(greyed_master_palette, master_palette, sizeof(Palette));
 
-	/* Remap the contents of the work screen to the top 8 colors of the  */
-	/* palette (the true grey scale to which all other colors have been  */
-	/* faded).  This will allow us to change palettes to load the object */
-	/* sprite.                                                           */
-
+	// Remap the contents of the work screen to the top 8 colors of the
+	// palette (the true grey scale to which all other colors have been
+	// faded).  This will allow us to change palettes to load the object
+	// sprite.
 	object_remap_buffer(&scr_main, map);
 
-	/* Copy the remapped version of the work buffer onto the screen; this */
-	/* will have no visible effect but will free up a good portion of the */
-	/* palette.                                                           */
-
+	// Copy the remapped version of the work buffer onto the screen; this
+	// will have no visible effect but will free up a good portion of the
+	// palette.
 	mouse_freeze();
 	refresh_flag = mouse_refresh_view_port();
 
@@ -320,88 +308,65 @@ int object_examine(int number, long message, int speech) {
 
 	mcga_setpal(&master_palette);
 
-	/* Load the object series                                                */
-	/* object_series = sprite_series_load (sprite_name, PAL_MAP_BACKGROUND); */
-
+	// Load the object series
+	// object_series = sprite_series_load (sprite_name, PAL_MAP_BACKGROUND);
 	matte_map_work_screen();
 
-	/* Now set the palette to include the colors for this series.         */
-	/* mcga_setpal (&master_palette);                                     */
-
+	// Now set the palette to include the colors for this series.
+	// mcga_setpal (&master_palette);
 	y_base = OBJECT_VIEW_OFFSET;
 
-	/* Draw the object sprite on the screen */
-
-	/*
-	if (object_series != NULL) {
-	  x_size = object_series->index[0].xs;
-	  y_size = object_series->index[0].ys;
-	  x_base = (video_x >> 1) - (x_size >> 1);
-	  sprite_draw  (object_series, 1, &scr_main, x_base, y_base);
-
-	  mouse_hide();
-
-	  video_update (&scr_main, x_base, y_base, x_base, y_base, x_size, y_size);
-
-	  mouse_show();
-
-	  y_base += y_size;
-	}
-	*/
-
+	// Draw the object sprite on the screen
+	// if (object_series != NULL) {
+	// x_size = object_series->index[0].xs;
+	// y_size = object_series->index[0].ys;
+	// x_base = (video_x >> 1) - (x_size >> 1);
+	// sprite_draw  (object_series, 1, &scr_main, x_base, y_base);
+	//
+	// mouse_hide();
+	//
+	// video_update (&scr_main, x_base, y_base, x_base, y_base, x_size, y_size);
+	//
+	// mouse_show();
+	//
+	// y_base += y_size;
+	// }
 	y_base += OBJECT_VIEW_OFFSET;
 
 	if (message) {
 		text_saves_screen = false;
-		/* text_default_y    = y_base; */
-
-		/*
-		for (count = 0; count < (popup_num_colors - 1); count++) {
-		  popup_colors[count] -= object_extra_colors;
-		}
-		*/
-
+		// text_default_y    = y_base;
+		// for (count = 0; count < (popup_num_colors - 1); count++) {
+		// popup_colors[count] -= object_extra_colors;
+		// }
 		memcpy(&cycling_palette[248].r, &master_palette[248].r, 8 * sizeof(RGBcolor));
 
-		/* pl    if (speech) {
-			  if (speech_system_active && speech_on) {
-			   speech_play (object_speech_resource, speech);
-			  }
-			}
-			*/
-
+		// pl    if (speech) {
+		// if (speech_system_active && speech_on) {
+		// speech_play (object_speech_resource, speech);
+		// }
+		// }
 		text_show(message);
 
-		/* pl    if (speech && speech_system_active && speech_on) {
-			  speech_all_off();
-			}
-			*/
-
-			/*
-			for (count = 0; count < (popup_num_colors - 1); count++) {
-			  popup_colors[count] += object_extra_colors;
-			}
-			*/
-
+		// pl    if (speech && speech_system_active && speech_on) {
+		// speech_all_off();
+		// }
+			// for (count = 0; count < (popup_num_colors - 1); count++) {
+			// popup_colors[count] += object_extra_colors;
+			// }
 		text_saves_screen = true;
-		/* text_default_y    = POPUP_CENTER; */
+		// text_default_y    = POPUP_CENTER;
 	} else {
 		keys_get();
 	}
 
-	/* Flush object from memory */
-
-	/*
-	if (object_series != (SeriesPtr) sprite_force_memory) mem_free (object_series);
-	*/
-
-	/* If we saved the work buffer in EMS, we can now fade back to the */
-	/* original screen.                                                */
-
+	// Flush object from memory
+	// if (object_series != (SeriesPtr) sprite_force_memory) mem_free (object_series);
+	// If we saved the work buffer in EMS, we can now fade back to the
+	// original screen.
 	if (object_preserve_handle != BUFFER_NOT_PRESERVED) {
 
-		/* Restore a copy of the work screen */
-
+		// Restore a copy of the work screen
 		matte_map_work_screen();
 
 		buffer_restore_keep_flag = true;
@@ -410,20 +375,17 @@ int object_examine(int number, long message, int speech) {
 
 		matte_map_work_screen();
 
-		/* We must remap to the special grey version first, so that we can */
-		/* change back to the first palette.                               */
-
+		// We must remap to the special grey version first, so that we can
+		// change back to the first palette.
 		object_remap_buffer(&scr_main, map);
 
-		/* Restore old master palette structure.                           */
-
+		// Restore old master palette structure.
 		memcpy(master_palette, old_master_palette, sizeof(Palette));
 		memcpy(color_status, old_color_status, sizeof(dword) << 8);
 		memcpy(flag_used, old_flag_used, sizeof(int) * PAL_MAXFLAGS);
 
-		/* Copy a greyed-out version of picture onto the screen (erasing the */
-		/* object picture).                                                  */
-
+		// Copy a greyed-out version of picture onto the screen (erasing the
+		// object picture).
 		mouse_freeze();
 		refresh_flag = mouse_refresh_view_port();
 
@@ -432,24 +394,21 @@ int object_examine(int number, long message, int speech) {
 		if (refresh_flag) mouse_refresh_done();
 		mouse_thaw();
 
-		/* Now we can change back to the fully greyed-out version of the   */
-		/* original master palette.                                        */
-
+		// Now we can change back to the fully greyed-out version of the
+		// original master palette.
 		mcga_setpal((Palette *)greyed_master_palette);
 
-		/* We must copy the work buffer from EMS again, since we have destroyed */
-		/* the first version we brought back (by remapping to grey again).      */
-
+		// We must copy the work buffer from EMS again, since we have destroyed
+		// the first version we brought back (by remapping to grey again).
 		matte_map_work_screen();
 
 		buffer_restore(&scr_main, object_preserve_handle, work_screen_ems_handle, 0, 0, video_x, video_y);
 
 		matte_map_work_screen();
 
-		/* We are ready to copy the true work buffer image back onto the screen. */
-		/* Since the palette is now fully greyed out, there will be no visible   */
-		/* change.                                                               */
-
+		// We are ready to copy the true work buffer image back onto the screen.
+		// Since the palette is now fully greyed out, there will be no visible
+		// change.
 		mouse_freeze();
 		refresh_flag = mouse_refresh_view_port();
 
@@ -458,8 +417,7 @@ int object_examine(int number, long message, int speech) {
 		if (refresh_flag) mouse_refresh_done();
 		mouse_thaw();
 
-		/* Finally, we can fade back to our original palette. */
-
+		// Finally, we can fade back to our original palette.
 		magic_fade_from_grey((RGBcolor *)greyed_master_palette, master_palette,
 			KERNEL_RESERVED_LOW_COLORS, num_colors,
 			OBJECT_GREY_BASE, OBJECT_GREY_COLORS,
@@ -468,17 +426,15 @@ int object_examine(int number, long message, int speech) {
 		restored_screen = true;
 	}
 
-	/* done: */
-	  /* Turn color cycling back on. */
-
+	// done:
+	  // Turn color cycling back on.
 	memcpy(&cycling_palette[248].r, top_eight, 8 * sizeof(RGBcolor));
 	mcga_setpal_range(&cycling_palette, 248, 8);
 
 	cycling_active = cycling_save;
 
-	/* Don't forget to reload the attribute screen which we wrote all */
-	/* over.                                                          */
-
+	// Don't forget to reload the attribute screen which we wrote all
+	// over.
 	sprite_force_memory = NULL;
 
 

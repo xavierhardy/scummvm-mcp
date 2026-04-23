@@ -307,8 +307,7 @@ int himem_preload(char *filename, int level) {
 			if (ems_copy_it_up(new_handle, &page_marker, &page_offset, load_buf, read_size)) goto done;
 		} else {
 
-			/* printf ("Record %d (Size: %ld, Offset: %ld)\n", count, read_size, xms_offset); */
-
+			// printf ("Record %d (Size: %ld, Offset: %ld)\n", count, read_size, xms_offset);
 			if (xms_copy(read_size,
 				MEM_CONV, load_buf,
 				xms_handle, (XMS)xms_offset)) goto done;
@@ -398,7 +397,7 @@ int himem_preload_series(const char *fname, int level) {
 	Common::strcpy_s(file_buf, fname);
 	char *filename = file_buf;
 
-	fileio_add_ext(filename, "SS"); /* Default to Sprite Series */
+	fileio_add_ext(filename, "SS");  // Default to Sprite Series
 
 	if ((himem_resident(filename) >= 0) || !himem_active) goto done;
 

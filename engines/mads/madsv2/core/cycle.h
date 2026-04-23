@@ -37,7 +37,6 @@ extern int total_cycle_colors;          /* Total # of colors being cycled */
 
 extern long cycle_timing[COLOR_MAX_CYCLES];     /* Timing for each cycle  */
 
-/* cycle_1.c */
 void cycle_init(CycleListPtr new_cycle_list, int activate);
 void cycle_colors(void);
 

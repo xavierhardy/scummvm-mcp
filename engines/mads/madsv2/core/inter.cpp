@@ -221,11 +221,11 @@ void VerbBuf::synchronize(Common::Serializer &s) {
 }
 
 
-/*
-/*      inter_set_colors()
-/*
-/*      Picks out font colors based on the current mode.
-*/
+/**
+ * Picks out font colors based on the current mode.
+ *
+ * @param color_code	Color code
+ */
 static void inter_set_colors(int color_code) {
 	switch (color_code) {
 	case NORMAL:
@@ -240,12 +240,9 @@ static void inter_set_colors(int color_code) {
 	}
 }
 
-/*
-/*      inter_get_spot()
-/*
-/*      Returns hot spot coordinates for a particular stroke class and
-/*      spot #.
-*/
+/**
+ * Returns hot spot coordinates for a particular stroke class and spot #.
+ */
 static int inter_get_spot(int class_, int id, int *x1, int *y1, int *xs, int *ys) {
 	int row, col;
 	int base_x, base_y, delta_x;
@@ -343,13 +340,13 @@ done:
 	return(valid_flag);
 }
 
-
-/*
-/*      inter_show_word()
-/*
-/*      Writes vocabulary word for the particular class_ & id # to the
-/*      interface work buffer.
-*/
+/**
+ * Writes vocabulary word for the particular class_ & id # to the
+ * interface work buffer.
+ *
+ * @param class_	Class
+ * @param id		Id
+ */
 static void inter_show_word(int class_, int id) {
 	int x, y, junk;
 	int word_id = 0;
@@ -448,7 +445,6 @@ done:
 	;
 }
 
-
 static void inter_show_scrollbar(void) {
 	if (scrollbar_active > 0) {
 		inter_show_word(STROKE_SCROLL, scrollbar_active);
@@ -457,13 +453,9 @@ static void inter_show_scrollbar(void) {
 	inter_show_word(STROKE_SCROLL, SCROLL_THUMB);
 }
 
-
-
-/*
-/*      inter_show_all_inven()
-/*
-/*      Writes the current inventory list to the interface work buffer.
-*/
+/**
+ * Writes the current inventory list to the interface work buffer.
+ */
 static void inter_show_all_inven(void) {
 	int count;
 
@@ -472,13 +464,11 @@ static void inter_show_all_inven(void) {
 	}
 }
 
-
-/*
-/*      inter_show_all_actions()
-/*
-/*      Writes the current list of object-specific verbs to the interface
-/*      work buffer.
-*/
+/**
+ * inter_show_all_actions()
+ * Writes the current list of object-specific verbs to the interface
+ * work buffer.
+ */
 static void inter_show_all_actions(void) {
 	int count;
 	int id;
@@ -487,9 +477,9 @@ static void inter_show_all_actions(void) {
 		for (count = 0; count < (int)object[inven[active_inven]].num_verbs; count++) {
 			id = object[inven[active_inven]].vocab_id;
 			id = object_named(id);
-			/* id = object[inven[active_inven]].verb[count].count; */
-			if (id == 8) {  /* pid doll */
-				if (global[86]) {  /* heal_verbs_visible */
+			// id = object[inven[active_inven]].verb[count].count;
+			if (id == 8) {  // pid doll
+				if (global[86]) {  // heal_verbs_visible
 					inter_show_word(STROKE_ACTION, count);
 				} else if (count == 0) {
 					inter_show_word(STROKE_ACTION, count);
@@ -502,9 +492,6 @@ static void inter_show_all_actions(void) {
 	}
 }
 
-/*
-/*      inter_show_all_dialog()
-*/
 static void inter_show_all_dialog(void) {
 	int count;
 
@@ -515,12 +502,6 @@ static void inter_show_all_dialog(void) {
 	}
 }
 
-
-/*
-/*      inter_prepare_background()
-/*
-/*      Writes all relevant words to the interface work buffer.
-*/
 void inter_prepare_background(void) {
 	int count;
 
@@ -543,16 +524,13 @@ void inter_prepare_background(void) {
 	}
 }
 
-
 static void inter_refresh(void) {
-	/*
-	int count;
-	for (count = 0; count < (int)image_inter_marker; count++) {
-	  if (image_inter_list[count].segment_id == INTER_SPINNING_OBJECT) {
-		image_inter_list[count].flags = IMAGE_REFRESH + IMAGE_UPDATE_ONLY;
-	  }
-	}
-	*/
+	// int count;
+	// for (count = 0; count < (int)image_inter_marker; count++) {
+	// if (image_inter_list[count].segment_id == INTER_SPINNING_OBJECT) {
+	// image_inter_list[count].flags = IMAGE_REFRESH + IMAGE_UPDATE_ONLY;
+	// }
+	// }
 	image_inter_marker = 0;
 	matte_refresh_inter();
 
@@ -560,8 +538,6 @@ static void inter_refresh(void) {
 
 	inter_prepare_background();
 }
-
-
 
 void inter_reset_dialog(void) {
 	int count;
@@ -572,13 +548,12 @@ void inter_reset_dialog(void) {
 	}
 }
 
-
 int inter_add_dialog(char *string, int result) {
 	int count, id;
 	char *mark;
 	char *mark2;
 
-	do {                                  /* Double hyphens to dashes */
+	do {  // Double hyphens to dashes
 		mark = strstr(string, "--");
 		if (mark != NULL) {
 			*mark = '{';
@@ -603,13 +578,14 @@ int inter_add_dialog(char *string, int result) {
 	return (id);
 }
 
-
-
 /*
-/*      inter_update()
-/*
-/*      Updates the specified region of the interface on the live screen.
-*/
+ * Updates the specified region of the interface on the live screen.
+ *
+ * @param x1		Top-left X
+ * @param y1		Top-left Y
+ * @param xs		X size
+ * @param ys		Y size
+ */
 static void inter_update(int x1, int y1, int xs, int ys) {
 	int refresh_flag;
 	int y1a;
@@ -655,7 +631,6 @@ static void inter_image(int x1, int y1, int xs, int ys) {
 #endif
 }
 
-
 static void inter_scrollbar_refresh(void) {
 	int x1, y1, xs, ys;
 
@@ -673,15 +648,12 @@ static void inter_scrollbar_refresh(void) {
 	inter_update(x1, y1, xs, ys);
 }
 
-
-/*
-/*      inter_set_active_word()
-/*
-/*      Sets an active word of the specific class_ to the "new" value.
-/*      "old" is a pointer to the main control variable for that value,
-/*      which also contains the old value of that variable.  The old
-/*      word is "turned off" automatically.
-*/
+/**
+ * Sets an active word of the specific class_ to the "new" value.
+ * "old" is a pointer to the main control variable for that value,
+ * which also contains the old value of that variable.  The old
+ * word is "turned off" automatically.
+ */
 static void inter_set_active_word(int class_, int *old, int new_) {
 	int x1, y1, xs, ys;
 	int temp;
@@ -728,14 +700,6 @@ static void inter_set_active_word(int class_, int *old, int new_) {
 	}
 }
 
-
-
-/*
-/*      inter_set_active_inven()
-/*
-/*      Picks a new active object from the inventory list.  This involves
-/*      changing the list of object-specific verbs.
-*/
 void inter_set_active_inven(int new_active) {
 	int new_verbs, old_verbs, max_verbs;
 	int x1, y1, xs, ys;
@@ -807,19 +771,12 @@ void inter_set_active_inven(int new_active) {
 	}
 }
 
-
 static void inter_purge_inven_stroke(void) {
 	left_inven = -1;
 	mouse_init_cycle();
 	stroke_type = STROKE_NONE;
 }
 
-
-/*
-/*      inter_give_to_player ()
-/*
-/*      Adds the specified object to the player's inventory.
-*/
 void inter_give_to_player(int this_) {
 	if (inven_num_objects >= INVEN_MAX_OBJECTS) {
 		error_report(ERROR_PLAYER_INVENTORY_FULL, ERROR, MODULE_INTER, this_, INVEN_MAX_OBJECTS);
@@ -829,12 +786,10 @@ void inter_give_to_player(int this_) {
 
 	inven[inven_num_objects] = this_;
 
-	/* if (!inven_num_objects) { */
-
+	// if (!inven_num_objects) {
 	active_inven = inven_num_objects;
 
-	/* } */
-
+	// }
 	first_inven = MAX(0, first_inven);
 
 	if (first_inven > inven_num_objects) first_inven = inven_num_objects;
@@ -849,11 +804,11 @@ void inter_give_to_player(int this_) {
 
 	inven_num_objects++;
 
-	/* Paul moved this from below */
+	// Paul moved this from below
 done:
 	;
 
-	/* Paul here */
+	// Paul here
 	if ((kernel_mode == KERNEL_ACTIVE_CODE) &&
 		(inter_input_mode == INTER_BUILDING_SENTENCES ||
 			inter_input_mode == INTER_LIMITED_SENTENCES)) {
@@ -862,14 +817,6 @@ done:
 	}
 }
 
-
-
-/*
-/*      inter_take_from_player ()
-/*
-/*      Moves the specified object from the player's inventory to
-/*      the designated location.
-*/
 void inter_take_from_player(int this_, int where_to) {
 	int id = -1;
 	int count;
@@ -918,13 +865,6 @@ void inter_take_from_player(int this_, int where_to) {
 	}
 }
 
-
-/*
-/*      inter_move_object()
-/*
-/*      Moves an object to a new location, taking into account any
-/*      player_inventory problems.
-*/
 void inter_move_object(int object_id, int location) {
 
 	if (object_id == paul_object_showing &&
@@ -939,22 +879,17 @@ void inter_move_object(int object_id, int location) {
 		object[object_id].location = location;
 	}
 
-	/* extra_blank_knothole(); */
-
+	// extra_blank_knothole();
 done:
 	;
 
 	extra_display_object = false;
 }
 
-
-
-/*
-/*      inter_spot_correct()
-/*
-/*      Takes a set of hotspot coordinates that is interface window relative
-/*      and converts it to absolute screen coordinates.
-*/
+/**
+ * Takes a set of hotspot coordinates that is interface window relative
+ * and converts it to absolute screen coordinates.
+ */
 static void inter_spot_correct(int *x1, int *y1, int *x2, int *y2, int xs, int ys) {
 	*x1 += inter_base_x;
 	*x2 = *x1 + xs - 1;
@@ -962,13 +897,6 @@ static void inter_spot_correct(int *x1, int *y1, int *x2, int *y2, int xs, int y
 	*y2 = *y1 + ys - 1;
 }
 
-
-/*
-/*      inter_setup_hotspots()
-/*
-/*      Sets up the hotspot list for the interface module.  Hotspots only
-/*      need to be set up once for each room.
-*/
 void inter_setup_hotspots(void) {
 	int count;
 	int x1, y1, xs, ys;
@@ -1038,12 +966,9 @@ void inter_setup_hotspots(void) {
 	inter_base_hotspots = numspots;
 }
 
-
-/*
-/*      inter_drag_check()
-/*
-/*      Handles up/down "dragging" for inventory list.
-*/
+/**
+ * Handles up/down "dragging" for inventory list.
+ */
 static void inter_drag_check(void) {
 	long timing_level;
 	long current_time;
@@ -1073,12 +998,10 @@ static void inter_drag_check(void) {
 	}
 }
 
-/*
-/*      inter_select_word()
-/*
-/*      Determines which word is being picked off the screen, and makes
-/*      it active.
-*/
+/**
+ * Determines which word is being picked off the screen, and makes
+ * it active.
+ */
 static void inter_select_word(void) {
 	int x1, y1, x2, y2;
 	int junk;
@@ -1104,7 +1027,7 @@ static void inter_select_word(void) {
 		if (mouse_button && (right_action >= 0)) {
 			inter_set_active_word(STROKE_ACTION, &right_action, -1);
 		}
-		/* tight_boxes = (end_of_selection && !mouse_button); */
+		// tight_boxes = (end_of_selection && !mouse_button);
 		tight_boxes = true;
 		break;
 
@@ -1115,7 +1038,7 @@ static void inter_select_word(void) {
 		strict = 0;
 		delta = first_inven;
 		selection = &left_inven;
-		/* tight_boxes = (end_of_selection && ((!mouse_any_stroke) || !(inter_awaiting == AWAITING_COMMAND))); */
+		// tight_boxes = (end_of_selection && ((!mouse_any_stroke) || !(inter_awaiting == AWAITING_COMMAND)));
 		tight_boxes = true;
 		break;
 
@@ -1124,7 +1047,7 @@ static void inter_select_word(void) {
 			paul_id = object[inven[active_inven]].vocab_id;
 			paul_id = object_named(paul_id);
 
-			if (paul_id == 8 && !global[86]) {  /* pid doll / global [heal_verbs_visible] */
+			if (paul_id == 8 && !global[86]) {  // pid doll / global [heal_verbs_visible]
 				quantity = 1;
 			} else {
 				quantity = object[inven[active_inven]].num_verbs;
@@ -1141,7 +1064,7 @@ static void inter_select_word(void) {
 		if (mouse_button && (right_command >= 0)) {
 			inter_set_active_word(STROKE_COMMAND, &right_command, -1);
 		}
-		/* tight_boxes = end_of_selection && !mouse_button; */
+		// tight_boxes = end_of_selection && !mouse_button;
 		tight_boxes = true;
 		break;
 
@@ -1189,13 +1112,11 @@ static void inter_select_word(void) {
 	for (count = 0; (count < quantity) && (new_ < 0); count++) {
 		if (stroke_type == STROKE_INTERFACE) {
 			this_spot = base_spot + (quantity - (count + 1));
-			/*
-			if (count >= difference) {
-			 this_spot = base_spot + (room_num_spots - ((count - difference) + 1));
-			} else {
-			 this_spot = base_spot + room_num_spots + count;
-			}
-			*/
+			// if (count >= difference) {
+			// this_spot = base_spot + (room_num_spots - ((count - difference) + 1));
+			// } else {
+			// this_spot = base_spot + room_num_spots + count;
+			// }
 		} else {
 			this_spot = base_spot + count;
 		}
@@ -1348,13 +1269,6 @@ done:
 	;
 }
 
-
-
-/*
-/*      inter_init_sentence()
-/*
-/*      Begins accepting a new sentence.
-*/
 void inter_init_sentence(void) {
 	inter_awaiting = AWAITING_COMMAND;
 
@@ -1381,13 +1295,12 @@ void inter_init_sentence(void) {
 	inter_sentence_changed = true;
 }
 
-
-
-/*
-/*      inter_add_word_to_sentence()
-/*
-/*      Adds the text for a vocabulary word to the current sentence.
-*/
+/**
+ * Adds the text for a vocabulary word to the current sentence.
+ *
+ * @param vocab_id		Vocabulary Id
+ * @param capitalize	Capitalization flag
+ */
 static void inter_add_word_to_sentence(int vocab_id, int capitalize) {
 	int  len;
 
@@ -1401,13 +1314,10 @@ static void inter_add_word_to_sentence(int vocab_id, int capitalize) {
 	Common::strcat_s(inter_sentence, istring_space);
 }
 
-
-/*
-/*      inter_compile_sentence()
-/*
-/*      Puts together a string for the current sentence, based on the
-/*      information currently available.
-*/
+/**
+ * Puts together a string for the current sentence, based on the
+ * information currently available.
+ */
 static void inter_compile_sentence(void) {
 	int prep_special;
 	int verb;
@@ -1463,7 +1373,7 @@ static void inter_compile_sentence(void) {
 
 			inter_add_word_to_sentence(inter_verb, true);
 			if (inter_verb == words_look) {
-				/* inter_prep = PREP_AT; */
+				// inter_prep = PREP_AT;
 				Common::strcat_s(inter_sentence, istring_prep_names[PREP_AT]);
 				Common::strcat_s(inter_sentence, istring_space);
 			}
@@ -1557,14 +1467,10 @@ done:
 	inter_sentence_changed = true;
 }
 
-
-
-/*
-/*      inter_analyze_stroke()
-/*
-/*      Analyzes the potential effect of the current stroke on the sentence --
-/*      w/ the proviso that the stroke is not yet finished.
-*/
+/**
+ * Analyzes the potential effect of the current stroke on the sentence --
+ * w/ the proviso that the stroke is not yet finished.
+ */
 static void inter_analyze_stroke(void) {
 	if ((stroke_type == STROKE_COMMAND) || (stroke_type == STROKE_ACTION)) {
 		if ((inter_awaiting != AWAITING_COMMAND) && (picked_word >= 0)) {
@@ -1697,13 +1603,10 @@ done:
 	;
 }
 
-
-/*
-/*      inter_complete_stroke()
-/*
-/*      Determines the final effect of a stroke on the sentence, after
-/*      that stroke has been completed.
-*/
+/**
+ * Determines the final effect of a stroke on the sentence, after
+ * that stroke has been completed.
+ */
 static void inter_complete_stroke(void) {
 	int demand_abort;
 
@@ -1756,7 +1659,7 @@ static void inter_complete_stroke(void) {
 			break;
 
 		case STROKE_SPECIAL_INVEN:
-			/* (Remove break to have clicking on spinning object reset inven list) */
+			// (Remove break to have clicking on spinning object reset inven list)
 			break;
 
 		case STROKE_INVEN:
@@ -1845,15 +1748,11 @@ done:
 	;
 }
 
-
-
-/*
-/*      inter_background_animation()
-/*
-/*      Manages the background animation for the interface screen, by
-/*      advancing segment counters and changing matteing lists when
-/*      appropriate.
-*/
+/**
+ * Manages the background animation for the interface screen, by
+ * advancing segment counters and changing matteing lists when
+ * appropriate.
+ */
 static void inter_background_animation(void) {
 	int count, count2;
 	int temp;
@@ -1927,7 +1826,6 @@ done:
 	;
 }
 
-
 void inter_spinning_object(void) {
 	int count;
 
@@ -1964,8 +1862,6 @@ done:
 	;
 }
 
-
-
 void inter_turn_off_object(void) {
 	if (inter_object_series >= 0) {
 		delete_sprite_in_interface(inter_object_series);
@@ -1974,8 +1870,8 @@ void inter_turn_off_object(void) {
 		inter_object_series = -1;
 	}
 
-	/* if last inventory object, copy section of interface */
-	/* over inventory object after removed from list (removed above) */
+	// if last inventory object, copy section of interface
+	// over inventory object after removed from list (removed above)
 	if (active_inven == -1) {
 		if (kernel_mode == KERNEL_ACTIVE_CODE) {
 			video_update(&scr_inter, OUAF_OBJECT_X, 0,
@@ -1989,10 +1885,9 @@ void inter_turn_off_object(void) {
 		paul_object_showing = -1;
 	}
 
-	/* will wipe out other 4 sprites */
+	// will wipe out other 4 sprites
 	if (inter_input_mode == INTER_BUILDING_SENTENCES) inter_refresh();
 }
-
 
 int inter_allocate_objects(void) {
 	int  error_flag = true;
@@ -2014,14 +1909,12 @@ done:
 	return error_flag;
 }
 
-
 void inter_deallocate_objects(void) {
 	if (inter_objects_block != NULL) {
 		mem_free(inter_objects_block);
 		inter_objects_block = NULL;
 	}
 }
-
 
 void inter_screen_update(void) {
 	if (kernel_mode == KERNEL_ACTIVE_CODE) {
@@ -2034,7 +1927,6 @@ void inter_screen_update(void) {
 	}
 }
 
-
 static void inter_exec_function(void (*(target))()) {
 	target();
 }
@@ -2045,8 +1937,8 @@ void inter_spin_object(int object_id) {
 
 	inter_turn_off_object();
 
-	/* update to live screen chunk of interface that selected object */
-	/* is on (it has been deleted in list by now) */
+	// Update to live screen chunk of interface that selected object
+	// is on (it has been deleted in list by now)
 	if (kernel_mode == KERNEL_ACTIVE_CODE) {
 		video_update(&scr_inter, OUAF_OBJECT_X, 0,
 			OUAF_OBJECT_X, 156,
@@ -2055,7 +1947,6 @@ void inter_spin_object(int object_id) {
 
 	if (!inter_spinning_objects) goto done;
 
-	/* Paul */
 	if (inter_input_mode == INTER_BUILDING_SENTENCES ||
 		inter_input_mode == INTER_LIMITED_SENTENCES) inter_screen_update();
 
@@ -2099,15 +1990,6 @@ done:
 	sprite_force_size = 0;
 }
 
-
-
-/*
-/*      inter_main_loop()
-/*
-/*      The main interface loop.  Called by run-time kernel to perform one
-/*      round of interface checking.  Provides mouse interface for the whole
-/*      program.
-*/
 void inter_main_loop(int allow_input) {
 	int width, x, y;
 	int count;
@@ -2253,7 +2135,6 @@ void inter_main_loop(int allow_input) {
 		inter_base_time = now_time + 6;
 	}
 }
-
 
 int inter_load_background(const char *name, Buffer *target) {
 	Color color[16];

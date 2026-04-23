@@ -142,7 +142,7 @@ word pack_read_memory(char *buffer, word *mysize) {
 		pack_read_size -= (uint32)cx;
 	}
 
-	/* read_infinite: */
+	// read_infinite:
 	pack_read_count += (uint32)cx;
 	return_value = cx;
 
@@ -161,7 +161,7 @@ word pack_write_memory(char *buffer, word *mysize) {
 	word cx = *mysize;
 	uint32 remaining = pack_write_size;
 
-	if (pack_write_size != 0xFFFFFFFFUL)  /* not "infinite write" */
+	if (pack_write_size != 0xFFFFFFFFUL)  // not "infinite write"
 	{
 		if (remaining == 0)
 			goto write_done;
@@ -172,7 +172,7 @@ word pack_write_memory(char *buffer, word *mysize) {
 		pack_write_size -= (uint32)cx;
 	}
 
-	/* write_infinite: */
+	// write_infinite:
 	pack_write_count += (uint32)cx;
 
 	if (cx != 0) {
@@ -232,15 +232,6 @@ done:
 }
 
 
-/*
-/*      pack_raw_copy()
-/*
-/*      Imitates the behavior of "implode" and "explode", but performs
-/*      no data compression --> just copies the data.
-/*
-/*      (So that we can have a transparent interface which either
-/*      compresses the data or doesn't, depending on our secret desires).
-*/
 word pack_raw_copy(void) {
 	word result = CMP_NO_ERROR;
 	word read_this_time;
@@ -260,14 +251,6 @@ word pack_raw_copy(void) {
 }
 
 
-/*
-/*      pack_a_packet()
-/*
-/*      Given that our packing parameters are set up (i.e.
-/*      pack_read_size, pack_write_size, and so forth), this
-/*      routine uses the specified packing strategy to move
-/*      a record.
-*/
 word pack_a_packet(int packing_flag, int explode_mode) {
 	word result;
 	word pack_window_size;
@@ -275,11 +258,9 @@ word pack_a_packet(int packing_flag, int explode_mode) {
 	switch (packing_flag) {
 	case PACK_IMPLODE:
 		pack_window_size = PACK_WINDOW_SIZE;
-		/*
-		while ((pack_read_size < (long)pack_window_size) && ((long)pack_window_size > PACK_MIN_WINDOW_SIZE)) {
-		 pack_window_size = pack_window_size >> 1;
-		}
-		*/
+		// while ((pack_read_size < (long)pack_window_size) && ((long)pack_window_size > PACK_MIN_WINDOW_SIZE)) {
+		// pack_window_size = pack_window_size >> 1;
+		// }
 		if (pack_strategy == PACK_PFAB) {
 			result = (*pack_pFABcomp_routine)(pack_read_routine, pack_write_routine, (char *)pack_buffer,
 				&pack_mode, &pack_window_size);
@@ -329,46 +310,6 @@ void pack_set_special_buffer(byte *buffer_address, void (*(special_function))())
 	pack_special_function = special_function;
 }
 
-/*
-/*      pack_data()
-/*
-/*      Transfers a data packet from the specified source to the specified
-/*      destination, using the specified packing strategy.
-/*
-/*              packing_flag    Specifies the packing strategy:
-/*                              PACK_IMPLODE  (Compresses   data)
-/*                              PACK_EXPLODE  (Decompresses data)
-/*                              PACK_RAW_COPY (Copies data)
-/*
-/*              size            # of bytes to move
-/*
-/*              source_type     Specifies the source type:
-/*                              FROM_DISK or FROM_MEMORY.
-/*
-/*              source          If FROM_DISK, then this is a FILE *handle.
-/*                              If FROM_MEMORY, this is a far memory pointer.
-/*
-/*              dest_type       Specifies the destination type:
-/*                              TO_DISK, TO_MEMORY, or TO_EMS.
-/*
-/*              dest            Same as "source" but for destination. For
-/*                              TO_EMS, "dest" is a far pointer to an
-/*                              EmsPtr structure.
-/*
-/*
-/*      Example:
-/*
-/*              result =pack_data (PACK_EXPLODE, 132000,
-/*                                 FROM_DISK, file_handle,
-/*                                 TO_MEMORY, memory_pointer);
-/*
-/*              (Decompresses 132000 bytes from the already open
-/*               disk file "file_handle", and writes it to memory
-/*               far the specified address.  Size is always the
-/*               uncompressed size of the data.  Result will be
-/*               the # of bytes actually written -- 132000 if successful).
-/*
-*/
 long pack_data(int packing_flag, long size,
 	int source_type, void *source, int dest_type, void *dest) {
 	int explode_mode = 0;
@@ -377,19 +318,17 @@ long pack_data(int packing_flag, long size,
 	EmsPtr *ems_dest;
 	int result;
 
-	/* Select the read data routine */
-
+	// Select the read data routine
 	if (source_type == FROM_MEMORY) {
 		pack_read_routine = pack_read_memory;
 		pack_read_memory_ptr = (byte *)source;
 	} else {
-		/* FROM_DISK */
+		// FROM_DISK
 		pack_read_routine = pack_read_file;
 		pack_read_file_handle = (Common::SeekableReadStream *)source;
 	}
 
-	/* Select the write data routine */
-
+	// Select the write data routine
 	if (dest_type == TO_EMS) {
 		pack_write_routine = pack_write_ems;
 		ems_dest = (EmsPtr *)dest;
@@ -400,13 +339,12 @@ long pack_data(int packing_flag, long size,
 		pack_write_routine = pack_write_memory;
 		pack_write_memory_ptr = (byte *)dest;
 	} else {
-		/* TO_DISK */
+		// TO_DISK
 		pack_write_routine = pack_write_file;
 		pack_write_file_handle = (Common::WriteStream *)dest;
 	}
 
-	/* Set up the packing parameters */
-
+	// Set up the packing parameters
 	pack_read_count = pack_write_count = 0;
 
 	switch (packing_flag) {
@@ -422,31 +360,31 @@ long pack_data(int packing_flag, long size,
 				error_report(ERROR_EXPLODER_NULL, SEVERE, MODULE_EXPLODER, packing_flag, pack_strategy);
 			}
 		}
-		pack_read_size = size;                  /* Stop after reading "size" bytes  */
-		pack_write_size = -1;                    /* Write as many bytes as necessary */
-		loop_value = &pack_read_size;       /* Loop control is # bytes to read  */
-		return_value = &pack_read_count;      /* Return value is # bytes read     */
+		pack_read_size = size;  // Stop after reading "size" bytes
+		pack_write_size = -1;  // Write as many bytes as necessary
+		loop_value = &pack_read_size;  // Loop control is # bytes to read
+		return_value = &pack_read_count;  // Return value is # bytes read
 		break;
 
 	case PACK_EXPLODE:
-		pack_read_size = -1;                    /* Read as many bytes as necessary  */
-		pack_write_size = size;                  /* Stop after writing "size" bytes  */
-		loop_value = &pack_write_size;      /* Loop control is # bytes to write */
+		pack_read_size = -1;  // Read as many bytes as necessary
+		pack_write_size = size;  // Stop after writing "size" bytes
+		loop_value = &pack_write_size;  // Loop control is # bytes to write
 		if (pack_strategy == PACK_PFAB) {
 			if ((source_type == FROM_MEMORY) && (dest_type == FROM_MEMORY) &&
 				(pack_pFABexp2_routine != NULL)) {
-				return_value = &size; /* Fake return value */
+				return_value = &size;  // Fake return value
 				pack_buffer_size = PACK_PFABEXP2_SIZE;
 				explode_mode = 2;
 			} else if ((dest_type == TO_DISK) || (dest_type == TO_EMS)) {
-				return_value = &pack_write_count;   /* Return value is # bytes written  */
+				return_value = &pack_write_count;  // Return value is # bytes written
 				pack_buffer_size = PACK_PFABEXP0_SIZE;
 				explode_mode = 0;
 				if (pack_pFABexp0_routine == NULL) {
 					error_report(ERROR_EXPLODER_NULL, SEVERE, MODULE_EXPLODER, packing_flag, pack_strategy);
 				}
 			} else {
-				return_value = &size;               /* Fake return value for file-to_mem*/
+				return_value = &size;  // Fake return value for file-to_mem
 				pack_buffer_size = PACK_PFABEXP1_SIZE;
 				explode_mode = 1;
 				if (pack_pFABexp1_routine == NULL) {
@@ -465,15 +403,14 @@ long pack_data(int packing_flag, long size,
 	case PACK_RAW_COPY:
 	default:
 		pack_buffer_size = PACK_RAW_COPY_SIZE;
-		pack_read_size = size;                  /* Stop after reading "size" bytes   */
-		pack_write_size = size;                  /* ... or after writing "size" bytes */
-		loop_value = &pack_read_size;       /* Loop control is # bytes to read   */
-		return_value = &pack_write_count;     /* Return value is # bytes written   */
+		pack_read_size = size;  // Stop after reading "size" bytes
+		pack_write_size = size;  // ... or after writing "size" bytes
+		loop_value = &pack_read_size;  // Loop control is # bytes to read
+		return_value = &pack_write_count;  // Return value is # bytes written
 		break;
 	}
 
-	/* Get memory for packing buffer if necessary */
-
+	// Get memory for packing buffer if necessary
 	pack_buffer = NULL;
 
 	if (pack_special_buffer == NULL) {
@@ -486,8 +423,7 @@ long pack_data(int packing_flag, long size,
 		pack_buffer = pack_special_buffer;
 	}
 
-	/* Keep moving records until we run out of data or die */
-
+	// Keep moving records until we run out of data or die
 	if ((packing_flag == PACK_EXPLODE) && (dest_type == TO_MEMORY)) {
 		result = pack_a_packet(packing_flag, explode_mode);
 		if (result != CMP_NO_ERROR) {
@@ -505,8 +441,7 @@ long pack_data(int packing_flag, long size,
 		}
 	}
 
-	/* Free memory and go away */
-
+	// Free memory and go away
 done:
 	if (pack_special_buffer == NULL) {
 		if (pack_buffer != NULL) mem_free(pack_buffer);
@@ -518,12 +453,6 @@ done:
 }
 
 
-/*
-/*      pack_check()
-/*
-/*      Asks user to choose between compressed and uncompressed data
-/*      formats.
-*/
 int pack_check(void) {
 	dialog_declare_ok(dialog);
 	ItemPtr none_item, zip_item = nullptr, pfab_item = nullptr, default_item;
@@ -634,7 +563,7 @@ read_loop:
 	if (--cx != 0)
 		goto read_loop;
 
-	/* loop fell through: store current run and finish */
+	// loop fell through: store current run and finish
 	*((word *)di) = (word)bh | ((word)bl << 8);
 	di += 2;
 	dx += 2;
@@ -647,13 +576,13 @@ make_new:
 	if (--cx != 0)
 		goto new_code;
 
-	/* store the final byte as a run of 1 */
+	// store the final byte as a run of 1
 	*((word *)di) = (word)1 | ((word)al << 8);
 	di += 2;
 	dx += 2;
 
 packed:
-	/* store terminating zero word */
+	// store terminating zero word
 	*((word *)di) = 0;
 	di += 2;
 	dx += 2;

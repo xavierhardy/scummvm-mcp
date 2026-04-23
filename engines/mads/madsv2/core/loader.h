@@ -63,7 +63,7 @@ public:
 	}
 
 	int64 pos() const override { return 0; }
-	int64 size() const { return 0; }
+	int64 size() const override { return 0; }
 	bool seek(int64 offset, int whence = SEEK_SET) override { return false; }
 	bool eos() const override { return false; }
 	uint32 read(void *dataPtr, uint32 dataSize) override;

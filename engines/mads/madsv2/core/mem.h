@@ -90,12 +90,10 @@ extern void mem_restore_free();
  */
 extern void mem_get_block_name(byte *block, char *block_name);
 
-/* mem_4.cpp */
 extern long mem_get_avail();
 extern long mem_conv_get_avail();
 extern void mem_set_video_mode(int mode);
 
-/* mem_5.cpp */
 extern long mem_program_block();
 
 } // namespace MADSV2

@@ -436,23 +436,8 @@ void AboutDialog::handleMouseMoved(int x, int y, int button) {
 }
 
 void AboutDialog::handleMouseWheel(int x, int y, int direction) {
-	const int stepping = 5 * _lineHeight * direction;
-
-	if (stepping == 0)
-		return;
-
 	_autoScroll = false;
-	_fluidScroller->stopAnimation();
-
-	_scrollPos += stepping;
-	_scrollPos = _fluidScroller->setPosition(_scrollPos, true);
-
-	if (_scrollbar) {
-		_scrollbar->_currentPos = (int)_scrollPos;
-		_scrollbar->recalc();
-	}
-
-	drawDialog(kDrawLayerForeground);
+	_fluidScroller->handleMouseWheel(direction);
 }
 
 void AboutDialog::handleCommand(CommandSender *sender, uint32 cmd, uint32 data) {
@@ -544,7 +529,7 @@ void AboutDialog::reflowLayout() {
 	buildLines();
 
 	int maxScroll = MAX(0, (int)(_lines.size() * _lineHeight) - _textRect.height());
-	_fluidScroller->setBounds((float)maxScroll, _textRect.height());
+	_fluidScroller->setBounds((float)maxScroll, _textRect.height(), (float)_scrollbar->_singleStep);
 }
 
 

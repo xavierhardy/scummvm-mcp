@@ -220,7 +220,8 @@ enum EventType {
 	ANIMATE_EVENT = 1 << 2,
 	SCROLL_EVENT  = 1 << 3,
 	PLAYER_DAMAGE_EVENT = 1 << 4,
-	MONSTER_DAMAGE_EVENT = 1 << 5
+	MONSTER_DAMAGE_EVENT = 1 << 5,
+	PN_FADE_EVENT = 1 << 6
 };
 
 struct GameSpecificSettings;
@@ -625,6 +626,13 @@ protected:
 	uint8 _simon2LanguageFlagTimer;
 	bool _simon2LanguageFlagClearPending;
 
+	uint16 _pnPaletteBanks[2][16];
+	uint16 _pnFadeCurrent[16];
+	uint16 _pnDayNightControllerSelectorMask;
+	uint8 _pnDayNightControllerLastStage;
+	int16 _pnLastClockMinutes;
+	bool _pnHavePaletteBank[2];
+	uint16 _pnDayNightControllerTickCounter;
 	byte *_planarBuf;
 	byte _videoBuf1[32000];
 	uint16 _videoWindows[128];
@@ -1303,6 +1311,16 @@ protected:
 	void clearVideoBackGround(uint16 windowNum, uint16 color);
 
 	void setPaletteSlot(uint16 srcOffs, uint8 dstOffs);
+	bool isPNDayNightPaletteMode() const;
+	uint8 getPNDesiredPaletteBank() const;
+	void notePNClockValueChange();
+	void resetPNRoomPaletteState();
+	void buildPNPaletteTarget(uint16 selectorMask, uint16 *target) const;
+	uint16 blendPNPaletteColor(uint16 source, uint16 target, uint8 steps) const;
+	uint8 getPNDayNightControllerStage() const;
+	void startPNDayNightController(uint16 selectorMask);
+	void updatePNDayNightController(uint16 selectorMask);
+	void applyPNDayNightPalette(const uint16 *palette);
 	void checkOnStopTable();
 	void checkWaitEndTable();
 
@@ -1316,6 +1334,8 @@ protected:
 	void addVgaEvent(uint16 num, uint8 type, const byte *codePtr, uint16 curSprite, uint16 curZoneNum);
 	void deleteVgaEvent(VgaTimerEntry * vte);
 	void processVgaEvents();
+	void schedulePNFadeEvent();
+	void removePNFadeEvent();
 	void animateEvent(const byte *codePtr, uint16 curZoneNum, uint16 curSprite);
 	void scrollEvent();
 	void drawStuff(const byte *src, uint offs);
@@ -1677,6 +1697,9 @@ protected:
 	void addChar(uint8 chr);
 	void clearCursor(WindowBlock *window);
 	void clearInputLine();
+	bool tryHandleDebugTimeCommand();
+	bool tryParseDebugTimeCommand(const char *typed, uint16 &hour, uint16 &minute) const;
+	void setDebugTime(uint16 hour, uint16 minute);
 	void handleKeyboard();
 	void handleMouseMoved() override;
 	void interact(char *buffer, uint8 size);

@@ -64,33 +64,25 @@ extern int qual_allocation;
 extern int qual_words;
 extern char *qual;
 
-/* qual_1.cpp */
 int        qual_destroy(void);
 
-/* qual_2.cpp */
 int        qual_load(int allocation_flag);
 int        qual_get_code(char *inp);
 char *qual_get_word(char *out, int inp);
 
-/* qual_3.cpp */
 int        qual_write_file(char *last_word);
 int        qual_add_word(char *inp);
 
-/* qual_4.c */
 void       qual_report_error(int number);
 
-/* qual_5.cpp */
 char *qual_select_word(char *out,
 	char *prompt,
 	char *default_word);
 
-/* qual_6.cpp */
 void       qual_maint(void);
 
-/* qual_7.cpp */
 int        qual_build(void);
 
-/* qual_8.cpp */
 void       qual_unload_active(void);
 void       qual_init_active(void);
 int        qual_active_id(word id);

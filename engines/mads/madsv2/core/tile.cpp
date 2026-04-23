@@ -109,8 +109,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 
 	load_handle.open = false;
 
-	/* Load tile map */
-
+	// Load tile map
 	if (tile_type > TILE_ATTRIBUTE) {
 		if (!env_exist(map_name)) {
 			map_name[strlen(map_name) - 1] = '0';
@@ -123,7 +122,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		goto done;
 	}
 
-	/* Read map header record */
+	// Read map header record
 	{
 		byte buffer[TileMapHeader::SIZE];
 		if (!loader_read(buffer, TileMapHeader::SIZE, 1, &load_handle)) {
@@ -136,8 +135,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		map->load(&src);
 	}
 
-	/* Compute map size and read map */
-
+	// Compute map size and read map
 	map->tile_type = tile_type;
 
 	map_size = (map->num_x_tiles * map->num_y_tiles) * sizeof(int16);
@@ -165,8 +163,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 	loader_close(&load_handle);
 
 
-	/* Load tile resource */
-
+	// Load tile resource
 	if (loader_open(&load_handle, resource_name, "rb", true)) {
 		tile_load_error = 5;
 		goto done;
@@ -178,7 +175,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		top_of_file = load_handle.handle->pos();
 	}
 
-	/* Read tile resource header record */
+	// Read tile resource header record
 	{
 		byte buffer[TileResource::SIZE];
 		if (!loader_read(buffer, TileResource::SIZE, 1, &load_handle)) {
@@ -190,8 +187,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		tile_resource->load(&src);
 	}
 
-	/* Initialize map structure parameters */
-
+	// Initialize map structure parameters
 	map_x_size = map->tile_x_size * map->num_x_tiles;
 	map_y_size = map->tile_y_size * map->num_y_tiles;
 
@@ -204,20 +200,17 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 	map->orig_x_tiles = ((map->orig_x_size - 1) / map->tile_x_size) + 1;
 	map->orig_y_tiles = ((map->orig_y_size - 1) / map->tile_y_size) + 1;
 
-	/* Prepare main ORIG or ATTR buffer */
-
+	// Prepare main ORIG or ATTR buffer
 	if (tile_type == TILE_PICTURE) {
 		buffer_init_name(picture, map->orig_x_size, map->orig_y_size, "$scrorig");
 	} else {
 		buffer_init_name(picture, ((map->orig_x_size - 1) >> 1) + 1, map->orig_y_size, "$scrdpth");
 	}
 
-	/* Check if one-to-one correspondence between ORIG and VIEWPORT */
-
+	// Check if one-to-one correspondence between ORIG and VIEWPORT
 	map->one_to_one = (map->orig_x_size == map->viewport_x) && (map->orig_y_size == map->viewport_y);
 
-	/* Initialize panning parameters */
-
+	// Initialize panning parameters
 	pan = !map->one_to_one;
 
 	map->pan_x = pan;
@@ -240,8 +233,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		buffer_fill(*picture, 0xff);
 	}
 
-	/* Get a temporary buffer to load tiles into */
-
+	// Get a temporary buffer to load tiles into
 	if (tile_type == TILE_PICTURE) {
 		buffer_init_name(&tile_buffer, tile_resource->tile_x, tile_resource->tile_y, "$t-load$");
 	} else {
@@ -252,8 +244,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		goto done;
 	}
 
-	/* Load tile file offset list */
-
+	// Load tile file offset list
 	tile_space = (((long)tile_resource->num_tiles) * sizeof(Tile));
 
 	if (tile_space) {
@@ -278,8 +269,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 			dest->file_offset = src.readSint32LE();
 	}
 
-	/* For background pictures, load color lists and allocate palette space */
-
+	// For background pictures, load color lists and allocate palette space
 	if (tile_type == TILE_PICTURE) {
 		if (color_list != NULL) my_color_list = color_list;
 		if (cycle_list != NULL) my_cycle_list = cycle_list;
@@ -365,16 +355,14 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 
 	tile_resource->color_handle = color_handle;
 
-	/* Compute size in bytes of a single tile */
-
+	// Compute size in bytes of a single tile
 	if (tile_type == TILE_PICTURE) {
 		tile_resource->chunk_size = (long)tile_resource->tile_x * (long)tile_resource->tile_y;
 	} else {
 		tile_resource->chunk_size = ((((long)tile_resource->tile_x - 1) >> 1) + 1) * (long)tile_resource->tile_y;
 	}
 
-	/* Allocate flat tile store for panning maps */
-
+	// Allocate flat tile store for panning maps
 	if (!map->one_to_one) {
 		delete[] tile_resource->tile_data;
 		tile_resource->tile_data = new byte[(long)tile_resource->num_tiles * tile_resource->chunk_size]();
@@ -384,7 +372,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		}
 	}
 
-	/* Get current (base) position in file */
+	// Get current (base) position in file
 	if (memory_mode == LOADER_DISK) {
 		base_position = load_handle.handle->pos();
 	} else {
@@ -394,8 +382,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		}
 	}
 
-	/* Load tile data into memory */
-
+	// Load tile data into memory
 	for (count = 0; count < tile_resource->num_tiles; count++) {
 		switch (memory_mode) {
 		case LOADER_XMS:
@@ -411,8 +398,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 
 		case LOADER_DISK:
 		default:
-			/* Set to appropriate file position */
-
+			// Set to appropriate file position
 			if (count < (tile_resource->num_tiles - 1)) {
 				compressed_size = tile[count + 1].file_offset - tile[count].file_offset;
 			} else {
@@ -423,8 +409,7 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 			pack_strategy = tile_resource->compression;
 			packing_flag = (pack_strategy != PACK_NONE) ? PACK_EXPLODE : PACK_RAW_COPY;
 
-			/* Unpack the tile data */
-
+			// Unpack the tile data
 			if (packing_flag == PACK_EXPLODE) {
 				decompress_buffer = (byte *)mem_get_name(compressed_size, "$tilpack");
 				if (decompress_buffer != NULL) {
@@ -458,15 +443,13 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 			break;
 		}
 
-		/* Translate color information for background pictures */
-
+		// Translate color information for background pictures
 		if (tile_type == TILE_PICTURE) {
 			color_buffer_list_to_main(my_color_list, &tile_buffer);
 		}
 
-		/* If a one-to-one map, just draw the tile into the ORIG buffer; */
-		/* if a panning map, copy tile into proper EMS page.             */
-
+		// If a one-to-one map, just draw the tile into the ORIG buffer;
+		// if a panning map, copy tile into proper EMS page.
 		if (map->one_to_one) {
 			if (tile_type == TILE_PICTURE) {
 				x_size = map->tile_x_size;
@@ -492,13 +475,11 @@ int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 		}
 	}
 
-	/* Store some pointers so we won't have to pass them around separately */
-
+	// Store some pointers so we won't have to pass them around separately
 	map->resource = tile_resource;
 	map->buffer = picture;
 
-	/* Store total size so we won't have to multiply it out over and over */
-
+	// Store total size so we won't have to multiply it out over and over
 	map->total_x_size = map->num_x_tiles * map->tile_x_size;
 	map->total_y_size = map->num_y_tiles * map->tile_y_size;
 
@@ -533,7 +514,7 @@ int tile_buffer(Buffer *target, TileResource *tile_resource,
 	int map_y_offset;
 	int map_value;
 	Buffer tile_buffer;
-	int max_x;
+	int max_x, max_y;
 
 	default_value = (map->tile_type == TILE_PICTURE) ? 0 : 0xff;
 
@@ -548,11 +529,12 @@ int tile_buffer(Buffer *target, TileResource *tile_resource,
 
 	// WORKAROUND: For tile panning reading beyond end of buffer
 	max_x = MIN<int>(map->orig_x_tiles, map->num_x_tiles - tile_x);
+	max_y = MIN<int>(map->orig_y_tiles, map->num_y_tiles - tile_y);
 
-	for (y = 0; y < map->orig_y_tiles; y++) {
-
+	for (y = 0; y < max_y; y++) {
 		picture_y = y * map->tile_y_size;
 		map_y_offset = (y + tile_y) * map->num_x_tiles;
+
 		for (x = 0; x < max_x; x++) {
 			picture_x = x * size_x;
 			map_value = *(map->map + map_y_offset + tile_x + x);

@@ -60,14 +60,15 @@ namespace MADSV2 {
 #define MATTE_FX_FAST_AND_FANCY       21
 
 
-typedef struct MatteBuf {
+struct Matte {
 	int x, y;             /* upper left coords    */
 	int xs, ys;             /* sizes                */
 	int xh, yh;             /* half sizes           */
 	int xc, yc;             /* centers              */
 	byte changed;           /* changed this update? */
 	byte valid;             /* contains valid matte?*/
-} Matte;
+	Matte *linked_matte;
+};
 
 typedef Matte *MattePtr;
 
@@ -124,35 +125,28 @@ extern TileResource  picture_resource, depth_resource; /* Tile resources    */
 
 
 
-/* matte_1.c */
 void matte_init(int init_series);
 int  matte_map_work_screen(void);
 
 
-/* matte_1.c */
 void matte_frame(int special_effect, int full_screen);
 
-/* matte_1.c */
 //void matte_init_series(void);
 int  matte_load_series(const char *name, int load_flags, int bonus_series_number);
 void matte_deallocate_series(int id, int free_memory);
 int  matte_allocate_series(SeriesPtr series,
 	int bonus_series_number);
 
-/* matte_1.c */
 //void matte_init_messages(void);
 int  matte_add_message(FontPtr font, char *text,
 	int x, int y, int message_color,
 	int auto_spacing);
 void matte_clear_message(int handle);
 
-/* matte_1.c */
 int matte_allocate_image(void);
 
-/* matte_1.c */
 void matte_refresh_work(void);
 
-/* matte_2.c */
 void matte_inter_frame(int update_live, int clear_chaff);
 int  matte_allocate_inter_image(void);
 void matte_refresh_inter(void);

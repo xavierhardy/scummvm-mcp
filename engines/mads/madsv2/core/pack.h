@@ -177,18 +177,72 @@ extern word (*pack_pFABexp2_routine)(
 
 
 extern byte *pack_special_buffer;
-extern void (*(pack_special_function))();
+extern void (*pack_special_function)();
 
 
 extern word pack_read_memory(char *buffer, word *size);
 extern word pack_write_memory(char *buffer, word *size);
 extern word pack_read_file(char *buffer, word *size);
 extern word pack_write_file(char *buffer, word *size);
+/*
+ * pack_a_packet()
+ * Given that our packing parameters are set up (i.e.
+ * pack_read_size, pack_write_size, and so forth), this
+ * routine uses the specified packing strategy to move
+ * a record.
+ *
+ * @param packing_flag	
+ * @param explode_mode	
+ * @return 
+ */
 extern word pack_a_packet(int packing_flag, int explode_mode);
+/*
+ * pack_data()
+ * Transfers a data packet from the specified source to the specified
+ * destination, using the specified packing strategy.
+ * packing_flag    Specifies the packing strategy:
+ * PACK_IMPLODE  (Compresses   data)
+ * PACK_EXPLODE  (Decompresses data)
+ * PACK_RAW_COPY (Copies data)
+ * size            # of bytes to move
+ * source_type     Specifies the source type:
+ * FROM_DISK or FROM_MEMORY.
+ * source          If FROM_DISK, then this is a FILE *handle.
+ * If FROM_MEMORY, this is a far memory pointer.
+ * dest_type       Specifies the destination type:
+ * TO_DISK, TO_MEMORY, or TO_EMS.
+ * dest            Same as "source" but for destination. For
+ * TO_EMS, "dest" is a far pointer to an
+ * EmsPtr structure.
+ * Example:
+ * result =pack_data (PACK_EXPLODE, 132000,
+ * FROM_DISK, file_handle,
+ * TO_MEMORY, memory_pointer);
+ * (Decompresses 132000 bytes from the already open
+ * disk file "file_handle", and writes it to memory
+ * far the specified address.  Size is always the
+ * uncompressed size of the data.  Result will be
+ * the # of bytes actually written -- 132000 if successful).
+ *
+ * @param packing_flag	
+ * @param size	
+ * @param source_type	
+ * @param source	
+ * @param dest_type	
+ * @param dest	
+ * @return 
+ */
 extern long pack_data(int packing_flag, long size, int source_type, void *source,
 	int dest_type, void *dest);
 extern void pack_set_special_buffer(byte *buffer_address,
 	void (*(special_function))());
+/*
+ * pack_check()
+ * Asks user to choose between compressed and uncompressed data
+ * formats.
+ *
+ * @return 
+ */
 extern int pack_check(void);
 extern void pack_enable_zip(void);
 extern void pack_enable_pfab(void);

@@ -156,14 +156,12 @@ void rail_connect_all_nodes(void) {
 
 
 /**
- * Parameters (passed in registers in the original):
- *   node_id      -- BX: node currently being evaluated
- *   weight       -- DX: cumulative weight for this solution attempt
- *   allow_mode   -- AX: RAIL_ALLOW_ILLEGAL or RAIL_ALLOW_LEGAL_ONLY
- *
- * Stack state:
- *   working_sp   -- SI in the original: index into _rail_working_stack,
- *                   acting as a simple push-down stack pointer.
+ * Used for recursively determing walk path between room rail nodes
+ * @param node_id		Node currently being evaluated
+ * @param weight		Cumulative weight for this solution attempt
+ * @param allow_mode	Mode: RAIL_ALLOW_ILLEGAL or RAIL_ALLOW_LEGAL_ONLY
+ * @param working_sp	Index into _rail_working_stack, acting as a simple
+ * push-down stack pointer.
  *
  * The function is recursive and modifies the globals directly.
  */
@@ -171,58 +169,56 @@ static void recursive_check_path(int node_id,
 	uint16 weight,
 	uint16 allow_mode,
 	int working_sp) {
-	/* visited[node_id] = true */
+	// visited[node_id] = true
 	rail_visited[node_id] = 1;
 
-	/* push(node_id) onto working stack */
+	// push(node_id) onto working stack
 	rail_working_stack[working_sp] = (unsigned char)node_id;
 	working_sp++;
 
-	/* Point at rail[node_id] */
+	// Point at rail[node_id]
 	Rail *node = &rail_base[node_id];
 
-	/* The source node is second-to-last: index = num_nodes - 2.
-	   We look up the weight from node_id to the source (from_node). */
+	// The source node is second-to-last: index = num_nodes - 2.
+	// We look up the weight from node_id to the source (from_node).
 	int from_node = rail_num_nodes - 2;
 	uint16 raw_weight = node->weight[from_node];
 
-	/* Check whether there is a direct legal path to the destination */
+	// Check whether there is a direct legal path to the destination
 	if (raw_weight & allow_mode) {
 		uint16 leg_weight = raw_weight & RAIL_WEIGHT_MASK;
 		uint16 total = weight + leg_weight;
 
 		if (total < rail_solution_stack_weight) {
-			/* This is a better solution -- save it */
-			int stack_len = working_sp; /* number of bytes currently on stack */
+			// This is a better solution -- save it
+			int stack_len = working_sp;  // number of bytes currently on stack
 			memcpy(rail_solution_stack, rail_working_stack, stack_len);
 			rail_solution_stack_pointer = (uint16)stack_len;
 			rail_solution_stack_weight = total;
 		}
 	} else {
-		/*
-		 * No direct path -- recurse through every unvisited intermediate node.
-		 * Intermediate nodes are indices 0 .. (num_nodes - 3); the last two
-		 * entries in the array are the destination and source nodes.
-		 */
+		// No direct path -- recurse through every unvisited intermediate node.
+		// Intermediate nodes are indices 0 .. (num_nodes - 3); the last two
+		// entries in the array are the destination and source nodes.
 		int num_intermediate = rail_num_nodes - 2;
 
 		for (int i = 0; i < num_intermediate; i++) {
-			int test_node = i;          /* loop counter - 1 in the ASM    */
+			int test_node = i;  // loop counter - 1 in the ASM
 
 			if (rail_visited[test_node])
 				continue;
 
-			/* Check edge weight from current node to test_node */
+			// Check edge weight from current node to test_node
 			uint16 edge_raw = node->weight[test_node];
 			uint16 edge_legal = edge_raw & allow_mode;
 
 			if (!edge_legal)
-				continue;               /* not a legal connection          */
+				continue;  // not a legal connection
 
 			uint16 edge_weight = edge_raw & RAIL_WEIGHT_MASK;
 
-			/* All further legs must be strictly legal once we step through
-			   an intermediate node (the ASM forces RAIL_ALLOW_LEGAL_ONLY) */
+			// All further legs must be strictly legal once we step through
+			// an intermediate node (the ASM forces RAIL_ALLOW_LEGAL_ONLY)
 			recursive_check_path(test_node,
 				weight + edge_weight,
 				RAIL_ALLOW_LEGAL_ONLY,
@@ -230,22 +226,22 @@ static void recursive_check_path(int node_id,
 		}
 	}
 
-	/* visited[node_id] = false  (unwind) */
+	// visited[node_id] = false  (unwind)
 	rail_visited[node_id] = 0;
 
-	/* pop() -- working_sp is a local copy so this just falls off the frame */
+	// pop() -- working_sp is a local copy so this just falls off the frame
 }
 
 void rail_check_path(int allow_one_illegal) {
-	/* Clear the visited array */
+	// Clear the visited array
 	memset(rail_visited, 0, rail_num_nodes);
 
-	/* Initialise solution state to "no solution yet" */
+	// Initialise solution state to "no solution yet"
 	rail_solution_stack_weight = RAIL_WEIGHT_MASK;
 	rail_solution_stack_pointer = 0;
 
-	/* The last node in the array (index num_nodes - 1) is the starting
-	   node for the search (the destination, in path terms) */
+	// The last node in the array (index num_nodes - 1) is the starting
+	// node for the search (the destination, in path terms)
 	int start_node = rail_num_nodes - 1;
 
 	uint16 allow_mode = allow_one_illegal ? RAIL_ALLOW_ILLEGAL

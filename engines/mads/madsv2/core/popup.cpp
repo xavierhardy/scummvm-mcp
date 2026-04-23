@@ -178,8 +178,7 @@ void popup_next_line(void) {
 	}
 
 	box->text_x = 0;
-	/* box->dont_add_space = false; */
-
+	// box->dont_add_space = false;
 	if (box->text_y >= POPUP_MAX_LINES) {
 		error_report(ERROR_POPUP_TOO_MANY_LINES, ERROR, MODULE_POPUP, box->text_y, POPUP_MAX_LINES);
 	}
@@ -243,17 +242,17 @@ void popup_write_string(const char *string) {
 				cr = true;
 				marker++;
 				word_ptr--;
-			} else if (*marker == 0x20) {   /* Soft space */
+			} else if (*marker == 0x20) {  // Soft space
 				marker++;
 				any_space = true;
-			} else if (*marker == '~') {    /* Hard space */
+			} else if (*marker == '~') {  // Hard space
 				word_ptr--;
 				*word_ptr++ = ' ';
 				marker++;
-			} else if (any_space) {         /* (Break after space) */
+			} else if (any_space) {  // (Break after space)
 				word_ptr--;
 				going = false;
-			} else if (*marker == '=') {    /* Hard hyphen */
+			} else if (*marker == '=') {  // Hard hyphen
 				word_ptr--;
 				*word_ptr++ = '-';
 				if (*(marker + 1) == '-') {
@@ -261,14 +260,14 @@ void popup_write_string(const char *string) {
 					marker++;
 				}
 				marker++;
-			} else if (*marker == '-') {    /* Soft hyphen */
+			} else if (*marker == '-') {  // Soft hyphen
 				if (*(marker + 1) == '-') {
-					*(word_ptr - 1) = '{';      /* Double hyphen */
+					*(word_ptr - 1) = '{';  // Double hyphen
 					marker++;
 				}
 				marker++;
 				any_hyphen = true;
-			} else if (any_hyphen) {        /* (Break after hyphen) */
+			} else if (any_hyphen) {  // (Break after hyphen)
 				word_ptr--;
 				going = false;
 				stop_on_hyphen = true;
@@ -296,7 +295,7 @@ void popup_write_string(const char *string) {
 		box->dont_add_space = stop_on_hyphen;
 
 		len = strlen(word2);
-		width = font_string_width(box_param.font, word2, POPUP_SPACING) /* - POPUP_SPACING */;
+		width = font_string_width(box_param.font, word2, POPUP_SPACING);	 // - POPUP_SPACING
 
 		if (((box->text_x + len) > box->text_width) || ((box->cursor_x + width) > box->text_xs)) {
 			popup_next_line();
@@ -397,7 +396,7 @@ int popup_draw(int save_screen, int depth_code) {
 	int icon_x;
 	int sum_y;
 
-	/* Arrow cursor */
+	// Arrow cursor
 	cursor_id = 1;
 	if (cursor_id != cursor_last) {
 		mouse_cursor_sprite(cursor, cursor_id);
@@ -406,9 +405,8 @@ int popup_draw(int save_screen, int depth_code) {
 
 	if (!box->cursor_x) box->text_y--;
 
-	/* Find out how many vertical pieces are needed to contain the text, */
-	/* and determine the resulting size.                                 */
-
+	// Find out how many vertical pieces are needed to contain the text,
+	// and determine the resulting size.
 	if (!box->dialog_system) {
 		base_text_size = ((box_param.font->max_y_size + 1) * (box->text_y + 1)) + (popup_padding_width << 1);
 	} else {
@@ -432,9 +430,8 @@ int popup_draw(int save_screen, int depth_code) {
 		+ pop_ys(POPUP_UPPER_LEFT)
 		+ pop_ys(POPUP_LOWER_LEFT);
 
-	/* Determine the true size of the entire window (figure out which border */
-	/* pieces extend the furthest).                                          */
-
+	// Determine the true size of the entire window (figure out which border
+	// pieces extend the furthest).
 	top = pop_y(POPUP_UPPER_LEFT);
 	top = MIN(top, pop_y(POPUP_UPPER_CENTER));
 	top = MIN(top, pop_y(POPUP_TOP));
@@ -457,8 +454,7 @@ int popup_draw(int save_screen, int depth_code) {
 
 	box->xs += (right - pop_x2(POPUP_UPPER_RIGHT));
 
-	/* Determine the popup's coordinates on the screen */
-
+	// Determine the popup's coordinates on the screen
 	if (box->base_x & POPUP_CENTER) {
 		temp = (box->base_x & (~POPUP_CENTER));
 		if (!temp) temp = (video_x >> 1);
@@ -491,13 +487,11 @@ int popup_draw(int save_screen, int depth_code) {
 		box->y++;
 	}
 
-	/* Compute base border point */
-
+	// Compute base border point
 	box->base_x = box->x + x_bonus;
 	box->base_y = box->y + y_bonus;
 
-	/* Compute window location   */
-
+	// Compute window location
 	box->window_x = box->base_x + box_param.offset_x;
 	box->window_y = box->base_y + box_param.offset_y;
 
@@ -550,8 +544,7 @@ int popup_draw(int save_screen, int depth_code) {
 	x = box->base_x;
 	y = box->base_y;
 
-	/* Draw top edge */
-
+	// Draw top edge
 	pop_draw(POPUP_UPPER_LEFT, x, y, depth_code);
 
 	x += pop_xs(POPUP_UPPER_LEFT);
@@ -571,8 +564,7 @@ int popup_draw(int save_screen, int depth_code) {
 
 	pop_draw(POPUP_UPPER_RIGHT, x, y + box_param.upper_right_adjust_y, depth_code);
 
-	/* Draw right edge */
-
+	// Draw right edge
 	y += pop_ys(POPUP_UPPER_RIGHT);
 
 	for (count = 0; count < box->vert_pieces; count++) {
@@ -580,8 +572,7 @@ int popup_draw(int save_screen, int depth_code) {
 		y += pop_ys(POPUP_RIGHT);
 	}
 
-	/* Draw left edge */
-
+	// Draw left edge
 	x = box->base_x;
 	y = box->base_y + pop_ys(POPUP_UPPER_LEFT);
 
@@ -592,8 +583,7 @@ int popup_draw(int save_screen, int depth_code) {
 
 	pop_draw(POPUP_LOWER_LEFT, x + box_param.lower_left_adjust_x, y, depth_code);
 
-	/* Draw bottom edge */
-
+	// Draw bottom edge
 	x += pop_xs(POPUP_LOWER_LEFT);
 
 	bottom_pieces = (box->horiz_pieces << 1) + box_param.pieces_per_center;
@@ -605,8 +595,7 @@ int popup_draw(int save_screen, int depth_code) {
 
 	pop_draw(POPUP_LOWER_RIGHT, x, y + box_param.lower_right_adjust_y, depth_code);
 
-	/* Fill center */
-
+	// Fill center
 	loc_y = box->window_y + popup_padding_width + (box->text_extra >> 1);
 	loc_y += ((box_param.font->max_y_size + 1) * box->ask_y);
 
@@ -646,8 +635,7 @@ int popup_draw(int save_screen, int depth_code) {
 			attr_depth_xs, box->window_ys, 0);
 	}
 
-	/* Draw icon if any */
-
+	// Draw icon if any
 	if (box->icon != NULL) {
 		icon_x = 0;
 
@@ -676,8 +664,7 @@ int popup_draw(int save_screen, int depth_code) {
 		goto done;
 	}
 
-	/* Draw text in box */
-
+	// Draw text in box
 	loc_y = box->window_y + popup_padding_width + (box->text_extra >> 1);
 	sum_y = 0;
 
@@ -725,8 +712,7 @@ int popup_draw(int save_screen, int depth_code) {
 		sum_y += (box_param.font->max_y_size + 1);
 	}
 
-	/* Update live video */
-
+	// Update live video
 	mouse_hide();
 	video_update(&scr_main, box->x, box->y, box->x, box->y, box->xs, box->ys);
 	mouse_show();
@@ -1040,7 +1026,7 @@ int popup_ask_number(long *value, int maxlen, int save_screen) {
 	popup_asking_number = true;
 
 	if (value) {
-		ltoa(*value, temp_buf, 10);
+		snprintf(temp_buf, 80, "%ld", *value);
 	} else {
 		temp_buf[0] = 0;
 	}
@@ -1152,7 +1138,7 @@ int popup_box_load(void) {
 	byte special_color;
 	Buffer data_buf;
 
-	data_buf.x = 1;               /* A one pixel buffer */
+	data_buf.x = 1;  // A one pixel buffer
 	data_buf.y = 1;
 	data_buf.data = &special_color;
 
@@ -1272,14 +1258,12 @@ done:
 }
 
 
-/*
-/*      popup_activate()
-/*
-/*      Causes the specified popup structure to become active (the active
-/*      popup structure is considered the target of all popup requests
-/*      which do not include a Popup structure or pointer in their
-/*      parameter lists).
-*/
+/**
+ * Causes the specified popup structure to become active (the active
+ * popup structure is considered the target of all popup requests
+ * which do not include a Popup structure or pointer in their
+ * parameter lists).
+ */
 static Popup *popup_activate(Popup *newpop) {
 	if (newpop != NULL) {
 		popup = newpop;
@@ -1287,14 +1271,12 @@ static Popup *popup_activate(Popup *newpop) {
 	return (popup);
 }
 
-/*
-/*      popup_exec_function ()
-/*
-/*      Executes the specified function vector for the specified item.
-/*      Returns function's return value if function exists; if vector
-/*      is NULL, always returns 0.  A far pointer to the PopupItem structure
-/*      is passed on the stack to the function routine.
-*/
+/**
+ * Executes the specified function vector for the specified item.
+ * Returns function's return value if function exists; if vector
+ * is NULL, always returns 0.  A far pointer to the PopupItem structure
+ * is passed on the stack to the function routine.
+ */
 static int popup_exec_function(PopupItem *item, int function) {
 	if (item == NULL || item->vector[function] == NULL)
 		return 0;
@@ -1302,11 +1284,9 @@ static int popup_exec_function(PopupItem *item, int function) {
 	return item->vector[function](item);
 }
 
-/*
-/*      popup_item_init();
-/*
-/*      Initializes an empty item.
-*/
+/**
+ * Initializes an empty item.
+ */
 static void popup_item_init(PopupItem *item) {
 	int count;
 
@@ -1328,12 +1308,6 @@ static void popup_item_init(PopupItem *item) {
 }
 
 
-/*
-/*      popup_dialog_create()
-/*
-/*      Sets up popup dialog structure, allocating memory dynamically
-/*      if necessary.
-*/
 Popup *popup_dialog_create(void *memory, long heap_size, int max_items) {
 	int   count;
 	byte  *block = NULL;
@@ -1416,11 +1390,6 @@ done:
 }
 
 
-/*
-/*      popup_dialog_destroy()
-/*
-/*      Destroys a popup dialog, deallocating any dynamic memory.
-*/
 Popup *popup_dialog_destroy(void) {
 	popup->status &= ~(POPUP_STATUS_VALID);
 
@@ -1888,7 +1857,7 @@ static int popup_button_x_size(PopupItem *item) {
 
 
 static int popup_button_y_size(PopupItem *item) {
-	item = NULL; /* delete if this routine is to be used */
+	item = NULL;  // delete if this routine is to be used
 	return (box_param.font->max_y_size + 4 + 2);
 }
 
@@ -1917,8 +1886,7 @@ static int popup_button_draw(PopupItem *item) {
 		popup_mouse_refresh_2(refresh);
 	}
 
-	/* color = selected ? POPUP_ASK_COLOR : POPUP_TEXT_COLOR; */
-
+	// color = selected ? POPUP_ASK_COLOR : POPUP_TEXT_COLOR;
 	if (popup->active_item->type == ITEM_BUTTON) {
 		big_button = (item == popup->active_item);
 	} else {
@@ -2088,7 +2056,7 @@ static int popup_menu_x_size(PopupItem *item) {
 
 
 static int popup_menu_y_size(PopupItem *item) {
-	item = NULL; /* delete if this routine is to be used */
+	item = NULL;  // delete if this routine is to be used
 	return(box_param.menu->index[0].ys);
 }
 
@@ -2246,8 +2214,7 @@ static int popup_message_x_size(PopupItem *item) {
 }
 
 
-static int popup_message_y_size(PopupItem *item) {
-	item = NULL; /* delete if this routine is to be used */
+static int popup_message_y_size(PopupItem *) {
 	return box_param.font->max_y_size;
 }
 
@@ -2499,7 +2466,7 @@ static void popup_savelist_scroll_draw(PopupItem *item) {
 	color = POPUP_DIALOG_BORDER_COLOR_1;
 	color2 = POPUP_DIALOG_BORDER_COLOR_2;
 
-	/* Scroll Bar */
+	// Scroll Bar
 	buffer_rect_fill(scr_main, list->scroll.x, list->scroll.y,
 		1, list->scroll.ys, color);
 	buffer_rect_fill(scr_main, list->scroll.x + 1, list->scroll.y,
@@ -2651,24 +2618,21 @@ static int popup_savelist_draw(PopupItem *item) {
 	color = POPUP_DIALOG_BORDER_COLOR_1;
 	color2 = POPUP_DIALOG_BORDER_COLOR_2;
 
-	/* Basic box */
+	// Basic box
 	popup_double_box_2(item->x, item->y, item->xs, item->ys, color, color2);
-	/*
-	buffer_rect_fill (scr_main, item->x, item->y,
-							   item->xs, 1,
-							   color);
-	buffer_rect_fill (scr_main, item->x, item->y,
-							   1, item->ys,
-							   color);
-	buffer_rect_fill (scr_main, item->x + item->xs - 1, item->y,
-							   1, item->ys,
-							   color);
-	buffer_rect_fill (scr_main, item->x, item->y + item->ys - 1,
-							   item->xs, 1,
-							   color);
-	*/
-
-	/* Number list */
+	// buffer_rect_fill (scr_main, item->x, item->y,
+	// item->xs, 1,
+	// color);
+	// buffer_rect_fill (scr_main, item->x, item->y,
+	// 1, item->ys,
+	// color);
+	// buffer_rect_fill (scr_main, item->x + item->xs - 1, item->y,
+	// 1, item->ys,
+	// color);
+	// buffer_rect_fill (scr_main, item->x, item->y + item->ys - 1,
+	// item->xs, 1,
+	// color);
+	// Number list
 	buffer_rect_fill(scr_main, list->extra_x + list->extra_xs - 2, list->extra_y,
 		1, list->extra_ys, color);
 	buffer_rect_fill(scr_main, list->extra_x + list->extra_xs - 1, list->extra_y,
@@ -2722,8 +2686,8 @@ static int popup_savelist_mouse(PopupItem *item) {
 	in_up_arrow = in_scroll_bar && (mouse_y <= (list->scroll.arrow_1_base + list->scroll.arrow_size));
 	in_down_arrow = in_scroll_bar && (mouse_y >= (list->scroll.arrow_2_base - 1));
 
-	in_main_box = popup_in_item(item) && !in_scroll_bar;
-	in_main_range = ((mouse_y > item->y) && (mouse_y < (item->y + item->ys - 1)));
+	in_main_box = popup_in_item(item) && ((mouse_y > item->y) &&
+		(mouse_y < (item->y + item->ys - 1)));
 
 	force_update = mouse_start_stroke || (item->status & ITEM_STATUS_FORCED) != 0;
 

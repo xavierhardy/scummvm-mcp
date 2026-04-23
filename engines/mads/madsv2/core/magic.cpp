@@ -81,13 +81,6 @@ void magic_grey_palette(Palette *pal) {
 }
 
 
-/*
-/*      magic_grey_popularity()
-/*
-/*      Given a "grey_list" containing "num_colors" grey values (0-63),
-/*      produces a 64-byte "grey_table" containing the number of grey
-/*      values of each intensity level.
-*/
 void magic_grey_popularity(byte *grey_list, byte *grey_table, int num_colors) {
 	int i;
 	memset(grey_table, 0, 64);
@@ -169,7 +162,7 @@ void magic_map_to_grey_ramp(Palette *pal,
 		}
 	}
 
-	/* pal_pointer = (byte *) &(((RGBcolor *) pal)[base_grey]); */
+	// pal_pointer = (byte *) &(((RGBcolor *) pal)[base_grey]);
 	pal_pointer = ((byte *) pal + (base_grey * 3));
 	for (greys = 0; greys < num_greys; greys++) {
 		for (color = 0; color < 3; color++) {
@@ -225,10 +218,9 @@ void magic_fade_to_grey(Palette pal, byte *map_pointer,
 	byte *pal_index;
 	char *signs;
 	MagicGrey *magic_map;
-	/* Palette temp_pal;         */
-	/* char signs[256][3];       */
-	/* MagicGrey magic_map[256]; */
-
+	// Palette temp_pal;
+	// char signs[256][3];
+	// MagicGrey magic_map[256];
 	memory_needed = (sizeof(Palette) << 1) + (sizeof(MagicGrey) << 8);
 
 	if (timer_low_semaphore) {
@@ -266,8 +258,8 @@ void magic_fade_to_grey(Palette pal, byte *map_pointer,
 			dif = (intensity - pal_color(pal, count, color));
 			*(pal_index + (color << 8) + count) = (byte)abs(dif);
 			*(signs + (color << 8) + count) = (char)sgn(dif);
-			/* pal_color(temp_pal,count,color) = (byte)abs(dif); */
-			/* signs[count][color] = (char)sgn(dif);             */
+			// pal_color(temp_pal,count,color) = (byte)abs(dif);
+			// signs[count][color] = (char)sgn(dif);
 		}
 	}
 
@@ -278,11 +270,11 @@ void magic_fade_to_grey(Palette pal, byte *map_pointer,
 			index = count - base_color;
 			for (color = 0; color < 3; color++) {
 				magic_map[index].accum[color] += *(pal_index + (color << 8) + count);
-				/* magic_map[index].accum[color] += pal_color(temp_pal, count, color); */
+				// magic_map[index].accum[color] += pal_color(temp_pal, count, color);
 				while (magic_map[index].accum[color] >= (word)steps) {
 					magic_map[index].accum[color] -= steps;
 					pal_color(pal, count, color) += *(signs + (color << 8) + count);
-					/* pal_color(pal,count,color) += signs[count][color]; */
+					// pal_color(pal,count,color) += signs[count][color];
 				}
 			}
 		}
@@ -326,10 +318,9 @@ void magic_fade_from_grey(RGBcolor *pal, Palette target,
 	byte *pal_index;
 	char *signs;
 	MagicGrey *magic_map;
-	/* Palette temp_pal;         */
-	/* char signs[256][3];       */
-	/* MagicGrey magic_map[256]; */
-
+	// Palette temp_pal;
+	// char signs[256][3];
+	// MagicGrey magic_map[256];
 	memory_needed = (sizeof(Palette) << 1) + (sizeof(MagicGrey) << 8);
 
 	if (timer_low_semaphore) {
@@ -368,9 +359,9 @@ void magic_fade_from_grey(RGBcolor *pal, Palette target,
 			}
 			dif = (pal_color(target, count, color) - intensity);
 			*(pal_index + (count * 3) + color) = (byte)abs(dif);
-			/* pal_color(pal_index,count,color) = (byte)abs(dif); */
+			// pal_color(pal_index,count,color) = (byte)abs(dif);
 			*(signs + (color << 8) + count) = (char)sgn(dif);
-			/* signs[count][color] = (char)sgn(dif); */
+			// signs[count][color] = (char)sgn(dif);
 			magic_map[index].accum[color] = 0;
 		}
 	}
@@ -382,12 +373,12 @@ void magic_fade_from_grey(RGBcolor *pal, Palette target,
 			index = count - base_color;
 			for (color = 0; color < 3; color++) {
 				magic_map[index].accum[color] += *(pal_index + (count * 3) + color);
-				/* magic_map[index].accum[color] += pal_color(pal_index ,count, color); */
+				// magic_map[index].accum[color] += pal_color(pal_index ,count, color);
 				while (magic_map[index].accum[color] >= (word)steps) {
 					magic_map[index].accum[color] -= steps;
 					*((byte *)pal + (count * 3) + color) += *(signs + (color << 8) + count);
-					/* *(((byte *)&pal[count])+color) += *(signs + (color << 8) + count); */
-					/* *(((byte *)&pal[count])+color) += signs[count][color]; */
+					// (((byte *)&pal[count])+color) += *(signs + (color << 8) + count);
+					// (((byte *)&pal[count])+color) += signs[count][color];
 				}
 			}
 		}
@@ -407,13 +398,6 @@ done:
 }
 
 
-/*
-/*      magic_screen_change_corner()
-/*
-/*      Picture-to-picture transition in which one of the screen
-/*      corners is pulled diagonally across the screen to bring in
-/*      the new view.
-*/
 void magic_screen_change_corner(Buffer *new_screen, Palette pal,
 	int corner_id,
 	int buffer_base_x, int buffer_base_y,
@@ -564,11 +548,6 @@ void magic_screen_change_corner(Buffer *new_screen, Palette pal,
 }
 
 
-/*      magic_screen_change_edge()
-/*
-/*      Picture-to-picture transition in which the new picture sweeps
-/*      in from either the right or left edge.
-*/
 void magic_screen_change_edge(Buffer *new_screen, Palette pal,
 	int edge_id,
 	int buffer_base_x, int buffer_base_y,
@@ -672,13 +651,6 @@ void magic_screen_change_edge(Buffer *new_screen, Palette pal,
 }
 
 
-/*
-/*      magic_screen_change_circle()
-/*
-/*      Picture-to-picture transition in which the new picture is
-/*      brought in with either expanding or contracting concentric
-*       circles.
-*/
 void magic_screen_change_circle(Buffer *new_screen, Palette pal,
 	int inward_flag,
 	int buffer_base_x, int buffer_base_y,
@@ -859,7 +831,7 @@ void magic_shrink_buffer(Buffer *from, Buffer *unto) {
 	y_count = from->y;
 	x_count = from->x;
 
-	/* Build X Bresenham table */
+	// Build X Bresenham table
 	bres = 0;
 	for (i = 0; i < from_wrap; i++) {
 		bres += unto_wrap;
@@ -871,7 +843,7 @@ void magic_shrink_buffer(Buffer *from, Buffer *unto) {
 		}
 	}
 
-	/* Shrink pixels using Y Bresenham + X table */
+	// Shrink pixels using Y Bresenham + X table
 	bres = 0;
 	do {
 		bres += unto_size;
@@ -1101,7 +1073,7 @@ void magic_swap_foreground(byte *background_table,
 	int     count;
 	byte *old_palette;
 	byte    swap_table[256];
-	/* Palette old_palette;     */
+	// Palette old_palette;
 	long    memory_needed;
 	byte *work_memory = NULL;
 	Heap    magic_heap;

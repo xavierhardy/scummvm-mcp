@@ -369,7 +369,7 @@ typedef struct {
 	int16 button_right_fill;      /* Button row right fill    */
 	int16 button_bar_color;       /* Button bar color         */
 
-	int16 key;                    /* Last keyboard input      */
+	uint32 key;                   /* Last keyboard input      */
 	int16 key_handled;            /* Flag if key handled      */
 
 	int16 mouse_status;           /* Mouse status word        */
@@ -411,13 +411,11 @@ extern byte popup_num_colors;
 extern BoxParam box_param;
 
 
-/* popup_1.c */
 int  popup_create(int horiz_pieces, int x, int y);
 void popup_add_icon(SeriesPtr series, int id, int center);
 int  popup_draw(int save_screen, int depth_code);
 void popup_destroy(void);
 
-/* popup_1.c */
 void popup_next_line(void);
 void popup_set_ask(void);
 void popup_add_string(const char *string);
@@ -428,39 +426,47 @@ void popup_downpixel(void);
 void popup_tab(int tab_level);
 void popup_center_string(const char *string, int underline);
 
-/* popup_1.c */
 int  popup_and_wait(int save_screen);
 int  popup_and_dont_wait(int save_screen);
 
-/* popup_1.c */
 void popup_update_ask(char *string, int maxlen);
 int  popup_ask_string(char *target, int maxlen, int save_screen);
 int  popup_ask_number(long *value, int maxlen, int save_screen);
 
 
-/* popup_2.c */
 int popup_estimate_pieces(int maxlen);
 int popup_get_string(char *target, const char *top, const char *left, int maxlen);
 int popup_get_long(long *value, const char *top, const char *left, int maxlen);
 int popup_get_number(int16 *value, const char *top, const char *left, int maxlen);
 
-/* popup_3.c */
 int popup_alert(int width, const char *message_line, ...);
 
-/* popup_4.c */
 int popup_box_load(void);
 
-/* popup_5.c */
+/*
+ * popup_dialog_create()
+ * Sets up popup dialog structure, allocating memory dynamically
+ * if necessary.
+ *
+ * @param memory	
+ * @param heap_size	
+ * @param max_items	
+ * @return 
+ */
 Popup *popup_dialog_create(void *memory, long heap_size, int max_items);
+/*
+ * popup_dialog_destroy()
+ * Destroys a popup dialog, deallocating any dynamic memory.
+ *
+ * @return 
+ */
 Popup *popup_dialog_destroy(void);
 
-/* popup_5.c */
 PopupItem *popup_button(const char *prompt, int x);
 PopupItem *popup_cancel_button(const char *prompt);
 PopupItem *popup_message(const char *prompt, int x, int y);
 PopupItem *popup_execute(void);
 
-/* popup_5.c */
 PopupItem *popup_savelist(const char *data,
 	const char *empty_string,
 	int elements,
@@ -471,13 +477,11 @@ PopupItem *popup_savelist(const char *data,
 	int accept_input,
 	int default_element);
 
-/* popup_5.c */
 void popup_blank(int num_lines);
 void popup_blank_line(void);
 void popup_width_force(int width);
 
 
-/* popup_5.c */
 void popup_menu_option(PopupItem *item, char *option);
 PopupItem *popup_menu(const char *prompt,
 	int x, int y, int pixel_width,
@@ -485,7 +489,6 @@ PopupItem *popup_menu(const char *prompt,
 	int elements, int element_max_length,
 	int default_element);
 
-/* popup_5.c */
 PopupItem *popup_sprite(SeriesPtr series, int sprite, int x, int y);
 
 } // namespace MADSV2

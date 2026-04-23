@@ -91,8 +91,7 @@ static int camera_pan(Camera *camera, int *picture_view, int *player_loc,
 	if (camera->pans) {
 		camera->pan_this_frame = false;
 
-		/* Try to keep player & panning in synch */
-
+		// Try to keep player & panning in synch
 		if ((abs(camera->pan_clock - player.clock) < camera->pan_rate) &&
 			(player.frame_delay == camera->pan_rate)) {
 			determining_clock = player.clock;

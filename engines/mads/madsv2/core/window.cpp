@@ -449,13 +449,12 @@ void window_title(WindowPtr window, const char *title, int title_color, int back
 	begin_x = center_x - ((strlen(title) + 2) / 2);
 
 	Common::strcpy_s(temp, " ");
-	/* temp[0] = (byte)((title_color == background_color) ? right_join : ' '); */
-
+	// temp[0] = (byte)((title_color == background_color) ? right_join : ' ');
 	begin_x = screen_put(temp, title_color, title_color, begin_x, window->ul_y);
 
 	begin_x = screen_put(title, title_color, title_color, begin_x, window->ul_y);
 
-	/* temp[0] = (byte)((title_color == background_color) ? left_join : ' '); */
+	// temp[0] = (byte)((title_color == background_color) ? left_join : ' ');
 	begin_x = screen_put(temp, title_color, title_color, begin_x, window->ul_y);
 
 	mouse_show();
@@ -639,10 +638,10 @@ void window_draw_box(WindowPtr window, int type) {
 		break;
 
 	default:
-		return;    /* Invalid line type */
+		return;  // Invalid line type
 	};
 
-	window_line_type = type;  /* Set global for reference by other procs */
+	window_line_type = type;  // Set global for reference by other procs
 
 	orig = screen + screen_char_add(window->ul_x, window->ul_y);
 	xsize = window->lr_x - window->ul_x + 1;
@@ -671,9 +670,9 @@ void window_draw_box(WindowPtr window, int type) {
 	}
 }
 
-/*
-/*      main interrupt 21 write string server
-*/
+/**
+ * main interrupt 21 write string server
+ */
 static void window_server(void) {
 	error("TODO: window_server");
 }

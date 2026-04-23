@@ -33,7 +33,6 @@ extern bool fileio_suppress_unbuffering;
 
 
 extern void fileio_purge_trailing_spaces(char *myline);
-extern void fileio_name_new_ext(char *bakfile, char *mainfile, const char *new_ext);
 extern char *fileio_ffgets(char *mystring, int num, Common::SeekableReadStream *stream);
 extern int fileio_ffputs(const char *mystring, Common::WriteStream *stream);
 extern char *fileio_fix_lf_input(char *mystring);

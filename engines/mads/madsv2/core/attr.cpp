@@ -70,9 +70,15 @@ int attr_depth(TileMapHeader *depth_map, int x, int y) {
 	x = x - depth_map->pan_base_x;
 	y = y - depth_map->pan_base_y;
 
-	scan = buffer_pointer(depth_map->buffer, (x >> 1), y);
-	shift_count = (byte)((x & 1) ? 0 : 4);
-	depth_code = (byte)((*scan >> shift_count) & 0x0f);
+	// WORKAROUND: Fixes crash in ROTP entering Box 5
+	if (x < 0 || y < 0 || (x >> 1) >= depth_map->buffer->x ||
+			y >= depth_map->buffer->y) {
+		depth_code = 0;
+	} else {
+		scan = buffer_pointer(depth_map->buffer, (x >> 1), y);
+		shift_count = (byte)((x & 1) ? 0 : 4);
+		depth_code = (byte)((*scan >> shift_count) & 0x0f);
+	}
 
 	if (view_changed) {
 		tile_pan(depth_map, pan_to_x, pan_to_y);

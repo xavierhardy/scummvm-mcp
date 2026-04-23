@@ -307,7 +307,7 @@ static void player_keep_turning() {
 		}
 	}
 
-	player.clock++; /* Add 1 to player clock for slightly slower turn */
+	player.clock++;  // Add 1 to player clock for slightly slower turn
 }
 
 void player_stationary_update() {
@@ -584,7 +584,7 @@ void player_set_image() {
 
 	depth = 1;
 	effective_y = player.y;
-	/* effective_y = MIN (effective_y, display_y - 1); */
+	// effective_y = MIN (effective_y, display_y - 1);
 	for (count = 1; count < 15; count++) {
 		if (effective_y <= room->depth_table[depth]) {
 			depth = (byte)(count + 1);
@@ -838,8 +838,8 @@ void player_new_command() {
 
 	player.ready_to_walk = player.need_to_walk;
 
-	/* Be sure player moves immediately even if in the middle of a long */
-	/* stop-walker frame.                                               */
+	// Be sure player moves immediately even if in the middle of a long
+	// stop-walker frame.
 	player.clock = MIN(player.clock, kernel.clock + series_list[player.series_base + player.series]->walker->frame_rate);
 }
 
