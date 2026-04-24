@@ -1009,8 +1009,8 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 		}
 	}
 	// MI1-style: dialog choices are unkeyed, normal verb bar is keyed (or absent).
-	// Only apply this for MI1 (version == 3); Maniac Mansion (v5) has unkeyed verbs in normal gameplay.
-	if (hasUnkeyed && !hasKeyed && _vm->_game.version == 3) return true;
+	// Skip this for Maniac Mansion, which has unkeyed verbs in normal gameplay.
+	if (hasUnkeyed && !hasKeyed && _vm->_game.id != GID_MANIAC) return true;
 	// Indy4-style: dialog choices have numeric keys; normal verb bar is saved (saveid!=0)
 	if (hasNumericKeyed && !hasUnkeyed) return true;
 	return false;
