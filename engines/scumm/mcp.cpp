@@ -358,7 +358,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		out.setVal("position", new Common::JSONValue(pos));
 	}
 
-	struct VerbInfo { int verbId; Common::String name; };
+	struct VerbInfo { int verbId; Common::String name; Common::String label; };
 	Common::Array<VerbInfo> activeVerbs;
 	Common::JSONArray verbsArr;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
@@ -384,6 +384,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		VerbInfo vi;
 		vi.verbId = vs.verbid;
 		vi.name   = safe2;
+		vi.label  = mcpSanitizeString(label);
 		activeVerbs.push_back(vi);
 	}
 	out.setVal("verbs", new Common::JSONValue(verbsArr));
@@ -409,7 +410,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			bool walkToHasHandler = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
 				if (_vm->getVerbEntrypoint(ne.numId, activeVerbs[k].verbId) != 0) {
-					compatVerbs.push_back(mcpJsonString(activeVerbs[k].name));
+					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 					handlerCount++;
 					if (activeVerbs[k].name == "look_at") hasLookAt = true;
 					if (activeVerbs[k].name == "walk_to") { hasWalkTo = true; walkToHasHandler = true; }
@@ -439,7 +440,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			bool hasTalkTo = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
 				if (_vm->getVerbEntrypoint(actorObjId, activeVerbs[k].verbId) != 0) {
-					compatVerbs.push_back(mcpJsonString(activeVerbs[k].name));
+					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 					if (activeVerbs[k].name == "talk_to") hasTalkTo = true;
 				}
 			}
