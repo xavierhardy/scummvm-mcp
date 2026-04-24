@@ -878,6 +878,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 	for (int i = 0; _vm->_inventory && i < _vm->_numInventory; ++i) {
 		uint16 obj = _vm->_inventory[i];
 		if (!obj) continue;
+		// Skip inventory items that are out of bounds for the object space
+		if (_vm->_numGlobalObjects > 0 && obj >= _vm->_numGlobalObjects) continue;
 		if (_vm->getOwner(obj) != ego) continue;
 		bool wasPresent = false;
 		for (uint j = 0; j < _ssePreInventory.size(); ++j)
@@ -910,6 +912,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 	for (int i = 1; _vm->_objs && i < _vm->_numLocalObjects; ++i) {
 		const ObjectData &od = _vm->_objs[i];
 		if (!od.obj_nr) continue;
+		// Skip objects that are out of bounds for the object space
+		if (_vm->_numGlobalObjects > 0 && od.obj_nr >= _vm->_numGlobalObjects) continue;
 		int newState = _vm->getState(od.obj_nr);
 		int preState = newState;
 		for (uint j = 0; j < _ssePreObjectStates.size(); ++j) {
