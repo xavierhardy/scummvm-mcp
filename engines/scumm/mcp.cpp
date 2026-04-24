@@ -236,7 +236,7 @@ void ScummMcpBridge::registerTools() {
 	// --- act ---
 	{
 		Common::JSONObject props;
-		props.setVal("verb",    mcpProp("string", "Verb name (e.g. 'open', 'use', 'look_at', 'walk_to'). Required."));
+		props.setVal("verb",    mcpProp("string", "Verb name (e.g. 'open', 'use', 'walk_to'). Required."));
 		props.setVal("target1", mcpPropOneOf("string", "integer",
 		    "Primary target: name or numeric id of an object/inventory item "
 		    "currently present in state (objects[] or inventory[]). "
