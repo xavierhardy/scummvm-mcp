@@ -380,11 +380,12 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			if ((unsigned char)label[ci] < 0x20) { labelHasCtrl = true; break; }
 		if (labelHasCtrl) continue;
 		Common::String safe2 = mcpSanitizeString(normalizeActionName(label));
-		verbsArr.push_back(mcpJsonString(safe2));
+		Common::String safeLabel = mcpSanitizeString(label);
+		verbsArr.push_back(mcpJsonString(safeLabel));
 		VerbInfo vi;
 		vi.verbId = vs.verbid;
 		vi.name   = safe2;
-		vi.label  = mcpSanitizeString(label);
+		vi.label  = safeLabel;
 		activeVerbs.push_back(vi);
 	}
 	out.setVal("verbs", new Common::JSONValue(verbsArr));
