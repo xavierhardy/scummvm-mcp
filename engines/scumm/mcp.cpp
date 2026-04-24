@@ -237,7 +237,7 @@ void ScummMcpBridge::registerTools() {
 	// --- act ---
 	{
 		Common::JSONObject props;
-		props.setVal("verb",    mcpProp("string", "Verb name (e.g. 'open', 'use', 'walk_to'). Required."));
+		props.setVal("verb",    mcpProp("string", "Verb name (e.g. 'open', 'use'). Required."));
 		props.setVal("target1", mcpPropOneOf("string", "integer",
 		    "Primary target: name or numeric id of an object/inventory item "
 		    "currently present in state (objects[] or inventory[]). "
@@ -622,6 +622,13 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			debug(1, "mcp: skipping verb with no entrypoint on object %d", targetA);
 			return true;  // Return success but don't execute
 		}
+		// In V0, certain verbs require a second object. Skip if missing.
+		// kVerbUse=11, kVerbGive=3, kVerbUnlock=8, kVerbFix=6 require a second object
+		if (_vm->_game.version == 0 && targetB == 0 &&
+		    (verbId == 11 || verbId == 3 || verbId == 8 || verbId == 6)) {
+			debug(1, "mcp: skipping verb %d on object %d (requires second object)", verbId, targetA);
+			return true;  // Return success but don't execute
+		}
 	}
 
 	snapshotPreAction();
@@ -796,13 +803,12 @@ void ScummMcpBridge::pumpStream() {
 			_sseEgoMoved = true;
 	}
 
-	// Early-exit: stuck (ego idle, no speech, user-put locked).
+	// Early-exit: stuck (no speech, user-put locked).
+	// This includes both idle and animated states (e.g., cutscenes with ego moving).
 	// Use a short timeout when no events have occurred yet (action had no visible
 	// effect and completed quickly), and a longer one when we've seen activity.
 	{
-		Actor *ego = getEgoActor();
-		bool egoIdle = !ego || !ego->_moving;
-		bool stuck = egoIdle && _vm->_talkDelay == 0 && _vm->_userPut <= 0;
+		bool stuck = _vm->_talkDelay == 0 && _vm->_userPut <= 0;
 		if (stuck) {
 			if (_sseStuckAtFrame == 0) _sseStuckAtFrame = _frameCounter;
 			bool hadActivity = _sseLastEventFrame > 0 || _sseEgoMoved;
@@ -1155,9 +1161,11 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		e.numId = od.obj_nr;
 		e.baseName = name.empty() ? Common::String::format("obj-%d", od.obj_nr)
 		                          : normalizeActionName(name);
-		e.visible = (od.state & 0xF) != 0;
+		// For visibility, use the correct mask based on game version
+		const int mask = (_vm->_game.version <= 2) ? 8 : 0xF;  // kObjectStateIntrinsic = 8
+		e.visible = (od.state & mask) != 0;
 		if (e.visible && od.parent != 0 && od.parent < _vm->_numLocalObjects)
-			e.visible = ((_vm->_objs[od.parent].state & 0xF) == od.parentstate);
+			e.visible = ((_vm->_objs[od.parent].state & mask) == od.parentstate);
 		// Detect pathway objects (walk_to is their sole verb handler).
 		if (!e.visible) {
 			bool hasWalkTo = false, hasOther = false;
