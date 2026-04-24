@@ -1062,10 +1062,9 @@ static const struct {
 } kVerbMap[] = {
 	{"talk_to", "Talk to"},
 	{"talk_to", "talk_to"},
-	{"talk_to", "What do"},		// Maniac Mansion
 	{"look_at", "Look at"},
 	{"look_at", "look_at"},
-	{"look_at", "What is"},		// Maniac Mansion
+	{"look_at", "What is"},		// Maniac Mansion C64
 	{"pick_up", "Pick up"},
 	{"pick_up", "pick_up"},
 	{"walk_to", "Walk to"},
