@@ -622,10 +622,10 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			debug(1, "mcp: skipping verb with no entrypoint on object %d", targetA);
 			return true;  // Return success but don't execute
 		}
-		// In V0, certain verbs require a second object. Skip if missing.
-		// kVerbUse=11, kVerbGive=3, kVerbUnlock=8, kVerbFix=6 require a second object
+		// In V0, certain transitive verbs require a second object (direct object).
+		// Executing them without one causes a crash in the sentence handler.
 		if (_vm->_game.version == 0 && targetB == 0 &&
-		    (verbId == 11 || verbId == 3 || verbId == 8 || verbId == 6)) {
+		    (verbId == kVerbUse || verbId == kVerbGive || verbId == kVerbUnlock || verbId == kVerbFix)) {
 			debug(1, "mcp: skipping verb %d on object %d (requires second object)", verbId, targetA);
 			return true;  // Return success but don't execute
 		}
@@ -1127,6 +1127,48 @@ static bool verbLabelMatches(const Common::String &rawLabel, const Common::Strin
 	return normLabel == canonicalAction;
 }
 
+// ---------------------------------------------------------------------------
+// Selectability helpers
+// ---------------------------------------------------------------------------
+
+// Mirrors findObject(): returns false for objects the player cannot click on.
+bool ScummMcpBridge::isObjectSelectable(const ObjectData &od) const {
+	// The untouchable class flag is the primary gate — it applies to all games.
+	if (_vm->getClass(od.obj_nr, kObjectClassUntouchable))
+		return false;
+
+	// Per-game additional checks that mirror the version-specific branches in findObject().
+	switch (_vm->_game.id) {
+	case GID_MANIAC:
+		// V0: only foreground objects carry the untouchable state flag.
+		// Background (BG) and actor-type objects use only the class check above.
+		if (OBJECT_V0_TYPE(od.obj_nr) == kObjectV0TypeFG && (od.state & kObjectStateUntouchable))
+			return false;
+		break;
+	case GID_MONKEY_EGA:
+	case GID_INDY4:
+		// V5: the class-level check above is sufficient; no state-flag veto.
+		break;
+	default:
+		break;
+	}
+	return true;
+}
+
+// Mirrors getActorFromPos(): returns false for actors the player cannot target.
+bool ScummMcpBridge::isActorSelectable(int actorId) const {
+	// The untouchable class flag is the only selectability gate for actors across
+	// all three supported games; getActorFromPos() applies the same test.
+	switch (_vm->_game.id) {
+	case GID_MANIAC:
+	case GID_MONKEY_EGA:
+	case GID_INDY4:
+		return !_vm->getClass(actorId, kObjectClassUntouchable);
+	default:
+		return !_vm->getClass(actorId, kObjectClassUntouchable);
+	}
+}
+
 void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const {
 	entities.clear();
 
@@ -1155,18 +1197,24 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 	for (int i = 1; _vm->_objs && i < _vm->_numLocalObjects; ++i) {
 		const ObjectData &od = _vm->_objs[i];
 		if (!od.obj_nr) continue;
+		// Exclude objects the player cannot interact with (mirrors findObject()).
+		if (!isObjectSelectable(od)) continue;
 		Common::String name = getObjName(this, od.obj_nr);
 		RawEntry e;
 		e.kind = NamedEntity::kObject;
 		e.numId = od.obj_nr;
 		e.baseName = name.empty() ? Common::String::format("obj-%d", od.obj_nr)
 		                          : normalizeActionName(name);
-		// For visibility, use the correct mask based on game version
-		const int mask = (_vm->_game.version <= 2) ? 8 : 0xF;  // kObjectStateIntrinsic = 8
+		// Visibility mask: v0-v2 use only the intrinsic (on/off) bit; v3+ use the full
+		// lower nibble which encodes pickupable, untouchable, locked, and intrinsic.
+		const int mask = (_vm->_game.version <= 2)
+		    ? kObjectStateIntrinsic
+		    : (kObjectStatePickupable | kObjectStateUntouchable | kObjectStateLocked | kObjectStateIntrinsic);
 		e.visible = (od.state & mask) != 0;
 		if (e.visible && od.parent != 0 && od.parent < _vm->_numLocalObjects)
 			e.visible = ((_vm->_objs[od.parent].state & mask) == od.parentstate);
-		// Detect pathway objects (walk_to is their sole verb handler).
+		// Pathway objects are invisible exits with only a walk_to handler.
+		// They are kept in the list so the agent can navigate, but flagged separately.
 		if (!e.visible) {
 			bool hasWalkTo = false, hasOther = false;
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
@@ -1196,7 +1244,10 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 	for (int i = 1; _vm->_actors && i < _vm->_numActors; ++i) {
 		Actor *a = _vm->_actors[i];
 		if (!a || !a->isInCurrentRoom()) continue;
+		// Ego is the player character; it is never presented as an interaction target.
 		if (a->_number == egoNum) continue;
+		// Exclude actors the player cannot click on (mirrors getActorFromPos()).
+		if (!isActorSelectable(a->_number)) continue;
 		int objId = _vm->actorToObj(a->_number);
 		// Skip actors whose object ID is out of bounds
 		if (_vm->_numGlobalObjects > 0 && objId >= _vm->_numGlobalObjects) continue;

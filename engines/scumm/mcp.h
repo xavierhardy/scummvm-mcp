@@ -19,6 +19,7 @@ namespace Scumm {
 
 class ScummEngine;
 class Actor;
+struct ObjectData;
 
 class ScummMcpBridge : public Networking::McpServer::IToolHandler {
 public:
@@ -111,6 +112,11 @@ private:
 	void buildEntityMap(Common::Array<NamedEntity> &entities) const;
 	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
 	bool resolveVerb(const Common::String &action, int &verbId) const;
+
+	// Selectability helpers: mirror the engine's findObject() / getActorFromPos() rules
+	// so that non-interactive entities are excluded from the MCP entity list.
+	bool isObjectSelectable(const ObjectData &od) const;
+	bool isActorSelectable(int actorId) const;
 };
 
 } // End of namespace Scumm
