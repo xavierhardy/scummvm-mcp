@@ -488,6 +488,12 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
 		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 		if (vs.curmode != 0 && vs.curmode != 1) continue;
+		// Skip verbs that are already in the verbs list to avoid duplication
+		bool isAlreadyVerb = false;
+		for (uint k = 0; k < activeVerbs.size(); ++k) {
+			if (activeVerbs[k].verbId == vs.verbid) { isAlreadyVerb = true; break; }
+		}
+		if (isAlreadyVerb) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
 		byte textBuf[256];
