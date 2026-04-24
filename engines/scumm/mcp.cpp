@@ -404,11 +404,12 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// Skip objects that are out of bounds for the object space
 			if (_vm->_numGlobalObjects > 0 && ne.numId >= _vm->_numGlobalObjects) break;
 
-			// Find the actual verb bar labels for default verbs
-			Common::String lookAtLabel = "look_at", walkToLabel = "walk_to";
+			// Find the actual verb bar labels and check if verbs exist
+			Common::String lookAtLabel, walkToLabel;
+			bool lookAtExists = false, walkToExists = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
-				if (activeVerbs[k].name == "look_at") lookAtLabel = activeVerbs[k].label;
-				if (activeVerbs[k].name == "walk_to") walkToLabel = activeVerbs[k].label;
+				if (activeVerbs[k].name == "look_at") { lookAtLabel = activeVerbs[k].label; lookAtExists = true; }
+				if (activeVerbs[k].name == "walk_to") { walkToLabel = activeVerbs[k].label; walkToExists = true; }
 			}
 
 			Common::JSONArray compatVerbs;
@@ -423,8 +424,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 					if (activeVerbs[k].name == "walk_to") { hasWalkTo = true; walkToHasHandler = true; }
 				}
 			}
-			if (!hasLookAt) compatVerbs.push_back(mcpJsonString(lookAtLabel));
-			if (!hasWalkTo) compatVerbs.push_back(mcpJsonString(walkToLabel));
+			if (!hasLookAt && lookAtExists) compatVerbs.push_back(mcpJsonString(lookAtLabel));
+			if (!hasWalkTo && walkToExists) compatVerbs.push_back(mcpJsonString(walkToLabel));
 
 			bool isPathway = walkToHasHandler && (handlerCount == 1);
 
@@ -443,10 +444,11 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// Skip actors whose converted object ID is out of bounds
 			if (_vm->_numGlobalObjects > 0 && actorObjId >= _vm->_numGlobalObjects) break;
 
-			// Find the actual verb bar label for the default talk_to verb
-			Common::String talkToLabel = "talk_to";
+			// Find the actual verb bar label for talk_to and check if it exists
+			Common::String talkToLabel;
+			bool talkToExists = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
-				if (activeVerbs[k].name == "talk_to") talkToLabel = activeVerbs[k].label;
+				if (activeVerbs[k].name == "talk_to") { talkToLabel = activeVerbs[k].label; talkToExists = true; }
 			}
 
 			Common::JSONArray compatVerbs;
@@ -457,7 +459,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 					if (activeVerbs[k].name == "talk_to") hasTalkTo = true;
 				}
 			}
-			if (!hasTalkTo) compatVerbs.push_back(mcpJsonString(talkToLabel));
+			if (!hasTalkTo && talkToExists) compatVerbs.push_back(mcpJsonString(talkToLabel));
 			Common::JSONObject actorObj;
 			actorObj.setVal("id",               mcpJsonInt(actorObjId));
 			actorObj.setVal("name",             mcpJsonString(safe));
