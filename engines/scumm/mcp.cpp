@@ -395,6 +395,9 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			inventory.push_back(mcpJsonString(safe));
 			break;
 		case NamedEntity::kObject: {
+			// Skip objects that are out of bounds for the object space
+			if (_vm->_numGlobalObjects > 0 && ne.numId >= _vm->_numGlobalObjects) break;
+
 			Common::JSONArray compatVerbs;
 			bool hasLookAt = false, hasWalkTo = false;
 			int handlerCount = 0;
@@ -424,6 +427,9 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 		case NamedEntity::kActor: {
 			int actorObjId = _vm->actorToObj(ne.numId);
+			// Skip actors whose converted object ID is out of bounds
+			if (_vm->_numGlobalObjects > 0 && actorObjId >= _vm->_numGlobalObjects) break;
+
 			Common::JSONArray compatVerbs;
 			bool hasTalkTo = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
@@ -454,10 +460,13 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		Common::JSONObject entry;
 		if (m.actorId >= 0) {
 			int objId = _vm->actorToObj(m.actorId);
-			Common::String actorName = getObjName(this, objId);
-			if (!actorName.empty()) {
-				Common::String safe = mcpSanitizeString(mcpLowerTrimmed(actorName));
-				entry.setVal("actor", mcpJsonString(safe));
+			// Only include actor name if the object ID is within bounds
+			if (_vm->_numGlobalObjects <= 0 || objId < _vm->_numGlobalObjects) {
+				Common::String actorName = getObjName(this, objId);
+				if (!actorName.empty()) {
+					Common::String safe = mcpSanitizeString(mcpLowerTrimmed(actorName));
+					entry.setVal("actor", mcpJsonString(safe));
+				}
 			}
 		}
 		entry.setVal("text", mcpJsonString(mcpSanitizeString(m.text)));
@@ -1120,6 +1129,8 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		if (!a || !a->isInCurrentRoom()) continue;
 		if (a->_number == egoNum) continue;
 		int objId = _vm->actorToObj(a->_number);
+		// Skip actors whose object ID is out of bounds
+		if (_vm->_numGlobalObjects > 0 && objId >= _vm->_numGlobalObjects) continue;
 		Common::String name = getObjName(this, objId);
 		RawEntry e;
 		e.kind = NamedEntity::kActor;
