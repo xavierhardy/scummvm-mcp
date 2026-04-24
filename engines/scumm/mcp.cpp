@@ -553,6 +553,12 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 				return false;
 			}
 			out = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
+			if (_vm->_numGlobalObjects > 0 && out >= _vm->_numGlobalObjects) {
+				errorOut = Common::String::format(
+					"act: %s id %d out of bounds (0-%d)",
+					param, out, _vm->_numGlobalObjects - 1);
+				return false;
+			}
 			return true;
 		}
 		errorOut = Common::String("act: ") + param + " must be a string name or integer id";
