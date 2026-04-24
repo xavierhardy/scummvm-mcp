@@ -856,6 +856,8 @@ void ScummMcpBridge::snapshotPreAction() {
 	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
 		const ObjectData &od = _vm->_objs[i];
 		if (!od.obj_nr) continue;
+		// Skip objects that are out of bounds for the object space
+		if (_vm->_numGlobalObjects > 0 && od.obj_nr >= _vm->_numGlobalObjects) continue;
 		ObjStateSnap snap;
 		snap.objNr = od.obj_nr;
 		snap.state = _vm->getState(od.obj_nr);
