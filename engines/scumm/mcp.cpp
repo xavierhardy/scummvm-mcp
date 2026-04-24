@@ -404,6 +404,13 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// Skip objects that are out of bounds for the object space
 			if (_vm->_numGlobalObjects > 0 && ne.numId >= _vm->_numGlobalObjects) break;
 
+			// Find the actual verb bar labels for default verbs
+			Common::String lookAtLabel = "look_at", walkToLabel = "walk_to";
+			for (uint k = 0; k < activeVerbs.size(); ++k) {
+				if (activeVerbs[k].name == "look_at") lookAtLabel = activeVerbs[k].label;
+				if (activeVerbs[k].name == "walk_to") walkToLabel = activeVerbs[k].label;
+			}
+
 			Common::JSONArray compatVerbs;
 			bool hasLookAt = false, hasWalkTo = false;
 			int handlerCount = 0;
@@ -416,8 +423,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 					if (activeVerbs[k].name == "walk_to") { hasWalkTo = true; walkToHasHandler = true; }
 				}
 			}
-			if (!hasLookAt) compatVerbs.push_back(mcpJsonString("look_at"));
-			if (!hasWalkTo) compatVerbs.push_back(mcpJsonString("walk_to"));
+			if (!hasLookAt) compatVerbs.push_back(mcpJsonString(lookAtLabel));
+			if (!hasWalkTo) compatVerbs.push_back(mcpJsonString(walkToLabel));
 
 			bool isPathway = walkToHasHandler && (handlerCount == 1);
 
@@ -436,6 +443,12 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// Skip actors whose converted object ID is out of bounds
 			if (_vm->_numGlobalObjects > 0 && actorObjId >= _vm->_numGlobalObjects) break;
 
+			// Find the actual verb bar label for the default talk_to verb
+			Common::String talkToLabel = "talk_to";
+			for (uint k = 0; k < activeVerbs.size(); ++k) {
+				if (activeVerbs[k].name == "talk_to") talkToLabel = activeVerbs[k].label;
+			}
+
 			Common::JSONArray compatVerbs;
 			bool hasTalkTo = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
@@ -444,7 +457,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 					if (activeVerbs[k].name == "talk_to") hasTalkTo = true;
 				}
 			}
-			if (!hasTalkTo) compatVerbs.push_back(mcpJsonString("talk_to"));
+			if (!hasTalkTo) compatVerbs.push_back(mcpJsonString(talkToLabel));
 			Common::JSONObject actorObj;
 			actorObj.setVal("id",               mcpJsonInt(actorObjId));
 			actorObj.setVal("name",             mcpJsonString(safe));
