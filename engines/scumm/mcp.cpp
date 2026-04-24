@@ -1112,7 +1112,9 @@ static bool verbLabelMatches(const Common::String &rawLabel, const Common::Strin
 		if (rawLabel == kVerbMap[i].label && canonicalAction == kVerbMap[i].canonical)
 			return true;
 	}
-	return false;
+	// Fallback: normalize the raw label and compare directly
+	Common::String normLabel = ScummMcpBridge::normalizeActionName(mcpLowerTrimmed(rawLabel));
+	return normLabel == canonicalAction;
 }
 
 void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const {
