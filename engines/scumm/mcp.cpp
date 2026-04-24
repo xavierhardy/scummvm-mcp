@@ -292,7 +292,6 @@ void ScummMcpBridge::registerTools() {
 		spec.description =
 		    "Walk ego to explicit (x, y) pixel coordinates in the current room. "
 		    "Out-of-bounds values are automatically clamped to the room bounds. "
-		    "Use 'act' with verb='walk_to' and target1=<name> to walk to a named object. "
 		    "Blocks until the walk completes and returns state changes.";
 		spec.inputSchema  = mcpObjectSchema(props, req, 2);
 		spec.outputSchema = makeChangesSchema();
