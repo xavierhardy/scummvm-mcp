@@ -59,6 +59,7 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	  _sseStuckAtFrame(0),
 	  _sseLastEventFrame(0),
 	  _sseEgoMoved(false),
+	  _sseTargetObject(0),
 	  _ssePreRoom(0),
 	  _ssePrePosX(0),
 	  _ssePrePosY(0) {
@@ -639,6 +640,10 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
+	// For V0: track the primary target so isActionDone() can wait for its script to finish.
+	// V0 scripts do not lock _userPut during execution, unlike V5, so script-slot polling
+	// is the only reliable signal that the verb script has completed.
+	_sseTargetObject = (_vm->_game.version == 0) ? targetA : 0;
 	_vm->doSentence(verbId, targetA, targetB);
 	_server->startStreaming();
 	return true;
@@ -702,6 +707,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
+	_sseTargetObject = 0;  // dialog answer has no target object
 	_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
 	_server->startStreaming();
 	return true;
@@ -758,6 +764,7 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
+	_sseTargetObject = 0;  // walk has no target object
 	ego->startWalkActor(wx, wy, -1);
 	_server->startStreaming();
 	return true;
@@ -1027,6 +1034,12 @@ bool ScummMcpBridge::isActionDone() const {
 	if (ego && ego->_moving) return false;
 	if (_vm->_talkDelay > 0) return false;
 	if (_vm->_userPut <= 0) return false;
+	// V0 (Maniac Mansion) scripts do not lock _userPut during execution the way V5 sentence
+	// scripts do. Without this check, isActionDone() fires 3 frames after the sentence is
+	// queued — before the object's verb script has had time to run and produce effects.
+	// Poll the script VM directly: hold off until the target object's script slot goes dead.
+	if (_sseTargetObject != 0 && _vm->isScriptInUse(_sseTargetObject))
+		return false;
 	return true;
 }
 
