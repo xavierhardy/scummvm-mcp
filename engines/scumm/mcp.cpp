@@ -819,13 +819,18 @@ void ScummMcpBridge::pumpStream() {
 			}
 		}
 		bool questionReady = hasPendingQuestion();
-		// Sentence scripts need time to set up dialog choices; use a 45-frame window
-		// to allow for both dialog creation and actor facing animations.
-		uint32 settleFrames = 45;
+		// Use adaptive settling window: if dialog question appears, wait longer for setup.
+		// If no dialog, use shorter window to avoid timeout on simple actions.
+		// Start with short window, increase if dialog might be coming.
+		uint32 settleFrames = 10;
+		if (_sseEgoMoved && !questionReady) {
+			// Ego moved but no dialog yet; wait a bit longer for animations/dialog creation
+			settleFrames = 20;
+		}
 		bool settled = _frameCounter - _sseDoneAtFrame >= settleFrames;
 		if (questionReady || settled) {
-			debug(1, "mcp: closing stream at frame %d (question=%d, settled=%d)",
-				_frameCounter, questionReady, settled);
+			debug(1, "mcp: closing stream at frame %d (question=%d, settled=%d, settleFrames=%d)",
+				_frameCounter, questionReady, settled, settleFrames);
 			Common::JSONObject changes = buildStateChanges();
 			_streaming = false;
 			_server->endStream(new Common::JSONValue(changes), true);
@@ -1057,8 +1062,10 @@ static const struct {
 } kVerbMap[] = {
 	{"talk_to", "Talk to"},
 	{"talk_to", "talk_to"},
+	{"talk_to", "What do"},		// Maniac Mansion
 	{"look_at", "Look at"},
 	{"look_at", "look_at"},
+	{"look_at", "What is"},		// Maniac Mansion
 	{"pick_up", "Pick up"},
 	{"pick_up", "pick_up"},
 	{"walk_to", "Walk to"},
