@@ -1046,6 +1046,7 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 	if (s == "walk")    return "walk_to";
 	if (s == "goto")    return "walk_to";
 	if (s == "look")    return "look_at";
+	if (s == "what_is") return "look_at";
 	if (s == "examine") return "look_at";
 	if (s == "pick")    return "pick_up";
 	if (s == "pickup")  return "pick_up";
