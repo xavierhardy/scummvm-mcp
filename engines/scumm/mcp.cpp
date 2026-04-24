@@ -725,10 +725,13 @@ void ScummMcpBridge::emitPendingMessages() {
 		Common::JSONObject params;
 		if (m.actorId >= 0) {
 			int objId = _vm->actorToObj(m.actorId);
-			Common::String actorName = getObjName(this, objId);
-			if (!actorName.empty()) {
-				Common::String safe = mcpSanitizeString(mcpLowerTrimmed(actorName));
-				params.setVal("actor", mcpJsonString(safe));
+			// Only include actor name if the object ID is within bounds
+			if (_vm->_numGlobalObjects <= 0 || objId < _vm->_numGlobalObjects) {
+				Common::String actorName = getObjName(this, objId);
+				if (!actorName.empty()) {
+					Common::String safe = mcpSanitizeString(mcpLowerTrimmed(actorName));
+					params.setVal("actor", mcpJsonString(safe));
+				}
 			}
 		}
 		params.setVal("text", mcpJsonString(mcpSanitizeString(m.text)));
