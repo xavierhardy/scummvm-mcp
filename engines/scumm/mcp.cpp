@@ -596,6 +596,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		debug(1, "mcp: act entrypoint for obj %d verb %d = %d", targetA, verbId, ep);
 	}
 
+	// In Maniac Mansion, executing verbs without entrypoints can cause out-of-bounds errors
+	// when the default sentence handling code accesses object 386. Skip execution if no handler.
+	if (_vm->_game.id == GID_MANIAC && targetA != 0) {
+		int ep = _vm->getVerbEntrypoint(targetA, verbId);
+		if (ep == 0) {
+			debug(1, "mcp: skipping verb with no entrypoint on object %d", targetA);
+			return true;  // Return success but don't execute
+		}
+	}
+
 	snapshotPreAction();
 	_streaming = true;
 	_sseStartFrame = _frameCounter;
