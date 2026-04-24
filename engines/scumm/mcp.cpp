@@ -57,6 +57,7 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	  _sseStartFrame(0),
 	  _sseDoneAtFrame(0),
 	  _sseStuckAtFrame(0),
+	  _sseLastEventFrame(0),
 	  _sseEgoMoved(false),
 	  _ssePreRoom(0),
 	  _ssePrePosX(0),
@@ -628,6 +629,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseStartFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
 	_vm->doSentence(verbId, targetA, targetB);
@@ -690,6 +692,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	_sseStartFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
 	_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
@@ -745,6 +748,7 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	_sseStartFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
 	ego->startWalkActor(wx, wy, -1);
@@ -760,6 +764,7 @@ void ScummMcpBridge::emitPendingMessages() {
 	while (!_messages.empty()) {
 		const MessageEntry &m = _messages[0];
 		_sseMessages.push_back(m);
+		_sseLastEventFrame = _frameCounter;
 		Common::JSONObject params;
 		if (m.actorId >= 0) {
 			int objId = _vm->actorToObj(m.actorId);
@@ -791,15 +796,19 @@ void ScummMcpBridge::pumpStream() {
 			_sseEgoMoved = true;
 	}
 
-	// Early-exit: stuck (ego idle, no speech, user-put locked) for 90 frames.
+	// Early-exit: stuck (ego idle, no speech, user-put locked).
+	// Use a short timeout when no events have occurred yet (action had no visible
+	// effect and completed quickly), and a longer one when we've seen activity.
 	{
 		Actor *ego = getEgoActor();
 		bool egoIdle = !ego || !ego->_moving;
 		bool stuck = egoIdle && _vm->_talkDelay == 0 && _vm->_userPut <= 0;
 		if (stuck) {
 			if (_sseStuckAtFrame == 0) _sseStuckAtFrame = _frameCounter;
-			if (_frameCounter - _sseStuckAtFrame > 90) {
-				debug(1, "mcp: action stuck for 90 frames — closing stream");
+			bool hadActivity = _sseLastEventFrame > 0 || _sseEgoMoved;
+			uint32 stuckLimit = hadActivity ? 90 : 15;
+			if (_frameCounter - _sseStuckAtFrame > stuckLimit) {
+				debug(1, "mcp: action stuck for %d frames — closing stream", stuckLimit);
 				Common::JSONObject changes = buildStateChanges();
 				_streaming = false;
 				_server->endStream(new Common::JSONValue(changes), true);
@@ -822,28 +831,23 @@ void ScummMcpBridge::pumpStream() {
 	if (done) {
 		if (_sseDoneAtFrame == 0) {
 			_sseDoneAtFrame = _frameCounter;
-			debug(1, "mcp: action looks done at frame %d, settling (egoMoved=%d)",
-			      _frameCounter, _sseEgoMoved);
-			// Dump all verb slots to diagnose dialog creation
-			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
-				const VerbSlot &vs = _vm->_verbs[slot];
-				if (!vs.verbid) continue;
-				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-				byte textBuf[256] = {};
-				if (ptr) _vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-				debug(1, "mcp:   verb[%d] id=%d saveid=%d curmode=%d key=%d imgindex=%d text='%s'",
-					slot, vs.verbid, vs.saveid, vs.curmode, vs.key, vs.imgindex, (const char *)textBuf);
-			}
+			debug(1, "mcp: action looks done at frame %d, settling (egoMoved=%d, lastEvent=%d)",
+			      _frameCounter, _sseEgoMoved, _sseLastEventFrame);
 		}
+
+		// If a new message arrived after we first thought we were done, the action
+		// script was still running — reset the window to wait for it to finish.
+		if (_sseLastEventFrame > _sseDoneAtFrame) {
+			debug(1, "mcp: new event at frame %d after done at %d, extending window",
+			      _sseLastEventFrame, _sseDoneAtFrame);
+			_sseDoneAtFrame = _sseLastEventFrame;
+		}
+
 		bool questionReady = hasPendingQuestion();
-		// Use adaptive settling window: if dialog question appears, wait longer for setup.
-		// If no dialog, use shorter window to avoid timeout on simple actions.
-		// Start with short window, increase if dialog might be coming.
 		uint32 settleFrames = 10;
-		if (_sseEgoMoved && !questionReady) {
-			// Ego moved but no dialog yet; wait a bit longer for animations/dialog creation
+		if (_sseEgoMoved && !questionReady)
 			settleFrames = 20;
-		}
+
 		bool settled = _frameCounter - _sseDoneAtFrame >= settleFrames;
 		if (questionReady || settled) {
 			debug(1, "mcp: closing stream at frame %d (question=%d, settled=%d, settleFrames=%d)",

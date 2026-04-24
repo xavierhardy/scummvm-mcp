@@ -79,6 +79,7 @@ private:
 	uint32 _sseStartFrame;
 	uint32 _sseDoneAtFrame;
 	uint32 _sseStuckAtFrame;
+	uint32 _sseLastEventFrame;  // Frame of most recent message received during stream
 	bool _sseEgoMoved;   // ego moved at any point during this stream
 	Common::Array<uint16> _ssePreInventory;
 	Common::Array<ObjStateSnap> _ssePreObjectStates;
