@@ -2,14 +2,19 @@
 """
 MCP integration test utilities: client, ScummVM launcher, shared helpers.
 """
+
 import json
 import os
 import subprocess
 import tempfile
 import time
-from typing import Optional, Dict, Any
+
+from typing import Any
 
 import httpx
+
+
+TIMEOUT_SECS = 10.0
 
 
 class McpClient:
@@ -19,29 +24,60 @@ class McpClient:
         self.host = host
         self.port = port
         self._url = f"http://{host}:{port}/mcp"
-        self._session_id: Optional[str] = None
+        self._session_id: str | None = None
         self._req_id = 0
-        self._client = httpx.Client(timeout=httpx.Timeout(30.0))
+        self._client = httpx.Client(timeout=httpx.Timeout(TIMEOUT_SECS))
 
     def _next_id(self) -> int:
         self._req_id += 1
         return self._req_id
 
-    def _headers(self, extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-        h: Dict[str, str] = {"Content-Type": "application/json"}
+    def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        h: dict[str, str] = {"Content-Type": "application/json"}
         if self._session_id:
             h["Mcp-Session-Id"] = self._session_id
         if extra:
             h.update(extra)
         return h
 
-    def _extract_result(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_result(self, data: dict[str, Any]) -> dict[str, Any]:
         """Pull the inner JSON from a tools/call response."""
         result = data.get("result", {})
         content = result.get("content", [])
         if content and content[0].get("type") == "text":
             return json.loads(content[0]["text"])
         return result
+
+    def _decode_stream_response(self, resp: httpx.Response, tool: str):
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Act error: HTTP {resp.status_code}")
+        for line in resp.iter_lines():
+            if line.startswith("data: "):
+                raw = line[6:].strip()
+            else:
+                raw = line.strip()
+
+            if not raw or raw == ": keepalive":
+                continue
+
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"Failed to decode JSON (error: {exc}): '{raw}'")
+
+            if "result" in msg:
+                return self._extract_result(msg)
+            elif "error" in msg:
+                if "message" in msg["error"]:
+                    if "code" in msg["error"]:
+                        raise RuntimeError(
+                            f"{tool} error: {msg['error']['message']} (code: {msg['error']['code']})"
+                        )
+                    else:
+                        raise RuntimeError(f"{tool} error: {msg['error']['message']}")
+                else:
+                    raise RuntimeError(f"{tool} error: {msg['error']}")
+        raise RuntimeError("{tool stream ended without result")
 
     def initialize(self) -> None:
         """Initialize MCP session."""
@@ -62,7 +98,7 @@ class McpClient:
         if "error" in data:
             raise RuntimeError(f"Initialize error: {data['error']}")
 
-    def state(self) -> Dict[str, Any]:
+    def state(self) -> dict[str, Any]:
         """Get current game state (sync call)."""
         payload = {
             "jsonrpc": "2.0",
@@ -72,13 +108,17 @@ class McpClient:
         }
         resp = self._client.post(self._url, json=payload, headers=self._headers())
         data = resp.json()
+
         if "error" in data:
             raise RuntimeError(f"State error: {data['error']}")
         return self._extract_result(data)
 
     def act(
-        self, verb: str, target1: Optional[str] = None, target2: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self,
+        verb: str,
+        target1: str | int | None = None,
+        target2: str | int | None = None,
+    ) -> dict[str, Any]:
         """Execute a verb on a target (streaming call)."""
         arguments = {"verb": verb}
         if target1 is not None:
@@ -96,25 +136,9 @@ class McpClient:
         with self._client.stream(
             "POST", self._url, json=payload, headers=headers
         ) as resp:
-            if resp.status_code >= 400:
-                raise RuntimeError(f"Act error: HTTP {resp.status_code}")
-            for line in resp.iter_lines():
-                if not line.startswith("data: "):
-                    continue
-                raw = line[6:].strip()
-                if not raw:
-                    continue
-                try:
-                    msg = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                if "result" in msg:
-                    return self._extract_result(msg)
-                elif "error" in msg:
-                    raise RuntimeError(f"Act error: {msg['error']}")
-        raise RuntimeError("Act stream ended without result")
+            return self._decode_stream_response(resp=resp, tool="Act")
 
-    def answer(self, choice_id: int) -> Dict[str, Any]:
+    def answer(self, choice_id: int) -> dict[str, Any]:
         """Select a dialog choice (streaming call)."""
         payload = {
             "jsonrpc": "2.0",
@@ -126,23 +150,7 @@ class McpClient:
         with self._client.stream(
             "POST", self._url, json=payload, headers=headers
         ) as resp:
-            if resp.status_code >= 400:
-                raise RuntimeError(f"Answer error: HTTP {resp.status_code}")
-            for line in resp.iter_lines():
-                if not line.startswith("data: "):
-                    continue
-                raw = line[6:].strip()
-                if not raw:
-                    continue
-                try:
-                    msg = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                if "result" in msg:
-                    return self._extract_result(msg)
-                elif "error" in msg:
-                    raise RuntimeError(f"Answer error: {msg['error']}")
-        raise RuntimeError("Answer stream ended without result")
+            return self._decode_stream_response(resp=resp, tool="Answer")
 
     def close(self) -> None:
         """Close the client."""
@@ -173,26 +181,42 @@ def launch_scummvm(
 ) -> subprocess.Popen:
     """Launch ScummVM headlessly with MCP enabled for the given game."""
     # Create temporary scummvm.ini
+    with open(os.path.join("ini_files", f"scummvm_{game_id}.ini")) as ini_file:
+        content = ini_file.read() % {"game_path": game_path, "mcp_port": port}
+
     tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
     ini_path = os.path.join(tmpdir, "scummvm.ini")
-    ini_content = f"""[scummvm]
-save_path=/tmp
+    save_path = os.path.join(os.path.dirname(__file__), f"save_slots/{game_id}")
 
-[{game_id}]
-path={game_path}
-mcp=true
-mcp_port={port}
-"""
     with open(ini_path, "w") as f:
-        f.write(ini_content)
+        f.write(content)
 
     # Launch with no video/audio
     env = os.environ.copy()
-    env["SDL_VIDEODRIVER"] = "dummy"
+    # env["SDL_VIDEODRIVER"] = "dummy"
     env["SDL_AUDIODRIVER"] = "dummy"
 
+    if game_id == "atlantis":
+        args = [
+            scummvm_binary,
+            "-c",
+            ini_path,
+            game_id,
+        ]
+    else:
+        args = [
+            scummvm_binary,
+            "-c",
+            ini_path,
+            "--save-slot=1",
+            f"--savepath={save_path}",
+            "--talkspeed=1200",
+            game_id,
+        ]
+
     proc = subprocess.Popen(
-        [scummvm_binary, "-c", ini_path, "--no-gui", game_id],
+        # [scummvm_binary, "-c", ini_path, "--no-gui", game_id],
+        args,
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -201,8 +225,8 @@ mcp_port={port}
 
 
 GAME_PATHS = {
-    "monkey": os.environ.get("MONKEY_DEMO_PATH", "/home/pi/games/MonkeyDemo"),
-    "maniac": os.environ.get("MANIAC_C64_PATH", "/home/pi/games/ManiacC64"),
+    "monkey-ega-demo": os.environ.get("MONKEY_DEMO_PATH", "/home/pi/games/MonkeyDemo"),
+    "maniac-c64": os.environ.get("MANIAC_C64_PATH", "/home/pi/games/ManiacC64"),
     "atlantis": os.environ.get("ATLANTIS_DEMO_PATH", "/home/pi/games/Indy4Demo"),
 }
 

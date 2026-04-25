@@ -314,3 +314,6 @@ CLAUDE.md
 .claude
 
 core.*
+venv/
+.venv/
+scummvm.ini

@@ -31,7 +31,7 @@ Create a Python venv and install dependencies:
 ```bash
 python3 -m venv venv
 . venv/bin/activate
-pip install pytest httpx
+pip install pytest pytest-xdist httpx
 ```
 
 Or use the existing ScummVM TUI venv:
@@ -51,6 +51,11 @@ python -m pytest
 ### Specific test file
 ```bash
 python -m pytest test_atlantis.py -v
+```
+
+### Specific parallelize by file
+```bash
+python -m pytest -n3 --dist=loadfile -v
 ```
 
 ### With custom game paths
