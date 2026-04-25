@@ -3,9 +3,6 @@ Pytest fixtures for MCP integration tests.
 """
 
 import os
-import subprocess
-import time
-
 import pytest
 
 from utils import (
@@ -14,55 +11,65 @@ from utils import (
     wait_for_mcp,
     require_game_path,
     GAME_PATHS,
+    MCP_HOST,
+    MCP_CONNECT_TIMEOUT_SECS,
 )
+
+PROC_KILL_TIMEOUT_SECS = 5
 
 
 @pytest.fixture(scope="session")
 def monkey_client() -> McpClient:
     """Launch Monkey Island 1 EGA demo and return MCP client."""
+    mcp_port = 23456
+
     require_game_path("monkey-ega-demo")
     scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
     proc = launch_scummvm(
         "monkey-ega-demo",
         GAME_PATHS["monkey-ega-demo"],
-        port=23456,
+        port=mcp_port,
         scummvm_binary=scummvm_binary,
     )
-    client = wait_for_mcp("127.0.0.1", 23456, timeout=30.0)
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
     yield client
     client.close()
     proc.kill()
-    proc.wait(timeout=5)
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
 
 
 @pytest.fixture(scope="session")
 def maniac_client() -> McpClient:
     """Launch Maniac Mansion C64 demo and return MCP client."""
+    mcp_port = 23457
+
     require_game_path("maniac-c64")
     scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
     proc = launch_scummvm(
         "maniac-c64",
         GAME_PATHS["maniac-c64"],
-        port=23457,
+        port=mcp_port,
         scummvm_binary=scummvm_binary,
     )
-    client = wait_for_mcp("127.0.0.1", 23457, timeout=30.0)
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
     yield client
     client.close()
     proc.kill()
-    proc.wait(timeout=5)
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
 
 
 @pytest.fixture(scope="session")
 def atlantis_client() -> McpClient:
     """Launch Indiana Jones Fate of Atlantis demo and return MCP client."""
+    mcp_port = 23458
+
     require_game_path("atlantis")
     scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
     proc = launch_scummvm(
-        "atlantis", GAME_PATHS["atlantis"], port=23458, scummvm_binary=scummvm_binary
+        "atlantis", GAME_PATHS["atlantis"], port=mcp_port, scummvm_binary=scummvm_binary
     )
-    client = wait_for_mcp("127.0.0.1", 23458, timeout=30.0)
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
     yield client
     client.close()
     proc.kill()
-    proc.wait(timeout=5)
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)

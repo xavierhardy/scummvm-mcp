@@ -14,19 +14,28 @@ from typing import Any
 import httpx
 
 
-TIMEOUT_SECS = 10.0
+MCP_HOST = "127.0.0.1"
+MCP_PORT = 23456
+MCP_TIMEOUT_SECS = 10.0
+MCP_CONNECT_TIMEOUT_SECS = 30.0
+MCP_TOOLS = ("state", "act", "answer", "walk")
 
 
 class McpClient:
     """Synchronous MCP client over HTTP/1.1 with SSE streaming support."""
 
-    def __init__(self, host: str, port: int):
+    def __init__(
+        self,
+        host: str = MCP_HOST,
+        port: int = MCP_PORT,
+        timeout: float = MCP_TIMEOUT_SECS,
+    ):
         self.host = host
         self.port = port
         self._url = f"http://{host}:{port}/mcp"
         self._session_id: str | None = None
         self._req_id = 0
-        self._client = httpx.Client(timeout=httpx.Timeout(TIMEOUT_SECS))
+        self._client = httpx.Client(timeout=httpx.Timeout(timeout))
 
     def _next_id(self) -> int:
         self._req_id += 1
@@ -152,27 +161,44 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="Answer")
 
+    def walk(self, x: int, y: int) -> dict[str, Any]:
+        """Select position to walk to (streaming call)."""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "walk", "arguments": {"x": x, "y": y}},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
+            return self._decode_stream_response(resp=resp, tool="Walk")
+
     def close(self) -> None:
         """Close the client."""
         self._client.close()
 
 
 def wait_for_mcp(
-    host: str = "127.0.0.1", port: int = 23456, timeout: float = 30.0
+    host: str = MCP_HOST,
+    port: int = MCP_PORT,
+    connect_timeout: float = MCP_CONNECT_TIMEOUT_SECS,
+    timeout: float = MCP_TIMEOUT_SECS,
 ) -> McpClient:
     """Poll until MCP server is ready, then return initialized client."""
     start = time.time()
     last_error = None
-    while time.time() - start < timeout:
+    while time.time() - start < connect_timeout:
         try:
-            client = McpClient(host, port)
+            client = McpClient(host=host, port=port, timeout=timeout)
             client.initialize()
             return client
         except Exception as e:
             last_error = e
             time.sleep(0.5)
     raise TimeoutError(
-        f"MCP server at {host}:{port} did not respond within {timeout}s: {last_error}"
+        f"MCP server at {host}:{port} did not respond within {connect_timeout}s: {last_error}"
     )
 
 
