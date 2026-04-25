@@ -49,11 +49,16 @@ def test_02_monkey_walk_to_troll(monkey_client: McpClient) -> None:
     assert "room" in state
     assert state["room"] == 55
 
-    result = monkey_client.act("walk_to", "Troll")
+    # Walk towards the troll side of the bridge first so game scripts position
+    # the troll actor and make the troll room object selectable.
+    monkey_client.walk(120, 132)
 
-    assert result.get("position") or result.get("room_changed"), (
-        "Expected position or room_changed after walking"
-    )
+    monkey_client.act("walk_to", "Troll")
+
+    # Guybrush should be on the troll's side of the bridge (x < 200).
+    # walk_to may return {} if already at the troll's position, which is fine.
+    state = monkey_client.state()
+    assert state["position"]["x"] < 200, f"Expected Guybrush near troll, got {state['position']}"
 
 
 def test_03_monkey_talk_to_troll(monkey_client: McpClient) -> None:

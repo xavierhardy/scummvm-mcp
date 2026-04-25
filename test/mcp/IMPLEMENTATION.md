@@ -21,7 +21,6 @@ test/mcp/
 ├── test_atlantis.py      — Indiana Jones Atlantis walkthrough tests
 ├── __init__.py           — Package marker
 ├── pytest.ini            — Pytest configuration
-├── run_tests.sh          — Convenience test runner script
 ├── README.md             — User documentation
 └── IMPLEMENTATION.md     — This file
 ```

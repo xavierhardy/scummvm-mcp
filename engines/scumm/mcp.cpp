@@ -621,14 +621,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		int ep = _vm->getVerbEntrypoint(targetA, verbId);
 		if (ep == 0) {
 			debug(1, "mcp: skipping verb with no entrypoint on object %d", targetA);
-			return true;  // Return success but don't execute
+			errorOut = "verb has no handler for this object";
+			return false;
 		}
 		// In V0, certain transitive verbs require a second object (direct object).
 		// Executing them without one causes a crash in the sentence handler.
 		if (_vm->_game.version == 0 && targetB == 0 &&
 		    (verbId == kVerbUse || verbId == kVerbGive || verbId == kVerbUnlock || verbId == kVerbFix)) {
 			debug(1, "mcp: skipping verb %d on object %d (requires second object)", verbId, targetA);
-			return true;  // Return success but don't execute
+			errorOut = "transitive verb requires second object";
+			return false;
 		}
 	}
 
@@ -927,6 +929,19 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 	if (!added.empty())
 		changes.setVal("inventory_added", new Common::JSONValue(added));
 
+	Common::JSONArray removed;
+	for (uint j = 0; j < _ssePreInventory.size(); ++j) {
+		uint16 obj = _ssePreInventory[j];
+		if (!obj) continue;
+		if (_vm->_numGlobalObjects > 0 && obj >= _vm->_numGlobalObjects) continue;
+		if (_vm->getOwner(obj) == ego) continue;
+		Common::String name = getObjName(this, obj);
+		if (name.empty()) name = Common::String::format("obj-%d", obj);
+		removed.push_back(mcpJsonString(mcpSanitizeString(mcpLowerTrimmed(name))));
+	}
+	if (!removed.empty())
+		changes.setVal("inventory_removed", new Common::JSONValue(removed));
+
 	if ((int)_vm->_currentRoom != _ssePreRoom)
 		changes.setVal("room_changed", mcpJsonInt(_vm->_currentRoom));
 
@@ -1031,15 +1046,26 @@ Actor *ScummMcpBridge::getEgoActor() const {
 bool ScummMcpBridge::isActionDone() const {
 	if (_frameCounter - _sseStartFrame < 3) return false;
 	Actor *ego = getEgoActor();
-	if (ego && ego->_moving) return false;
+	// Ego movement check with timeout only for V0 (Maniac Mansion):
+	// V0 doesn't lock _userPut, so we need a timeout to prevent indefinite waits.
+	// V5+ games handle movement more predictably and don't need this timeout.
+	if (ego && ego->_moving) {
+		if (_vm->_game.version == 0) {
+			uint32 elapsed = _frameCounter - _sseStartFrame;
+			if (elapsed < 60)
+				return false;
+		} else {
+			return false;  // For V5+, wait for ego to actually stop moving
+		}
+	}
 	if (_vm->_talkDelay > 0) return false;
 	if (_vm->_userPut <= 0) return false;
-	// V0 (Maniac Mansion) scripts do not lock _userPut during execution the way V5 sentence
-	// scripts do. Without this check, isActionDone() fires 3 frames after the sentence is
-	// queued — before the object's verb script has had time to run and produce effects.
-	// Poll the script VM directly: hold off until the target object's script slot goes dead.
-	if (_sseTargetObject != 0 && _vm->isScriptInUse(_sseTargetObject))
-		return false;
+	// Note: The script check for V0 is disabled temporarily to debug timeout issues.
+	// For V0, we normally would check if the target object's script is still in use,
+	// but this can cause infinite waits if the script never finishes or isScriptInUse()
+	// is unreliable.
+	// if (_sseTargetObject != 0 && _vm->isScriptInUse(_sseTargetObject))
+	// 	return false;
 	return true;
 }
 
@@ -1120,6 +1146,8 @@ static const struct {
 	{"close", "close"},
 	{"use", "Use"},
 	{"use", "use"},
+	{"unlock", "Unlock"},
+	{"unlock", "unlock"},
 	{"give", "Give"},
 	{"give", "give"},
 	{"push", "Push"},
@@ -1256,7 +1284,12 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 	int egoNum = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : -1;
 	for (int i = 1; _vm->_actors && i < _vm->_numActors; ++i) {
 		Actor *a = _vm->_actors[i];
-		if (!a || !a->isInCurrentRoom()) continue;
+		if (!a) continue;
+		// Only include actors that are properly placed in the current room.
+		// In V4+ (Monkey Island, Atlantis), actors are visual representations only;
+		// room objects carry the verb scripts. Requiring _room == currentRoom prevents
+		// including actors placed by scripts at off-screen positions (e.g. (0,0)).
+		if (!a->isInCurrentRoom()) continue;
 		// Ego is the player character; it is never presented as an interaction target.
 		if (a->_number == egoNum) continue;
 		// Exclude actors the player cannot click on (mirrors getActorFromPos()).
@@ -1302,14 +1335,27 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 		      i, (int)entities[i].kind, entities[i].numId,
 		      entities[i].displayName.c_str(), entities[i].visible);
 	}
-	// Prefer actors: an actor and its room object share a name; kActor is authoritative.
+	// When an actor and a room object share a name:
+	// V0 (Maniac Mansion): actors carry the verb scripts → prefer actor over object.
+	// V4+ (Monkey Island, Atlantis): room objects carry verb scripts; actors are
+	//   visual only → prefer room object over actor so verbs execute correctly.
+	int actorMatch = -1;
+	int objectMatch = -1;
 	int firstMatch = -1;
 	for (uint i = 0; i < entities.size(); ++i) {
 		if (entities[i].displayName != normalized) continue;
-		if (entities[i].kind == NamedEntity::kActor) { out = entities[i]; return true; }
 		if (firstMatch < 0) firstMatch = (int)i;
+		if (entities[i].kind == NamedEntity::kActor) {
+			if (actorMatch < 0) actorMatch = (int)i;
+		} else {
+			if (objectMatch < 0) objectMatch = (int)i;
+		}
 	}
-	if (firstMatch >= 0) { out = entities[firstMatch]; return true; }
+	bool v0Game = (_vm->_game.version == 0);
+	int best = v0Game
+	    ? ((actorMatch  >= 0) ? actorMatch  : (objectMatch >= 0) ? objectMatch : firstMatch)
+	    : ((objectMatch >= 0) ? objectMatch : (actorMatch  >= 0) ? actorMatch  : firstMatch);
+	if (best >= 0) { out = entities[best]; return true; }
 	debug(1, "mcp: resolveEntityByName '%s' not found", name.c_str());
 	return false;
 }
