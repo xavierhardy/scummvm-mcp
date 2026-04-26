@@ -360,35 +360,42 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		out.setVal("position", new Common::JSONValue(pos));
 	}
 
+	// Check for pending dialog question before building the verb bar.
+	// When a question is pending, the verb bar is replaced by dialog choices
+	// (in V4/MI1, the same verb slots are reused with new text; in V5/Indy4,
+	// new slots are added). Either way, we emit an empty verbs list and put
+	// the choices into 'question' instead.
+	bool questionPending = hasPendingQuestion();
+
 	struct VerbInfo { int verbId; Common::String name; Common::String label; };
 	Common::Array<VerbInfo> activeVerbs;
 	Common::JSONArray verbsArr;
-	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
-		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
-		// Skip dialog choices (numeric-keyed or unkeyed non-dialog slots)
-		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
-		if (vs.curmode != 0 && vs.curmode != 1) continue;
-		// Skip slots without text
-		const byte *ptr2 = _vm->getResourceAddress(rtVerb, slot);
-		if (!ptr2) continue;
-		byte textBuf2[256];
-		_vm->convertMessageToString(ptr2, textBuf2, sizeof(textBuf2));
-		if (!textBuf2[0]) continue;
-		Common::String label = mcpLowerTrimmed((const char *)textBuf2);
-		if (label.empty()) continue;
-		bool labelHasCtrl = false;
-		for (uint ci = 0; ci < label.size(); ++ci)
-			if ((unsigned char)label[ci] < 0x20) { labelHasCtrl = true; break; }
-		if (labelHasCtrl) continue;
-		Common::String safe2 = mcpSanitizeString(normalizeActionName(label));
-		Common::String safeLabel = mcpSanitizeString(label);
-		verbsArr.push_back(mcpJsonString(safeLabel));
-		VerbInfo vi;
-		vi.verbId = vs.verbid;
-		vi.name   = safe2;
-		vi.label  = safeLabel;
-		activeVerbs.push_back(vi);
+	if (!questionPending) {
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
+			if (vs.curmode != 0 && vs.curmode != 1) continue;
+			const byte *ptr2 = _vm->getResourceAddress(rtVerb, slot);
+			if (!ptr2) continue;
+			byte textBuf2[256];
+			_vm->convertMessageToString(ptr2, textBuf2, sizeof(textBuf2));
+			if (!textBuf2[0]) continue;
+			Common::String label = mcpLowerTrimmed((const char *)textBuf2);
+			if (label.empty()) continue;
+			bool labelHasCtrl = false;
+			for (uint ci = 0; ci < label.size(); ++ci)
+				if ((unsigned char)label[ci] < 0x20) { labelHasCtrl = true; break; }
+			if (labelHasCtrl) continue;
+			Common::String safe2 = mcpSanitizeString(normalizeActionName(label));
+			Common::String safeLabel = mcpSanitizeString(label);
+			verbsArr.push_back(mcpJsonString(safeLabel));
+			VerbInfo vi;
+			vi.verbId = vs.verbid;
+			vi.name   = safe2;
+			vi.label  = safeLabel;
+			activeVerbs.push_back(vi);
+		}
 	}
 	out.setVal("verbs", new Common::JSONValue(verbsArr));
 
@@ -499,35 +506,29 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	out.setVal("messages", new Common::JSONValue(msgsArr));
 	_messages.clear();
 
-	int choiceCount = 0;
-	Common::JSONArray choiceList;
-	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
-		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
-		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
-		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
-		if (vs.curmode != 0 && vs.curmode != 1) continue;
-		// Skip verbs that are already in the verbs list to avoid duplication
-		bool isAlreadyVerb = false;
-		for (uint k = 0; k < activeVerbs.size(); ++k) {
-			if (activeVerbs[k].verbId == vs.verbid) { isAlreadyVerb = true; break; }
+	if (questionPending) {
+		int choiceCount = 0;
+		Common::JSONArray choiceList;
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
+			if (vs.curmode != 0 && vs.curmode != 1) continue;
+			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+			if (!ptr) continue;
+			byte textBuf[256];
+			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+			if (!textBuf[0]) continue;
+			Common::JSONObject choice;
+			choice.setVal("id",    mcpJsonInt(++choiceCount));
+			choice.setVal("label", mcpJsonString(mcpSanitizeString(Common::String((const char *)textBuf))));
+			choiceList.push_back(new Common::JSONValue(choice));
 		}
-		if (isAlreadyVerb) continue;
-		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-		if (!ptr) continue;
-		byte textBuf[256];
-		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-		if (!textBuf[0]) continue;
-		if (!hasPendingQuestion()) break;
-		Common::JSONObject choice;
-		choice.setVal("id",    mcpJsonInt(++choiceCount));
-		choice.setVal("label", mcpJsonString(mcpSanitizeString(Common::String((const char *)textBuf))));
-		choiceList.push_back(new Common::JSONValue(choice));
-	}
-	if (choiceCount > 0) {
-		Common::JSONObject question;
-		question.setVal("choices", new Common::JSONValue(choiceList));
-		out.setVal("question", new Common::JSONValue(question));
+		if (choiceCount > 0) {
+			Common::JSONObject question;
+			question.setVal("choices", new Common::JSONValue(choiceList));
+			out.setVal("question", new Common::JSONValue(question));
+		}
 	}
 
 	return new Common::JSONValue(out);

@@ -42,7 +42,7 @@ def test_04_maniac_pull_bushes(maniac_client: McpClient) -> None:
 
 def test_05_maniac_walk_to_front_door(maniac_client: McpClient) -> None:
     """Walk to front door."""
-    result = maniac_client.act("walk_to", "front door")
+    result = maniac_client.act("walk_to", "front_door")
     assert result.get("position")
 
 
@@ -60,11 +60,11 @@ def test_07_maniac_pickup_key(maniac_client: McpClient) -> None:
 
 def test_08_maniac_use_key_on_door(maniac_client: McpClient) -> None:
     """Unlock front door with key."""
-    result = maniac_client.act("unlock", "key", "front door")
-    assert result.get("room_changed") or result.get("position") or result.get("objects_changed")
+    result = maniac_client.act("use", "key", "front_door")
+    assert result.get("objects_changed")
 
 
 def test_09_maniac_walk_through_front_door(maniac_client: McpClient) -> None:
     """Walk to front door (should enter new room)."""
-    result = maniac_client.act("walk_to", "front door")
-    assert result.get("room_changed") or result.get("position")
+    result = maniac_client.act("walk_to", "front_door")
+    assert result.get("room_changed")
