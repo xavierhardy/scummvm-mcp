@@ -81,4 +81,4 @@ def test_07_atlantis_close_crate(atlantis_client: McpClient) -> None:
 
     assert "x" in result["position"]
     assert "y" in result["position"]
-    assert result["objects_changed"]["name"] == "create"
+    assert result["objects_changed"][0]["name"] == "crate"
