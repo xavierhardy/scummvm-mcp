@@ -88,10 +88,19 @@ if __name__ == "__main__":
         if tool == "state":
             result = mcp_client.state()
         elif tool == "act":
+            if arguments.target1 in ("to", "in", "off", "on", "is"):
+                verb = f"{arguments.verb}_{arguments.target1}"
+                target1 = arguments.target2
+                target2 = ""
+            else:
+                verb = arguments.verb
+                target1 = arguments.target1
+                target2 = arguments.target2
+
             result = mcp_client.act(
-                arguments.verb,
-                convert_target(arguments.target1),
-                convert_target(arguments.target2),
+                verb,
+                convert_target(target1),
+                convert_target(target2),
             )
         elif tool == "answer":
             if arguments.choice < 1:
