@@ -690,10 +690,22 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		if (v->isString()) {
 			NamedEntity ent;
 			if (!resolveEntityByName(v->asString(), ent)) {
-				errorOut = Common::String("act: unknown ") + param + " '" + v->asString() + "'";
-				return false;
+				const char *str = v->asString().c_str();
+				char *endptr = nullptr;
+				long val = strtol(str, &endptr, 10);
+				if (endptr != str && *endptr == '\0') {
+					out = (int)val;
+					if (out < 0) {
+						errorOut = Common::String::format("act: %s id %d is negative", param, out);
+						return false;
+					}
+				} else {
+					errorOut = Common::String("act: unknown ") + param + " '" + v->asString() + "'";
+					return false;
+				}
+			} else {
+				out = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
 			}
-			out = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
 			if (_vm->_numGlobalObjects > 0 && out >= _vm->_numGlobalObjects) {
 				errorOut = Common::String::format(
 					"act: %s id %d out of bounds (0-%d)",
@@ -753,6 +765,15 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		    (verbId == kVerbUse || verbId == kVerbGive || verbId == kVerbUnlock || verbId == kVerbFix)) {
 			debug(1, "mcp: skipping verb %d on object %d (requires second object)", verbId, targetA);
 			errorOut = "transitive verb requires second object";
+			return false;
+		}
+	}
+
+	// For V0: ScummEngine_v0 asserts that the primary object (st.objectA) exists.
+	// We must check if targetA is valid and present before starting the action.
+	if (_vm->_game.version == 0) {
+		if (targetA == 0 || _vm->whereIsObject(targetA) == WIO_NOT_FOUND) {
+			errorOut = "target object does not exist or is not available";
 			return false;
 		}
 	}
