@@ -114,6 +114,7 @@ Common::String cleanGameText(const Common::String &text) {
 ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	: _vm(vm),
 	  _enabled(false),
+	  _skipToolEnabled(false),
 	  _server(nullptr),
 	  _nextMessageSeq(1),
 	  _frameCounter(0),
@@ -131,6 +132,8 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 
 	_enabled = ConfMan.getBool("mcp");
 	if (!_enabled) return;
+
+	_skipToolEnabled = ConfMan.hasKey("mcp_skip_tool") && ConfMan.getBool("mcp_skip_tool");
 
 	int port = ConfMan.hasKey("mcp_port") ? ConfMan.getInt("mcp_port") : 23456;
 	Common::String host = ConfMan.hasKey("mcp_host") ? ConfMan.get("mcp_host") : "127.0.0.1";
@@ -370,6 +373,19 @@ void ScummMcpBridge::registerTools() {
 		spec.streaming    = true;
 		_server->registerTool(spec);
 	}
+
+	// --- skip ---
+	if (_skipToolEnabled) {
+		Networking::McpServer::ToolSpec spec;
+		spec.name = "skip";
+		spec.description =
+		    "Skip/cancel current action or cutscene by simulating an Escape key press. "
+		    "Useful for skipping long intros or animations. Returns state changes.";
+		spec.inputSchema  = nullptr;  // No input required
+		spec.outputSchema = makeChangesSchema();
+		spec.streaming    = true;
+		_server->registerTool(spec);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -395,6 +411,10 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 	}
 	if (name == "walk") {
 		if (!toolWalk(args, errorOut)) return nullptr;
+		return nullptr;
+	}
+	if (name == "skip") {
+		if (!toolSkip(args, errorOut)) return nullptr;
 		return nullptr;
 	}
 	errorOut = "Unknown tool: " + name;
@@ -851,6 +871,30 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	_sseTargetObject = 0;  // walk has no target object
 	ego->startWalkActor(wx, wy, -1);
 	_server->startStreaming();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Tool: skip
+// ---------------------------------------------------------------------------
+
+bool ScummMcpBridge::toolSkip(const Common::JSONValue &args, Common::String &errorOut) {
+	// Allow skip even if streaming to interrupt current action
+	if (!_streaming) {
+		snapshotPreAction();
+		_streaming = true;
+		_sseStartFrame = _frameCounter;
+		_sseDoneAtFrame = 0;
+		_sseStuckAtFrame = 0;
+		_sseLastEventFrame = 0;
+		_sseEgoMoved = false;
+		_sseMessages.clear();
+		_sseTargetObject = 0;
+		_server->startStreaming();
+	}
+
+	// Simulate Escape key press to skip/cancel
+	_vm->_keyPressed = Common::KeyCode(27); // ESC key
 	return true;
 }
 
@@ -1398,9 +1442,12 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		// Exclude actors the player cannot click on (mirrors getActorFromPos()).
 		if (!isActorSelectable(a->_number)) continue;
 		int objId = _vm->actorToObj(a->_number);
-		// Skip actors whose object ID is out of bounds
-		if (_vm->_numGlobalObjects > 0 && objId >= _vm->_numGlobalObjects) continue;
-		Common::String name = getObjName(this, objId);
+		// Even if objId is out of bounds, include the actor so it can be targeted
+		// (the verb handler will handle whether the verb is available)
+		Common::String name;
+		if (_vm->_numGlobalObjects <= 0 || objId < _vm->_numGlobalObjects) {
+			name = getObjName(this, objId);
+		}
 		RawEntry e;
 		e.kind = NamedEntity::kActor;
 		e.numId = a->_number;

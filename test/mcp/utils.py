@@ -18,7 +18,7 @@ MCP_HOST = "127.0.0.1"
 MCP_PORT = 23456
 MCP_TIMEOUT_SECS = 10.0
 MCP_CONNECT_TIMEOUT_SECS = 30.0
-MCP_TOOLS = ("state", "act", "answer", "walk")
+MCP_TOOLS = ("state", "act", "answer", "walk", "skip")
 
 
 class McpClient:
@@ -61,7 +61,6 @@ class McpClient:
         if resp.status_code >= 400:
             raise RuntimeError(f"Act error: HTTP {resp.status_code}")
         for line in resp.iter_lines():
-            print(line)
             if line.startswith("data: "):
                 raw = line[6:].strip()
             else:
@@ -123,6 +122,20 @@ class McpClient:
             raise RuntimeError(f"State error: {data['error']}")
         return self._extract_result(data)
 
+    def skip(self) -> dict[str, Any]:
+        """Skip (equivalent to Escape)."""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "skip", "arguments": {}},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
+            return self._decode_stream_response(resp=resp, tool="Skip")
+
     def act(
         self,
         verb: str,
@@ -146,10 +159,7 @@ class McpClient:
         with self._client.stream(
             "POST", self._url, json=payload, headers=headers
         ) as resp:
-            result = self._decode_stream_response(resp=resp, tool="Act")
-            print(result)
-            # raise ValueError(result)
-            return result
+            return self._decode_stream_response(resp=resp, tool="Act")
 
     def answer(self, choice_id: int) -> dict[str, Any]:
         """Select a dialog choice (streaming call)."""

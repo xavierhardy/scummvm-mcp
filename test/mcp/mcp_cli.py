@@ -87,6 +87,8 @@ if __name__ == "__main__":
     try:
         if tool == "state":
             result = mcp_client.state()
+        elif tool == "skip":
+            result = mcp_client.skip()
         elif tool == "act":
             if arguments.target1 in ("to", "in", "off", "on", "is"):
                 verb = f"{arguments.verb}_{arguments.target1}"

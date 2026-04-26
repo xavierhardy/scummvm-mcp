@@ -69,6 +69,7 @@ private:
 
 	ScummEngine *_vm;
 	bool _enabled;
+	bool _skipToolEnabled;
 	Networking::McpServer *_server;
 
 	Common::Array<MessageEntry> _messages;
@@ -96,6 +97,7 @@ private:
 	bool toolAct(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolAnswer(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
 
 	// Register all tools with the server.
 	void registerTools();
