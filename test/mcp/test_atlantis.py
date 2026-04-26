@@ -37,9 +37,7 @@ def test_01_atlantis_initial_state(atlantis_client: McpClient) -> None:
 def test_02_atlantis_answer_opening_dialog(atlantis_client: McpClient) -> None:
     """Answer opening dialog choice 4."""
     result = atlantis_client.answer(4)
-    assert result["messages"][0] == {"text": "\x7fTrust me. �\t\x07", "actor": "indy"}
-    assert result["messages"][1]["actor"] == "sophia"
-    assert result["room_changed"] == 63
+    assert result["messages"][0] == {"text": "Let's take a look around.", "actor": "indy"}
 
 
 def test_03_atlantis_walk_to_path_away_from_dock(atlantis_client: McpClient) -> None:
@@ -53,7 +51,9 @@ def test_04_atlantis_answer_dialog_2(atlantis_client: McpClient) -> None:
     """Answer dialog choice 2."""
     result = atlantis_client.answer(2)
     assert_messages_produced(result)
-    assert result.get("room_changed")
+    assert result["messages"][0] == {"text": "I want to see if our friend Kerner has been here.", "actor": "indy"}
+    assert result["messages"][1]["actor"] == "sophia"
+    assert result["room_changed"] == 63
 
 
 def test_05_atlantis_walk_to_mountain(atlantis_client: McpClient) -> None:

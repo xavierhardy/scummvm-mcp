@@ -42,6 +42,69 @@ Common::String getObjName(const ScummMcpBridge *bridge, int obj) {
 	return Common::String((const char *)name);
 }
 
+// Clean up game text: remove control characters, trim whitespace, remove trailing @, remove unicode chars
+Common::String cleanGameText(const Common::String &text) {
+	Common::String out;
+	for (size_t i = 0; i < text.size(); ++i) {
+		unsigned char c = (unsigned char)text[i];
+		// Replace control characters (except newline) and DEL with space
+		if ((c < 0x20 && c != 0x0A) || c == 0x7F) {
+			out += ' ';
+			continue;
+		}
+		// Skip UTF-8 sequences for replacement character (� = 0xEF 0xBF 0xBD)
+		if (c == 0xEF && i + 2 < text.size()) {
+			unsigned char c1 = (unsigned char)text[i+1];
+			unsigned char c2 = (unsigned char)text[i+2];
+			if (c1 == 0xBF && c2 == 0xBD) {
+				// Skip replacement character unless it's part of orichalum beads
+				if (i + 4 < text.size()) {
+					unsigned char c3 = (unsigned char)text[i+3];
+					unsigned char c4 = (unsigned char)text[i+4];
+					// Orichalum beads: �� = 0xEF 0xBF 0xBD 0x04 0xEF 0xBF 0xBD
+					if (c3 == 0x04) {
+						out += text[i];
+						out += text[++i];
+						out += text[++i];
+						out += text[++i];
+						continue;
+					}
+				}
+				i += 2;
+				continue;
+			}
+		}
+		out += text[i];
+	}
+	// Collapse multiple consecutive spaces
+	Common::String collapsed;
+	bool prevWasSpace = false;
+	for (size_t i = 0; i < out.size(); ++i) {
+		char c = out[i];
+		if (c == ' ') {
+			if (!prevWasSpace) {
+				collapsed += c;
+				prevWasSpace = true;
+			}
+		} else {
+			collapsed += c;
+			prevWasSpace = false;
+		}
+	}
+	out = collapsed;
+	// Trim leading/trailing whitespace (including newlines)
+	size_t start = 0;
+	while (start < out.size() && (unsigned char)out[start] <= 0x20) start++;
+	size_t end = out.size();
+	while (end > start && (unsigned char)out[end-1] <= 0x20) end--;
+	out = out.substr(start, end - start);
+	// Remove trailing @
+	while (!out.empty() && out[out.size()-1] == '@') {
+		out = out.substr(0, out.size()-1);
+	}
+	return out;
+}
+
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -415,9 +478,13 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		const NamedEntity &ne = entities[i];
 		Common::String safe = mcpSanitizeString(ne.displayName);
 		switch (ne.kind) {
-		case NamedEntity::kInventory:
-			inventory.push_back(mcpJsonString(safe));
+		case NamedEntity::kInventory: {
+			Common::String cleanItem = cleanGameText(safe);
+			if (!cleanItem.empty()) {
+				inventory.push_back(mcpJsonString(cleanItem));
+			}
 			break;
+		}
 		case NamedEntity::kObject: {
 			// Skip objects that are out of bounds for the object space
 			if (_vm->_numGlobalObjects > 0 && ne.numId >= _vm->_numGlobalObjects) break;
@@ -498,6 +565,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	Common::JSONArray msgsArr;
 	for (uint i = 0; i < _messages.size(); ++i) {
 		const MessageEntry &m = _messages[i];
+		Common::String cleanText = cleanGameText(mcpSanitizeString(m.text));
+		if (cleanText.empty()) continue;
 		Common::JSONObject entry;
 		if (m.actorId >= 0) {
 			int objId = _vm->actorToObj(m.actorId);
@@ -510,7 +579,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				}
 			}
 		}
-		entry.setVal("text", mcpJsonString(mcpSanitizeString(m.text)));
+		entry.setVal("text", mcpJsonString(cleanText));
 		msgsArr.push_back(new Common::JSONValue(entry));
 	}
 	out.setVal("messages", new Common::JSONValue(msgsArr));
@@ -529,9 +598,11 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			byte textBuf[256];
 			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 			if (!textBuf[0]) continue;
+			Common::String cleanLabel = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+			if (cleanLabel.empty()) continue;
 			Common::JSONObject choice;
 			choice.setVal("id",    mcpJsonInt(++choiceCount));
-			choice.setVal("label", mcpJsonString(mcpSanitizeString(Common::String((const char *)textBuf))));
+			choice.setVal("label", mcpJsonString(cleanLabel));
 			choiceList.push_back(new Common::JSONValue(choice));
 		}
 		if (choiceCount > 0) {
@@ -804,9 +875,12 @@ void ScummMcpBridge::emitPendingMessages() {
 				}
 			}
 		}
-		params.setVal("text", mcpJsonString(mcpSanitizeString(m.text)));
-		params.setVal("type", mcpJsonString(mcpSanitizeString(m.type)));
-		_server->emitNotification(params);
+		Common::String cleanText = cleanGameText(mcpSanitizeString(m.text));
+		if (!cleanText.empty()) {
+			params.setVal("text", mcpJsonString(cleanText));
+			params.setVal("type", mcpJsonString(mcpSanitizeString(m.type)));
+			_server->emitNotification(params);
+		}
 		_messages.remove_at(0);
 	}
 }
@@ -943,7 +1017,10 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (!wasPresent) {
 			Common::String name = getObjName(this, obj);
 			if (name.empty()) name = Common::String::format("obj-%d", obj);
-			added.push_back(mcpJsonString(mcpSanitizeString(mcpLowerTrimmed(name))));
+			Common::String cleanName = cleanGameText(mcpSanitizeString(mcpLowerTrimmed(name)));
+			if (!cleanName.empty()) {
+				added.push_back(mcpJsonString(cleanName));
+			}
 		}
 	}
 	if (!added.empty())
@@ -957,7 +1034,10 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (_vm->getOwner(obj) == ego) continue;
 		Common::String name = getObjName(this, obj);
 		if (name.empty()) name = Common::String::format("obj-%d", obj);
-		removed.push_back(mcpJsonString(mcpSanitizeString(mcpLowerTrimmed(name))));
+		Common::String cleanName = cleanGameText(mcpSanitizeString(mcpLowerTrimmed(name)));
+		if (!cleanName.empty()) {
+			removed.push_back(mcpJsonString(cleanName));
+		}
 	}
 	if (!removed.empty())
 		changes.setVal("inventory_removed", new Common::JSONValue(removed));
@@ -1008,8 +1088,10 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		Common::JSONArray msgs;
 		for (uint i = 0; i < _sseMessages.size(); ++i) {
 			const MessageEntry &me = _sseMessages[i];
+			Common::String cleanText = cleanGameText(mcpSanitizeString(me.text));
+			if (cleanText.empty()) continue;
 			Common::JSONObject m;
-			m.setVal("text", mcpJsonString(me.text));
+			m.setVal("text", mcpJsonString(cleanText));
 			if (me.actorId > 0) {
 				const byte *actorNamePtr = callGetObjOrActorName(me.actorId);
 				if (actorNamePtr) {
@@ -1038,9 +1120,11 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 			byte textBuf[256];
 			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 			if (!textBuf[0]) continue;
+			Common::String cleanLabel = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+			if (cleanLabel.empty()) continue;
 			Common::JSONObject choice;
 			choice.setVal("id",    mcpJsonInt(++choiceCount));
-			choice.setVal("label", mcpJsonString(mcpSanitizeString(Common::String((const char *)textBuf))));
+			choice.setVal("label", mcpJsonString(cleanLabel));
 			choiceList.push_back(new Common::JSONValue(choice));
 		}
 		if (choiceCount > 0) {
