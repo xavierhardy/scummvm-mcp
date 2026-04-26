@@ -138,8 +138,13 @@ void ScummMcpBridge::registerTools() {
 	{
 		Common::JSONObject inputProps;
 		Common::JSONObject outputProps;
-		outputProps.setVal("room", mcpProp("integer", "Current room number"));
-		outputProps.setVal("room_name", mcpProp("string", "Human-readable room name (optional)"));
+		Common::JSONObject roomProps;
+		roomProps.setVal("id", mcpProp("integer", "Current room ID"));
+		roomProps.setVal("name", mcpProp("string", "Human-readable room name (optional)"));
+		Common::JSONObject roomSchema;
+		roomSchema.setVal("type", mcpJsonString("object"));
+		roomSchema.setVal("properties", new Common::JSONValue(roomProps));
+		outputProps.setVal("room", new Common::JSONValue(roomSchema));
 
 		Common::JSONObject positionProps;
 		positionProps.setVal("x", mcpProp("integer", "X coordinate"));
@@ -162,7 +167,8 @@ void ScummMcpBridge::registerTools() {
 		objectItemProps.setVal("id",              mcpProp("integer", "Object ID"));
 		objectItemProps.setVal("name",            mcpProp("string",  "Object name"));
 		objectItemProps.setVal("state",           mcpProp("integer", "Object state"));
-		objectItemProps.setVal("visible",         mcpProp("boolean", "Visibility status"));
+		objectItemProps.setVal("x",               mcpProp("integer", "X coordinate"));
+		objectItemProps.setVal("y",               mcpProp("integer", "Y coordinate"));
 		objectItemProps.setVal("pathway",         mcpProp("boolean", "Is pathway/exit"));
 		objectItemProps.setVal("compatible_verbs",mcpProp("array",   "Verbs that have script handlers for this object"));
 		Common::JSONObject objectItem;
@@ -339,8 +345,8 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::String &) {
 	Common::JSONObject out;
 
-	out.setVal("room", mcpJsonInt(_vm->_currentRoom));
-
+	Common::JSONObject roomObj;
+	roomObj.setVal("id", mcpJsonInt(_vm->_currentRoom));
 	if (_vm->_objs && _vm->_numLocalObjects > 0 && _vm->_objs[0].obj_nr) {
 		Common::String rn = getObjName(this, _vm->_objs[0].obj_nr);
 		if (!rn.empty()) {
@@ -349,9 +355,10 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			for (uint ci = 0; ci < rn.size(); ++ci)
 				if ((unsigned char)rn[ci] < 0x20) { hasCtrl = true; break; }
 			if (!hasCtrl)
-				out.setVal("room_name", mcpJsonString(mcpSanitizeString(rn)));
+				roomObj.setVal("name", mcpJsonString(mcpSanitizeString(rn)));
 		}
 	}
+	out.setVal("room", new Common::JSONValue(roomObj));
 
 	Actor *ego = getEgoActor();
 	if (ego) {
@@ -374,7 +381,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	if (!questionPending) {
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
-			if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+			if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
 			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 			if (vs.curmode != 0 && vs.curmode != 1) continue;
 			const byte *ptr2 = _vm->getResourceAddress(rtVerb, slot);
@@ -444,7 +451,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			obj.setVal("id",               mcpJsonInt(ne.numId));
 			obj.setVal("name",             mcpJsonString(safe));
 			obj.setVal("state",            mcpJsonInt(_vm->getState(ne.numId)));
-			obj.setVal("visible",          mcpJsonBool(ne.visible));
+			obj.setVal("x",                mcpJsonInt(_vm->getObjX(ne.numId)));
+			obj.setVal("y",                mcpJsonInt(_vm->getObjY(ne.numId)));
 			obj.setVal("pathway",          mcpJsonBool(isPathway));
 			obj.setVal("compatible_verbs", new Common::JSONValue(compatVerbs));
 			objects.push_back(new Common::JSONValue(obj));
@@ -475,7 +483,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			actorObj.setVal("id",               mcpJsonInt(actorObjId));
 			actorObj.setVal("name",             mcpJsonString(safe));
 			actorObj.setVal("state",            mcpJsonInt(_vm->getState(actorObjId)));
-			actorObj.setVal("visible",          mcpJsonBool(ne.visible));
+			actorObj.setVal("x",                mcpJsonInt(_vm->getObjX(actorObjId)));
+			actorObj.setVal("y",                mcpJsonInt(_vm->getObjY(actorObjId)));
 			actorObj.setVal("pathway",          mcpJsonBool(false));
 			actorObj.setVal("compatible_verbs", new Common::JSONValue(compatVerbs));
 			objects.push_back(new Common::JSONValue(actorObj));
@@ -512,7 +521,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		Common::JSONArray choiceList;
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
-			if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+			if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
 			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 			if (vs.curmode != 0 && vs.curmode != 1) continue;
 			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
@@ -685,7 +694,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	int chosenSlot = -1;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+		if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
 		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
 		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 		if (vs.curmode != 0 && vs.curmode != 1) continue;
@@ -1020,7 +1029,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		Common::JSONArray choiceList;
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
-			if (!vs.verbid || vs.saveid != 0 || vs.verbid == 1) continue;
+			if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
 		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
 		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 		if (vs.curmode != 0 && vs.curmode != 1) continue;
@@ -1087,8 +1096,8 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 		if (!vs.verbid || vs.saveid != 0) continue;
 		// Skip OBIM verb slots (verbid=1) — they are graphical UI elements, not text
 		// choices, but their key=0 would incorrectly set hasUnkeyed=true and prevent
-		// Indy4-style numeric-key dialog detection.
-		if (vs.verbid == 1) continue;
+		// Indy4-style numeric-key dialog detection. In V0, verbid=1 is Open, not OBIM.
+		if (_vm->_game.version > 0 && vs.verbid == 1) continue;
 		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
 		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 		if (vs.curmode != 0 && vs.curmode != 1) continue;

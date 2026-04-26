@@ -18,7 +18,8 @@ def test_01_maniac_initial_state(maniac_client: McpClient) -> None:
     """Verify initial game state."""
     state = maniac_client.state()
     assert "room" in state
-    assert state.get("room") == 1
+    assert isinstance(state.get("room"), dict)
+    assert state["room"]["id"] == 1
     assert state.get("objects") is not None
 
 
