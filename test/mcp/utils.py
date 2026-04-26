@@ -220,9 +220,18 @@ def launch_scummvm(
     game_id: str, game_path: str, port: int = 23456, scummvm_binary: str = "./scummvm"
 ) -> subprocess.Popen:
     """Launch ScummVM headlessly with MCP enabled for the given game."""
+    # Create logs directory and per-game log file path for ScummVM's own logger
+    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    scummvm_log = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.scummvm.log")
+
     # Create temporary scummvm.ini
     with open(os.path.join("ini_files", f"scummvm_{game_id}.ini")) as ini_file:
-        content = ini_file.read() % {"game_path": game_path, "mcp_port": port}
+        content = ini_file.read() % {
+            "game_path": game_path,
+            "mcp_port": port,
+            "logfile": scummvm_log,
+        }
 
     tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
     ini_path = os.path.join(tmpdir, "scummvm.ini")
@@ -254,13 +263,41 @@ def launch_scummvm(
             game_id,
         ]
 
+    # Create logs directory for capturing output
+    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    log_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.log")
+    stderr_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.stderr")
+
+    # Open log files for writing
+    with open(log_file, "w") as logf:
+        # Write header with command line
+        logf.write(f"Command: {' '.join(args)}\n")
+        logf.write(f"Environment: SDL_AUDIODRIVER=dummy\n")
+        logf.write(f"Config: {ini_path}\n")
+        logf.write("=" * 80 + "\n\n")
+        logf.flush()
+
+    # Launch process with output going to separate log files
+    stdout_file = open(log_file, "a")
+    stderr_fh = open(stderr_file, "a")
+
     proc = subprocess.Popen(
         # [scummvm_binary, "-c", ini_path, "--no-gui", game_id],
         args,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=stdout_file,
+        stderr=stderr_fh,
     )
+
+    # Store file handles so they don't get garbage collected
+    proc._stdout_file = stdout_file
+    proc._stderr_file = stderr_fh
+
+    # Print log file locations for reference
+    print(f"[MCP] {game_id} stdout: {log_file}", flush=True)
+    print(f"[MCP] {game_id} stderr: {stderr_file}", flush=True)
+
     return proc
 
 

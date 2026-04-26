@@ -36,6 +36,11 @@ def monkey_client() -> McpClient:
     client.close()
     proc.kill()
     proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    # Close log file handles
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()
 
 
 @pytest.fixture(scope="session")
@@ -56,6 +61,11 @@ def maniac_client() -> McpClient:
     client.close()
     proc.kill()
     proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    # Close log file handles
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()
 
 
 @pytest.fixture(scope="session")
@@ -73,3 +83,8 @@ def atlantis_client() -> McpClient:
     client.close()
     proc.kill()
     proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    # Close log file handles
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()

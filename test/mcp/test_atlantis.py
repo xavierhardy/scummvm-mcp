@@ -58,17 +58,14 @@ def test_02_atlantis_answer_opening_dialog(atlantis_client: McpClient) -> None:
 def test_03_atlantis_talk_to_sophia(atlantis_client: McpClient) -> None:
     """Talk to Sophia."""
     result = atlantis_client.act("talk_to", "sophia")
-    # talk_to should return some result (question, messages, or state changes)
-    assert isinstance(result, dict)
-    assert len(result) > 0
+    assert result.get("question") is not None
 
 
 def test_04_atlantis_answer_sophia_dialog_1(atlantis_client: McpClient) -> None:
     """Answer dialog choice 1 if available."""
-    state = atlantis_client.state()
-    if state.get("question"):
-        result = atlantis_client.answer(1)
-        assert_messages_produced(result)
+    atlantis_client.state()
+    result = atlantis_client.answer(1)
+    assert_messages_produced(result)
 
 
 def test_05_atlantis_walk_to_path_away_from_dock(atlantis_client: McpClient) -> None:

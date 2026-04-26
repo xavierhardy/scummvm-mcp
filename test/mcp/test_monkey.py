@@ -203,3 +203,42 @@ def test_12_monkey_use_meat_with_pot_o_soup(monkey_client: McpClient) -> None:
         {"text": "This will take a while to cook.", "actor": "guybrush"}
     ]
     assert_inventory_does_not_contain(result, "hunk o' meat")
+
+
+def test_13_monkey_give_breath_mint_to_prisoner(monkey_client: McpClient) -> None:
+    """Walk to prison and give breath mint to prisoner."""
+    state = monkey_client.state()
+    assert "room" in state
+    assert state["room"]["id"] == 51
+
+    result = monkey_client.act("walk", 305)
+    assert result["room_changed"] == 52
+
+    result = monkey_client.act("walk", 353)
+    assert result["room_changed"] == 55
+
+    result = monkey_client.act("walk", "archway")
+    assert result["room_changed"] == 57
+
+    result = monkey_client.act("walk", "jail_entrance")
+    assert result["room_changed"] == 54
+
+    result = monkey_client.act("give", "breath_mint", "prisoner")
+    assert result["question"] == {
+        "choices": [
+            {"id": 1, "label": "I wanted to say goodbye."},
+            {"id": 2, "label": "Won't you help me now?"},
+            {"id": 3, "label": "Do you know anything about a magic phrase?"},
+        ]
+    }
+    assert result["messages"] == [
+        {"text": "I'll just take what I need. I'm not a pirate^", "actor": "guybrush"},
+        {"text": "^yet.", "actor": "guybrush"},
+        {"text": "Ooooh! Grog-o-mint! How refreshing! Thanks.", "actor": "prisoner"},
+        {"text": "Don't mention it.", "actor": "guybrush"},
+        {"text": "OK^I won't.", "actor": "prisoner"},
+        {"text": "Wait a minute^", "actor": "guybrush"},
+    ]
+    assert result["inventory_removed"] == ["breath mint"]
+    assert "x" in result["position"]
+    assert "y" in result["position"]

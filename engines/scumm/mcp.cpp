@@ -712,9 +712,30 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 
 	debug(1, "mcp: act verb='%s' verbId=%d targetA=%d targetB=%d",
 	      verbStr.c_str(), verbId, targetA, targetB);
-	if (targetA != 0) {
+
+	// For Indy4, actors are handled by the sentence script, not verb entrypoints.
+	// Skip the entrypoint check for actors and proceed to doSentence.
+	bool isIndy4Actor = _vm->_game.id == GID_INDY4 && targetA != 0 && _vm->objIsActor(targetA);
+
+	if (targetA != 0 && !isIndy4Actor) {
 		int ep = _vm->getVerbEntrypoint(targetA, verbId);
 		debug(1, "mcp: act entrypoint for obj %d verb %d = %d", targetA, verbId, ep);
+
+		// For Indiana Jones: if this object has no handler, search for one that does
+		if (ep == 0 && _vm->_game.id == GID_INDY4 && _vm->_objs && verbId > 0) {
+			for (int i = 1; i < _vm->_numLocalObjects; ++i) {
+				const ObjectData &od = _vm->_objs[i];
+				if (!od.obj_nr) continue;
+				if (_vm->_numGlobalObjects > 0 && od.obj_nr >= _vm->_numGlobalObjects) continue;
+				int tryEp = _vm->getVerbEntrypoint(od.obj_nr, verbId);
+				if (tryEp != 0) {
+					debug(1, "mcp: no handler on %d, trying object %d instead", targetA, od.obj_nr);
+					targetA = od.obj_nr;
+					ep = tryEp;
+					break;
+				}
+			}
+		}
 	}
 
 	// In Maniac Mansion, executing verbs without entrypoints can cause out-of-bounds errors
