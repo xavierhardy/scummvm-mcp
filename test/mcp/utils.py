@@ -61,6 +61,7 @@ class McpClient:
         if resp.status_code >= 400:
             raise RuntimeError(f"Act error: HTTP {resp.status_code}")
         for line in resp.iter_lines():
+            print(line)
             if line.startswith("data: "):
                 raw = line[6:].strip()
             else:
@@ -145,7 +146,10 @@ class McpClient:
         with self._client.stream(
             "POST", self._url, json=payload, headers=headers
         ) as resp:
-            return self._decode_stream_response(resp=resp, tool="Act")
+            result = self._decode_stream_response(resp=resp, tool="Act")
+            print(result)
+            # raise ValueError(result)
+            return result
 
     def answer(self, choice_id: int) -> dict[str, Any]:
         """Select a dialog choice (streaming call)."""

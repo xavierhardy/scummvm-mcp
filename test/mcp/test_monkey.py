@@ -51,14 +51,19 @@ def test_02_monkey_walk_to_troll(monkey_client: McpClient) -> None:
 
     # Walk towards the troll side of the bridge first so game scripts position
     # the troll actor and make the troll room object selectable.
-    monkey_client.walk(120, 132)
+    result = monkey_client.walk(120, 132)
+    assert "x" in result["position"]
+    assert "y" in result["position"]
+    assert result["messages"] == [{"actor": "troll", "text": "None shall pass!"}]
 
     monkey_client.act("walk_to", "Troll")
 
     # Guybrush should be on the troll's side of the bridge (x < 200).
     # walk_to may return {} if already at the troll's position, which is fine.
     state = monkey_client.state()
-    assert state["position"]["x"] < 200, f"Expected Guybrush near troll, got {state['position']}"
+    assert state["position"]["x"] < 200, (
+        f"Expected Guybrush near troll, got {state['position']}"
+    )
 
 
 def test_03_monkey_talk_to_troll(monkey_client: McpClient) -> None:
@@ -68,9 +73,28 @@ def test_03_monkey_talk_to_troll(monkey_client: McpClient) -> None:
     assert state["room"] == 55
 
     result = monkey_client.act("talk_to", "Troll")
+    expected = {
+        "question": {
+            "choices": [
+                {"id": 1, "label": "But I want to be a pirate!"},
+                {"id": 2, "label": "Why not?"},
+                {"id": 3, "label": "Pretty please?"},
+            ]
+        },
+        "messages": [
+            {"text": "Hi. I'm Guybrush Threepwood and--", "actor": "guybrush"},
+            {
+                "text": "I don't care who you are or what your business is, you snivelling slimy sliver of scumm!ÿ\x03No one gets by me until they say the magic words.",
+                "actor": "troll",
+            },
+        ],
+    }
+
+    assert result == expected
 
     # Dialog should present a question
     state = monkey_client.state()
+
     assert state.get("question") is not None, (
         "Expected dialog question after talking to Troll"
     )
@@ -83,7 +107,15 @@ def test_04_monkey_answer_troll_dialog(monkey_client: McpClient) -> None:
     assert state["room"] == 55
 
     result = monkey_client.answer(3)
-    assert_messages_produced(result)
+    assert result == {
+        "messages": [
+            {"text": "Pretty please?", "actor": "guybrush"},
+            {
+                "text": "Not those magic words, you pedantic putrefied pinhead, the MAGIC words!ÿ\x03--sigh--",
+                "actor": "troll",
+            },
+        ]
+    }
 
 
 def test_05_monkey_walk_to_door_1(monkey_client: McpClient) -> None:
@@ -93,7 +125,7 @@ def test_05_monkey_walk_to_door_1(monkey_client: McpClient) -> None:
     assert state["room"] == 55
 
     result = monkey_client.act("walk_to", "door")
-    assert result.get("position") or result.get("room_changed")
+    assert result == {"position": {"y": 132, "x": 361}}
 
 
 def test_06_monkey_open_door_1(monkey_client: McpClient) -> None:
@@ -137,9 +169,7 @@ def test_09_monkey_open_door_2(monkey_client: McpClient) -> None:
     assert state["room"] == 52
 
     result = monkey_client.act("open", 354)
-    assert (
-        result.get("messages") or result.get("position") or result.get("room_changed")
-    )
+    assert result["objects_changed"][0]["name"] == "door"
 
 
 def test_10_monkey_walk_to_door_3(monkey_client: McpClient) -> None:

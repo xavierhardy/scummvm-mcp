@@ -13,6 +13,7 @@
 #include "common/util.h"
 
 #include "scumm/actor.h"
+#include "scumm/scumm_v0.h"
 #include "scumm/detection.h"
 #include "scumm/mcp.h"
 #include "scumm/object.h"
@@ -860,11 +861,19 @@ void ScummMcpBridge::pumpStream() {
 		}
 
 		bool questionReady = hasPendingQuestion();
-		uint32 settleFrames = 10;
-		if (_sseEgoMoved && !questionReady)
+		uint32 settleFrames = (_vm->_game.version == 0) ? 3 : 10;
+		if (_vm->_game.version != 0 && _sseEgoMoved && !questionReady)
 			settleFrames = 20;
 
-		bool settled = _frameCounter - _sseDoneAtFrame >= settleFrames;
+		// For V0 (Maniac Mansion): after ego reaches the target object, runObjectScript
+		// is called for the verb. Wait until that object script finishes (isScriptInUse
+		// with the target object's ID). Cap at 30 frames after sseDoneAtFrame.
+		bool v0ScriptRunning = (_vm->_game.version == 0) &&
+		                       (_sseTargetObject != 0) &&
+		                       _vm->isScriptInUse(_sseTargetObject) &&
+		                       (_frameCounter - _sseDoneAtFrame < 30);
+
+		bool settled = !v0ScriptRunning && (_frameCounter - _sseDoneAtFrame >= settleFrames);
 		if (questionReady || settled) {
 			debug(1, "mcp: closing stream at frame %d (question=%d, settled=%d, settleFrames=%d)",
 				_frameCounter, questionReady, settled, settleFrames);
@@ -903,6 +912,7 @@ void ScummMcpBridge::snapshotPreAction() {
 		ObjStateSnap snap;
 		snap.objNr = od.obj_nr;
 		snap.state = _vm->getState(od.obj_nr);
+		debug(1, "mcp: preSnapshot obj=%d state=%d", snap.objNr, snap.state);
 		_ssePreObjectStates.push_back(snap);
 	}
 }
@@ -965,6 +975,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		// Skip objects that are out of bounds for the object space
 		if (_vm->_numGlobalObjects > 0 && od.obj_nr >= _vm->_numGlobalObjects) continue;
 		int newState = _vm->getState(od.obj_nr);
+		debug(1, "mcp: buildStateChanges obj=%d newState=%d", od.obj_nr, newState);
 		int preState = newState;
 		for (uint j = 0; j < _ssePreObjectStates.size(); ++j) {
 			if (_ssePreObjectStates[j].objNr == od.obj_nr) {
@@ -1050,23 +1061,21 @@ bool ScummMcpBridge::isActionDone() const {
 	// Ego movement check with timeout only for V0 (Maniac Mansion):
 	// V0 doesn't lock _userPut, so we need a timeout to prevent indefinite waits.
 	// V5+ games handle movement more predictably and don't need this timeout.
-	if (ego && ego->_moving) {
-		if (_vm->_game.version == 0) {
-			uint32 elapsed = _frameCounter - _sseStartFrame;
-			if (elapsed < 60)
-				return false;
-		} else {
-			return false;  // For V5+, wait for ego to actually stop moving
-		}
-	}
 	if (_vm->_talkDelay > 0) return false;
 	if (_vm->_userPut <= 0) return false;
-	// Note: The script check for V0 is disabled temporarily to debug timeout issues.
-	// For V0, we normally would check if the target object's script is still in use,
-	// but this can cause infinite waits if the script never finishes or isScriptInUse()
-	// is unreliable.
-	// if (_sseTargetObject != 0 && _vm->isScriptInUse(_sseTargetObject))
-	// 	return false;
+	if (_vm->_game.version == 0) {
+		// V0 (Maniac Mansion): actors use _moving==2 for "arrived", not 0. The
+		// reliable completion signal is: sentence dispatched (_sentenceNum==0)
+		// AND walk-then-turn-then-act cycle finished (isWalkToObjectDone()).
+		// By the time isActionDone() first runs (>= 3 frames in), checkAndRunSentenceScript
+		// has already set _walkToObjectState to non-zero, so the initial state
+		// (_sentenceNum==0, _walkToObjectState==kWalkToObjectStateDone) is safe.
+		ScummEngine_v0 *v0 = static_cast<ScummEngine_v0 *>(_vm);
+		if (_vm->_sentenceNum > 0 || !v0->isWalkToObjectDone())
+			return false;
+	} else {
+		if (ego && ego->_moving) return false;
+	}
 	return true;
 }
 

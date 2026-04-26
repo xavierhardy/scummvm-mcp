@@ -317,3 +317,5 @@ core.*
 venv/
 .venv/
 scummvm.ini
+.pytest_cache/
+.ruff_cache/

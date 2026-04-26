@@ -69,6 +69,8 @@ public:
 
 	byte walkboxFindTarget(Actor *a, int destbox, Common::Point walkdest);
 
+	bool isWalkToObjectDone() const { return _walkToObjectState == kWalkToObjectStateDone; }
+
 	/* Delay calculation */
 	void DelayReset();
 	int DelayCalculateDelta();
