@@ -280,9 +280,7 @@ void ScummMcpBridge::registerTools() {
 		    "Returns the current game state: room, position, inventory, scene objects "
 		    "(including NPCs with their compatible_verbs — always includes talk_to), "
 		    "active verbs, latest messages (cleared after reading), "
-		    "and pending dialog question if any. "
-		    "Objects include both visible and invisible ones (check the 'visible' field); "
-		    "the player character is never listed. "
+		    "and pending dialog question if any. The player character is never listed. "
 		    "Use act(verb='talk_to', target1=<npc_name>) to speak to an NPC.";
 		spec.inputSchema  = mcpObjectSchema(inputProps);
 		spec.outputSchema = mcpObjectSchema(outputProps);
