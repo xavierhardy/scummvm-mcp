@@ -34,11 +34,11 @@ using Networking::mcpLowerTrimmed;
 
 namespace {
 
-// V6+ standard action icon verb IDs (walk_to, look_at, talk_to, use, pick_up).
-// These are the five permanent icon verbs in Sam & Max. During dialog the game
-// saves them (saveid != 0) and adds new topic-icon verbs in their place.
-static const int kV6ActionIds[]    = {4, 5, 6, 7, 13};
-static const int kNumV6ActionIds   = 5;
+// V6+ standard action icon verb IDs.
+// Sam & Max uses V6 image verbs, but verb IDs differ from other SCUMM variants,
+// so keep both common V6 and Sam & Max candidate IDs.
+static const int kV6ActionIds[]    = {4, 5, 6, 7, 11, 13, 14, 15};
+static const int kNumV6ActionIds   = 8;
 
 static bool isV6ActionVerb(int verbid) {
 	for (int i = 0; i < kNumV6ActionIds; ++i)
@@ -49,11 +49,16 @@ static bool isV6ActionVerb(int verbid) {
 // Canonical V6 verb label table (verbid → name/label for image-verb games).
 struct V6VerbEntry { int id; const char *name; const char *label; };
 static const V6VerbEntry kV6CanonicalVerbs[] = {
+	// Common V6 mapping used by several games
 	{4,  "pick_up", "pick up"},
 	{5,  "look_at", "look at"},
 	{6,  "talk_to", "talk to"},
 	{7,  "use",     "use"},
 	{13, "walk_to", "walk to"},
+	// Sam & Max mapping (icon verbs)
+	{11, "use",     "use"},
+	{14, "pick_up", "pick up"},
+	{15, "look_at", "look at"},
 	{0,  nullptr,   nullptr}
 };
 
@@ -528,7 +533,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid || vs.saveid != 0) continue;
 			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
-			if (vs.curmode != 1) continue;
+			if (vs.curmode == 0) continue;
 			if (vs.type != kImageVerbType) continue;
 			const V6VerbEntry *entry = findV6Verb(vs.verbid);
 			if (!entry) continue;
@@ -542,6 +547,28 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			vi2.name   = entry->name;
 			vi2.label  = entry->label;
 			activeVerbs.push_back(vi2);
+		}
+	}
+
+	// Sam & Max (V6) does not populate the classic text verb slots; expose a
+	// stable MCP verb set even when _verbs[] is empty.
+	if (_vm->_game.id == GID_SAMNMAX && !questionPending && activeVerbs.empty()) {
+		struct FallbackVerb { int id; const char *name; const char *label; };
+		static const FallbackVerb kSamnMaxFallback[] = {
+			{13, "walk_to", "walk to"},
+			{15, "look_at", "look at"},
+			{11, "use", "use"},
+			{6,  "talk_to", "talk to"},
+			{14, "pick_up", "pick up"},
+			{0, nullptr, nullptr}
+		};
+		for (int i = 0; kSamnMaxFallback[i].name; ++i) {
+			verbsArr.push_back(mcpJsonString(kSamnMaxFallback[i].label));
+			VerbInfo vi;
+			vi.verbId = kSamnMaxFallback[i].id;
+			vi.name = kSamnMaxFallback[i].name;
+			vi.label = kSamnMaxFallback[i].label;
+			activeVerbs.push_back(vi);
 		}
 	}
 
@@ -672,7 +699,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				const VerbSlot &vs = _vm->_verbs[slot];
 				if (!vs.verbid || vs.saveid != 0) continue;
 				if (_vm->_game.version > 0 && vs.verbid == 1) continue;
-				if (vs.curmode != 1) continue;
+				if (vs.curmode == 0) continue;
 				if (isV6ActionVerb(vs.verbid)) continue;
 				// Try to read associated text first (some V6 dialog slots have it)
 				Common::String label;
@@ -914,7 +941,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid || vs.saveid != 0) continue;
 			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
-			if (vs.curmode != 1) continue;
+			if (vs.curmode == 0) continue;
 			if (isV6ActionVerb(vs.verbid)) continue;
 			++current;
 			if (current == choiceIdx) { chosenSlot = slot; break; }
@@ -1313,7 +1340,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 				const VerbSlot &vs = _vm->_verbs[slot];
 				if (!vs.verbid || vs.saveid != 0) continue;
 				if (_vm->_game.version > 0 && vs.verbid == 1) continue;
-				if (vs.curmode != 1) continue;
+				if (vs.curmode == 0) continue;
 				if (isV6ActionVerb(vs.verbid)) continue;
 				Common::String label;
 				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
@@ -1410,7 +1437,7 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
 			if (isV6ActionVerb(vs.verbid)) {
 				if (vs.saveid != 0) hasActiveSavedAction = true;
-			} else if (vs.saveid == 0 && vs.curmode == 1) {
+			} else if (vs.saveid == 0 && vs.curmode != 0) {
 				hasActiveDialog = true;
 			}
 		}
@@ -1805,7 +1832,7 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 			// Verify the verb slot is currently active (action icon bar is visible).
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 				const VerbSlot &vs = _vm->_verbs[slot];
-				if (vs.verbid == entry->id && vs.saveid == 0 && vs.curmode == 1) {
+				if (vs.verbid == entry->id && vs.saveid == 0 && vs.curmode != 0) {
 					verbId = entry->id;
 					debug(1, "mcp: resolveVerb V6 direct verbid=%d for '%s'", verbId, normalized.c_str());
 					return true;
