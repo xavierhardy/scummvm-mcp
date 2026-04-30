@@ -88,3 +88,27 @@ def atlantis_client() -> McpClient:
         proc._stdout_file.close()
     if hasattr(proc, "_stderr_file"):
         proc._stderr_file.close()
+
+
+@pytest.fixture(scope="session")
+def samnmax_client() -> McpClient:
+    """Launch Sam & Max Hit the Road demo and return MCP client."""
+    mcp_port = 23459
+
+    require_game_path("samnmax")
+    scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
+    proc = launch_scummvm(
+        "samnmax",
+        GAME_PATHS["samnmax"],
+        port=mcp_port,
+        scummvm_binary=scummvm_binary,
+    )
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    yield client
+    client.close()
+    proc.kill()
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()

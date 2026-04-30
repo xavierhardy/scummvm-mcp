@@ -33,8 +33,17 @@ def test_01_atlantis_initial_state(atlantis_client: McpClient) -> None:
         result = atlantis_client.skip()
 
     old_room_id = result["room_changed"]
-    while atlantis_client.state()["room"]["id"] == old_room_id:
+    new_room_id = atlantis_client.state()["room"]["id"]
+    while new_room_id == old_room_id:
         sleep(INTRO_POLL_SECS)
+        new_room_id = atlantis_client.state()["room"]["id"]
+
+    # there is a second screen that needs for us to wait
+    old_room_id = new_room_id
+    new_room_id = atlantis_client.state()["room"]["id"]
+    while new_room_id == old_room_id:
+        sleep(INTRO_POLL_SECS)
+        new_room_id = atlantis_client.state()["room"]["id"]
 
     atlantis_client.skip()
 

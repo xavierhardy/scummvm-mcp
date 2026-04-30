@@ -34,6 +34,35 @@ using Networking::mcpLowerTrimmed;
 
 namespace {
 
+// V6+ standard action icon verb IDs (walk_to, look_at, talk_to, use, pick_up).
+// These are the five permanent icon verbs in Sam & Max. During dialog the game
+// saves them (saveid != 0) and adds new topic-icon verbs in their place.
+static const int kV6ActionIds[]    = {4, 5, 6, 7, 13};
+static const int kNumV6ActionIds   = 5;
+
+static bool isV6ActionVerb(int verbid) {
+	for (int i = 0; i < kNumV6ActionIds; ++i)
+		if (kV6ActionIds[i] == verbid) return true;
+	return false;
+}
+
+// Canonical V6 verb label table (verbid → name/label for image-verb games).
+struct V6VerbEntry { int id; const char *name; const char *label; };
+static const V6VerbEntry kV6CanonicalVerbs[] = {
+	{4,  "pick_up", "pick up"},
+	{5,  "look_at", "look at"},
+	{6,  "talk_to", "talk to"},
+	{7,  "use",     "use"},
+	{13, "walk_to", "walk to"},
+	{0,  nullptr,   nullptr}
+};
+
+static const V6VerbEntry *findV6Verb(int verbid) {
+	for (int i = 0; kV6CanonicalVerbs[i].name; ++i)
+		if (kV6CanonicalVerbs[i].id == verbid) return &kV6CanonicalVerbs[i];
+	return nullptr;
+}
+
 // Return the display name of an object/actor. Empty string if unnamed.
 Common::String getObjName(const ScummMcpBridge *bridge, int obj) {
 	if (!bridge) return "";
@@ -60,8 +89,7 @@ Common::String cleanGameText(const Common::String &text) {
 				// Skip replacement character unless it's part of orichalum beads
 				if (i + 4 < text.size()) {
 					unsigned char c3 = (unsigned char)text[i+3];
-					unsigned char c4 = (unsigned char)text[i+4];
-					// Orichalum beads: �� = 0xEF 0xBF 0xBD 0x04 0xEF 0xBF 0xBD
+					// Orichalum beads:�� = 0xEF 0xBF 0xBD 0x04 0xEF 0xBF 0xBD
 					if (c3 == 0x04) {
 						out += text[i];
 						out += text[++i];
@@ -70,6 +98,10 @@ Common::String cleanGameText(const Common::String &text) {
 						continue;
 					}
 				}
+				// Replace with space rather than skipping: V6 games emit non-ASCII
+				// charset bytes that mcpSanitizeString converts to U+FFFD; silently
+				// dropping them would erase whole dialog lines.
+				out += ' ';
 				i += 2;
 				continue;
 			}
@@ -487,6 +519,32 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			activeVerbs.push_back(vi);
 		}
 	}
+
+	// V6+ games use image verbs (kImageVerbType) with no text labels. Build the
+	// verb list from the canonical verbid -> name table for any image-type slots
+	// not already captured by the text path above.
+	if (_vm->_game.version >= 6 && !questionPending) {
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid || vs.saveid != 0) continue;
+			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
+			if (vs.curmode != 1) continue;
+			if (vs.type != kImageVerbType) continue;
+			const V6VerbEntry *entry = findV6Verb(vs.verbid);
+			if (!entry) continue;
+			bool alreadyAdded = false;
+			for (uint k = 0; k < activeVerbs.size(); ++k)
+				if (activeVerbs[k].verbId == vs.verbid) { alreadyAdded = true; break; }
+			if (alreadyAdded) continue;
+			verbsArr.push_back(mcpJsonString(entry->label));
+			VerbInfo vi2;
+			vi2.verbId = vs.verbid;
+			vi2.name   = entry->name;
+			vi2.label  = entry->label;
+			activeVerbs.push_back(vi2);
+		}
+	}
+
 	out.setVal("verbs", new Common::JSONValue(verbsArr));
 
 	Common::Array<NamedEntity> entities;
@@ -607,22 +665,48 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	if (questionPending) {
 		int choiceCount = 0;
 		Common::JSONArray choiceList;
-		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
-			const VerbSlot &vs = _vm->_verbs[slot];
-			if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
-			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
-			if (vs.curmode != 0 && vs.curmode != 1) continue;
-			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-			if (!ptr) continue;
-			byte textBuf[256];
-			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-			if (!textBuf[0]) continue;
-			Common::String cleanLabel = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
-			if (cleanLabel.empty()) continue;
-			Common::JSONObject choice;
-			choice.setVal("id",    mcpJsonInt(++choiceCount));
-			choice.setVal("label", mcpJsonString(cleanLabel));
-			choiceList.push_back(new Common::JSONValue(choice));
+		if (_vm->_game.version >= 6) {
+			// V6+ dialog choices are icon verbs. Standard action verbs are saved away;
+			// the remaining active non-action verb slots are the dialog topic choices.
+			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+				const VerbSlot &vs = _vm->_verbs[slot];
+				if (!vs.verbid || vs.saveid != 0) continue;
+				if (_vm->_game.version > 0 && vs.verbid == 1) continue;
+				if (vs.curmode != 1) continue;
+				if (isV6ActionVerb(vs.verbid)) continue;
+				// Try to read associated text first (some V6 dialog slots have it)
+				Common::String label;
+				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+				if (ptr) {
+					byte textBuf[256] = {};
+					_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+					label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+				}
+				if (label.empty())
+					label = Common::String::format("Topic %d", choiceCount + 1);
+				Common::JSONObject choice;
+				choice.setVal("id",    mcpJsonInt(++choiceCount));
+				choice.setVal("label", mcpJsonString(label));
+				choiceList.push_back(new Common::JSONValue(choice));
+			}
+		} else {
+			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+				const VerbSlot &vs = _vm->_verbs[slot];
+				if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
+				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
+				if (vs.curmode != 0 && vs.curmode != 1) continue;
+				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+				if (!ptr) continue;
+				byte textBuf[256];
+				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+				if (!textBuf[0]) continue;
+				Common::String cleanLabel = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+				if (cleanLabel.empty()) continue;
+				Common::JSONObject choice;
+				choice.setVal("id",    mcpJsonInt(++choiceCount));
+				choice.setVal("label", mcpJsonString(cleanLabel));
+				choiceList.push_back(new Common::JSONValue(choice));
+			}
 		}
 		if (choiceCount > 0) {
 			Common::JSONObject question;
@@ -824,19 +908,32 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 
 	int current = 0;
 	int chosenSlot = -1;
-	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
-		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
-		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
-		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
-		if (vs.curmode != 0 && vs.curmode != 1) continue;
-		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-		if (!ptr) continue;
-		byte textBuf[256];
-		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-		if (!textBuf[0]) continue;
-		++current;
-		if (current == choiceIdx) { chosenSlot = slot; break; }
+	if (_vm->_game.version >= 6) {
+		// V6+ dialog choices: enumerate active non-action verb slots (image-based, no text).
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid || vs.saveid != 0) continue;
+			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
+			if (vs.curmode != 1) continue;
+			if (isV6ActionVerb(vs.verbid)) continue;
+			++current;
+			if (current == choiceIdx) { chosenSlot = slot; break; }
+		}
+	} else {
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
+			// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
+			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
+			if (vs.curmode != 0 && vs.curmode != 1) continue;
+			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+			if (!ptr) continue;
+			byte textBuf[256];
+			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+			if (!textBuf[0]) continue;
+			++current;
+			if (current == choiceIdx) { chosenSlot = slot; break; }
+		}
 	}
 	if (chosenSlot < 0) {
 		errorOut = Common::String::format("answer: choice %d not found (only %d available)", choiceIdx, current);
@@ -1210,23 +1307,47 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 	if (hasPendingQuestion()) {
 		int choiceCount = 0;
 		Common::JSONArray choiceList;
-		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
-			const VerbSlot &vs = _vm->_verbs[slot];
-			if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
-		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
-		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
-		if (vs.curmode != 0 && vs.curmode != 1) continue;
-			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-			if (!ptr) continue;
-			byte textBuf[256];
-			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-			if (!textBuf[0]) continue;
-			Common::String cleanLabel = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
-			if (cleanLabel.empty()) continue;
-			Common::JSONObject choice;
-			choice.setVal("id",    mcpJsonInt(++choiceCount));
-			choice.setVal("label", mcpJsonString(cleanLabel));
-			choiceList.push_back(new Common::JSONValue(choice));
+		if (_vm->_game.version >= 6) {
+			// V6+ dialog choices are icon verbs without text. Enumerate active non-action slots.
+			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+				const VerbSlot &vs = _vm->_verbs[slot];
+				if (!vs.verbid || vs.saveid != 0) continue;
+				if (_vm->_game.version > 0 && vs.verbid == 1) continue;
+				if (vs.curmode != 1) continue;
+				if (isV6ActionVerb(vs.verbid)) continue;
+				Common::String label;
+				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+				if (ptr) {
+					byte textBuf[256] = {};
+					_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+					label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+				}
+				if (label.empty())
+					label = Common::String::format("Topic %d", choiceCount + 1);
+				Common::JSONObject choice;
+				choice.setVal("id",    mcpJsonInt(++choiceCount));
+				choice.setVal("label", mcpJsonString(label));
+				choiceList.push_back(new Common::JSONValue(choice));
+			}
+		} else {
+			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+				const VerbSlot &vs = _vm->_verbs[slot];
+				if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
+				// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
+				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
+				if (vs.curmode != 0 && vs.curmode != 1) continue;
+				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+				if (!ptr) continue;
+				byte textBuf[256];
+				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+				if (!textBuf[0]) continue;
+				Common::String cleanLabel = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+				if (cleanLabel.empty()) continue;
+				Common::JSONObject choice;
+				choice.setVal("id",    mcpJsonInt(++choiceCount));
+				choice.setVal("label", mcpJsonString(cleanLabel));
+				choiceList.push_back(new Common::JSONValue(choice));
+			}
 		}
 		if (choiceCount > 0) {
 			Common::JSONObject question;
@@ -1275,6 +1396,27 @@ bool ScummMcpBridge::isActionDone() const {
 
 bool ScummMcpBridge::hasPendingQuestion() const {
 	if (!_vm || _vm->_userPut <= 0) return false;
+
+	// V6+ (Sam & Max and later): dialog uses icon verb slots. The game saves the
+	// five standard action icon verbs (saveid != 0) and inserts new topic icon slots.
+	// Dialog is pending when at least one standard action verb is saved AND at least
+	// one non-standard active verb exists (the topic choices).
+	if (_vm->_game.version >= 6) {
+		bool hasActiveSavedAction = false;
+		bool hasActiveDialog     = false;
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid) continue;
+			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
+			if (isV6ActionVerb(vs.verbid)) {
+				if (vs.saveid != 0) hasActiveSavedAction = true;
+			} else if (vs.saveid == 0 && vs.curmode == 1) {
+				hasActiveDialog = true;
+			}
+		}
+		return hasActiveSavedAction && hasActiveDialog;
+	}
+
 	bool hasKeyed = false, hasUnkeyed = false, hasNumericKeyed = false;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
@@ -1462,17 +1604,28 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		// They are kept in the list so the agent can navigate, but flagged separately.
 		if (!e.visible) {
 			bool hasWalkTo = false, hasOther = false;
-			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
-				const VerbSlot &vs = _vm->_verbs[slot];
-				if (!vs.verbid || vs.saveid != 0) continue;
-				if (_vm->getVerbEntrypoint(e.numId, vs.verbid) == 0) continue;
-				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-				if (!ptr) continue;
-				byte textBuf[256];
-				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-				Common::String label = normalizeActionName((const char *)textBuf);
-				if (label == "walk_to") hasWalkTo = true;
-				else hasOther = true;
+			if (_vm->_game.version >= 6) {
+				// V6+ verbs are image-based: identify walk_to by verbid (13) directly.
+				for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+					const VerbSlot &vs = _vm->_verbs[slot];
+					if (!vs.verbid || vs.saveid != 0) continue;
+					if (_vm->getVerbEntrypoint(e.numId, vs.verbid) == 0) continue;
+					if (vs.verbid == 13) hasWalkTo = true;
+					else hasOther = true;
+				}
+			} else {
+				for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+					const VerbSlot &vs = _vm->_verbs[slot];
+					if (!vs.verbid || vs.saveid != 0) continue;
+					if (_vm->getVerbEntrypoint(e.numId, vs.verbid) == 0) continue;
+					const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+					if (!ptr) continue;
+					byte textBuf[256];
+					_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+					Common::String label = normalizeActionName((const char *)textBuf);
+					if (label == "walk_to") hasWalkTo = true;
+					else hasOther = true;
+				}
 			}
 			if (hasWalkTo && !hasOther) e.isPathway = true;
 		}
@@ -1642,7 +1795,33 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 			return true;
 		}
 	}
-	if (normalized == "walk_to") {
+	// V6+: standard action verbs are image-based. Resolve by verbid directly.
+	if (_vm->_game.version >= 6) {
+		const V6VerbEntry *entry = nullptr;
+		for (int i = 0; kV6CanonicalVerbs[i].name; ++i) {
+			if (normalized == kV6CanonicalVerbs[i].name) { entry = &kV6CanonicalVerbs[i]; break; }
+		}
+		if (entry) {
+			// Verify the verb slot is currently active (action icon bar is visible).
+			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+				const VerbSlot &vs = _vm->_verbs[slot];
+				if (vs.verbid == entry->id && vs.saveid == 0 && vs.curmode == 1) {
+					verbId = entry->id;
+					debug(1, "mcp: resolveVerb V6 direct verbid=%d for '%s'", verbId, normalized.c_str());
+					return true;
+				}
+			}
+			// Slot not active (e.g. dialog in progress), but verb is still a known V6 verb.
+			// Accept it unconditionally so the caller can still dispatch the action.
+			verbId = entry->id;
+			debug(1, "mcp: resolveVerb V6 verbid=%d (slot not active) for '%s'", verbId, normalized.c_str());
+			return true;
+		}
+	}
+
+	// V5 and below: if no text label matched for walk_to, take the first active verb slot.
+	// Skipped for V6+ where walk_to is always verbid 13 and handled by kFallback below.
+	if (normalized == "walk_to" && _vm->_game.version < 6) {
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (vs.verbid && vs.saveid == 0 && vs.curmode == 1) {
