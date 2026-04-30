@@ -472,6 +472,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			if (!textBuf2[0]) continue;
 			Common::String label = mcpLowerTrimmed((const char *)textBuf2);
 			if (label.empty()) continue;
+			if (label == "obim") continue;
 			bool labelHasCtrl = false;
 			for (uint ci = 0; ci < label.size(); ++ci)
 				if ((unsigned char)label[ci] < 0x20) { labelHasCtrl = true; break; }
@@ -981,6 +982,16 @@ void ScummMcpBridge::pumpStream() {
 			_sseEgoMoved = true;
 	}
 
+	// Early-close: if the room has already changed, there is nothing left to settle —
+	// no dialogue will appear in the old room and accessing old-room state is unsafe.
+	if ((int)_vm->_currentRoom != _ssePreRoom) {
+		debug(1, "mcp: room changed to %d during stream, closing immediately", _vm->_currentRoom);
+		Common::JSONObject changes = buildStateChanges();
+		_streaming = false;
+		_server->endStream(new Common::JSONValue(changes), true);
+		return;
+	}
+
 	// Early-exit: stuck (no speech, user-put locked).
 	// This includes both idle and animated states (e.g., cutscenes with ego moving).
 	// Use a short timeout when no events have occurred yet (action had no visible
@@ -1060,8 +1071,14 @@ void ScummMcpBridge::pumpStream() {
 void ScummMcpBridge::snapshotPreAction() {
 	_ssePreRoom = _vm->_currentRoom;
 	_ssePreInventory.clear();
-	for (int i = 0; _vm->_inventory && i < _vm->_numInventory; ++i)
-		_ssePreInventory.push_back(_vm->_inventory[i]);
+	{
+		int ego = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
+		for (int i = 0; _vm->_inventory && i < _vm->_numInventory; ++i) {
+			uint16 obj = _vm->_inventory[i];
+			if (obj && _vm->getOwner(obj) == ego)
+				_ssePreInventory.push_back(obj);
+		}
+	}
 	Actor *ego = getEgoActor();
 	if (ego) {
 		_ssePrePosX = ego->getRealPos().x;
@@ -1545,7 +1562,30 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 	int best = v0Game
 	    ? ((actorMatch  >= 0) ? actorMatch  : (objectMatch >= 0) ? objectMatch : firstMatch)
 	    : ((objectMatch >= 0) ? objectMatch : (actorMatch  >= 0) ? actorMatch  : firstMatch);
-	if (best >= 0) { out = entities[best]; return true; }
+	if (best >= 0) {
+		// For V4+: if the best match is an actor and there is an untouchable room object
+		// with the same name, prefer the room object — it carries the verb entrypoints
+		// while the actor is a visual-only representation.
+		if (!v0Game && entities[best].kind == NamedEntity::kActor && _vm->_objs) {
+			for (int i = 1; i < _vm->_numLocalObjects; ++i) {
+				const ObjectData &od = _vm->_objs[i];
+				if (!od.obj_nr) continue;
+				if (_vm->_numGlobalObjects > 0 && od.obj_nr >= _vm->_numGlobalObjects) continue;
+				Common::String objName = getObjName(this, od.obj_nr);
+				if (objName.empty()) continue;
+				if (normalizeActionName(objName) == normalized) {
+					out.kind        = NamedEntity::kObject;
+					out.numId       = od.obj_nr;
+					out.displayName = normalized;
+					out.visible     = false;
+					debug(1, "mcp: resolveEntityByName '%s' redirected from actor to room obj %d",
+					      normalized.c_str(), od.obj_nr);
+					return true;
+				}
+			}
+		}
+		out = entities[best]; return true;
+	}
 	debug(1, "mcp: resolveEntityByName '%s' not found", name.c_str());
 	return false;
 }
