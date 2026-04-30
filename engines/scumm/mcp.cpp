@@ -1496,6 +1496,8 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 	if (s == "take")    return "pick_up";
 	if (s == "get")     return "pick_up";
 	if (s == "talk")    return "talk_to";
+	// Sam & Max: expose companion inventory item as plain 'max' for MCP targets.
+	if (s == "max_the_object") return "max";
 	return s;
 }
 
@@ -1685,6 +1687,11 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		if (_vm->_numGlobalObjects <= 0 || objId < _vm->_numGlobalObjects) {
 			name = getObjName(this, objId);
 		}
+		// Sam & Max: actor names may not be available via actorToObj(), but can be
+		// resolved directly from actor id (e.g. Max).
+		if (name.empty() && _vm->_game.id == GID_SAMNMAX) {
+			name = getObjName(this, a->_number);
+		}
 		RawEntry e;
 		e.kind = NamedEntity::kActor;
 		e.numId = a->_number;
@@ -1739,6 +1746,21 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 		}
 	}
 	bool v0Game = (_vm->_game.version == 0);
+	// Sam & Max: when user asks for "max", prefer the actor target over the
+	// inventory item/object alias.
+	if (_vm->_game.id == GID_SAMNMAX && normalized == "max") {
+		if (actorMatch >= 0) {
+			out = entities[(uint)actorMatch];
+			return true;
+		}
+		// Some Sam & Max scenes don't expose actor names. Fall back to Max actor id (3).
+		for (uint i = 0; i < entities.size(); ++i) {
+			if (entities[i].kind == NamedEntity::kActor && entities[i].numId == 3) {
+				out = entities[i];
+				return true;
+			}
+		}
+	}
 	int best = v0Game
 	    ? ((actorMatch  >= 0) ? actorMatch  : (objectMatch >= 0) ? objectMatch : firstMatch)
 	    : ((objectMatch >= 0) ? objectMatch : (actorMatch  >= 0) ? actorMatch  : firstMatch);
