@@ -189,6 +189,20 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="Walk")
 
+    def play_note(self, note: str) -> dict[str, Any]:
+        """Play a note on the Loom distaff (streaming call)."""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "play_note", "arguments": {"note": note}},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
+            return self._decode_stream_response(resp=resp, tool="PlayNote")
+
     def close(self) -> None:
         """Close the client."""
         self._client.close()
@@ -317,6 +331,10 @@ GAME_PATHS = {
     "ft-demo": os.environ.get(
         "FT_DEMO_PATH",
         "/Users/xhardy/Personal/llm/scummvm/games/ft-dos-demo",
+    ),
+    "pass": os.environ.get(
+        "PASS_DEMO_PATH",
+        "/Users/xhardy/Personal/llm/scummvm/games/pass",
     ),
 }
 

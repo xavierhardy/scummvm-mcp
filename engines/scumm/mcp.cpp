@@ -200,6 +200,48 @@ void ScummMcpBridge::pump() {
 }
 
 // ---------------------------------------------------------------------------
+// Loom segment detection
+// ---------------------------------------------------------------------------
+
+// True when the engine is running the Loom mini-game. For full Loom this is
+// always true; for Passport to Adventure (3 mini-games) we detect Loom by the
+// empty text verb bar — Indy3 and MI1 populate the standard V3 verb slots
+// (Open / Look at / Pick up / etc.), but Loom uses a single-cursor + distaff
+// interface and leaves them empty.
+bool ScummMcpBridge::isInLoomSection() const {
+	if (!_vm) return false;
+	if (_vm->_game.id == GID_LOOM) return true;
+	if (_vm->_game.id != GID_PASS) return false;
+	// Loom in Passport renders its distaff as the verb bar: every slot's label
+	// is a single-character glyph (note icons), e.g. 'z', '{', '^'. Indy3 and
+	// MI1 segments populate the bar with multi-character English verbs
+	// ("Open", "Look at", etc.). Detect by examining slot label lengths.
+	bool sawAnyVerb = false;
+	bool sawWordLabel = false;
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid) continue;
+		if (vs.saveid != 0) continue;
+		if (_vm->_game.version > 0 && vs.verbid == 1) continue; // OBIM slot
+		if (vs.curmode != 0 && vs.curmode != 1) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256] = {};
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		const char *label = (const char *)textBuf;
+		if (!label[0]) continue;
+		sawAnyVerb = true;
+		// Word-length English labels (>= 3 chars starting with a letter) are
+		// the hallmark of Indy3 / MI1 verb bars.
+		size_t len = strlen(label);
+		if (len >= 3 && Common::isAlpha((byte)label[0]))
+			sawWordLabel = true;
+	}
+	// Loom: many populated slots, none with word labels (or no slots at all).
+	return sawAnyVerb && !sawWordLabel;
+}
+
+// ---------------------------------------------------------------------------
 // Message capture from engine
 // ---------------------------------------------------------------------------
 
@@ -421,6 +463,27 @@ void ScummMcpBridge::registerTools() {
 		spec.streaming    = true;
 		_server->registerTool(spec);
 	}
+
+	// --- play_note (Loom only) ---
+	{
+		Common::JSONObject props;
+		props.setVal("note", mcpProp("string",
+		    "Note to play on the Loom distaff. One of: c d e f g a b C "
+		    "(C is the high octave). Notes are unlocked progressively in-game; "
+		    "the engine silently ignores notes that are not yet unlocked."));
+		const char *req[] = {"note"};
+		Networking::McpServer::ToolSpec spec;
+		spec.name = "play_note";
+		spec.description =
+		    "Play a single note on the Loom distaff. Only valid in the Loom segment "
+		    "of Passport to Adventure (and full Loom). Used to cast spells: several "
+		    "notes must be played in sequence to trigger an action. Returns state "
+		    "changes after the note is consumed by the engine.";
+		spec.inputSchema  = mcpObjectSchema(props, req, 1);
+		spec.outputSchema = makeChangesSchema();
+		spec.streaming    = true;
+		_server->registerTool(spec);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -450,6 +513,10 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 	}
 	if (name == "skip") {
 		if (!toolSkip(args, errorOut)) return nullptr;
+		return nullptr;
+	}
+	if (name == "play_note") {
+		if (!toolPlayNote(args, errorOut)) return nullptr;
 		return nullptr;
 	}
 	errorOut = "Unknown tool: " + name;
@@ -572,6 +639,31 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 
 	// Sam & Max (V6) does not populate the classic text verb slots; expose a
 	// stable MCP verb set even when _verbs[] is empty.
+	// Loom (full game) and the Loom mini-game inside Passport to Adventure use
+	// a single-cursor model + distaff instead of the V3 text verb bar. Discard
+	// any V3 verbs that the text-slot extraction may have populated and expose
+	// only 'interact' (left-click) and 'use_item' (inventory-on-object). Note
+	// input goes through the separate 'play_note' tool. The Indy3 and MI1
+	// segments of Passport to Adventure keep the standard V3 verb bar.
+	if (isInLoomSection() && !questionPending) {
+		verbsArr.clear();
+		activeVerbs.clear();
+		struct FallbackVerb { int id; const char *name; const char *label; };
+		static const FallbackVerb kLoomFallback[] = {
+			{11, "interact", "interact"},
+			{11, "use_item", "use item"},
+			{0,  nullptr,    nullptr}
+		};
+		for (int i = 0; kLoomFallback[i].name; ++i) {
+			verbsArr.push_back(mcpJsonString(kLoomFallback[i].label));
+			VerbInfo vi;
+			vi.verbId = kLoomFallback[i].id;
+			vi.name   = kLoomFallback[i].name;
+			vi.label  = kLoomFallback[i].label;
+			activeVerbs.push_back(vi);
+		}
+	}
+
 	if (_vm->_game.id == GID_SAMNMAX && !questionPending && activeVerbs.empty()) {
 		struct FallbackVerb { int id; const char *name; const char *label; };
 		static const FallbackVerb kSamnMaxFallback[] = {
@@ -628,7 +720,9 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// The Dig and Full Throttle (V7) use click-callbacks / pie-menu rather than
 			// per-verb SCUMM entrypoints, so getVerbEntrypoint returns 0 for all objects.
 			// Treat every selectable object as supporting all exposed verbs.
-			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
+			// Loom (and the Loom segment of Passport to Adventure) similarly uses a
+			// single-cursor model where 'interact' applies to every selectable object.
+			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || isInLoomSection()) {
 				for (uint k = 0; k < activeVerbs.size(); ++k) {
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 					handlerCount++;
@@ -654,7 +748,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				if (!hasWalkTo && walkToExists) compatVerbs.push_back(mcpJsonString(walkToLabel));
 			}
 
-			bool isPathway = (_vm->_game.id != GID_DIG && _vm->_game.id != GID_FT) && walkToHasHandler && (handlerCount == 1);
+			bool isPathway = (_vm->_game.id != GID_DIG && _vm->_game.id != GID_FT && !isInLoomSection()) && walkToHasHandler && (handlerCount == 1);
 
 			Common::JSONObject obj;
 			obj.setVal("id",               mcpJsonInt(ne.numId));
@@ -682,7 +776,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			Common::JSONArray compatVerbs;
 			bool hasTalkTo = false;
 			// For GID_DIG and GID_FT, all selectable actors support 'interact' (click-callback / pie-menu model).
-			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
+			// Same reasoning applies to Loom's single-cursor model.
+			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || isInLoomSection()) {
 				for (uint k = 0; k < activeVerbs.size(); ++k)
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 			} else {
@@ -1108,6 +1203,77 @@ bool ScummMcpBridge::toolSkip(const Common::JSONValue &args, Common::String &err
 }
 
 // ---------------------------------------------------------------------------
+// Tool: play_note (Loom distaff)
+// ---------------------------------------------------------------------------
+
+bool ScummMcpBridge::toolPlayNote(const Common::JSONValue &args, Common::String &errorOut) {
+	if (_streaming) {
+		errorOut = "play_note: another action is already in progress";
+		return false;
+	}
+	if (!isInLoomSection()) {
+		errorOut = "play_note: only available in the Loom segment";
+		return false;
+	}
+	if (_vm->_userPut <= 0) {
+		errorOut = "play_note: game is not accepting input right now";
+		return false;
+	}
+	if (hasPendingQuestion()) {
+		errorOut = "play_note: a dialog question is pending — use 'answer' first";
+		return false;
+	}
+	if (!args.isObject()) {
+		errorOut = "play_note: arguments must be an object with a 'note' field";
+		return false;
+	}
+	const Common::JSONObject &a = args.asObject();
+	if (!a.contains("note") || !a["note"]->isString()) {
+		errorOut = "play_note: 'note' string is required";
+		return false;
+	}
+
+	Common::String noteStr = a["note"]->asString();
+	noteStr.trim();
+
+	// Map note name to its in-game keyboard key. Loom binds two key sets to the
+	// distaff: the qwerty top row (q=c, w=d, e=e, r=f, t=g, y=a, u=b, i=highC)
+	// and the note letters themselves. We accept either form.
+	struct NoteEntry { const char *name; char key; };
+	static const NoteEntry kNotes[] = {
+		{"c",  'c'}, {"d",  'd'}, {"e",  'e'}, {"f",  'f'},
+		{"g",  'g'}, {"a",  'a'}, {"b",  'b'}, {"C",  'C'},
+		{nullptr, 0}
+	};
+	char key = 0;
+	for (int i = 0; kNotes[i].name; ++i) {
+		if (noteStr == kNotes[i].name) { key = kNotes[i].key; break; }
+	}
+	if (!key) {
+		errorOut = "play_note: unknown note '" + noteStr +
+		           "'. Use one of: c d e f g a b C";
+		return false;
+	}
+
+	snapshotPreAction();
+	_streaming = true;
+	_sseStartFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
+	_sseEgoMoved = false;
+	_sseMessages.clear();
+	_sseTargetObject = 0;
+
+	// Inject the keypress the same way toolSkip injects ESC. KeyState has an
+	// implicit constructor from KeyCode, and for ASCII letters the keycode
+	// value equals the ASCII byte.
+	_vm->_keyPressed = Common::KeyCode((byte)key);
+	_server->startStreaming();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
 // Streaming pump
 // ---------------------------------------------------------------------------
 
@@ -1467,6 +1633,12 @@ bool ScummMcpBridge::isActionDone() const {
 
 bool ScummMcpBridge::hasPendingQuestion() const {
 	if (!_vm || _vm->_userPut <= 0) return false;
+
+	// Loom's distaff renders as ~14 unkeyed text-verb slots with single-char
+	// glyph labels. The MI1-style "unkeyed → dialog" heuristic below would
+	// otherwise misidentify them as a pending question. The distaff is the
+	// permanent verb bar, not a transient dialog, so suppress the check.
+	if (isInLoomSection()) return false;
 
 	// V6+ (Sam & Max and later): dialog uses icon verb slots. The game saves the
 	// five standard action icon verbs (saveid != 0) and inserts new topic icon slots.
@@ -1925,6 +2097,17 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 				return true;
 			}
 		}
+	}
+
+	// Loom (V3/V4) uses a single-cursor model with no traditional verb bar:
+	// 'interact' and 'use_item' (both normalize to "use") map to the engine's
+	// "use" verb (id 11 in V3/V4 Loom). The engine's getVerbEntrypoint may
+	// not return non-zero for objects in this click-callback model, so we
+	// accept the resolution unconditionally when in the Loom segment.
+	if (isInLoomSection() && normalized == "use") {
+		verbId = 11;
+		debug(1, "mcp: resolveVerb Loom interact -> verbid=11");
+		return true;
 	}
 
 	// Fallback for v6/v7/v8 games that use right-click context menus: the verb

@@ -98,6 +98,10 @@ private:
 	bool toolAnswer(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
+
+	// Loom segment detection (full Loom or the Loom mini-game in Passport to Adventure)
+	bool isInLoomSection() const;
 
 	// Register all tools with the server.
 	void registerTools();
