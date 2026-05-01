@@ -314,6 +314,10 @@ GAME_PATHS = {
         "DIG_DEMO_PATH",
         "/Users/xhardy/Personal/llm/scummvm/games/Dig",
     ),
+    "ft-demo": os.environ.get(
+        "FT_DEMO_PATH",
+        "/Users/xhardy/Personal/llm/scummvm/games/ft-dos-demo",
+    ),
 }
 
 

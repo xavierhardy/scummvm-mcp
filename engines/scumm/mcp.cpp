@@ -550,22 +550,22 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 	}
 
-	// The Dig (V7) uses a single-cursor interface with no persistent verb bar.
-	// Expose 'interact' (universal context action) and 'use_item' (inventory item
-	// on room object) — both map to verb ID 7 (Use) internally.
-	if (_vm->_game.id == GID_DIG && !questionPending && activeVerbs.empty()) {
+	// The Dig and Full Throttle (both V7) use single-cursor / pie-menu interfaces
+	// with no persistent verb bar. Expose 'interact' (universal context action)
+	// and 'use_item' (inventory item on room object) — both map to verb ID 7 internally.
+	if ((_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) && !questionPending && activeVerbs.empty()) {
 		struct FallbackVerb { int id; const char *name; const char *label; };
-		static const FallbackVerb kDigFallback[] = {
+		static const FallbackVerb kV7Fallback[] = {
 			{7, "interact", "interact"},
 			{7, "use_item", "use item"},
 			{0, nullptr,    nullptr}
 		};
-		for (int i = 0; kDigFallback[i].name; ++i) {
-			verbsArr.push_back(mcpJsonString(kDigFallback[i].label));
+		for (int i = 0; kV7Fallback[i].name; ++i) {
+			verbsArr.push_back(mcpJsonString(kV7Fallback[i].label));
 			VerbInfo vi;
-			vi.verbId = kDigFallback[i].id;
-			vi.name   = kDigFallback[i].name;
-			vi.label  = kDigFallback[i].label;
+			vi.verbId = kV7Fallback[i].id;
+			vi.name   = kV7Fallback[i].name;
+			vi.label  = kV7Fallback[i].label;
 			activeVerbs.push_back(vi);
 		}
 	}
@@ -625,10 +625,10 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			bool hasLookAt = false, hasWalkTo = false;
 			int handlerCount = 0;
 			bool walkToHasHandler = false;
-			// The Dig (V7) uses click-callbacks rather than per-verb SCUMM entrypoints,
-			// so getVerbEntrypoint returns 0 for all objects. Treat every selectable object
-			// as supporting all exposed verbs ('interact' and 'use item').
-			if (_vm->_game.id == GID_DIG) {
+			// The Dig and Full Throttle (V7) use click-callbacks / pie-menu rather than
+			// per-verb SCUMM entrypoints, so getVerbEntrypoint returns 0 for all objects.
+			// Treat every selectable object as supporting all exposed verbs.
+			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
 				for (uint k = 0; k < activeVerbs.size(); ++k) {
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 					handlerCount++;
@@ -654,7 +654,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				if (!hasWalkTo && walkToExists) compatVerbs.push_back(mcpJsonString(walkToLabel));
 			}
 
-			bool isPathway = (_vm->_game.id != GID_DIG) && walkToHasHandler && (handlerCount == 1);
+			bool isPathway = (_vm->_game.id != GID_DIG && _vm->_game.id != GID_FT) && walkToHasHandler && (handlerCount == 1);
 
 			Common::JSONObject obj;
 			obj.setVal("id",               mcpJsonInt(ne.numId));
@@ -681,8 +681,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 
 			Common::JSONArray compatVerbs;
 			bool hasTalkTo = false;
-			// For GID_DIG, all selectable actors support 'interact' (click-callback model).
-			if (_vm->_game.id == GID_DIG) {
+			// For GID_DIG and GID_FT, all selectable actors support 'interact' (click-callback / pie-menu model).
+			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
 				for (uint k = 0; k < activeVerbs.size(); ++k)
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 			} else {
