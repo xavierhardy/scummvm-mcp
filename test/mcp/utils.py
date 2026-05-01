@@ -310,6 +310,10 @@ GAME_PATHS = {
         "SAMNMAX_DEMO_PATH",
         "/Users/xhardy/Personal/llm/scummvm/games/samnmax-dos-cd-demo-en",
     ),
+    "dig-demo": os.environ.get(
+        "DIG_DEMO_PATH",
+        "/Users/xhardy/Personal/llm/scummvm/games/Dig",
+    ),
 }
 
 

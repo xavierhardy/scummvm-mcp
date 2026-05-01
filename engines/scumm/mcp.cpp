@@ -550,6 +550,26 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 	}
 
+	// The Dig (V7) uses a single-cursor interface with no persistent verb bar.
+	// Expose 'interact' (universal context action) and 'use_item' (inventory item
+	// on room object) — both map to verb ID 7 (Use) internally.
+	if (_vm->_game.id == GID_DIG && !questionPending && activeVerbs.empty()) {
+		struct FallbackVerb { int id; const char *name; const char *label; };
+		static const FallbackVerb kDigFallback[] = {
+			{7, "interact", "interact"},
+			{7, "use_item", "use item"},
+			{0, nullptr,    nullptr}
+		};
+		for (int i = 0; kDigFallback[i].name; ++i) {
+			verbsArr.push_back(mcpJsonString(kDigFallback[i].label));
+			VerbInfo vi;
+			vi.verbId = kDigFallback[i].id;
+			vi.name   = kDigFallback[i].name;
+			vi.label  = kDigFallback[i].label;
+			activeVerbs.push_back(vi);
+		}
+	}
+
 	// Sam & Max (V6) does not populate the classic text verb slots; expose a
 	// stable MCP verb set even when _verbs[] is empty.
 	if (_vm->_game.id == GID_SAMNMAX && !questionPending && activeVerbs.empty()) {
@@ -605,18 +625,36 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			bool hasLookAt = false, hasWalkTo = false;
 			int handlerCount = 0;
 			bool walkToHasHandler = false;
-			for (uint k = 0; k < activeVerbs.size(); ++k) {
-				if (_vm->getVerbEntrypoint(ne.numId, activeVerbs[k].verbId) != 0) {
+			// The Dig (V7) uses click-callbacks rather than per-verb SCUMM entrypoints,
+			// so getVerbEntrypoint returns 0 for all objects. Treat every selectable object
+			// as supporting all exposed verbs ('interact' and 'use item').
+			if (_vm->_game.id == GID_DIG) {
+				for (uint k = 0; k < activeVerbs.size(); ++k) {
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 					handlerCount++;
-					if (activeVerbs[k].name == "look_at") hasLookAt = true;
-					if (activeVerbs[k].name == "walk_to") { hasWalkTo = true; walkToHasHandler = true; }
 				}
+			} else {
+				Common::Array<int> countedVerbIds;
+				for (uint k = 0; k < activeVerbs.size(); ++k) {
+					if (_vm->getVerbEntrypoint(ne.numId, activeVerbs[k].verbId) != 0) {
+						compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
+						// Count each unique verbId only once for pathway detection.
+						bool counted = false;
+						for (uint j = 0; j < countedVerbIds.size(); ++j)
+							if (countedVerbIds[j] == activeVerbs[k].verbId) { counted = true; break; }
+						if (!counted) {
+							countedVerbIds.push_back(activeVerbs[k].verbId);
+							handlerCount++;
+						}
+						if (activeVerbs[k].name == "look_at") hasLookAt = true;
+						if (activeVerbs[k].name == "walk_to") { hasWalkTo = true; walkToHasHandler = true; }
+					}
+				}
+				if (!hasLookAt && lookAtExists) compatVerbs.push_back(mcpJsonString(lookAtLabel));
+				if (!hasWalkTo && walkToExists) compatVerbs.push_back(mcpJsonString(walkToLabel));
 			}
-			if (!hasLookAt && lookAtExists) compatVerbs.push_back(mcpJsonString(lookAtLabel));
-			if (!hasWalkTo && walkToExists) compatVerbs.push_back(mcpJsonString(walkToLabel));
 
-			bool isPathway = walkToHasHandler && (handlerCount == 1);
+			bool isPathway = (_vm->_game.id != GID_DIG) && walkToHasHandler && (handlerCount == 1);
 
 			Common::JSONObject obj;
 			obj.setVal("id",               mcpJsonInt(ne.numId));
@@ -643,13 +681,19 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 
 			Common::JSONArray compatVerbs;
 			bool hasTalkTo = false;
-			for (uint k = 0; k < activeVerbs.size(); ++k) {
-				if (_vm->getVerbEntrypoint(actorObjId, activeVerbs[k].verbId) != 0) {
+			// For GID_DIG, all selectable actors support 'interact' (click-callback model).
+			if (_vm->_game.id == GID_DIG) {
+				for (uint k = 0; k < activeVerbs.size(); ++k)
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
-					if (activeVerbs[k].name == "talk_to") hasTalkTo = true;
+			} else {
+				for (uint k = 0; k < activeVerbs.size(); ++k) {
+					if (_vm->getVerbEntrypoint(actorObjId, activeVerbs[k].verbId) != 0) {
+						compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
+						if (activeVerbs[k].name == "talk_to") hasTalkTo = true;
+					}
 				}
+				if (!hasTalkTo && talkToExists) compatVerbs.push_back(mcpJsonString(talkToLabel));
 			}
-			if (!hasTalkTo && talkToExists) compatVerbs.push_back(mcpJsonString(talkToLabel));
 			Common::JSONObject actorObj;
 			actorObj.setVal("id",               mcpJsonInt(actorObjId));
 			actorObj.setVal("name",             mcpJsonString(safe));
@@ -1495,7 +1539,10 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 	if (s == "pickup")  return "pick_up";
 	if (s == "take")    return "pick_up";
 	if (s == "get")     return "pick_up";
-	if (s == "talk")    return "talk_to";
+	if (s == "talk")     return "talk_to";
+	// The Dig: single-cursor verbs map to the generic 'use' action (verb ID 7).
+	if (s == "interact") return "use";
+	if (s == "use_item") return "use";
 	// Sam & Max: expose companion inventory item as plain 'max' for MCP targets.
 	if (s == "max_the_object") return "max";
 	return s;
