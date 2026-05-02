@@ -166,6 +166,7 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	: _vm(vm),
 	  _enabled(false),
 	  _skipToolEnabled(false),
+	  _debugToolsEnabled(false),
 	  _server(nullptr),
 	  _nextMessageSeq(1),
 	  _frameCounter(0),
@@ -185,6 +186,7 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	if (!_enabled) return;
 
 	_skipToolEnabled = ConfMan.hasKey("mcp_skip_tool") && ConfMan.getBool("mcp_skip_tool");
+	_debugToolsEnabled = ConfMan.hasKey("mcp_debug") && ConfMan.getBool("mcp_debug");
 
 	int port = ConfMan.hasKey("mcp_port") ? ConfMan.getInt("mcp_port") : 23456;
 	Common::String host = ConfMan.hasKey("mcp_host") ? ConfMan.get("mcp_host") : "127.0.0.1";
@@ -498,6 +500,90 @@ void ScummMcpBridge::registerTools() {
 		spec.streaming    = true;
 		_server->registerTool(spec);
 	}
+
+	// --- debug tools (gated by mcp_debug ini option) ---
+	if (_debugToolsEnabled) {
+		// debug — return raw engine state for diagnostics
+		{
+			Networking::McpServer::ToolSpec spec;
+			spec.name = "debug";
+			spec.description =
+			    "Return raw engine state for diagnostics: room id, ego position, "
+			    "_userPut, _mouse, _virtualMouse, _leftBtnPressed, _rightBtnPressed, "
+			    "_mouseAndKeyboardStat, _keyPressed, _currentRoom, plus a slice of "
+			    "SCUMM script vars (0..127 by default; pass 'from' and 'to' to widen). "
+			    "Engine-version-agnostic.";
+			Common::JSONObject props;
+			props.setVal("from", mcpProp("integer",
+			    "First SCUMM var index to return (default 0)."));
+			props.setVal("to", mcpProp("integer",
+			    "Last SCUMM var index to return (inclusive, default 127)."));
+			spec.inputSchema  = mcpObjectSchema(props);
+			spec.outputSchema = nullptr;
+			spec.streaming    = false;
+			_server->registerTool(spec);
+		}
+		// keystroke — inject a key event
+		{
+			Networking::McpServer::ToolSpec spec;
+			spec.name = "keystroke";
+			spec.description =
+			    "Inject a keyboard keystroke into the engine. Sets _keyPressed so "
+			    "the next engine frame processes it. Useful for skipping cutscenes "
+			    "(Escape), opening menus, or sending game-specific shortcuts.";
+			Common::JSONObject props;
+			props.setVal("key", mcpProp("string",
+			    "Key to press: a single ASCII character ('a', 'C', '1'), or a name "
+			    "('Escape', 'Return', 'Space', 'Tab', 'Backspace', 'F1'..'F12', "
+			    "'Up', 'Down', 'Left', 'Right')."));
+			props.setVal("ctrl",  mcpProp("boolean", "Hold Ctrl modifier (default false)."));
+			props.setVal("shift", mcpProp("boolean", "Hold Shift modifier (default false)."));
+			props.setVal("alt",   mcpProp("boolean", "Hold Alt modifier (default false)."));
+			const char *req[] = {"key"};
+			spec.inputSchema  = mcpObjectSchema(props, req, 1);
+			spec.outputSchema = nullptr;
+			spec.streaming    = false;
+			_server->registerTool(spec);
+		}
+		// mouse_move — set the virtual mouse position
+		{
+			Networking::McpServer::ToolSpec spec;
+			spec.name = "mouse_move";
+			spec.description =
+			    "Move the virtual mouse cursor to (x, y) in room/screen coordinates. "
+			    "Updates _mouse, _virtualMouse, and VAR_VIRT_MOUSE_X/Y so the engine "
+			    "and scripts read the new position. Does not click.";
+			Common::JSONObject props;
+			props.setVal("x", mcpProp("integer", "X coordinate."));
+			props.setVal("y", mcpProp("integer", "Y coordinate."));
+			const char *req[] = {"x", "y"};
+			spec.inputSchema  = mcpObjectSchema(props, req, 2);
+			spec.outputSchema = nullptr;
+			spec.streaming    = false;
+			_server->registerTool(spec);
+		}
+		// mouse_click — simulate a mouse click at (x, y)
+		{
+			Networking::McpServer::ToolSpec spec;
+			spec.name = "mouse_click";
+			spec.description =
+			    "Simulate a mouse click at (x, y). The engine processes the click "
+			    "the same way as a real player click (walks ego, runs verb script, "
+			    "etc.). Set 'double' for a double click. Button defaults to left.";
+			Common::JSONObject props;
+			props.setVal("x", mcpProp("integer", "X coordinate."));
+			props.setVal("y", mcpProp("integer", "Y coordinate."));
+			props.setVal("button", mcpProp("string",
+			    "Mouse button: 'left' (default), 'right', or 'middle'."));
+			props.setVal("double", mcpProp("boolean",
+			    "True for a double click (two clicks within ~250ms). Default false."));
+			const char *req[] = {"x", "y"};
+			spec.inputSchema  = mcpObjectSchema(props, req, 2);
+			spec.outputSchema = nullptr;
+			spec.streaming    = false;
+			_server->registerTool(spec);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -532,6 +618,19 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 	if (name == "play_note") {
 		if (!toolPlayNote(args, errorOut)) return nullptr;
 		return nullptr;
+	}
+	if (name == "debug")        return toolDebug(args, errorOut);
+	if (name == "keystroke")    {
+		if (!toolKeystroke(args, errorOut)) return nullptr;
+		return new Common::JSONValue(Common::JSONObject());
+	}
+	if (name == "mouse_move")   {
+		if (!toolMouseMove(args, errorOut)) return nullptr;
+		return new Common::JSONValue(Common::JSONObject());
+	}
+	if (name == "mouse_click")  {
+		if (!toolMouseClick(args, errorOut)) return nullptr;
+		return new Common::JSONValue(Common::JSONObject());
 	}
 	errorOut = "Unknown tool: " + name;
 	return nullptr;
@@ -1327,6 +1426,245 @@ bool ScummMcpBridge::toolPlayNote(const Common::JSONValue &args, Common::String 
 	// value equals the ASCII byte.
 	_vm->_keyPressed = Common::KeyCode((byte)key);
 	_server->startStreaming();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Debug tools: 'debug', 'keystroke', 'mouse_move', 'mouse_click'
+// ---------------------------------------------------------------------------
+
+// Map a JSON 'key' value to a Common::KeyState. Single ASCII chars map to
+// their Common::KeyCode (which equals the ASCII byte for printable letters
+// and digits). Named keys ('Escape', 'Return', 'F1', 'Up'...) map via a
+// small table. Returns false on unknown name.
+static bool jsonKeyToKeyState(const Common::String &name, bool ctrl, bool shift, bool alt,
+                                Common::KeyState &out) {
+	struct NamedKey { const char *name; Common::KeyCode kc; };
+	static const NamedKey kNamed[] = {
+		{"Escape",    Common::KEYCODE_ESCAPE},
+		{"Return",    Common::KEYCODE_RETURN},
+		{"Enter",     Common::KEYCODE_RETURN},
+		{"Space",     Common::KEYCODE_SPACE},
+		{"Tab",       Common::KEYCODE_TAB},
+		{"Backspace", Common::KEYCODE_BACKSPACE},
+		{"Delete",    Common::KEYCODE_DELETE},
+		{"Up",        Common::KEYCODE_UP},
+		{"Down",      Common::KEYCODE_DOWN},
+		{"Left",      Common::KEYCODE_LEFT},
+		{"Right",     Common::KEYCODE_RIGHT},
+		{"F1",        Common::KEYCODE_F1},
+		{"F2",        Common::KEYCODE_F2},
+		{"F3",        Common::KEYCODE_F3},
+		{"F4",        Common::KEYCODE_F4},
+		{"F5",        Common::KEYCODE_F5},
+		{"F6",        Common::KEYCODE_F6},
+		{"F7",        Common::KEYCODE_F7},
+		{"F8",        Common::KEYCODE_F8},
+		{"F9",        Common::KEYCODE_F9},
+		{"F10",       Common::KEYCODE_F10},
+		{"F11",       Common::KEYCODE_F11},
+		{"F12",       Common::KEYCODE_F12},
+		{nullptr,     Common::KEYCODE_INVALID}
+	};
+
+	Common::KeyCode kc = Common::KEYCODE_INVALID;
+	uint16 ascii = 0;
+
+	if (name.size() == 1) {
+		byte ch = (byte)name[0];
+		ascii = ch;
+		// Lower-case letters and digits map directly to their KEYCODE values.
+		// Upper-case letters use the lowercase keycode + Shift modifier.
+		if (ch >= 'A' && ch <= 'Z') {
+			kc = (Common::KeyCode)(ch - 'A' + 'a');
+			shift = true;
+		} else {
+			kc = (Common::KeyCode)ch;
+		}
+	} else {
+		for (int i = 0; kNamed[i].name; ++i) {
+			if (name.equalsIgnoreCase(kNamed[i].name)) { kc = kNamed[i].kc; break; }
+		}
+		if (kc == Common::KEYCODE_INVALID) return false;
+		// Set ASCII for keys that have a printable equivalent
+		if (kc == Common::KEYCODE_RETURN)    ascii = 13;
+		else if (kc == Common::KEYCODE_TAB)  ascii = 9;
+		else if (kc == Common::KEYCODE_SPACE) ascii = ' ';
+		else if (kc == Common::KEYCODE_ESCAPE) ascii = 27;
+		else if (kc == Common::KEYCODE_BACKSPACE) ascii = 8;
+	}
+
+	byte flags = 0;
+	if (ctrl)  flags |= Common::KBD_CTRL;
+	if (shift) flags |= Common::KBD_SHIFT;
+	if (alt)   flags |= Common::KBD_ALT;
+
+	out = Common::KeyState(kc, ascii, flags);
+	return true;
+}
+
+Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Common::String &errorOut) {
+	(void)errorOut;
+
+	int from = 0;
+	int to   = 127;
+	if (args.isObject()) {
+		const Common::JSONObject &a = args.asObject();
+		if (a.contains("from") && a["from"]->isIntegerNumber())
+			from = (int)a["from"]->asIntegerNumber();
+		if (a.contains("to")   && a["to"]->isIntegerNumber())
+			to   = (int)a["to"]->asIntegerNumber();
+	}
+	if (from < 0) from = 0;
+	if (to >= _vm->_numVariables) to = _vm->_numVariables - 1;
+	if (to < from) to = from;
+
+	Common::JSONObject out;
+	out.setVal("game_id",       mcpJsonInt((int)_vm->_game.id));
+	out.setVal("game_version",  mcpJsonInt(_vm->_game.version));
+	out.setVal("current_room",  mcpJsonInt(_vm->_currentRoom));
+	out.setVal("user_put",      mcpJsonInt(_vm->_userPut));
+	out.setVal("num_variables", mcpJsonInt(_vm->_numVariables));
+	out.setVal("num_global_objects", mcpJsonInt(_vm->_numGlobalObjects));
+	out.setVal("frame_counter", mcpJsonInt((int)_frameCounter));
+	out.setVal("streaming",     mcpJsonBool(_streaming));
+	out.setVal("in_loom_section", mcpJsonBool(isInLoomSection()));
+
+	Common::JSONObject mouse;
+	mouse.setVal("x", mcpJsonInt(_vm->_mouse.x));
+	mouse.setVal("y", mcpJsonInt(_vm->_mouse.y));
+	out.setVal("mouse", new Common::JSONValue(mouse));
+
+	Common::JSONObject vmouse;
+	vmouse.setVal("x", mcpJsonInt(_vm->_virtualMouse.x));
+	vmouse.setVal("y", mcpJsonInt(_vm->_virtualMouse.y));
+	out.setVal("virtual_mouse", new Common::JSONValue(vmouse));
+
+	out.setVal("left_btn_pressed",  mcpJsonInt(_vm->_leftBtnPressed));
+	out.setVal("right_btn_pressed", mcpJsonInt(_vm->_rightBtnPressed));
+	out.setVal("mouse_keyboard_stat", mcpJsonInt(_vm->_mouseAndKeyboardStat));
+
+	Common::JSONObject keyPressed;
+	keyPressed.setVal("keycode", mcpJsonInt((int)_vm->_keyPressed.keycode));
+	keyPressed.setVal("ascii",   mcpJsonInt((int)_vm->_keyPressed.ascii));
+	keyPressed.setVal("flags",   mcpJsonInt((int)_vm->_keyPressed.flags));
+	out.setVal("key_pressed", new Common::JSONValue(keyPressed));
+
+	// Ego actor info
+	Actor *ego = getEgoActor();
+	if (ego) {
+		Common::JSONObject e;
+		e.setVal("number", mcpJsonInt(ego->_number));
+		e.setVal("x",      mcpJsonInt(ego->getRealPos().x));
+		e.setVal("y",      mcpJsonInt(ego->getRealPos().y));
+		e.setVal("room",   mcpJsonInt(ego->_room));
+		e.setVal("moving", mcpJsonInt(ego->_moving));
+		out.setVal("ego", new Common::JSONValue(e));
+	}
+
+	// Slice of script vars
+	Common::JSONArray vars;
+	if (_vm->_scummVars) {
+		for (int i = from; i <= to; ++i) {
+			Common::JSONObject v;
+			v.setVal("i", mcpJsonInt(i));
+			v.setVal("v", mcpJsonInt((int)_vm->_scummVars[i]));
+			vars.push_back(new Common::JSONValue(v));
+		}
+	}
+	out.setVal("vars", new Common::JSONValue(vars));
+
+	return new Common::JSONValue(out);
+}
+
+bool ScummMcpBridge::toolKeystroke(const Common::JSONValue &args, Common::String &errorOut) {
+	if (!args.isObject()) {
+		errorOut = "keystroke: arguments must be an object with a 'key' field";
+		return false;
+	}
+	const Common::JSONObject &a = args.asObject();
+	if (!a.contains("key") || !a["key"]->isString()) {
+		errorOut = "keystroke: 'key' string is required";
+		return false;
+	}
+	bool ctrl  = a.contains("ctrl")  && a["ctrl"]->isBool()  && a["ctrl"]->asBool();
+	bool shift = a.contains("shift") && a["shift"]->isBool() && a["shift"]->asBool();
+	bool alt   = a.contains("alt")   && a["alt"]->isBool()   && a["alt"]->asBool();
+
+	Common::KeyState ks;
+	if (!jsonKeyToKeyState(a["key"]->asString(), ctrl, shift, alt, ks)) {
+		errorOut = "keystroke: unknown key '" + a["key"]->asString() + "'";
+		return false;
+	}
+	_vm->_keyPressed = ks;
+	return true;
+}
+
+bool ScummMcpBridge::toolMouseMove(const Common::JSONValue &args, Common::String &errorOut) {
+	if (!args.isObject()) { errorOut = "mouse_move: arguments must be an object"; return false; }
+	const Common::JSONObject &a = args.asObject();
+	if (!a.contains("x") || !a["x"]->isIntegerNumber() ||
+	    !a.contains("y") || !a["y"]->isIntegerNumber()) {
+		errorOut = "mouse_move: integer 'x' and 'y' are required";
+		return false;
+	}
+	int x = (int)a["x"]->asIntegerNumber();
+	int y = (int)a["y"]->asIntegerNumber();
+	_vm->_mouse.x        = x;
+	_vm->_mouse.y        = y;
+	_vm->_virtualMouse.x = x;
+	_vm->_virtualMouse.y = y;
+	if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = x;
+	if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = y;
+	if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = x;
+	if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = y;
+	return true;
+}
+
+bool ScummMcpBridge::toolMouseClick(const Common::JSONValue &args, Common::String &errorOut) {
+	if (!args.isObject()) { errorOut = "mouse_click: arguments must be an object"; return false; }
+	const Common::JSONObject &a = args.asObject();
+	if (!a.contains("x") || !a["x"]->isIntegerNumber() ||
+	    !a.contains("y") || !a["y"]->isIntegerNumber()) {
+		errorOut = "mouse_click: integer 'x' and 'y' are required";
+		return false;
+	}
+	int x = (int)a["x"]->asIntegerNumber();
+	int y = (int)a["y"]->asIntegerNumber();
+	Common::String button = "left";
+	if (a.contains("button") && a["button"]->isString()) button = a["button"]->asString();
+	bool isDouble = a.contains("double") && a["double"]->isBool() && a["double"]->asBool();
+
+	// Position the mouse first.
+	_vm->_mouse.x        = x;
+	_vm->_mouse.y        = y;
+	_vm->_virtualMouse.x = x;
+	_vm->_virtualMouse.y = y;
+	if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = x;
+	if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = y;
+	if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = x;
+	if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = y;
+
+	// msClicked = 2, msDown = 1 (both bits set on a real button press).
+	const byte kClicked = 2;
+	const byte kDown    = 1;
+	const byte mask     = kClicked | kDown;
+
+	if (button == "right") {
+		_vm->_rightBtnPressed |= mask;
+	} else if (button == "middle") {
+		// SCUMM doesn't distinguish middle clicks from a Common::Event level for the
+		// mouseAndKeyboardStat field; route to left to avoid a no-op.
+		_vm->_leftBtnPressed |= mask;
+	} else {
+		_vm->_leftBtnPressed |= mask;
+	}
+
+	// For a double click, we tweak _lastInputScriptTime so the engine's 250-500ms
+	// delta check inside runInputScript flags this click as the second of a pair.
+	if (isDouble) {
+		_vm->_lastInputScriptTime = _vm->_system->getMillis();  // mark "first click was just now"
+	}
 	return true;
 }
 

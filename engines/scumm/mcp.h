@@ -70,6 +70,7 @@ private:
 	ScummEngine *_vm;
 	bool _enabled;
 	bool _skipToolEnabled;
+	bool _debugToolsEnabled;
 	Networking::McpServer *_server;
 
 	Common::Array<MessageEntry> _messages;
@@ -99,6 +100,12 @@ private:
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
+
+	// Debug tools (gated by mcp_debug ini option). Engine-version-agnostic.
+	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolKeystroke(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolMouseMove(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolMouseClick(const Common::JSONValue &args, Common::String &errorOut);
 
 	// Loom segment detection (full Loom or the Loom mini-game in Passport to Adventure)
 	bool isInLoomSection() const;
