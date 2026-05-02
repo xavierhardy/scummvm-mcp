@@ -179,7 +179,10 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	  _sseTargetObject(0),
 	  _ssePreRoom(0),
 	  _ssePrePosX(0),
-	  _ssePrePosY(0) {
+	  _ssePrePosY(0),
+	  _ssePendingSecondClick(false),
+	  _sseClickMouseX(0),
+	  _sseClickMouseY(0) {
 	if (!_vm) return;
 
 	_enabled = ConfMan.getBool("mcp");
@@ -484,18 +487,17 @@ void ScummMcpBridge::registerTools() {
 	{
 		Common::JSONObject props;
 		props.setVal("note", mcpProp("string",
-		    "Note to play on the Loom distaff. One of: c d e f g a b C "
-		    "(C is the high octave). Notes are unlocked progressively in-game; "
-		    "the engine silently ignores notes that are not yet unlocked."));
-		const char *req[] = {"note"};
+		    "Single note to play on the Loom distaff. One of: c d e f g a b C "
+		    "(C is the high octave)."));
+		props.setVal("notes", mcpProp("array",
+		    "Optional sequence of note strings to play in order, e.g. ['e','c','e','d']."));
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "play_note";
 		spec.description =
-		    "Play a single note on the Loom distaff. Only valid in the Loom segment "
-		    "of Passport to Adventure (and full Loom). Used to cast spells: several "
-		    "notes must be played in sequence to trigger an action. Returns state "
-		    "changes after the note is consumed by the engine.";
-		spec.inputSchema  = mcpObjectSchema(props, req, 1);
+		    "Play Loom distaff notes. Accepts either {note:'c'} for one note, or "
+		    "{notes:['e','c','e','d']} to play a full sequence in one call. "
+		    "Only valid in the Loom segment of Passport to Adventure (and full Loom).";
+		spec.inputSchema  = mcpObjectSchema(props);
 		spec.outputSchema = makeChangesSchema();
 		spec.streaming    = true;
 		_server->registerTool(spec);
@@ -1157,31 +1159,45 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
 	// For V0: track the primary target so isActionDone() can wait for its script to finish.
 	// V0 scripts do not lock _userPut during execution, unlike V5, so script-slot polling
 	// is the only reliable signal that the verb script has completed.
 	_sseTargetObject = (_vm->_game.version == 0) ? targetA : 0;
 	if (isLoomClick) {
-		// Simulate a real left click on the target. This preserves Loom's native
-		// click scripts (walk + object-specific arrival behavior).
+		// Convert object world coords to on-screen mouse coords (Passport Loom has
+		// horizontally scrolling rooms, so screen X != world X).
 		int objX = _vm->getObjX(targetA);
 		int objY = _vm->getObjY(targetA);
+		VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
+		int mouseX = objX - vs->xstart;
+		int mouseY = objY + vs->topline;
+		if (mouseX < 0) mouseX = 0;
+		if (mouseX > _vm->_screenWidth - 1) mouseX = _vm->_screenWidth - 1;
+		if (mouseY < 0) mouseY = 0;
+		if (mouseY > _vm->_screenHeight - 1) mouseY = _vm->_screenHeight - 1;
+
+		_vm->_mouse.x        = mouseX;
+		_vm->_mouse.y        = mouseY;
 		_vm->_virtualMouse.x = objX;
 		_vm->_virtualMouse.y = objY;
-		_vm->_mouse.x        = objX;
-		_vm->_mouse.y        = objY;
 		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX;
 		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
 
-		// Egg listen/replay flow in Loom is double-click driven in the target room.
-		// Emulate the second click timing so interact("egg") reliably triggers
-		// the authentic note playback sequence.
+		// First click now.
+		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+
+		// Egg listen/replay requires a real double-click cadence.
 		Common::String targetName = mcpLowerTrimmed(getObjName(this, targetA));
-		if (targetName.contains("egg"))
+		if (targetName.contains("egg")) {
+			_ssePendingSecondClick = true;
+			_sseClickMouseX = mouseX;
+			_sseClickMouseY = mouseY;
 			_vm->_lastInputScriptTime = _vm->_system->getMillis();
-
-		// msClicked | msDown, same as parseEvent() for a button press.
-		_vm->_leftBtnPressed |= 0x03;
+		}
 	} else {
 		_vm->doSentence(verbId, targetA, targetB);
 	}
@@ -1272,6 +1288,8 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
 	_sseTargetObject = 0;  // dialog answer has no target object
 	_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
 	_server->startStreaming();
@@ -1329,6 +1347,8 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
 	_sseTargetObject = 0;  // walk has no target object
 	ego->startWalkActor(wx, wy, -1);
 	_server->startStreaming();
@@ -1350,6 +1370,8 @@ bool ScummMcpBridge::toolSkip(const Common::JSONValue &args, Common::String &err
 		_sseLastEventFrame = 0;
 		_sseEgoMoved = false;
 		_sseMessages.clear();
+		_ssePendingSecondClick = false;
+		_ssePendingNotes.clear();
 		_sseTargetObject = 0;
 		_server->startStreaming();
 	}
@@ -1381,34 +1403,55 @@ bool ScummMcpBridge::toolPlayNote(const Common::JSONValue &args, Common::String 
 		return false;
 	}
 	if (!args.isObject()) {
-		errorOut = "play_note: arguments must be an object with a 'note' field";
+		errorOut = "play_note: arguments must be an object with 'note' or 'notes'";
 		return false;
 	}
 	const Common::JSONObject &a = args.asObject();
-	if (!a.contains("note") || !a["note"]->isString()) {
-		errorOut = "play_note: 'note' string is required";
-		return false;
-	}
 
-	Common::String noteStr = a["note"]->asString();
-	noteStr.trim();
-
-	// Map note name to its in-game keyboard key. Loom binds two key sets to the
-	// distaff: the qwerty top row (q=c, w=d, e=e, r=f, t=g, y=a, u=b, i=highC)
-	// and the note letters themselves. We accept either form.
 	struct NoteEntry { const char *name; char key; };
 	static const NoteEntry kNotes[] = {
 		{"c",  'c'}, {"d",  'd'}, {"e",  'e'}, {"f",  'f'},
 		{"g",  'g'}, {"a",  'a'}, {"b",  'b'}, {"C",  'C'},
 		{nullptr, 0}
 	};
-	char key = 0;
-	for (int i = 0; kNotes[i].name; ++i) {
-		if (noteStr == kNotes[i].name) { key = kNotes[i].key; break; }
-	}
-	if (!key) {
-		errorOut = "play_note: unknown note '" + noteStr +
-		           "'. Use one of: c d e f g a b C";
+	auto mapNote = [&](const Common::String &s) -> char {
+		for (int i = 0; kNotes[i].name; ++i)
+			if (s == kNotes[i].name) return kNotes[i].key;
+		return 0;
+	};
+
+	Common::Array<Common::KeyCode> keys;
+	if (a.contains("notes") && a["notes"]->isArray()) {
+		const Common::JSONArray &arr = a["notes"]->asArray();
+		for (uint i = 0; i < arr.size(); ++i) {
+			if (!arr[i] || !arr[i]->isString()) {
+				errorOut = "play_note: 'notes' must be an array of strings";
+				return false;
+			}
+			Common::String noteStr = arr[i]->asString();
+			noteStr.trim();
+			char key = mapNote(noteStr);
+			if (!key) {
+				errorOut = "play_note: unknown note '" + noteStr + "'. Use one of: c d e f g a b C";
+				return false;
+			}
+			keys.push_back((Common::KeyCode)(byte)key);
+		}
+		if (keys.empty()) {
+			errorOut = "play_note: 'notes' must not be empty";
+			return false;
+		}
+	} else if (a.contains("note") && a["note"]->isString()) {
+		Common::String noteStr = a["note"]->asString();
+		noteStr.trim();
+		char key = mapNote(noteStr);
+		if (!key) {
+			errorOut = "play_note: unknown note '" + noteStr + "'. Use one of: c d e f g a b C";
+			return false;
+		}
+		keys.push_back((Common::KeyCode)(byte)key);
+	} else {
+		errorOut = "play_note: provide 'note' (string) or 'notes' (array of strings)";
 		return false;
 	}
 
@@ -1420,12 +1463,15 @@ bool ScummMcpBridge::toolPlayNote(const Common::JSONValue &args, Common::String 
 	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
 	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes = keys;
 	_sseTargetObject = 0;
 
-	// Inject the keypress the same way toolSkip injects ESC. KeyState has an
-	// implicit constructor from KeyCode, and for ASCII letters the keycode
-	// value equals the ASCII byte.
-	_vm->_keyPressed = Common::KeyCode((byte)key);
+	// Inject first note immediately; remaining notes are fed one per frame from pumpStream().
+	if (!_ssePendingNotes.empty()) {
+		_vm->_keyPressed = _ssePendingNotes[0];
+		_ssePendingNotes.remove_at(0);
+	}
 	_server->startStreaming();
 	return true;
 }
@@ -1704,6 +1750,22 @@ void ScummMcpBridge::pumpStream() {
 	if (!_streaming) return;
 
 	emitPendingMessages();
+
+	// Feed deferred synthetic inputs (used by Loom): second click for egg and
+	// note sequences for play_note(notes=[...]).
+	if (_ssePendingSecondClick) {
+		_vm->_mouse.x = _sseClickMouseX;
+		_vm->_mouse.y = _sseClickMouseY;
+		if (_vm->VAR_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_MOUSE_X) = _sseClickMouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = _sseClickMouseY;
+		_vm->_lastInputScriptTime = _vm->_system->getMillis();
+		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+		_ssePendingSecondClick = false;
+	}
+	if (!_ssePendingNotes.empty()) {
+		_vm->_keyPressed = _ssePendingNotes[0];
+		_ssePendingNotes.remove_at(0);
+	}
 
 	// Track whether ego moved at any point during this stream.
 	{
@@ -2011,6 +2073,7 @@ Actor *ScummMcpBridge::getEgoActor() const {
 
 bool ScummMcpBridge::isActionDone() const {
 	if (_frameCounter - _sseStartFrame < 3) return false;
+	if (_ssePendingSecondClick || !_ssePendingNotes.empty()) return false;
 	Actor *ego = getEgoActor();
 	// Ego movement check with timeout only for V0 (Maniac Mansion):
 	// V0 doesn't lock _userPut, so we need a timeout to prevent indefinite waits.

@@ -90,6 +90,9 @@ private:
 	int _ssePreRoom;
 	int _ssePrePosX, _ssePrePosY;
 	Common::Array<MessageEntry> _sseMessages;
+	bool _ssePendingSecondClick;
+	int _sseClickMouseX, _sseClickMouseY;
+	Common::Array<Common::KeyCode> _ssePendingNotes;
 
 	void pushMessage(const char *type, int actorId, const Common::String &text);
 
