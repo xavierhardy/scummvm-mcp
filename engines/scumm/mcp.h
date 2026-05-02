@@ -93,6 +93,11 @@ private:
 	bool _ssePendingSecondClick;
 	int _sseClickMouseX, _sseClickMouseY;
 	Common::Array<Common::KeyCode> _ssePendingNotes;
+	// Last value seen in the Loom note variable (var 259). Used in pumpStream
+	// to detect 0 -> note transitions and emit them as MCP notifications.
+	int32 _ssePrevNoteValue;
+	// Frame at which the most recent pending-note keypress was fed.
+	uint32 _sseLastNoteFedFrame;
 
 	void pushMessage(const char *type, int actorId, const Common::String &text);
 

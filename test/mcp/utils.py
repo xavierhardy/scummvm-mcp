@@ -189,13 +189,23 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="Walk")
 
-    def play_note(self, note: str) -> dict[str, Any]:
-        """Play a note on the Loom distaff (streaming call)."""
+    def play_note(self, note) -> dict[str, Any]:
+        """Play one or more notes on the Loom distaff (streaming call).
+
+        Pass a single note ('c'..'C') for a one-note play, or a list/tuple
+        like ['e', 'c', 'e', 'd'] to send a full sequence in one call. The
+        engine plays them one after another, throttled so each note finishes
+        before the next is pressed.
+        """
+        if isinstance(note, (list, tuple)):
+            arguments = {"notes": list(note)}
+        else:
+            arguments = {"note": note}
         payload = {
             "jsonrpc": "2.0",
             "id": self._next_id(),
             "method": "tools/call",
-            "params": {"name": "play_note", "arguments": {"note": note}},
+            "params": {"name": "play_note", "arguments": arguments},
         }
         headers = self._headers({"Accept": "text/event-stream"})
         with self._client.stream(

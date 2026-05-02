@@ -99,7 +99,8 @@ def cmd_skip(client: McpClient, _: argparse.Namespace) -> Any:
 
 
 def cmd_note(client: McpClient, args: argparse.Namespace) -> Any:
-    return client.play_note(args.note)
+    notes = list(args.note)
+    return client.play_note(notes if len(notes) > 1 else notes[0])
 
 
 def cmd_answer(client: McpClient, args: argparse.Namespace) -> Any:
@@ -160,7 +161,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("skip").set_defaults(fn=cmd_skip)
 
     pnote = sub.add_parser("note")
-    pnote.add_argument("note")
+    pnote.add_argument("note", nargs="+",
+                       help="One or more notes to play in order, e.g. 'note e c e d'.")
     pnote.set_defaults(fn=cmd_note)
 
     panswer = sub.add_parser("answer")

@@ -182,7 +182,9 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	  _ssePrePosY(0),
 	  _ssePendingSecondClick(false),
 	  _sseClickMouseX(0),
-	  _sseClickMouseY(0) {
+	  _sseClickMouseY(0),
+	  _ssePrevNoteValue(0),
+	  _sseLastNoteFedFrame(0) {
 	if (!_vm) return;
 
 	_enabled = ConfMan.getBool("mcp");
@@ -1467,11 +1469,8 @@ bool ScummMcpBridge::toolPlayNote(const Common::JSONValue &args, Common::String 
 	_ssePendingNotes = keys;
 	_sseTargetObject = 0;
 
-	// Inject first note immediately; remaining notes are fed one per frame from pumpStream().
-	if (!_ssePendingNotes.empty()) {
-		_vm->_keyPressed = _ssePendingNotes[0];
-		_ssePendingNotes.remove_at(0);
-	}
+	// pumpStream() will dispatch the queued notes via runInputScript on
+	// subsequent frames; nothing else to do here.
 	_server->startStreaming();
 	return true;
 }
@@ -1751,6 +1750,44 @@ void ScummMcpBridge::pumpStream() {
 
 	emitPendingMessages();
 
+	// On the first pump of a new stream, snapshot the Loom note variable so
+	// the watcher below only emits transitions occurring during this action.
+	if (_frameCounter == _sseStartFrame) {
+		_ssePrevNoteValue = (_vm->_scummVars && _vm->_numVariables > 259)
+		                    ? _vm->_scummVars[259] : 0;
+		_sseLastNoteFedFrame = 0;
+	}
+
+	// Loom note watcher: var(259) is set by the engine each time a distaff
+	// note is played — both when an object sings (e.g. the egg playing the
+	// Opening draft) and when the player presses a note key. Detect 0 -> note
+	// transitions and surface them as MCP notifications so the client can
+	// learn the songs objects play.
+	if (_vm->_scummVars && _vm->_numVariables > 259) {
+		int32 cur = _vm->_scummVars[259];
+		if (cur != _ssePrevNoteValue) {
+			if (cur >= 1 && cur <= 8) {
+				static const char *kNoteNames[] = {"c", "d", "e", "f", "g", "a", "b", "C"};
+				const char *noteName = kNoteNames[cur - 1];
+				MessageEntry m;
+				m.seq = _nextMessageSeq++;
+				m.frame = _frameCounter;
+				m.room = _vm->_currentRoom;
+				m.actorId = -1;
+				m.type = "note";
+				m.text = noteName;
+				_sseMessages.push_back(m);
+				_sseLastEventFrame = _frameCounter;
+
+				Common::JSONObject params;
+				params.setVal("type", mcpJsonString("note"));
+				params.setVal("text", mcpJsonString(noteName));
+				_server->emitNotification(params);
+			}
+			_ssePrevNoteValue = cur;
+		}
+	}
+
 	// Feed deferred synthetic inputs (used by Loom): second click for egg and
 	// note sequences for play_note(notes=[...]).
 	if (_ssePendingSecondClick) {
@@ -1762,9 +1799,24 @@ void ScummMcpBridge::pumpStream() {
 		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
 		_ssePendingSecondClick = false;
 	}
-	if (!_ssePendingNotes.empty()) {
-		_vm->_keyPressed = _ssePendingNotes[0];
+	// Feed the next pending note by invoking the engine's verb script
+	// directly (kKeyClickArea). Each runInputScript invocation runs Script 97
+	// (Loom's input handler) which kills any prior instance — meaning two
+	// notes in rapid succession would have the second overwrite the first.
+	// Pace feeds at roughly the same rate a human player can type (~500 ms),
+	// fast enough that the script's draft-buffer timeout doesn't fire mid-
+	// sequence but slow enough that each note's script completes.
+	const uint32 kNoteSpacingFrames = 30;
+	if (!_ssePendingNotes.empty()
+	    && (_sseLastNoteFedFrame == 0
+	        || _frameCounter - _sseLastNoteFedFrame >= kNoteSpacingFrames)) {
+		Common::KeyCode kc = _ssePendingNotes[0];
 		_ssePendingNotes.remove_at(0);
+		_sseLastNoteFedFrame = _frameCounter;
+		// kKeyClickArea handler reads the ASCII value for the key. For the
+		// distaff note keys (lowercase letters c/d/e/f/g/a/b plus capital C),
+		// the keycode value equals the ASCII byte.
+		_vm->runInputScript(kKeyClickArea, (int)kc, 1);
 	}
 
 	// Track whether ego moved at any point during this stream.
