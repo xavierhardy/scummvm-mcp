@@ -336,6 +336,10 @@ GAME_PATHS = {
         "PASS_DEMO_PATH",
         "/Users/xhardy/Personal/llm/scummvm/games/pass",
     ),
+    "comi-demo": os.environ.get(
+        "COMI_DEMO_PATH",
+        "/Users/xhardy/Personal/llm/scummvm/games/COMIDEMO",
+    ),
 }
 
 

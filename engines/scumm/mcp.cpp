@@ -34,6 +34,8 @@ using Networking::mcpLowerTrimmed;
 
 namespace {
 
+Common::String cleanGameText(const Common::String &text);
+
 // V6+ standard action icon verb IDs.
 // Sam & Max uses V6 image verbs, but verb IDs differ from other SCUMM variants,
 // so keep both common V6 and Sam & Max candidate IDs.
@@ -44,6 +46,18 @@ static bool isV6ActionVerb(int verbid) {
 	for (int i = 0; i < kNumV6ActionIds; ++i)
 		if (kV6ActionIds[i] == verbid) return true;
 	return false;
+}
+
+static bool isSentenceLikeDialogLabel(const Common::String &label) {
+	if (label.empty()) return false;
+	int alphaCount = 0;
+	int spaceCount = 0;
+	for (uint i = 0; i < label.size(); ++i) {
+		const char c = label[i];
+		if (Common::isAlpha((byte)c)) ++alphaCount;
+		if (c == ' ') ++spaceCount;
+	}
+	return alphaCount >= 6 && spaceCount >= 1;
 }
 
 // Canonical V6 verb label table (verbid → name/label for image-verb games).
@@ -832,22 +846,27 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		int choiceCount = 0;
 		Common::JSONArray choiceList;
 		if (_vm->_game.version >= 6) {
-			// V6+ dialog choices are icon verbs. Standard action verbs are saved away;
-			// the remaining active non-action verb slots are the dialog topic choices.
+			// V6+/V8 dialog choices are usually non-action verb slots. In COMI (V8)
+			// they are full sentences and may not always follow curmode conventions.
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 				const VerbSlot &vs = _vm->_verbs[slot];
 				if (!vs.verbid || vs.saveid != 0) continue;
 				if (_vm->_game.version > 0 && vs.verbid == 1) continue;
-				if (vs.curmode == 0) continue;
 				if (isV6ActionVerb(vs.verbid)) continue;
-				// Try to read associated text first (some V6 dialog slots have it)
 				Common::String label;
-				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-				if (ptr) {
+				if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
 					byte textBuf[256] = {};
 					_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 					label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
 				}
+				bool allowAsChoice = true;
+				if (_vm->_game.version >= 8) {
+					allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+				} else {
+					if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
+					if (vs.curmode != 0 && vs.curmode != 1) allowAsChoice = false;
+				}
+				if (!allowAsChoice) continue;
 				if (label.empty())
 					label = Common::String::format("Topic %d", choiceCount + 1);
 				Common::JSONObject choice;
@@ -978,7 +997,11 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// Skip the entrypoint check for actors and proceed to doSentence.
 	bool isIndy4Actor = _vm->_game.id == GID_INDY4 && targetA != 0 && _vm->objIsActor(targetA);
 
-	if (targetA != 0 && !isIndy4Actor) {
+	// Loom interact: skip the entrypoint check entirely (verbId == -1 sentinel
+	// means we're dispatching via simulated scene click, not doSentence).
+	bool isLoomClick = (verbId == -1);
+
+	if (targetA != 0 && !isIndy4Actor && !isLoomClick) {
 		int ep = _vm->getVerbEntrypoint(targetA, verbId);
 		debug(1, "mcp: act entrypoint for obj %d verb %d = %d", targetA, verbId, ep);
 
@@ -1039,7 +1062,29 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// V0 scripts do not lock _userPut during execution, unlike V5, so script-slot polling
 	// is the only reliable signal that the verb script has completed.
 	_sseTargetObject = (_vm->_game.version == 0) ? targetA : 0;
-	_vm->doSentence(verbId, targetA, targetB);
+	if (isLoomClick) {
+		// Simulate a left mouse click on the target's screen position by
+		// injecting into the same fields the engine reads from a real mouse
+		// click. processInput() will pick up the msClicked flag on the next
+		// frame and run the full scene-click pipeline (findObject + walk +
+		// runInputScript), exactly as if the player had clicked. This makes
+		// Bobbin physically walk to the target — and triggers the object's
+		// "arrival" behavior (e.g. an egg or anvil singing its draft) the
+		// same way a real player click would.
+		int objX = _vm->getObjX(targetA);
+		int objY = _vm->getObjY(targetA);
+		_vm->_virtualMouse.x = objX;
+		_vm->_virtualMouse.y = objY;
+		_vm->_mouse.x        = objX;
+		_vm->_mouse.y        = objY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY;
+		// msClicked = 2 (single bit set). Setting both msClicked and msDown
+		// mirrors what parseEvent() does on a real button press.
+		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+	} else {
+		_vm->doSentence(verbId, targetA, targetB);
+	}
 	_server->startStreaming();
 	return true;
 }
@@ -1075,13 +1120,25 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	int current = 0;
 	int chosenSlot = -1;
 	if (_vm->_game.version >= 6) {
-		// V6+ dialog choices: enumerate active non-action verb slots (image-based, no text).
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid || vs.saveid != 0) continue;
 			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
-			if (vs.curmode == 0) continue;
 			if (isV6ActionVerb(vs.verbid)) continue;
+			Common::String label;
+			if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
+				byte textBuf[256] = {};
+				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+				label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+			}
+			bool allowAsChoice = true;
+			if (_vm->_game.version >= 8) {
+				allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+			} else {
+				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
+				if (vs.curmode != 0 && vs.curmode != 1) allowAsChoice = false;
+			}
+			if (!allowAsChoice) continue;
 			++current;
 			if (current == choiceIdx) { chosenSlot = slot; break; }
 		}
@@ -1545,20 +1602,26 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		int choiceCount = 0;
 		Common::JSONArray choiceList;
 		if (_vm->_game.version >= 6) {
-			// V6+ dialog choices are icon verbs without text. Enumerate active non-action slots.
+			// V6+/V8 dialog choices are represented as non-action verb slots.
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 				const VerbSlot &vs = _vm->_verbs[slot];
 				if (!vs.verbid || vs.saveid != 0) continue;
 				if (_vm->_game.version > 0 && vs.verbid == 1) continue;
-				if (vs.curmode == 0) continue;
 				if (isV6ActionVerb(vs.verbid)) continue;
 				Common::String label;
-				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-				if (ptr) {
+				if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
 					byte textBuf[256] = {};
 					_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 					label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
 				}
+				bool allowAsChoice = true;
+				if (_vm->_game.version >= 8) {
+					allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+				} else {
+					if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
+					if (vs.curmode != 0 && vs.curmode != 1) allowAsChoice = false;
+				}
+				if (!allowAsChoice) continue;
 				if (label.empty())
 					label = Common::String::format("Topic %d", choiceCount + 1);
 				Common::JSONObject choice;
@@ -1646,18 +1709,39 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 	// one non-standard active verb exists (the topic choices).
 	if (_vm->_game.version >= 6) {
 		bool hasActiveSavedAction = false;
-		bool hasActiveDialog     = false;
+		bool hasActiveDialog = false;
+		int sentenceLikeChoices = 0;
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid) continue;
 			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
 			if (isV6ActionVerb(vs.verbid)) {
 				if (vs.saveid != 0) hasActiveSavedAction = true;
-			} else if (vs.saveid == 0 && vs.curmode != 0) {
-				hasActiveDialog = true;
+				continue;
 			}
+			if (vs.saveid != 0) continue;
+			Common::String label;
+			if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
+				byte textBuf[256] = {};
+				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+				label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+			}
+			bool allowAsChoice = true;
+			if (_vm->_game.version >= 8) {
+				allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+			} else {
+				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
+				if (vs.curmode != 0 && vs.curmode != 1) allowAsChoice = false;
+			}
+			if (!allowAsChoice) continue;
+			hasActiveDialog = true;
+			if (isSentenceLikeDialogLabel(label))
+				++sentenceLikeChoices;
 		}
-		return hasActiveSavedAction && hasActiveDialog;
+		if (hasActiveSavedAction && hasActiveDialog)
+			return true;
+		// COMI/V8 can expose full-sentence topics without saveid choreography.
+		return sentenceLikeChoices >= 2;
 	}
 
 	bool hasKeyed = false, hasUnkeyed = false, hasNumericKeyed = false;
@@ -2099,14 +2183,15 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		}
 	}
 
-	// Loom (V3/V4) uses a single-cursor model with no traditional verb bar:
-	// 'interact' and 'use_item' (both normalize to "use") map to the engine's
-	// "use" verb (id 11 in V3/V4 Loom). The engine's getVerbEntrypoint may
-	// not return non-zero for objects in this click-callback model, so we
-	// accept the resolution unconditionally when in the Loom segment.
+	// Loom (V3/V4) uses verb 0 as the click/listen verb — the engine's
+	// post-walk-arrival handler (script 99 in Passport) calls
+	// startObject(targetObj, 0), which triggers each object's "sing its
+	// draft" script. Verb 1 ("Open") would skip the puzzle by directly
+	// opening (e.g. hatching the egg without playing the Opening draft),
+	// so we bind 'interact' / 'use_item' to verb 0.
 	if (isInLoomSection() && normalized == "use") {
-		verbId = 11;
-		debug(1, "mcp: resolveVerb Loom interact -> verbid=11");
+		verbId = 0;
+		debug(1, "mcp: resolveVerb Loom interact -> verb 0 (listen/sing)");
 		return true;
 	}
 
