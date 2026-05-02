@@ -1162,14 +1162,8 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// is the only reliable signal that the verb script has completed.
 	_sseTargetObject = (_vm->_game.version == 0) ? targetA : 0;
 	if (isLoomClick) {
-		// Simulate a left mouse click on the target's screen position by
-		// injecting into the same fields the engine reads from a real mouse
-		// click. processInput() will pick up the msClicked flag on the next
-		// frame and run the full scene-click pipeline (findObject + walk +
-		// runInputScript), exactly as if the player had clicked. This makes
-		// Bobbin physically walk to the target — and triggers the object's
-		// "arrival" behavior (e.g. an egg or anvil singing its draft) the
-		// same way a real player click would.
+		// Simulate a real left click on the target. This preserves Loom's native
+		// click scripts (walk + object-specific arrival behavior).
 		int objX = _vm->getObjX(targetA);
 		int objY = _vm->getObjY(targetA);
 		_vm->_virtualMouse.x = objX;
@@ -1178,9 +1172,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		_vm->_mouse.y        = objY;
 		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX;
 		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY;
-		// msClicked = 2 (single bit set). Setting both msClicked and msDown
-		// mirrors what parseEvent() does on a real button press.
-		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+
+		// Egg listen/replay flow in Loom is double-click driven in the target room.
+		// Emulate the second click timing so interact("egg") reliably triggers
+		// the authentic note playback sequence.
+		Common::String targetName = mcpLowerTrimmed(getObjName(this, targetA));
+		if (targetName.contains("egg"))
+			_vm->_lastInputScriptTime = _vm->_system->getMillis();
+
+		// msClicked | msDown, same as parseEvent() for a button press.
+		_vm->_leftBtnPressed |= 0x03;
 	} else {
 		_vm->doSentence(verbId, targetA, targetB);
 	}
@@ -2521,15 +2522,13 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		}
 	}
 
-	// Loom (V3/V4) uses verb 0 as the click/listen verb — the engine's
-	// post-walk-arrival handler (script 99 in Passport) calls
-	// startObject(targetObj, 0), which triggers each object's "sing its
-	// draft" script. Verb 1 ("Open") would skip the puzzle by directly
-	// opening (e.g. hatching the egg without playing the Opening draft),
-	// so we bind 'interact' / 'use_item' to verb 0.
+	// Loom uses a single-cursor click model. To preserve the genuine click
+	// pipeline (walk + arrival callback scripts such as listen/replay on egg,
+	// leaf fall, etc.), map interact/use_item to a Loom-specific sentinel and
+	// dispatch via simulated mouse click in toolAct() instead of doSentence().
 	if (isInLoomSection() && normalized == "use") {
-		verbId = 0;
-		debug(1, "mcp: resolveVerb Loom interact -> verb 0 (listen/sing)");
+		verbId = -1;
+		debug(1, "mcp: resolveVerb Loom interact -> click dispatch sentinel");
 		return true;
 	}
 
