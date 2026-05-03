@@ -1237,6 +1237,11 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			_sseClickMouseY = mouseY;
 			_vm->_lastInputScriptTime = _vm->_system->getMillis();
 		}
+	} else if (targetA == 0) {
+		// Verb-only invocation (e.g. Indy3 'travel'): dispatch the verb-click
+		// input script directly, the same way the engine handles a click on
+		// the verb bar slot.
+		_vm->runInputScript(kVerbClickArea, verbId, 1);
 	} else {
 		_vm->doSentence(verbId, targetA, targetB);
 	}
@@ -2669,6 +2674,30 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (vs.verbid && vs.saveid == 0 && vs.curmode == 1) {
 				verbId = vs.verbid;
+				return true;
+			}
+		}
+	}
+
+	// Indy3's verb bar carries global verbs ("Travel") that are not bound to any
+	// per-object verb script — clicking them runs the verb-click input script
+	// directly. Accept the label match without requiring an entrypoint. The
+	// caller (toolAct) dispatches verb-only calls via runInputScript.
+	if (_vm->_game.id == GID_INDY3 || _vm->_game.id == GID_PASS) {
+		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid || vs.saveid != 0) continue;
+			if (vs.curmode != 1) continue;
+			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+			if (!ptr) continue;
+			byte textBuf[256] = {};
+			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+			Common::String label = mcpLowerTrimmed((const char *)textBuf);
+			if (label.empty()) continue;
+			if (normalizeActionName(label) == normalized) {
+				verbId = vs.verbid;
+				debug(1, "mcp: resolveVerb Indy3 global verb '%s' -> verbid=%d",
+				      normalized.c_str(), verbId);
 				return true;
 			}
 		}
