@@ -1137,6 +1137,15 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// Skip the entrypoint check for actors and proceed to doSentence.
 	bool isIndy4Actor = _vm->_game.id == GID_INDY4 && targetA != 0 && _vm->objIsActor(targetA);
 
+	// Indy4 single-target actor sentences (e.g. talk_to sophia) dispatched via
+	// doSentence() do not reliably fire the talk action — the sentence script
+	// walks ego a few pixels and stops without triggering dialog. Replicating
+	// the user click flow (activate verb on the verb bar, then scene-click on
+	// the actor) goes through the same input scripts the engine uses for real
+	// clicks and reliably opens the dialog. Restrict to single-target sentences;
+	// 2-target verbs like 'give X to Y' still use doSentence.
+	bool isIndy4ActorClick = isIndy4Actor && targetB == 0;
+
 	// Loom interact: skip the entrypoint check entirely (verbId == -1 sentinel
 	// means we're dispatching via simulated scene click, not doSentence).
 	bool isLoomClick = (verbId == -1);
@@ -1204,7 +1213,36 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// V0 scripts do not lock _userPut during execution, unlike V5, so script-slot polling
 	// is the only reliable signal that the verb script has completed.
 	_sseTargetObject = (_vm->_game.version == 0) ? targetA : 0;
-	if (isLoomClick) {
+	if (isIndy4ActorClick) {
+		// Activate the verb on the verb bar (sets the cursor verb). Equivalent
+		// to the user pressing the verb's keyboard shortcut.
+		_vm->runInputScript(kVerbClickArea, verbId, 1);
+
+		// Place the virtual mouse over the actor's screen position and trigger
+		// a scene click. The engine's checkExecVerbs() will route this to the
+		// scene-click input script, which builds and dispatches the sentence
+		// the same way a real click does.
+		int objX = _vm->getObjX(targetA);
+		int objY = _vm->getObjY(targetA);
+		VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
+		int mouseX = objX - vs->xstart;
+		int mouseY = objY + vs->topline;
+		if (mouseX < 0) mouseX = 0;
+		if (mouseX > _vm->_screenWidth - 1) mouseX = _vm->_screenWidth - 1;
+		if (mouseY < 0) mouseY = 0;
+		if (mouseY > _vm->_screenHeight - 1) mouseY = _vm->_screenHeight - 1;
+
+		_vm->_mouse.x        = mouseX;
+		_vm->_mouse.y        = mouseY;
+		_vm->_virtualMouse.x = objX;
+		_vm->_virtualMouse.y = objY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
+
+		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+	} else if (isLoomClick) {
 		// Convert object world coords to on-screen mouse coords (Passport Loom has
 		// horizontally scrolling rooms, so screen X != world X).
 		int objX = _vm->getObjX(targetA);
