@@ -213,6 +213,50 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="PlayNote")
 
+    def call_capturing(self, name: str, arguments: dict) -> tuple[list[str], list[dict], dict | None]:
+        """Invoke any MCP tool, capturing every notification.
+
+        Returns (notes, messages, result):
+          - notes:    text of each notification with type=='note' (Loom note plays)
+          - messages: every other notification (dialog, system, etc.)
+          - result:   inner JSON of the final tool result, or None on error
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        notes: list[str] = []
+        messages: list[dict] = []
+        result: dict | None = None
+        with self._client.stream("POST", self._url, json=payload, headers=headers) as resp:
+            for line in resp.iter_lines():
+                if not line.startswith("data: "):
+                    continue
+                raw = line[6:].strip()
+                if not raw:
+                    continue
+                try:
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if "params" in msg:
+                    p = msg["params"]
+                    if p.get("type") == "note":
+                        text = p.get("text") or ""
+                        if text:
+                            notes.append(text)
+                    else:
+                        messages.append(p)
+                elif "result" in msg:
+                    result = self._extract_result(msg)
+                    break
+                elif "error" in msg:
+                    return notes, messages, None
+        return notes, messages, result
+
     def close(self) -> None:
         """Close the client."""
         self._client.close()
@@ -241,7 +285,11 @@ def wait_for_mcp(
 
 
 def launch_scummvm(
-    game_id: str, game_path: str, port: int = 23456, scummvm_binary: str = "./scummvm"
+    game_id: str,
+    game_path: str,
+    port: int = 23456,
+    scummvm_binary: str = "./scummvm",
+    save_slot: int = 1,
 ) -> subprocess.Popen:
     """Launch ScummVM headlessly with MCP enabled for the given game."""
     # Create logs directory and per-game log file path for ScummVM's own logger
@@ -282,7 +330,7 @@ def launch_scummvm(
             scummvm_binary,
             "-c",
             ini_path,
-            "--save-slot=1",
+            f"--save-slot={save_slot}",
             f"--savepath={save_path}",
             "--talkspeed=1200",
             game_id,

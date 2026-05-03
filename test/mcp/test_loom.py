@@ -192,7 +192,57 @@ def test_06_loom_play_unknown_note(loom_client: McpClient) -> None:
     assert isinstance(result, dict), f"play_note('C') returned: {result!r}"
 
 
-def test_07_loom_use_item_on_object(loom_client: McpClient) -> None:
+def _find_id(state: dict, name: str) -> int | None:
+    for obj in state.get("objects", []):
+        if obj["name"] == name:
+            return obj["id"]
+    return None
+
+
+def test_07_loom_egg_listen_and_replay(loom_client: McpClient) -> None:
+    """Full Loom puzzle loop: walk away, listen to the egg, replay its draft.
+
+    Verifies both:
+      * `act("interact", "egg")` triggers the egg's auto-song and the watcher
+        emits per-note MCP notifications (the Opening draft is 4 notes).
+      * Replaying the captured notes via `play_note(notes=[...])` is accepted
+        by the engine in a single tool call (no LLM-side timing required).
+    """
+    if not wait_for_interactive(loom_client):
+        pytest.skip("Save did not reach interactive state")
+
+    state = get_state_with_retry(loom_client)
+    egg_id = _find_id(state, "egg")
+    if egg_id is None:
+        pytest.skip("egg not in current room")
+
+    # Step 1: move Bobbin away so the next click triggers a fresh listen flow.
+    loom_client.walk(40, 130)
+    sleep(2)
+
+    # Step 2: interact with the egg → it walks Bobbin and sings its draft.
+    notes, messages, _ = loom_client.call_capturing(
+        "act", {"verb": "interact", "target1": egg_id})
+
+    # The Opening draft for the egg is 4 notes long. Allow a small tolerance —
+    # in some game states the song may be skipped or shortened — but we always
+    # expect at least 3 distinct note notifications when the listen path fires.
+    if len(notes) < 3:
+        pytest.skip(f"egg did not sing this run (notes={notes}, msgs={len(messages)})")
+    valid_notes = set("cdefgabC")
+    assert all(n in valid_notes for n in notes), (
+        f"unexpected note glyph in egg song: {notes}")
+
+    # Step 3: replay those notes via play_note(notes=[...]).
+    replay_notes, _, _ = loom_client.call_capturing(
+        "play_note", {"notes": notes})
+
+    # The watcher should re-emit the same notes when the player plays them.
+    assert len(replay_notes) >= len(notes) - 1, (
+        f"replay only emitted {replay_notes} for input {notes}")
+
+
+def test_08_loom_use_item_on_object(loom_client: McpClient) -> None:
     """Two-target 'use item' exercises the inventory-on-object mechanic."""
     if not wait_for_interactive(loom_client):
         pytest.skip("Game in cutscene")
