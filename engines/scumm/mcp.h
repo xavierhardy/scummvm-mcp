@@ -118,6 +118,11 @@ private:
 	// Loom segment detection (full Loom or the Loom mini-game in Passport to Adventure)
 	bool isInLoomSection() const;
 
+	// Indy3 fist-fight detection (full Indy3 or the Indy3 mini-game in Passport).
+	// When true, toolState exposes a 'fight' object with both fighters' health
+	// and punch-power gauges so an MCP client can react to the HUD.
+	bool isInIndy3Fight() const;
+
 	// Register all tools with the server.
 	void registerTools();
 

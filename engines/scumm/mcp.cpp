@@ -229,6 +229,23 @@ void ScummMcpBridge::pump() {
 // empty text verb bar — Indy3 and MI1 populate the standard V3 verb slots
 // (Open / Look at / Pick up / etc.), but Loom uses a single-cursor + distaff
 // interface and leaves them empty.
+// True when an Indy3 fist-fight is active. Indy3's fight HUD is driven by a
+// stable set of script vars (322..327) that hold each fighter's punch-power
+// gauge and health. Outside of a fight these vars are 0 (or unused for
+// non-Indy3 games), so a non-zero opponent health on the right game is a
+// reliable signal. We restrict to GID_INDY3 and GID_PASS (the Passport demo
+// containing Indy3) to avoid colliding with var indices used by other games.
+bool ScummMcpBridge::isInIndy3Fight() const {
+	if (!_vm || !_vm->_scummVars) return false;
+	if (_vm->_game.id != GID_INDY3 && _vm->_game.id != GID_PASS) return false;
+	if (_vm->_numVariables <= 327) return false;
+	// Both health values should be non-zero AND not stale (heuristic: max
+	// health ~1000, current health is in 1..1000 range during a fight).
+	int32 indyHealth = _vm->_scummVars[325];
+	int32 oppHealth  = _vm->_scummVars[327];
+	return indyHealth > 0 && oppHealth > 0 && indyHealth <= 2000 && oppHealth <= 2000;
+}
+
 bool ScummMcpBridge::isInLoomSection() const {
 	if (!_vm) return false;
 	if (_vm->_game.id == GID_LOOM) return true;
@@ -921,6 +938,26 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	}
 	out.setVal("inventory", new Common::JSONValue(inventory));
 	out.setVal("objects",   new Common::JSONValue(objects));
+
+	// Indy3 fist-fight HUD — surface each fighter's health and punch-power
+	// gauge so the MCP client can mirror what the in-game HUD shows
+	// ("Indiana Jones' Health" / "Punch power" / "Boxing Coach's Health" /
+	// "Punch power"). Driven by Indy3's script vars 322..327.
+	if (isInIndy3Fight()) {
+		Common::JSONObject fight;
+
+		Common::JSONObject indy;
+		indy.setVal("health",      mcpJsonInt((int)_vm->_scummVars[325]));
+		indy.setVal("punch_power", mcpJsonInt((int)_vm->_scummVars[322]));
+		fight.setVal("indy", new Common::JSONValue(indy));
+
+		Common::JSONObject opponent;
+		opponent.setVal("health",      mcpJsonInt((int)_vm->_scummVars[327]));
+		opponent.setVal("punch_power", mcpJsonInt((int)_vm->_scummVars[323]));
+		fight.setVal("opponent", new Common::JSONValue(opponent));
+
+		out.setVal("fight", new Common::JSONValue(fight));
+	}
 
 	Common::JSONArray msgsArr;
 	for (uint i = 0; i < _messages.size(); ++i) {
