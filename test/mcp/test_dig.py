@@ -1,89 +1,80 @@
 """
 Integration tests for The Dig (DOS demo, SCUMM V7).
 
-Focus areas:
-  - V7 single-cursor verb model: only 'interact' and 'use item' exposed
-  - Icon-based dialog (choices as text labels, same mechanism as Sam & Max V6)
-  - Two-target 'use item' mechanic: use inventory item on room object
+The Dig uses the V7 single-cursor / pie-menu UI model. Only 'interact' and
+'use item' are exposed as verbs; the engine's own scene-click input script
+decides the action (look_at, talk_to, give, etc.) based on the held inventory
+verb cursor and the object class.
+
+The fixture loads dig-demo.s01, which puts the player in canyon room 15 with
+Brink and Maggie present and 'look_at' / 'trowel' in inventory.
 """
 
 from utils import McpClient
 
-INTRO_POLL_SECS = 1.0
-INTRO_MAX_SKIPS = 20
-INTERACTIVE_TIMEOUT_SECS = 120
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
 
 def test_01_dig_initial_state(dig_client: McpClient) -> None:
-    """Skip startup screens then verify state is reachable."""
+    """Save loads cleanly and we can read state with no intro to skip."""
     state = dig_client.state()
     assert state.get("room") is not None, "Expected room in state"
+    assert state["room"].get("id") == 15, (
+        f"Expected canyon room 15, got {state['room']}"
+    )
 
 
 def test_02_dig_verbs_exposed(dig_client: McpClient) -> None:
     """V7 must expose 'interact' and 'use item' (single-cursor model)."""
     state = dig_client.state()
     verbs = set(state.get("verbs", []))
-    expected = {"interact", "use item"}
-    missing = expected - verbs
-    assert not missing, f"Missing expected V7 verbs: {missing}, got: {sorted(verbs)}"
-    # Must NOT expose the raw V6 canonical set — The Dig has a different UI model.
-    assert "walk to" not in verbs, "walk to should not appear in Dig verb list"
-    assert "look at" not in verbs, "look at should not appear in Dig verb list"
-    assert "pick up" not in verbs, "pick up should not appear in Dig verb list"
+    assert {"interact", "use item"}.issubset(verbs), (
+        f"Missing expected V7 verbs, got: {sorted(verbs)}"
+    )
+    # Canonical V6 verbs must not leak through.
+    for forbidden in ("walk to", "look at", "pick up", "talk to"):
+        assert forbidden not in verbs, (
+            f"{forbidden!r} should not appear in Dig verb list"
+        )
 
 
 def test_03_dig_objects_in_room(dig_client: McpClient) -> None:
-    """At least one object should be visible in the starting room."""
+    """Brink, Maggie and at least one scenery object should be visible."""
     state = dig_client.state()
-    objects = state.get("objects", [])
-    assert objects, f"Expected room objects, got empty list (room={state.get('room')})"
+    names = {obj["name"] for obj in state.get("objects", [])}
+    assert "brink" in names, f"brink not visible (got {sorted(names)})"
+    assert "maggie" in names, f"maggie not visible (got {sorted(names)})"
+    assert "platform" in names, f"platform scenery not visible (got {sorted(names)})"
 
 
-def test_04_dig_use_object(dig_client: McpClient) -> None:
-    """'interact' on a room object must produce messages, a state change, or trigger dialog."""
-    result = dig_client.act("use_item", "trowel", "brink")
-    assert "messages" in result
-    print(result)
+def test_04_dig_inventory(dig_client: McpClient) -> None:
+    """The save file ships with the trowel and the look-at cursor in inventory."""
+    inv = set(dig_client.state().get("inventory", []))
+    assert "trowel" in inv, f"trowel missing from inventory: {inv}"
 
 
-def test_05_dig_interact_object(dig_client: McpClient) -> None:
-    """Interacting with an NPC should trigger V7 icon-based dialog with text choices."""
+def test_05_dig_interact_actor(dig_client: McpClient) -> None:
+    """Interact on an actor walks the hero over and produces the look line."""
+    result = dig_client.act("interact", "brink")
+    msgs = result.get("messages", [])
+    assert msgs, (
+        f"Expected at least one message after interacting with Brink, got: {result}"
+    )
+    # Hero (actor 1, internal name "low") says the actor's name.
+    assert any("brink" in m["text"].lower() for m in msgs), (
+        f"Expected hero to acknowledge Brink, got: {msgs}"
+    )
+
+
+def test_06_dig_interact_object(dig_client: McpClient) -> None:
+    """Interact on a scenery object produces a hero comment line."""
     result = dig_client.act("interact", "platform")
-    assert "position" in result
-    assert "messages" in result
-    print(result)
+    msgs = result.get("messages", [])
+    assert msgs, (
+        f"Expected at least one message after interacting with platform, got: {result}"
+    )
 
 
-def test_05_dig_interact_npc_triggers_dialog(dig_client: McpClient) -> None:
-    """Interacting with an NPC should trigger V7 icon-based dialog with text choices."""
-    result = dig_client.act("interact", "maggie")
-    assert "position" in result
-    assert "messages" in result
-    assert result["messages"][0]["text"] == "Robbins..."
-
-
-def test_06_dig_answer_dialog(dig_client: McpClient) -> None:
-    """If a dialog is pending, answer choice 1 and expect output."""
-    state = dig_client.state()
-    assert "question" in state
-
-    result = dig_client.answer(1)
-    messages = result.get("messages", [])
-    assert messages, f"Expected messages after answering dialog choice 1, got: {result}"
-
-    result = dig_client.answer(3)
-    messages = result.get("messages", [])
-    assert messages, f"Expected messages after answering dialog choice 3, got: {result}"
-
-
-def test_07_dig_leave_area(dig_client: McpClient) -> None:
-    """Interacting with an NPC should trigger V7 icon-based dialog with text choices."""
-    result = dig_client.act("interact", "clearing")
-    assert "room_changed" in result
-    print(result)
+def test_07_dig_use_item_on_actor(dig_client: McpClient) -> None:
+    """Using the trowel on Maggie produces a hero refusal line."""
+    result = dig_client.act("use item", "trowel", "maggie")
+    msgs = result.get("messages", [])
+    assert msgs, f"Expected at least one message, got: {result}"

@@ -35,9 +35,12 @@ class SmushMixer;
 class SmushPlayer;
 class TextRenderer_v7;
 
+class ScummMcpBridge;
+
 class ScummEngine_v7 : public ScummEngine_v6 {
 	friend class SmushPlayer;
 	friend class Insane;
+	friend class ScummMcpBridge;
 public:
 	ScummEngine_v7(OSystem *syst, const DetectorResult &dr);
 	~ScummEngine_v7() override;

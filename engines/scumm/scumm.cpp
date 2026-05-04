@@ -445,19 +445,22 @@ ScummEngine::ScummEngine(OSystem *syst, const DetectorResult &dr)
 
 	_isRTL = (_language == Common::HE_ISR && (_game.heversion == 0 || _game.heversion >= 72))
 			&& (_game.id == GID_MANIAC || (_game.version >= 4 && _game.version < 7)) && !(_game.features & GF_HE_NO_BIDI);
-#ifndef DISABLE_HELP
-	// Create custom GMM dialog providing a help subdialog
-	assert(!_mainMenuDialog);
-	_mainMenuDialog = new ScummMenuDialog(this);
-#endif
-
 	_isIndy4Jap = _game.id == GID_INDY4 &&
 				  (_game.platform == Common::kPlatformMacintosh || _game.platform == Common::kPlatformDOS) &&
 				  _language == Common::JA_JPN;
 
 	_enableHECompetitiveOnlineMods = ConfMan.getBool("enable_competitive_mods");
 
+	// Create the MCP bridge before the menu dialog so the MCP server starts
+	// listening on its TCP port even if the GUI manager blocks on first redraw
+	// (which happens on macOS when running headlessly with no real display).
 	_mcpBridge = new ScummMcpBridge(this);
+
+#ifndef DISABLE_HELP
+	// Create custom GMM dialog providing a help subdialog
+	assert(!_mainMenuDialog);
+	_mainMenuDialog = new ScummMenuDialog(this);
+#endif
 }
 
 

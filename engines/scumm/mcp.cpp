@@ -20,6 +20,9 @@
 #include "scumm/scumm.h"
 #include "scumm/verbs.h"
 #include "scumm/boxes.h"
+#ifdef ENABLE_SCUMM_7_8
+#include "scumm/scumm_v7.h"
+#endif
 
 namespace Scumm {
 
@@ -1305,6 +1308,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// the held cursor by simulating a click on the inventory icon, then
 		// click on the room object.
 		if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
+			// V7 single-cursor model: clicks are interpreted by the held verb
+			// cursor (the inventory icon currently armed). The Dig demo ships
+			// with the "look_at" cursor armed in the save file (object id 192
+			// in inventory). To get the talk action when clicking on an actor,
+			// we must temporarily clear that armed cursor by re-clicking the
+			// look_at icon (inventory clicks toggle). For "use item" (targetB
+			// != 0) we instead arm the desired inventory item.
+			const int kDigLookAtItem = 192;
+			if (targetB == 0 && _vm->_game.id == GID_DIG && _vm->objIsActor(targetA))
+				_vm->runInputScript(kInventoryClickArea, kDigLookAtItem, 0);
 			if (targetB != 0) {
 				_vm->runInputScript(kInventoryClickArea, targetA, 0);
 				// Recompute mouse position over targetB so the next click
@@ -1330,8 +1343,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			// Drive the engine's natural input pipeline: set the left button as
 			// pressed and let checkExecVerbs() route the scene click. This goes
 			// through the same code path as a real user click and lets the game
-			// scripts decide the action. Direct runInputScript() bypasses some
-			// state setup (e.g. cursor armed item) that the scripts rely on.
+			// scripts decide the action.
 			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
 		} else {
 			// Loom (V3/V4) — keep the original _leftBtnPressed pipeline so that
