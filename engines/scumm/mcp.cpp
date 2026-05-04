@@ -1296,21 +1296,43 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
 		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
 
-		// V7 (Dig/FT) — single-cursor model. The doSentence path used for V6
-		// Sam & Max does not fire verb-7 (use) handlers for arbitrary objects in
-		// these games, but verb-specific entry points still work. Pick the verb
-		// that matches the user intent (talk_to for actors, look_at for plain
-		// objects, use for inventory-on-object) and dispatch the sentence.
+		// V7 (Dig/FT) — single-cursor pie-menu model. The engine's scene-click
+		// input script picks the right action (talk_to for actors, look_at for
+		// scenery, use for inventory-on-object) based on the active held item
+		// and the object class. Replicate a real left-click on the object: the
+		// mouse position has already been placed over the target above. For
+		// "use item" with a second target we first arm the inventory item as
+		// the held cursor by simulating a click on the inventory icon, then
+		// click on the room object.
 		if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
-			int v7Verb;
 			if (targetB != 0) {
-				v7Verb = 7; // use inventory item on room object
-			} else if (_vm->objIsActor(targetA)) {
-				v7Verb = 6; // talk_to: clicking on a person opens dialog
-			} else {
-				v7Verb = 5; // look_at: clicking on scenery yields the look line
+				_vm->runInputScript(kInventoryClickArea, targetA, 0);
+				// Recompute mouse position over targetB so the next click
+				// resolves to it instead of the inventory item.
+				int objX2 = _vm->getObjX(targetB);
+				int objY2 = _vm->getObjY(targetB);
+				VirtScreen *vs2 = &_vm->_virtscr[kMainVirtScreen];
+				int mx = objX2 - vs2->xstart;
+				int my = objY2 + vs2->topline;
+				if (mx < 0) mx = 0;
+				if (mx > _vm->_screenWidth - 1) mx = _vm->_screenWidth - 1;
+				if (my < 0) my = 0;
+				if (my > _vm->_screenHeight - 1) my = _vm->_screenHeight - 1;
+				_vm->_mouse.x        = mx;
+				_vm->_mouse.y        = my;
+				_vm->_virtualMouse.x = objX2;
+				_vm->_virtualMouse.y = objY2;
+				if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX2;
+				if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY2;
+				if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mx;
+				if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = my;
 			}
-			_vm->doSentence(v7Verb, targetA, targetB);
+			// Drive the engine's natural input pipeline: set the left button as
+			// pressed and let checkExecVerbs() route the scene click. This goes
+			// through the same code path as a real user click and lets the game
+			// scripts decide the action. Direct runInputScript() bypasses some
+			// state setup (e.g. cursor armed item) that the scripts rely on.
+			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
 		} else {
 			// Loom (V3/V4) — keep the original _leftBtnPressed pipeline so that
 			// the engine processes the click on the next frame, preserving the

@@ -45,12 +45,21 @@ try:
     time.sleep(2.0)
     show_state(client, "INITIAL")
 
+    # Dump initial vars 0-50 + held item state
+    notes, msgs, dbg = client.call_capturing("debug", {"from": 0, "to": 60})
+    dump("DEBUG INITIAL", dbg)
+
     # Step 1: click on Brink → "Brink..." then dialog
     act(client, "interact brink", verb="interact", target1="brink")
-    for i in range(8):
+    notes, msgs, dbg = client.call_capturing("debug", {"from": 0, "to": 60})
+    dump("DEBUG AFTER BRINK", dbg)
+    time.sleep(2.0)
+    act(client, "interact brink #2", verb="interact", target1="brink")
+    for i in range(20):
         time.sleep(1.0)
         s = client.state()
-        print(f"  +{i+1}s question={bool(s.get('question'))} verbs={s.get('verbs')}")
+        verbs_in = s.get("verbs", [])
+        print(f"  +{i+1}s userPut? q={bool(s.get('question'))} verbs={verbs_in[:8]}")
         if s.get("question"):
             print("    choices:", s["question"]["choices"])
             break
