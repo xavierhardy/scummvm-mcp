@@ -46,7 +46,19 @@ def find_npc(state: dict) -> str | None:
         if obj.get("pathway"):
             continue
         name = obj["name"].lower()
-        if any(kw in name for kw in ("low", "brink", "miles", "maggie", "person", "man", "woman", "alien")):
+        if any(
+            kw in name
+            for kw in (
+                "low",
+                "brink",
+                "miles",
+                "maggie",
+                "person",
+                "man",
+                "woman",
+                "alien",
+            )
+        ):
             return obj["name"]
     return None
 
@@ -56,7 +68,9 @@ def find_npc(state: dict) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def wait_for_interactive(client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS) -> bool:
+def wait_for_interactive(
+    client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS
+) -> bool:
     """Poll with skips until the game actually accepts input (_userPut > 0).
 
     Verifies by attempting a walk() call — if it doesn't raise "not accepting input",
@@ -118,7 +132,8 @@ def test_04_dig_interact_object(dig_client: McpClient) -> None:
     wait_for_interactive(dig_client)
     state = dig_client.state()
     candidates = [
-        obj["name"] for obj in state.get("objects", [])
+        obj["name"]
+        for obj in state.get("objects", [])
         if not obj.get("pathway") and "interact" in obj.get("compatible_verbs", [])
     ]
     if not candidates:
@@ -208,7 +223,9 @@ def test_07_dig_use_item_on_object(dig_client: McpClient) -> None:
     # Filter out The Dig's cursor-mode pseudo-items (stored as inventory objects
     # by the engine but not real pick-up-able items).
     cursor_names = {"look_at", "look at", "interact", "use", "use_item", "use item"}
-    real_inventory = [i for i in state.get("inventory", []) if i.lower() not in cursor_names]
+    real_inventory = [
+        i for i in state.get("inventory", []) if i.lower() not in cursor_names
+    ]
     if not real_inventory:
         pytest.skip("No real inventory items available (only cursor objects)")
 

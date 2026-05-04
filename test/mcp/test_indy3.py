@@ -63,7 +63,8 @@ def test_01_indy3_initial_state(indy3_client: McpClient) -> None:
     # Gym scene exposes the standard V3 verb bar.
     verbs = set(state.get("verbs", []))
     assert {"walk to", "look", "use", "push", "pull"}.issubset(verbs), (
-        f"expected V3 verb bar, got: {sorted(verbs)}")
+        f"expected V3 verb bar, got: {sorted(verbs)}"
+    )
 
 
 def test_02_indy3_locker_room_visible(indy3_client: McpClient) -> None:
@@ -72,7 +73,8 @@ def test_02_indy3_locker_room_visible(indy3_client: McpClient) -> None:
     locker = _find_object(state, "locker_room")
     assert locker is not None, (
         f"locker_room not found; objects = "
-        f"{[o['name'] for o in state.get('objects', [])]}")
+        f"{[o['name'] for o in state.get('objects', [])]}"
+    )
 
 
 def test_03_indy3_walk_to_locker_triggers_dialog(indy3_client: McpClient) -> None:
@@ -82,8 +84,9 @@ def test_03_indy3_walk_to_locker_triggers_dialog(indy3_client: McpClient) -> Non
         return  # already in dialog
 
     indy3_client.act("walk to", "locker_room")
-    if not _wait_until(lambda: indy3_client.state().get("question") is not None,
-                       timeout=10.0):
+    if not _wait_until(
+        lambda: indy3_client.state().get("question") is not None, timeout=10.0
+    ):
         pytest.skip("dialog did not appear")
     state = _state_or_skip(indy3_client)
     question = state.get("question")
@@ -100,8 +103,9 @@ def test_04_indy3_answer_starts_fight(indy3_client: McpClient) -> None:
     # walking back and re-triggering the dialog.
     if state.get("question") is None and state.get("fight") is None:
         indy3_client.act("walk to", "locker_room")
-        _wait_until(lambda: indy3_client.state().get("question") is not None,
-                    timeout=10.0)
+        _wait_until(
+            lambda: indy3_client.state().get("question") is not None, timeout=10.0
+        )
 
     state = _state_or_skip(indy3_client)
     if state.get("question") is None:
@@ -142,12 +146,17 @@ def test_05_indy3_punch_high_lands(indy3_client: McpClient) -> None:
     # The opponent should have taken some damage on at least one of the
     # subsequent rounds. If the coach blocked, only the punch_power gauge
     # changes — that still counts as the input being received.
-    opponent_changed = (after["opponent"]["health"] != before["opponent"]["health"]
-                        or after["opponent"]["punch_power"] != before["opponent"]["punch_power"])
-    indy_changed = (after["indy"]["health"] != before["indy"]["health"]
-                    or after["indy"]["punch_power"] != before["indy"]["punch_power"])
+    opponent_changed = (
+        after["opponent"]["health"] != before["opponent"]["health"]
+        or after["opponent"]["punch_power"] != before["opponent"]["punch_power"]
+    )
+    indy_changed = (
+        after["indy"]["health"] != before["indy"]["health"]
+        or after["indy"]["punch_power"] != before["indy"]["punch_power"]
+    )
     assert opponent_changed or indy_changed, (
-        f"high-punch had no effect: before={before}, after={after}")
+        f"high-punch had no effect: before={before}, after={after}"
+    )
 
 
 def test_06_indy3_block_then_step_back(indy3_client: McpClient) -> None:
@@ -186,7 +195,9 @@ def test_10_indy3_travel_initial_state(indy3_travel_client: McpClient) -> None:
     assert "travel" in verbs, f"expected 'travel' verb, got: {sorted(verbs)}"
 
 
-def test_11_indy3_travel_opens_destination_dialog(indy3_travel_client: McpClient) -> None:
+def test_11_indy3_travel_opens_destination_dialog(
+    indy3_travel_client: McpClient,
+) -> None:
     """`act('travel')` opens the destination dialog (To Henry's House / Cancel)."""
     state = _state_or_skip(indy3_travel_client)
     if state.get("question") is not None:
@@ -196,7 +207,9 @@ def test_11_indy3_travel_opens_destination_dialog(indy3_travel_client: McpClient
         pytest.skip("not in clipper room")
 
     result = indy3_travel_client.act("travel")
-    question = result.get("question") or _state_or_skip(indy3_travel_client).get("question")
+    question = result.get("question") or _state_or_skip(indy3_travel_client).get(
+        "question"
+    )
     assert question is not None, f"expected destination dialog, got result={result}"
     labels = [c["label"].lower() for c in question.get("choices", [])]
     assert any("henry" in l for l in labels), f"expected 'Henry' choice, got {labels}"

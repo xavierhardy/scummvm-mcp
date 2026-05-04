@@ -45,7 +45,9 @@ def skip_intros(client: McpClient) -> None:
             pass  # ReadTimeout is normal during cutscenes
 
 
-def wait_for_interactive(client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS) -> bool:
+def wait_for_interactive(
+    client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS
+) -> bool:
     """Poll with skips until walk() succeeds (game accepts input)."""
     deadline = time() + timeout
     while time() < deadline:
@@ -133,8 +135,7 @@ def test_04_loom_interact_object(loom_client: McpClient) -> None:
     initial_pos = state.get("position", {})
 
     candidates: list[int] = [
-        obj["id"] for obj in state.get("objects", [])
-        if not obj.get("pathway")
+        obj["id"] for obj in state.get("objects", []) if not obj.get("pathway")
     ]
     if not candidates:
         pytest.skip("No interactable objects in room")
@@ -153,8 +154,9 @@ def test_04_loom_interact_object(loom_client: McpClient) -> None:
             continue
         new_inv = set(new_state.get("inventory", []))
         new_pos = new_state.get("position", {})
-        moved = (new_pos.get("x") != initial_pos.get("x")
-                 or new_pos.get("y") != initial_pos.get("y"))
+        moved = new_pos.get("x") != initial_pos.get("x") or new_pos.get(
+            "y"
+        ) != initial_pos.get("y")
         inv_changed = bool(new_inv - initial_inventory)
         if moved or inv_changed or result.get("messages"):
             return  # success: at least one object responded
@@ -222,7 +224,8 @@ def test_07_loom_egg_listen_and_replay(loom_client: McpClient) -> None:
 
     # Step 2: interact with the egg → it walks Bobbin and sings its draft.
     notes, messages, _ = loom_client.call_capturing(
-        "act", {"verb": "interact", "target1": egg_id})
+        "act", {"verb": "interact", "target1": egg_id}
+    )
 
     # The Opening draft for the egg is 4 notes long. Allow a small tolerance —
     # in some game states the song may be skipped or shortened — but we always
@@ -231,15 +234,16 @@ def test_07_loom_egg_listen_and_replay(loom_client: McpClient) -> None:
         pytest.skip(f"egg did not sing this run (notes={notes}, msgs={len(messages)})")
     valid_notes = set("cdefgabC")
     assert all(n in valid_notes for n in notes), (
-        f"unexpected note glyph in egg song: {notes}")
+        f"unexpected note glyph in egg song: {notes}"
+    )
 
     # Step 3: replay those notes via play_note(notes=[...]).
-    replay_notes, _, _ = loom_client.call_capturing(
-        "play_note", {"notes": notes})
+    replay_notes, _, _ = loom_client.call_capturing("play_note", {"notes": notes})
 
     # The watcher should re-emit the same notes when the player plays them.
     assert len(replay_notes) >= len(notes) - 1, (
-        f"replay only emitted {replay_notes} for input {notes}")
+        f"replay only emitted {replay_notes} for input {notes}"
+    )
 
 
 def test_08_loom_use_item_on_object(loom_client: McpClient) -> None:

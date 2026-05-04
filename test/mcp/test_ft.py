@@ -47,7 +47,20 @@ def find_npc(state: dict) -> str | None:
         if obj.get("pathway"):
             continue
         name = obj["name"].lower()
-        if any(kw in name for kw in ("ben", "corley", "rip", "nestor", "mo", "person", "man", "woman", "biker")):
+        if any(
+            kw in name
+            for kw in (
+                "ben",
+                "corley",
+                "rip",
+                "nestor",
+                "mo",
+                "person",
+                "man",
+                "woman",
+                "biker",
+            )
+        ):
             return obj["name"]
     return None
 
@@ -66,7 +79,9 @@ def skip_intros(client: McpClient) -> None:
             pass  # ReadTimeout is normal while a SMUSH video is playing
 
 
-def wait_for_interactive(client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS) -> bool:
+def wait_for_interactive(
+    client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS
+) -> bool:
     """Poll with skips until the game actually accepts input (_userPut > 0).
 
     Verifies by attempting a walk() call — if it doesn't raise "not accepting input",
@@ -129,6 +144,7 @@ def test_03_ft_objects_in_room(ft_client: McpClient) -> None:
 def get_state_with_retry(client: McpClient, max_attempts: int = 5) -> dict:
     """Call state() with retries for ReadTimeout (cutscene in progress)."""
     import httpx
+
     for attempt in range(max_attempts):
         try:
             return client.state()
@@ -147,7 +163,8 @@ def test_04_ft_interact_object(ft_client: McpClient) -> None:
             pytest.skip("Game stuck in cutscene after extended wait")
         state = get_state_with_retry(ft_client)
         candidates = [
-            obj["name"] for obj in state.get("objects", [])
+            obj["name"]
+            for obj in state.get("objects", [])
             if not obj.get("pathway") and "interact" in obj.get("compatible_verbs", [])
         ]
         if not candidates:
@@ -229,9 +246,20 @@ def test_07_ft_use_item_on_object(ft_client: McpClient) -> None:
         state = ft_client.state()
 
     # Filter out FT's cursor-mode pseudo-items stored as inventory objects by the engine.
-    cursor_names = {"look_at", "look at", "interact", "use", "use_item", "use item",
-                    "boot", "eye", "mouth"}
-    real_inventory = [i for i in state.get("inventory", []) if i.lower() not in cursor_names]
+    cursor_names = {
+        "look_at",
+        "look at",
+        "interact",
+        "use",
+        "use_item",
+        "use item",
+        "boot",
+        "eye",
+        "mouth",
+    }
+    real_inventory = [
+        i for i in state.get("inventory", []) if i.lower() not in cursor_names
+    ]
     if not real_inventory:
         pytest.skip("No real inventory items available (only cursor objects)")
 

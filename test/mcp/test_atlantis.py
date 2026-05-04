@@ -68,12 +68,17 @@ def test_03_atlantis_talk_to_sophia(atlantis_client: McpClient) -> None:
     """Talk to Sophia."""
     result = atlantis_client.act("talk_to", "sophia")
     assert result.get("question") is not None
+    assert any(
+        choice
+        == {"id": 1, "label": "What if Atlantis was vaporized when Thera exploded?"}
+        for choice in result["question"]["choices"]
+    )
 
 
 def test_04_atlantis_answer_sophia_dialog_1(atlantis_client: McpClient) -> None:
     """Answer dialog choice 1 if available."""
     atlantis_client.state()
-    result = atlantis_client.answer(1)
+    result = atlantis_client.answer(4)
     assert_messages_produced(result)
 
 
