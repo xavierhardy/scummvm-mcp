@@ -423,3 +423,112 @@ def require_game_path(game_id: str) -> None:
     path = GAME_PATHS.get(game_id)
     if not path or not os.path.isdir(path):
         pytest.skip(f"Game files not found at {path}")
+
+
+# ---------------------------------------------------------------------------
+# Shared test helpers
+# ---------------------------------------------------------------------------
+
+
+def find_object_by_name(state: dict, substring: str) -> str | None:
+    """Return the first object name containing *substring* (case-insensitive)."""
+    for obj in state.get("objects", []):
+        if substring.lower() in obj["name"].lower():
+            return obj["name"]
+    return None
+
+
+def find_object_with_verb(state: dict, verb: str) -> str | None:
+    """Return the first non-pathway object that lists *verb* as compatible."""
+    for obj in state.get("objects", []):
+        if obj.get("pathway"):
+            continue
+        if verb in obj.get("compatible_verbs", []):
+            return obj["name"]
+    return None
+
+
+def skip_intros(client: McpClient, max_skips: int = 20, poll_secs: float = 1.0) -> None:
+    """Send repeated skip commands to advance past SMUSH/intro videos.
+
+    May block until a video finishes, so timeouts are silently ignored.
+    """
+    for _ in range(max_skips):
+        time.sleep(poll_secs)
+        try:
+            client.skip()
+        except Exception:
+            pass
+
+
+def wait_for_interactive(
+    client: McpClient, timeout: float = 120.0
+) -> bool:
+    """Poll with skips until walk() succeeds (game accepts input)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(1.0)
+        try:
+            client.skip()
+        except Exception:
+            pass
+        try:
+            state = client.state()
+            pos = state.get("position", {})
+            x, y = pos.get("x", 160), pos.get("y", 100)
+            client.walk(x, y)
+            return True
+        except RuntimeError as e:
+            if "not accepting input" in str(e):
+                continue
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def get_state_with_retry(client: McpClient, max_attempts: int = 5) -> dict:
+    """Call state() with retries for ReadTimeout (cutscene in progress)."""
+    import httpx
+
+    for attempt in range(max_attempts):
+        try:
+            return client.state()
+        except (httpx.ReadTimeout, httpx.ConnectTimeout):
+            if attempt == max_attempts - 1:
+                raise
+            time.sleep(2.0)
+    raise RuntimeError("state() failed after retries")
+
+
+def _wait_until(predicate, timeout: float = 10.0, poll: float = 0.5) -> bool:
+    """Wait until *predicate()* returns True or timeout expires."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            if predicate():
+                return True
+        except (httpx.ReadTimeout, httpx.ConnectTimeout):
+            pass
+        time.sleep(poll)
+    return False
+
+
+def _state_or_skip(client: McpClient, retries: int = 5) -> dict:
+    """Return state() or skip the test if it can't be read."""
+    import pytest
+
+    for _ in range(retries):
+        try:
+            return client.state()
+        except (httpx.ReadTimeout, httpx.ConnectTimeout):
+            time.sleep(1.0)
+    pytest.skip("could not read state")
+
+
+def _find_object(state: dict, name: str) -> dict | None:
+    """Return the first object whose name exactly matches *name*."""
+    for obj in state.get("objects", []):
+        if obj["name"] == name:
+            return obj
+    return None

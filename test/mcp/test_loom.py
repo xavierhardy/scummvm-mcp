@@ -11,76 +11,15 @@ the player picks up the staff in the Loom mini-game.
 """
 
 import pytest
-from time import sleep, time
+from time import sleep
 
-import httpx
-
-from utils import McpClient
-
-INTRO_POLL_SECS = 1.0
-INTRO_MAX_SKIPS = 20
-INTERACTIVE_TIMEOUT_SECS = 60
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def find_object_by_name(state: dict, substring: str) -> str | None:
-    """Return the first object name containing *substring* (case-insensitive)."""
-    for obj in state.get("objects", []):
-        if substring.lower() in obj["name"].lower():
-            return obj["name"]
-    return None
-
-
-def skip_intros(client: McpClient) -> None:
-    """Send repeated skip commands to advance past intro screens."""
-    for _ in range(INTRO_MAX_SKIPS):
-        sleep(INTRO_POLL_SECS)
-        try:
-            client.skip()
-        except Exception:
-            pass  # ReadTimeout is normal during cutscenes
-
-
-def wait_for_interactive(
-    client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS
-) -> bool:
-    """Poll with skips until walk() succeeds (game accepts input)."""
-    deadline = time() + timeout
-    while time() < deadline:
-        sleep(1.0)
-        try:
-            client.skip()
-        except Exception:
-            pass
-        try:
-            state = client.state()
-            pos = state.get("position", {})
-            x, y = pos.get("x", 160), pos.get("y", 100)
-            client.walk(x, y)
-            return True
-        except RuntimeError as e:
-            if "not accepting input" in str(e):
-                continue
-            return True
-        except Exception:
-            continue
-    return False
-
-
-def get_state_with_retry(client: McpClient, max_attempts: int = 5) -> dict:
-    """Call state() with retries for ReadTimeout (cutscene in progress)."""
-    for attempt in range(max_attempts):
-        try:
-            return client.state()
-        except (httpx.ReadTimeout, httpx.ConnectTimeout):
-            if attempt == max_attempts - 1:
-                raise
-            sleep(2.0)
-    raise RuntimeError("state() failed after retries")
+from utils import (
+    McpClient,
+    find_object_by_name,
+    skip_intros,
+    wait_for_interactive,
+    get_state_with_retry,
+)
 
 
 # ---------------------------------------------------------------------------

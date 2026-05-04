@@ -9,104 +9,16 @@ Focus areas:
 """
 
 import pytest
-from time import sleep, time
+from time import sleep
 
-from utils import McpClient
-
-INTRO_POLL_SECS = 1.0
-INTRO_MAX_SKIPS = 30
-INTERACTIVE_TIMEOUT_SECS = 120
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def find_object_by_name(state: dict, substring: str) -> str | None:
-    """Return the first object name containing *substring* (case-insensitive)."""
-    for obj in state.get("objects", []):
-        if substring.lower() in obj["name"].lower():
-            return obj["name"]
-    return None
-
-
-def find_object_with_verb(state: dict, verb: str) -> str | None:
-    """Return the first non-pathway object that lists *verb* as compatible."""
-    for obj in state.get("objects", []):
-        if obj.get("pathway"):
-            continue
-        if verb in obj.get("compatible_verbs", []):
-            return obj["name"]
-    return None
-
-
-def find_npc(state: dict) -> str | None:
-    """Return the first non-pathway object that looks like an NPC."""
-    for obj in state.get("objects", []):
-        if obj.get("pathway"):
-            continue
-        name = obj["name"].lower()
-        if any(
-            kw in name
-            for kw in (
-                "ben",
-                "corley",
-                "rip",
-                "nestor",
-                "mo",
-                "person",
-                "man",
-                "woman",
-                "biker",
-            )
-        ):
-            return obj["name"]
-    return None
-
-
-def skip_intros(client: McpClient) -> None:
-    """Send repeated skip commands to advance past SMUSH intro videos.
-
-    Full Throttle has long SMUSH cutscenes; skip() may block until the
-    video finishes, so timeouts are silently ignored.
-    """
-    for _ in range(INTRO_MAX_SKIPS):
-        sleep(INTRO_POLL_SECS)
-        try:
-            client.skip()
-        except Exception:
-            pass  # ReadTimeout is normal while a SMUSH video is playing
-
-
-def wait_for_interactive(
-    client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS
-) -> bool:
-    """Poll with skips until the game actually accepts input (_userPut > 0).
-
-    Verifies by attempting a walk() call — if it doesn't raise "not accepting input",
-    the game is in an interactive state.
-    """
-    deadline = time() + timeout
-    while time() < deadline:
-        sleep(1.0)
-        try:
-            client.skip()
-        except Exception:
-            pass
-        try:
-            state = client.state()
-            pos = state.get("position", {})
-            x, y = pos.get("x", 160), pos.get("y", 100)
-            client.walk(x, y)
-            return True
-        except RuntimeError as e:
-            if "not accepting input" in str(e):
-                continue
-            return True
-        except Exception:
-            continue
-    return False
+from utils import (
+    McpClient,
+    find_object_by_name,
+    find_object_with_verb,
+    skip_intros,
+    wait_for_interactive,
+    get_state_with_retry,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -139,20 +51,6 @@ def test_03_ft_objects_in_room(ft_client: McpClient) -> None:
     state = ft_client.state()
     objects = state.get("objects", [])
     assert objects, f"Expected room objects, got empty list (room={state.get('room')})"
-
-
-def get_state_with_retry(client: McpClient, max_attempts: int = 5) -> dict:
-    """Call state() with retries for ReadTimeout (cutscene in progress)."""
-    import httpx
-
-    for attempt in range(max_attempts):
-        try:
-            return client.state()
-        except (httpx.ReadTimeout, httpx.ConnectTimeout):
-            if attempt == max_attempts - 1:
-                raise
-            sleep(2.0)
-    raise RuntimeError("state() failed after retries")
 
 
 def test_04_ft_interact_object(ft_client: McpClient) -> None:
