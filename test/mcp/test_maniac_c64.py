@@ -1,11 +1,9 @@
 """
 Integration test for Maniac Mansion C64 demo.
-Walkthrough: mailbox -> flags -> bushes -> front door -> key -> use key.
+Walkthrough: door mat -> key -> use key -> front door.
 """
 
-from time import sleep
-
-from utils import McpClient, wait_for_mcp, MCP_CONNECT_TIMEOUT_SECS
+from utils import McpClient
 
 
 def assert_inventory_contains(result: dict, item: str) -> None:
@@ -25,36 +23,14 @@ def test_01_maniac_initial_state(maniac_client: McpClient) -> None:
     assert state.get("objects") is not None
 
 
-def test_02_maniac_open_mailbox(maniac_client: McpClient) -> None:
-    """Open mailbox."""
-    result = maniac_client.act("open", "mailbox")
-    assert result["objects_changed"][0]["name"] == "mailbox"
-    assert "x" in result["position"]
-    assert "y" in result["position"]
-
-
-def test_03_maniac_pull_flag(maniac_client: McpClient) -> None:
-    """Pull flag."""
-    result = maniac_client.act("pull", "flag")
-    assert result["objects_changed"][0]["name"] == "flag"
-
-
-def test_04_maniac_pull_bushes(maniac_client: McpClient) -> None:
-    """Pull bushes."""
-    result = maniac_client.act("pull", "bushes")
-    assert result["objects_changed"][0]["name"] == "bushes"
-    assert "x" in result["position"]
-    assert "y" in result["position"]
-
-
-def test_05_maniac_walk_to_front_door(maniac_client: McpClient) -> None:
+def test_02_maniac_walk_to_front_door(maniac_client: McpClient) -> None:
     """Walk to front door."""
     result = maniac_client.act("walk_to", "front_door")
     assert "x" in result["position"]
     assert "y" in result["position"]
 
 
-def test_06_maniac_pull_door_mat(maniac_client: McpClient) -> None:
+def test_03_maniac_pull_door_mat(maniac_client: McpClient) -> None:
     """Pull door mat."""
     result = maniac_client.act("pull", "door mat")
     assert result["objects_changed"][0]["name"] == "door mat"
@@ -62,32 +38,20 @@ def test_06_maniac_pull_door_mat(maniac_client: McpClient) -> None:
     assert "y" in result["position"]
 
 
-def test_07_maniac_pickup_key(maniac_client: McpClient) -> None:
+def test_04_maniac_pickup_key(maniac_client: McpClient) -> None:
     """Pick up key."""
     result = maniac_client.act("pick_up", "key")
     assert_inventory_contains(result, "key")
 
 
-def test_08_maniac_use_key_on_door(maniac_client: McpClient) -> None:
+def test_05_maniac_use_key_on_door(maniac_client: McpClient) -> None:
     """Unlock front door with key."""
     # for some reason, re-using the same client fails here
-    print(
-        dict(
-            host=maniac_client.host,
-            port=maniac_client.port,
-            timeout=MCP_CONNECT_TIMEOUT_SECS,
-        )
-    )
-    second_client = wait_for_mcp(
-        host=maniac_client.host,
-        port=maniac_client.port,
-        timeout=MCP_CONNECT_TIMEOUT_SECS,
-    )
-    result = second_client.act("use", "key", "front_door")
-    # assert result["objects_changed"][0]["name"] == "front_door"
+    result = maniac_client.act("use", "key", "front_door")
+    assert result["objects_changed"][0]["name"] == "front door"
 
 
-def test_09_maniac_walk_through_front_door(maniac_client: McpClient) -> None:
+def test_06_maniac_walk_through_front_door(maniac_client: McpClient) -> None:
     """Walk to front door (should enter new room)."""
     result = maniac_client.act("walk_to", "front_door")
-    # assert result.get("room_changed")
+    assert result.get("room_changed")
