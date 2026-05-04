@@ -13,7 +13,6 @@ from time import sleep
 
 from utils import (
     McpClient,
-    find_object_by_name,
     find_object_with_verb,
     skip_intros,
     wait_for_interactive,

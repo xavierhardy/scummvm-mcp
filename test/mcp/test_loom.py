@@ -15,8 +15,6 @@ from time import sleep
 
 from utils import (
     McpClient,
-    find_object_by_name,
-    skip_intros,
     wait_for_interactive,
     get_state_with_retry,
 )
