@@ -3,15 +3,8 @@ Integration test for Maniac Mansion C64 demo.
 Walkthrough: door mat -> key -> use key -> front door.
 """
 
+from assertions import assert_inventory_contains
 from utils import McpClient
-
-
-def assert_inventory_contains(result: dict, item: str) -> None:
-    """Assert inventory_added contains the item (case-insensitive)."""
-    added = result.get("inventory_added", [])
-    assert any(i.lower() == item.lower() for i in added), (
-        f"Expected '{item}' in inventory_added, got {added}"
-    )
 
 
 def test_01_maniac_initial_state(maniac_client: McpClient) -> None:

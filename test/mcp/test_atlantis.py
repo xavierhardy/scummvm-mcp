@@ -3,24 +3,11 @@ Integration test for Indiana Jones: Fate of Atlantis demo.
 Walkthrough: answer dialogs -> walk to path -> answer -> walk to cleft -> pickup item -> close crate.
 """
 
+from assertions import assert_messages_produced, assert_inventory_contains
 from utils import McpClient
 from time import sleep
 
 INTRO_POLL_SECS = 0.5
-
-
-def assert_inventory_contains(result: dict, item: str) -> None:
-    """Assert inventory_added contains the item (case-insensitive)."""
-    added = result.get("inventory_added", [])
-    assert any(i.lower() == item.lower() for i in added), (
-        f"Expected '{item}' in inventory_added, got {added}"
-    )
-
-
-def assert_messages_produced(result: dict) -> None:
-    """Assert messages list is non-empty."""
-    messages = result.get("messages", [])
-    assert messages, "Expected messages to be produced"
 
 
 def test_01_atlantis_initial_state(atlantis_client: McpClient) -> None:

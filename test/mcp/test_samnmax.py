@@ -11,6 +11,7 @@ Focus areas:
 import pytest
 from time import sleep
 
+from assertions import assert_messages_produced
 from utils import McpClient
 
 INTRO_POLL_SECS = 0.5
@@ -20,11 +21,6 @@ INTRO_MAX_SKIPS = 10
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def assert_messages_produced(result: dict) -> None:
-    messages = result.get("messages", [])
-    assert messages, "Expected messages to be produced"
 
 
 def find_object_by_name(state: dict, substring: str) -> str | None:
