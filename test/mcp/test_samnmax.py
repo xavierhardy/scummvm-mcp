@@ -15,6 +15,9 @@ from assertions import assert_messages_produced
 from utils import McpClient, find_object_by_name, find_object_with_verb
 
 
+INTRO_POLL_SECS = 0.5
+INTRO_MAX_SKIPS = 10
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------

@@ -10,42 +10,12 @@ keystrokes (1-9) drive Indy's punches/blocks/step-backs.
 from __future__ import annotations
 
 import pytest
-from time import sleep, time
+from time import sleep
 
-import httpx
-
-from utils import McpClient
+from utils import McpClient, _wait_until, _state_or_skip, _find_object
 
 
 INTERACTIVE_TIMEOUT_SECS = 30
-
-
-def _wait_until(predicate, timeout: float = 10.0, poll: float = 0.5) -> bool:
-    deadline = time() + timeout
-    while time() < deadline:
-        try:
-            if predicate():
-                return True
-        except (httpx.ReadTimeout, httpx.ConnectTimeout):
-            pass
-        sleep(poll)
-    return False
-
-
-def _state_or_skip(client: McpClient, retries: int = 5) -> dict:
-    for _ in range(retries):
-        try:
-            return client.state()
-        except (httpx.ReadTimeout, httpx.ConnectTimeout):
-            sleep(1.0)
-    pytest.skip("could not read state")
-
-
-def _find_object(state: dict, name: str) -> dict | None:
-    for obj in state.get("objects", []):
-        if obj["name"] == name:
-            return obj
-    return None
 
 
 # ---------------------------------------------------------------------------
