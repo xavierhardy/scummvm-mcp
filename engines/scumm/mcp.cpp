@@ -217,6 +217,38 @@ ScummMcpBridge::~ScummMcpBridge() {
 void ScummMcpBridge::pump() {
 	if (!_enabled || !_server) return;
 	++_frameCounter;
+
+	// V7 (The Dig, Full Throttle) — ScummEngine_v7::actorTalk does not call the
+	// base ScummEngine::actorTalk, so the onActorLine hook in actor.cpp is not
+	// triggered for these games. Poll _charsetBuffer + the talking-actor var
+	// here and synthesize a message whenever a new line appears. Detection runs
+	// only while a talker is active, so it stays cheap and won't fire during
+	// idle frames.
+	// V7 (The Dig, Full Throttle) — ScummEngine_v7::actorTalk does not call the
+	// base ScummEngine::actorTalk, so the onActorLine hook in actor.cpp is not
+	// triggered. _charsetBuffer holds the active line for the duration of the
+	// message; it is prefixed by 0xFF-coded sound/voice metadata blocks (each 4
+	// bytes long) emitted by the original interpreter for lip-sync. Skip those
+	// to read the printable text, then push a message whenever it changes.
+	if (_vm && _vm->_game.version == 7 && _vm->_haveMsg) {
+		const byte *p = _vm->_charsetBuffer;
+		const byte *end = p + sizeof(_vm->_charsetBuffer);
+		while (p < end && *p == 0xFF)
+			p += 4;
+		if (p < end && *p != 0) {
+			Common::String text((const char *)p);
+			int actor = _vm->getTalkingActor();
+			if (text != _lastV7TalkText || actor != _lastV7TalkActor) {
+				_lastV7TalkText = text;
+				_lastV7TalkActor = actor;
+				onActorLine(actor == 0xFF ? -1 : actor, text);
+			}
+		}
+	} else if (_vm && _vm->_game.version == 7) {
+		_lastV7TalkText.clear();
+		_lastV7TalkActor = 0;
+	}
+
 	_server->pump();
 }
 
@@ -1264,16 +1296,34 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
 		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
 
-		// First click now.
-		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+		// V7 (Dig/FT) — single-cursor model. The doSentence path used for V6
+		// Sam & Max does not fire verb-7 (use) handlers for arbitrary objects in
+		// these games, but verb-specific entry points still work. Pick the verb
+		// that matches the user intent (talk_to for actors, look_at for plain
+		// objects, use for inventory-on-object) and dispatch the sentence.
+		if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
+			int v7Verb;
+			if (targetB != 0) {
+				v7Verb = 7; // use inventory item on room object
+			} else if (_vm->objIsActor(targetA)) {
+				v7Verb = 6; // talk_to: clicking on a person opens dialog
+			} else {
+				v7Verb = 5; // look_at: clicking on scenery yields the look line
+			}
+			_vm->doSentence(v7Verb, targetA, targetB);
+		} else {
+			// Loom (V3/V4) — keep the original _leftBtnPressed pipeline so that
+			// the engine processes the click on the next frame, preserving the
+			// double-click cadence required for the egg listen/replay puzzle.
+			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
 
-		// Egg listen/replay requires a real double-click cadence.
-		Common::String targetName = mcpLowerTrimmed(getObjName(this, targetA));
-		if (targetName.contains("egg")) {
-			_ssePendingSecondClick = true;
-			_sseClickMouseX = mouseX;
-			_sseClickMouseY = mouseY;
-			_vm->_lastInputScriptTime = _vm->_system->getMillis();
+			Common::String targetName = mcpLowerTrimmed(getObjName(this, targetA));
+			if (targetName.contains("egg")) {
+				_ssePendingSecondClick = true;
+				_sseClickMouseX = mouseX;
+				_sseClickMouseY = mouseY;
+				_vm->_lastInputScriptTime = _vm->_system->getMillis();
+			}
 		}
 	} else if (targetA == 0) {
 		// Verb-only invocation (e.g. Indy3 'travel'): dispatch the verb-click
@@ -2681,6 +2731,16 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 			return true;
 		}
 	}
+	// The Dig and Full Throttle (V7) use a single-cursor click / pie-menu model.
+	// Map interact / use_item to a click sentinel and let toolAct dispatch via a
+	// simulated scene click — the doSentence path used for V6 does not reliably
+	// trigger the per-object scripts for V7 games.
+	if ((_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) && normalized == "use") {
+		verbId = -1;
+		debug(1, "mcp: resolveVerb V7 interact/use_item -> click dispatch sentinel");
+		return true;
+	}
+
 	// V6+: standard action verbs are image-based. Resolve by verbid directly.
 	if (_vm->_game.version >= 6) {
 		const V6VerbEntry *entry = nullptr;

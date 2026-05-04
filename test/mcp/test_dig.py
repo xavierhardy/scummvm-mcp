@@ -56,20 +56,6 @@ def find_npc(state: dict) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def skip_intros(client: McpClient) -> None:
-    """Send repeated skip commands to advance past SMUSH intro videos.
-
-    The Dig has long SMUSH cutscenes that can cause skip() to block until
-    the video finishes, so timeouts are expected and silently ignored.
-    """
-    for _ in range(INTRO_MAX_SKIPS):
-        sleep(INTRO_POLL_SECS)
-        try:
-            client.skip()
-        except Exception:
-            pass  # ReadTimeout is normal while a SMUSH video is playing
-
-
 def wait_for_interactive(client: McpClient, timeout: float = INTERACTIVE_TIMEOUT_SECS) -> bool:
     """Poll with skips until the game actually accepts input (_userPut > 0).
 
@@ -103,8 +89,6 @@ def wait_for_interactive(client: McpClient, timeout: float = INTERACTIVE_TIMEOUT
 
 def test_01_dig_initial_state(dig_client: McpClient) -> None:
     """Skip startup screens then verify state is reachable."""
-    skip_intros(dig_client)
-    sleep(3)
     state = dig_client.state()
     assert state.get("room") is not None, "Expected room in state"
 

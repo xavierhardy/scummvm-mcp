@@ -99,6 +99,10 @@ private:
 	// Frame at which the most recent pending-note keypress was fed.
 	uint32 _sseLastNoteFedFrame;
 
+	// V7 talk-line polling state (see pump()).
+	Common::String _lastV7TalkText;
+	int _lastV7TalkActor = 0;
+
 	void pushMessage(const char *type, int actorId, const Common::String &text);
 
 	// Tool implementations
