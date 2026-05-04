@@ -122,6 +122,21 @@ class McpClient:
             raise RuntimeError(f"State error: {data['error']}")
         return self._extract_result(data)
 
+    def debug(self) -> dict[str, Any]:
+        """Get current game state (sync call)."""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "debug", "arguments": {}},
+        }
+        resp = self._client.post(self._url, json=payload, headers=self._headers())
+        data = resp.json()
+
+        if "error" in data:
+            raise RuntimeError(f"Debug error: {data['error']}")
+        return self._extract_result(data)
+
     def skip(self) -> dict[str, Any]:
         """Skip (equivalent to Escape)."""
         payload = {
