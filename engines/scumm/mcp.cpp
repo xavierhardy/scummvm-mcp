@@ -3046,8 +3046,9 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		return true;
 	}
 
-	// Curse of Monkey Island (V8) uses single-cursor interface with implicit verbs
-	// based on clicked object type. Accept verbs unconditionally via canonical ID table.
+	// Curse of Monkey Island (V8) uses a single-cursor click model similar to The Dig.
+	// Map all verbs to a click sentinel and let toolAct dispatch via a simulated scene click
+	// to preserve the game's natural input pipeline for verb actions.
 	if (_vm->_game.id == GID_CMI) {
 		static const struct { const char *name; int id; } kCMIVerbs[] = {
 			{"walk_to",  13}, {"talk_to",  6}, {"pick_up",  4},
@@ -3055,8 +3056,8 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		};
 		for (int ci = 0; kCMIVerbs[ci].name; ++ci) {
 			if (normalized == kCMIVerbs[ci].name) {
-				verbId = kCMIVerbs[ci].id;
-				debug(1, "mcp: resolveVerb CMI '%s' -> verbid=%d", normalized.c_str(), verbId);
+				verbId = -1;  // Click dispatch sentinel for CMI
+				debug(1, "mcp: resolveVerb CMI '%s' -> click dispatch sentinel", normalized.c_str());
 				return true;
 			}
 		}
