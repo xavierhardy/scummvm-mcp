@@ -863,6 +863,28 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 	}
 
+	// Curse of Monkey Island (V8) uses a single-cursor model similar to The Dig
+	// and Full Throttle, with no persistent verb bar. Expose the 5 core verbs.
+	if (_vm->_game.id == GID_CMI && !questionPending && activeVerbs.empty()) {
+		struct FallbackVerb { int id; const char *name; const char *label; };
+		static const FallbackVerb kCMIFallback[] = {
+			{13, "walk_to", "walk to"},
+			{6,  "talk_to", "talk to"},
+			{14, "pick_up", "pick up"},
+			{5,  "look_at", "look at"},
+			{7,  "use", "use"},
+			{0, nullptr, nullptr}
+		};
+		for (int i = 0; kCMIFallback[i].name; ++i) {
+			verbsArr.push_back(mcpJsonString(kCMIFallback[i].label));
+			VerbInfo vi;
+			vi.verbId = kCMIFallback[i].id;
+			vi.name = kCMIFallback[i].name;
+			vi.label = kCMIFallback[i].label;
+			activeVerbs.push_back(vi);
+		}
+	}
+
 	out.setVal("verbs", new Common::JSONValue(verbsArr));
 
 	Common::Array<NamedEntity> entities;
@@ -901,7 +923,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// Treat every selectable object as supporting all exposed verbs.
 			// Loom (and the Loom segment of Passport to Adventure) similarly uses a
 			// single-cursor model where 'interact' applies to every selectable object.
-			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || isInLoomSection()) {
+			// Curse of Monkey Island (V8) also uses a single-cursor model.
+			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || _vm->_game.id == GID_CMI || isInLoomSection()) {
 				for (uint k = 0; k < activeVerbs.size(); ++k) {
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 					handlerCount++;
@@ -927,7 +950,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				if (!hasWalkTo && walkToExists) compatVerbs.push_back(mcpJsonString(walkToLabel));
 			}
 
-			bool isPathway = (_vm->_game.id != GID_DIG && _vm->_game.id != GID_FT && !isInLoomSection()) && walkToHasHandler && (handlerCount == 1);
+			bool isPathway = (_vm->_game.id != GID_DIG && _vm->_game.id != GID_FT && _vm->_game.id != GID_CMI && !isInLoomSection()) && walkToHasHandler && (handlerCount == 1);
 
 			Common::JSONObject obj;
 			obj.setVal("id",               mcpJsonInt(ne.numId));
@@ -955,8 +978,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			Common::JSONArray compatVerbs;
 			bool hasTalkTo = false;
 			// For GID_DIG and GID_FT, all selectable actors support 'interact' (click-callback / pie-menu model).
-			// Same reasoning applies to Loom's single-cursor model.
-			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || isInLoomSection()) {
+			// Same reasoning applies to Loom's single-cursor model and CMI's single-cursor model.
+			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || _vm->_game.id == GID_CMI || isInLoomSection()) {
 				for (uint k = 0; k < activeVerbs.size(); ++k)
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 			} else {
@@ -1341,14 +1364,14 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// "use item" with a second target we first arm the inventory item as
 		// the held cursor by simulating a click on the inventory icon, then
 		// click on the room object.
-		if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
-			// V7 single-cursor pie-menu model. The engine's scene-click script
-			// decides the action based on the held inventory cursor and the
-			// object class: no held cursor → talk/interact for actors; look_at
-			// cursor held → look action; inventory item held → use-on action.
-			// For "interact" (targetB==0) we let the game script decide with
-			// whatever cursor is currently held — typically none, which gives
-			// the natural talk action when clicking an actor. For "use item"
+		if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || _vm->_game.id == GID_CMI) {
+			// V7 (Dig/FT) and V8 (CMI) single-cursor pie-menu / click model.
+			// The engine's scene-click script decides the action based on the held
+			// inventory cursor and the object class: no held cursor → talk/interact
+			// for actors; look_at cursor held → look action; inventory item held →
+			// use-on action. For "interact" (targetB==0) we let the game script
+			// decide with whatever cursor is currently held — typically none, which
+			// gives the natural talk action when clicking an actor. For "use item"
 			// (targetB!=0) we first arm the inventory item as the held cursor.
 			if (targetB != 0) {
 				_vm->runInputScript(kInventoryClickArea, targetA, 0);
@@ -3021,6 +3044,22 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		verbId = -1;
 		debug(1, "mcp: resolveVerb Loom interact -> click dispatch sentinel");
 		return true;
+	}
+
+	// Curse of Monkey Island (V8) uses single-cursor interface with implicit verbs
+	// based on clicked object type. Accept verbs unconditionally via canonical ID table.
+	if (_vm->_game.id == GID_CMI) {
+		static const struct { const char *name; int id; } kCMIVerbs[] = {
+			{"walk_to",  13}, {"talk_to",  6}, {"pick_up",  4},
+			{"look_at",   5}, {"use",      7}, {nullptr,   0}
+		};
+		for (int ci = 0; kCMIVerbs[ci].name; ++ci) {
+			if (normalized == kCMIVerbs[ci].name) {
+				verbId = kCMIVerbs[ci].id;
+				debug(1, "mcp: resolveVerb CMI '%s' -> verbid=%d", normalized.c_str(), verbId);
+				return true;
+			}
+		}
 	}
 
 	// Fallback for v6/v7/v8 games that use right-click context menus: the verb
