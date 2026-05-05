@@ -716,6 +716,11 @@ void ScummEngine::writeVar(uint var, int value) {
 	if (!(var & 0xF000)) {
 		assertRange(0, var, _numVariables - 1, "variable (writing)");
 
+		// Log VAR_VERB_SCRIPT changes at the SCRIPTS channel level so they appear
+		// alongside script dispatch events without enabling full VARS noise.
+		if (VAR_VERB_SCRIPT != 0xFF && var == VAR_VERB_SCRIPT)
+			debugC(DEBUG_SCRIPTS, "VAR_VERB_SCRIPT [%d] := %d", var, value);
+
 		if (VAR_SUBTITLES != 0xFF && var == VAR_SUBTITLES) {
 			// Ignore default setting in HE72-74 games
 			if (_game.heversion <= 74 && currentScriptSlotIs(1))
@@ -1471,8 +1476,13 @@ void ScummEngine::runInputScript(int clickArea, int val, int mode) {
 		_lastInputScriptTime = time;
 	}
 
-	if (verbScript)
+	if (verbScript) {
+		int mx = (VAR_MOUSE_X != 0xFF) ? (int)VAR(VAR_MOUSE_X) : -1;
+		int my = (VAR_MOUSE_Y != 0xFF) ? (int)VAR(VAR_MOUSE_Y) : -1;
+		debugC(DEBUG_SCRIPTS, "runInputScript: area=%d val=%d mode=%d mouse=(%d,%d) -> script %d",
+		       clickArea, val, mode, mx, my, verbScript);
 		runScript(verbScript, 0, 0, args);
+	}
 }
 
 void ScummEngine::decreaseScriptDelay(int amount) {

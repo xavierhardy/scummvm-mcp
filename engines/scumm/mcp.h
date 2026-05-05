@@ -103,6 +103,21 @@ private:
 	Common::String _lastV7TalkText;
 	int _lastV7TalkActor = 0;
 
+	// V7: VAR_VERB_SCRIPT "normal" value observed before first action; used to
+	// detect when the game has switched to a dialog input handler.
+	int _baseVerbScript = 0;
+	// VAR_VERB_SCRIPT value at stream start (never updated during stream).
+	int _sseInitialVerbScript = 0;
+	// VAR_VERB_SCRIPT value at last observed change (updated in pumpStream).
+	int _sseVerbScript = 0;
+	// True once VAR_VERB_SCRIPT has changed from its initial stream value.
+	bool _sseVerbScriptChanged = false;
+	// V7: pending dialog choice digit (1-9); fed to the dialog script when
+	// the game is ready to accept input. 0 means no choice is pending.
+	int _ssePendingV7Choice = 0;
+	// Frame at which we should clear the simulated left-button msDown bit.
+	uint32 _sseButtonClearFrame = 0;
+
 	void pushMessage(const char *type, int actorId, const Common::String &text);
 
 	// Tool implementations

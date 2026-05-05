@@ -233,6 +233,16 @@ void ScummMcpBridge::pump() {
 	// message; it is prefixed by 0xFF-coded sound/voice metadata blocks (each 4
 	// bytes long) emitted by the original interpreter for lip-sync. Skip those
 	// to read the printable text, then push a message whenever it changes.
+	// V7: snapshot the "normal" verb script on the first pump frame where it is
+	// non-zero and we're not in a stream. This lets hasPendingQuestion() detect
+	// when the game switches to a dialog input handler (e.g., script 38 → 69).
+	if (_vm && _vm->_game.version == 7 && _baseVerbScript == 0 && !_streaming &&
+	    _vm->VAR_VERB_SCRIPT != 0xFF) {
+		int cur = (int)_vm->VAR(_vm->VAR_VERB_SCRIPT);
+		if (cur != 0)
+			_baseVerbScript = cur;
+	}
+
 	if (_vm && _vm->_game.version == 7 && _vm->_haveMsg) {
 		const byte *p = _vm->_charsetBuffer;
 		const byte *end = p + sizeof(_vm->_charsetBuffer);
@@ -1020,7 +1030,24 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	if (questionPending) {
 		int choiceCount = 0;
 		Common::JSONArray choiceList;
-		if (_vm->_game.version >= 6) {
+		// V7 (Dig/FT): dialog choices are not in verb slots. Expose placeholder
+		// numbered choices so the client can call answer(id) with a digit key.
+		// The actual choice labels are shown on screen and not accessible from here.
+		bool v7DialogPending = (_vm->_game.version == 7 && _baseVerbScript != 0 &&
+		                        _vm->VAR_VERB_SCRIPT != 0xFF &&
+		                        (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) != _baseVerbScript);
+		if (v7DialogPending) {
+			// Expose up to 9 generic choices; the client selects by index.
+			// Use a small fixed count (5) as a reasonable upper bound for The Dig dialog.
+			const int kV7MaxChoices = 9;
+			for (int i = 1; i <= kV7MaxChoices; ++i) {
+				Common::JSONObject choice;
+				choice.setVal("id",    mcpJsonInt(i));
+				choice.setVal("label", mcpJsonString(Common::String::format("Choice %d", i)));
+				choiceList.push_back(new Common::JSONValue(choice));
+				choiceCount = i;
+			}
+		} else if (_vm->_game.version >= 6) {
 			// V6+/V8 dialog choices are usually non-action verb slots. In COMI (V8)
 			// they are full sentences and may not always follow curmode conventions.
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
@@ -1035,7 +1062,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 					label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
 				}
 				bool allowAsChoice = true;
-				if (_vm->_game.version >= 8) {
+				if (_vm->_game.version >= 7) {
 					allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
 				} else {
 					if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
@@ -1244,6 +1271,13 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseMessages.clear();
 	_ssePendingSecondClick = false;
 	_ssePendingNotes.clear();
+	_sseButtonClearFrame = 0;
+	_ssePendingV7Choice = 0;
+	// Capture the current input script so we can detect when the game switches
+	// to a dialog-mode script (V7: VAR_VERB_SCRIPT changes to a different value).
+	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
+	_sseInitialVerbScript = _sseVerbScript;
+	_sseVerbScriptChanged = false;
 	// For V0: track the primary target so isActionDone() can wait for its script to finish.
 	// V0 scripts do not lock _userPut during execution, unlike V5, so script-slot polling
 	// is the only reliable signal that the verb script has completed.
@@ -1308,16 +1342,14 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// the held cursor by simulating a click on the inventory icon, then
 		// click on the room object.
 		if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) {
-			// V7 single-cursor model: clicks are interpreted by the held verb
-			// cursor (the inventory icon currently armed). The Dig demo ships
-			// with the "look_at" cursor armed in the save file (object id 192
-			// in inventory). To get the talk action when clicking on an actor,
-			// we must temporarily clear that armed cursor by re-clicking the
-			// look_at icon (inventory clicks toggle). For "use item" (targetB
-			// != 0) we instead arm the desired inventory item.
-			const int kDigLookAtItem = 192;
-			if (targetB == 0 && _vm->_game.id == GID_DIG && _vm->objIsActor(targetA))
-				_vm->runInputScript(kInventoryClickArea, kDigLookAtItem, 0);
+			// V7 single-cursor pie-menu model. The engine's scene-click script
+			// decides the action based on the held inventory cursor and the
+			// object class: no held cursor → talk/interact for actors; look_at
+			// cursor held → look action; inventory item held → use-on action.
+			// For "interact" (targetB==0) we let the game script decide with
+			// whatever cursor is currently held — typically none, which gives
+			// the natural talk action when clicking an actor. For "use item"
+			// (targetB!=0) we first arm the inventory item as the held cursor.
 			if (targetB != 0) {
 				_vm->runInputScript(kInventoryClickArea, targetA, 0);
 				// Recompute mouse position over targetB so the next click
@@ -1345,6 +1377,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			// through the same code path as a real user click and lets the game
 			// scripts decide the action.
 			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+			_sseButtonClearFrame = _frameCounter + 2;
 		} else {
 			// Loom (V3/V4) — keep the original _leftBtnPressed pipeline so that
 			// the engine processes the click on the next frame, preserving the
@@ -1399,6 +1432,41 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 		return false;
 	}
 
+	// V7 (Dig/FT): dialog choices are not in verb slots. The dialog input script
+	// (e.g., script 69 in The Dig) handles number-key input from kKeyClickArea.
+	// Send the choice as a digit keystroke rather than a verb-slot click.
+	const bool isV7Dialog = (_vm->_game.version == 7 && _baseVerbScript != 0 &&
+	                         _vm->VAR_VERB_SCRIPT != 0xFF &&
+	                         (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) != _baseVerbScript);
+	if (isV7Dialog) {
+		if (choiceIdx > 9) {
+			errorOut = Common::String::format("answer: V7 dialog supports up to 9 choices, got %d", choiceIdx);
+			return false;
+		}
+		snapshotPreAction();
+		_streaming = true;
+		_sseStartFrame = _frameCounter;
+		_sseDoneAtFrame = 0;
+		_sseStuckAtFrame = 0;
+		_sseLastEventFrame = 0;
+		_sseEgoMoved = false;
+		_sseMessages.clear();
+		_ssePendingSecondClick = false;
+		_ssePendingNotes.clear();
+		_sseTargetObject = 0;
+		_sseButtonClearFrame = 0;
+		// Reset verb-script tracking so the new stream starts fresh.
+		_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
+		_sseInitialVerbScript = _sseVerbScript;
+		_sseVerbScriptChanged = false;
+		// Store the choice digit to be fed when the game is ready (userPut > 0).
+		// We cannot use _keyPressed here because processInput() consumes it
+		// immediately (even if _userPut <= 0 prevents checkExecVerbs from acting).
+		_ssePendingV7Choice = choiceIdx;
+		_server->startStreaming();
+		return true;
+	}
+
 	int current = 0;
 	int chosenSlot = -1;
 	if (_vm->_game.version >= 6) {
@@ -1414,7 +1482,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 				label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
 			}
 			bool allowAsChoice = true;
-			if (_vm->_game.version >= 8) {
+			if (_vm->_game.version >= 7) {
 				allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
 			} else {
 				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
@@ -1457,6 +1525,10 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	_ssePendingSecondClick = false;
 	_ssePendingNotes.clear();
 	_sseTargetObject = 0;  // dialog answer has no target object
+	_sseButtonClearFrame = 0;
+	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
+	_sseInitialVerbScript = _sseVerbScript;
+	_sseVerbScriptChanged = false;
 	_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
 	_server->startStreaming();
 	return true;
@@ -2030,6 +2102,49 @@ void ScummMcpBridge::pumpStream() {
 		return;
 	}
 
+	// V7: if the game switched to a dialog input script (VAR_VERB_SCRIPT changed),
+	// the action is still in progress — reset the settle window so we wait for the
+	// dialog choices to appear rather than closing the stream prematurely.
+	if (_vm->_game.version == 7 && _sseVerbScript != 0 &&
+	    _vm->VAR_VERB_SCRIPT != 0xFF) {
+		int curVerbScript = (int)_vm->VAR(_vm->VAR_VERB_SCRIPT);
+		if (curVerbScript != _sseVerbScript) {
+			debug(1, "mcp: VAR_VERB_SCRIPT changed %d->%d at frame %d, resetting settle",
+			      _sseVerbScript, curVerbScript, _frameCounter);
+			_sseVerbScript = curVerbScript;
+			_sseVerbScriptChanged = true;
+			_sseDoneAtFrame = 0;
+		}
+	}
+
+	// Clear the simulated mouse-button msDown bit a couple frames after the click
+	// so that the dialog input script (V7 script 69) does not see a held button.
+	if (_sseButtonClearFrame != 0 && _frameCounter >= _sseButtonClearFrame) {
+		_vm->_leftBtnPressed &= ~0x01; // clear msDown
+		_sseButtonClearFrame = 0;
+	}
+
+	// V7: feed a deferred dialog-choice click once the game is ready.
+	// toolAnswer() stores the choice here. Dialog choices in V7 (The Dig / FT) are
+	// selected by a scene click (kSceneClickArea) at the Y coordinate of the chosen
+	// line — script 69 reads VAR_MOUSE_Y to determine which choice was made.
+	// Empirical Y layout (The Dig, 320x200 game coords): choice N is at y = 163 + (N-1)*4.
+	if (_ssePendingV7Choice != 0 && _vm->_userPut > 0 &&
+	    _frameCounter - _sseStartFrame >= 3) {
+		int choiceX = 160;
+		int choiceY = 163 + (_ssePendingV7Choice - 1) * 4;
+		debug(1, "mcp: feeding V7 dialog choice %d as scene click at (%d,%d) frame %d",
+		      _ssePendingV7Choice, choiceX, choiceY, _frameCounter);
+		_vm->_mouse.x = choiceX;
+		_vm->_mouse.y = choiceY;
+		if (_vm->VAR_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_MOUSE_X) = choiceX;
+		if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = choiceY;
+		_vm->runInputScript(kSceneClickArea, 0, 1);
+		_ssePendingV7Choice = 0;
+		// Reset settle window so we capture messages produced by this choice.
+		_sseDoneAtFrame = 0;
+	}
+
 	bool done = isActionDone();
 	if (done) {
 		if (_sseDoneAtFrame == 0) {
@@ -2046,10 +2161,18 @@ void ScummMcpBridge::pumpStream() {
 			_sseDoneAtFrame = _sseLastEventFrame;
 		}
 
-		bool questionReady = hasPendingQuestion();
+		// V7: hasPendingQuestion() returns true whenever VAR_VERB_SCRIPT differs
+		// from the baseline, even during an answer stream that started in dialog
+		// mode. Suppress it for V7 here — dialog detection uses v7DialogReady.
+		bool questionReady = (_vm->_game.version == 7) ? false : hasPendingQuestion();
 		uint32 settleFrames = (_vm->_game.version == 0) ? 3 : 10;
 		if (_vm->_game.version != 0 && _sseEgoMoved && !questionReady)
 			settleFrames = 20;
+		// V7 (Dig/FT): dialog choices may appear after a brief script delay
+		// even when ego hasn't moved (hero was already near the actor).
+		// Use a longer settle window so we don't close before the question appears.
+		if (_vm->_game.version == 7 && !questionReady)
+			settleFrames = MAX(settleFrames, (uint32)45);
 
 		// For V0 (Maniac Mansion): after ego reaches the target object, runObjectScript
 		// is called for the verb. Wait until that object script finishes (isScriptInUse
@@ -2059,8 +2182,32 @@ void ScummMcpBridge::pumpStream() {
 		                       _vm->isScriptInUse(_sseTargetObject) &&
 		                       (_frameCounter - _sseDoneAtFrame < 30);
 
-		bool settled = !v0ScriptRunning && (_frameCounter - _sseDoneAtFrame >= settleFrames);
-		if (questionReady || settled) {
+		// V7: if the verb script changed toward dialog mode (not away from it),
+		// AND the ego has stopped moving (reached the target), the dialog choices
+		// are now visible on screen — close the stream to expose them.
+		// We only trigger this when we ENTERED dialog mode from the normal script
+		// (not during an answer stream that started already in dialog mode).
+		bool startedInDialogMode = (_sseInitialVerbScript != 0 &&
+		                            _baseVerbScript != 0 &&
+		                            _sseInitialVerbScript != _baseVerbScript);
+		bool egoNowMoving = false;
+		{
+			Actor *egoA = getEgoActor();
+			if (egoA) egoNowMoving = (egoA->_moving != 0);
+		}
+		bool v7DialogReady = _sseVerbScriptChanged && !startedInDialogMode &&
+		                     (_vm->_game.version == 7) && !egoNowMoving;
+		// In V7 dialog mode (verb script changed, not started in dialog), suppress
+		// settle-based close while ego is still moving — wait for v7DialogReady.
+		bool inV7DialogWait = _sseVerbScriptChanged && !startedInDialogMode &&
+		                      (_vm->_game.version == 7) && egoNowMoving;
+		bool settled = !v0ScriptRunning && !inV7DialogWait &&
+		               (_frameCounter - _sseDoneAtFrame >= settleFrames);
+		if (questionReady || v7DialogReady || settled) {
+			if (v7DialogReady)
+				debug(1, "mcp: V7 dialog mode detected at frame %d (verbScript=%d, egoStopped), closing",
+				      _frameCounter, _sseVerbScript);
+
 			debug(1, "mcp: closing stream at frame %d (question=%d, settled=%d, settleFrames=%d)",
 				_frameCounter, questionReady, settled, settleFrames);
 			Common::JSONObject changes = buildStateChanges();
@@ -2232,7 +2379,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 					label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
 				}
 				bool allowAsChoice = true;
-				if (_vm->_game.version >= 8) {
+				if (_vm->_game.version >= 7) {
 					allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
 				} else {
 					if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
@@ -2290,6 +2437,7 @@ Actor *ScummMcpBridge::getEgoActor() const {
 bool ScummMcpBridge::isActionDone() const {
 	if (_frameCounter - _sseStartFrame < 3) return false;
 	if (_ssePendingSecondClick || !_ssePendingNotes.empty()) return false;
+	if (_ssePendingV7Choice != 0) return false;
 	Actor *ego = getEgoActor();
 	// Ego movement check with timeout only for V0 (Maniac Mansion):
 	// V0 doesn't lock _userPut, so we need a timeout to prevent indefinite waits.
@@ -2321,22 +2469,43 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 	// permanent verb bar, not a transient dialog, so suppress the check.
 	if (isInLoomSection()) return false;
 
+	// V7 (Dig/FT): dialog choices are NOT stored in verb slots. Instead, the
+	// dialog input handler script (e.g., script 69 in The Dig) renders choices
+	// directly to screen. Detect dialog mode via VAR_VERB_SCRIPT deviating from
+	// the normal baseline value recorded at game start.
+	if (_vm->_game.version == 7 && _baseVerbScript != 0 &&
+	    _vm->VAR_VERB_SCRIPT != 0xFF) {
+		int cur = (int)_vm->VAR(_vm->VAR_VERB_SCRIPT);
+		if (cur != _baseVerbScript)
+			return true;
+	}
+
 	// V6+ (Sam & Max and later): dialog uses icon verb slots. The game saves the
 	// five standard action icon verbs (saveid != 0) and inserts new topic icon slots.
 	// Dialog is pending when at least one standard action verb is saved AND at least
 	// one non-standard active verb exists (the topic choices).
+	// V7 (Dig/FT) uses no permanent verb bar (single-cursor model), so there are
+	// no saved action verbs; instead dialog choices appear as sentence-like slots.
 	if (_vm->_game.version >= 6) {
 		bool hasActiveSavedAction = false;
 		bool hasActiveDialog = false;
 		int sentenceLikeChoices = 0;
+		debug(1, "mcp: hasPendingQuestion numVerbs=%d", _vm->_numVerbs);
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
+			if (vs.verbid || vs.key || vs.curmode || vs.saveid)
+				debug(1, "mcp: slot=%d verbid=%d saveid=%d curmode=%d key=%d center=%d",
+				      slot, vs.verbid, vs.saveid, vs.curmode, vs.key, vs.center);
 			if (!vs.verbid) continue;
 			if (_vm->_game.version > 0 && vs.verbid == 1) continue;
 			if (isV6ActionVerb(vs.verbid)) {
 				if (vs.saveid != 0) hasActiveSavedAction = true;
+				debug(1, "mcp: hasPendingQuestion slot=%d verbid=%d saveid=%d curmode=%d key=%d [ACTION]",
+				      slot, vs.verbid, vs.saveid, vs.curmode, vs.key);
 				continue;
 			}
+			debug(1, "mcp: hasPendingQuestion slot=%d verbid=%d saveid=%d curmode=%d key=%d [non-action]",
+			      slot, vs.verbid, vs.saveid, vs.curmode, vs.key);
 			if (vs.saveid != 0) continue;
 			Common::String label;
 			if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
@@ -2344,8 +2513,10 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 				label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
 			}
+			debug(1, "mcp: hasPendingQuestion   label='%s'", label.c_str());
 			bool allowAsChoice = true;
-			if (_vm->_game.version >= 8) {
+			if (_vm->_game.version >= 7) {
+				// V7/V8: sentence-like labels or active mode or numbered keys
 				allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
 			} else {
 				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
@@ -2356,9 +2527,16 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 			if (isSentenceLikeDialogLabel(label))
 				++sentenceLikeChoices;
 		}
+		debug(1, "mcp: hasPendingQuestion savedAction=%d activeDialog=%d sentenceLike=%d",
+		      hasActiveSavedAction, hasActiveDialog, sentenceLikeChoices);
 		if (hasActiveSavedAction && hasActiveDialog)
 			return true;
-		// COMI/V8 can expose full-sentence topics without saveid choreography.
+		// V7 (Dig/FT) and V8 (COMI) expose full-sentence dialog topics directly
+		// without the SO_SAVE_VERBS choreography used by V6. Accept if at least
+		// one sentence-like choice is visible and at least two choices exist overall.
+		if ((_vm->_game.version >= 7) && sentenceLikeChoices >= 1 && hasActiveDialog)
+			return true;
+		// COMI/V8 fallback for dialogs where all choices are sentence-like.
 		return sentenceLikeChoices >= 2;
 	}
 
