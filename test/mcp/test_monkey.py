@@ -65,7 +65,7 @@ def test_03_monkey_talk_to_troll(monkey_client: McpClient) -> None:
         "messages": [
             {"text": "Hi. I'm Guybrush Threepwood and--", "actor": "guybrush"},
             {
-                "text": "I don't care who you are or what your business is, you snivelling slimy sliver of scumm! No one gets by me until they say the magic words.",
+                "text": "I don't care who you are or what your business is, you snivelling slimy sliver of scumm!  No one gets by me until they say the magic words.",
                 "actor": "troll",
             },
         ],
@@ -92,7 +92,7 @@ def test_04_monkey_answer_troll_dialog(monkey_client: McpClient) -> None:
         "messages": [
             {"text": "Pretty please?", "actor": "guybrush"},
             {
-                "text": "Not those magic words, you pedantic putrefied pinhead, the MAGIC words! --sigh--",
+                "text": "Not those magic words, you pedantic putrefied pinhead, the MAGIC words!  --sigh--",
                 "actor": "troll",
             },
         ]
@@ -139,7 +139,7 @@ def test_08_monkey_pickup_bowl(monkey_client: McpClient) -> None:
     assert state["room"]["id"] == 52
 
     result = monkey_client.act("pick_up", "bowl o' mints")
-    assert_inventory_contains(result, "breath mint")
+    assert_inventory_contains(result, "breath_mint")
     assert len(result["messages"]) > 0
 
 
@@ -170,7 +170,7 @@ def test_11_monkey_pickup_meat(monkey_client: McpClient) -> None:
     assert state["room"]["id"] == 51
 
     result = monkey_client.act("pick_up", "hunk_o'_meat@@@@@@@")
-    assert_inventory_contains(result, "hunk o' meat")
+    assert_inventory_contains(result, "hunk_o'_meat")
 
 
 def test_12_monkey_use_meat_with_pot_o_soup(monkey_client: McpClient) -> None:
@@ -183,7 +183,7 @@ def test_12_monkey_use_meat_with_pot_o_soup(monkey_client: McpClient) -> None:
     assert result["messages"] == [
         {"text": "This will take a while to cook.", "actor": "guybrush"}
     ]
-    assert_inventory_does_not_contain(result, "hunk o' meat")
+    assert_inventory_does_not_contain(result, "hunk_o'_meat")
 
 
 def test_13_monkey_give_breath_mint_to_prisoner(monkey_client: McpClient) -> None:

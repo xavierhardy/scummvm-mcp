@@ -95,28 +95,45 @@ Common::String getObjName(const ScummMcpBridge *bridge, int obj) {
 
 // Clean up game text: remove control characters, trim whitespace, remove trailing @, remove unicode chars
 Common::String cleanGameText(const Common::String &text) {
+	Common::String src(text);
+	// V8 (Curse of Monkey Island) messages start with a "/<TAG>/" prefix
+	// (e.g. "/BPIR001/Hold yer tongue, captive!"). Strip it so the MCP client
+	// sees only the human-readable text.
+	if (!src.empty() && src[0] == '/') {
+		const char *str = src.c_str();
+		const char *secondSlash = strchr(str + 1, '/');
+		if (secondSlash) {
+			// Verify the tag-like portion is alphanumeric (typical V8 tag format)
+			bool isV8Tag = true;
+			for (const char *p = str + 1; p < secondSlash; ++p) {
+				if (!Common::isAlnum((byte)*p)) { isV8Tag = false; break; }
+			}
+			if (isV8Tag && (secondSlash - str) > 2)
+				src = Common::String(secondSlash + 1);
+		}
+	}
 	Common::String out;
-	for (size_t i = 0; i < text.size(); ++i) {
-		unsigned char c = (unsigned char)text[i];
+	for (size_t i = 0; i < src.size(); ++i) {
+		unsigned char c = (unsigned char)src[i];
 		// Replace control characters (except newline) and DEL with space
 		if ((c < 0x20 && c != 0x0A) || c == 0x7F) {
 			out += ' ';
 			continue;
 		}
 		// Skip UTF-8 sequences for replacement character (� = 0xEF 0xBF 0xBD)
-		if (c == 0xEF && i + 2 < text.size()) {
-			unsigned char c1 = (unsigned char)text[i+1];
-			unsigned char c2 = (unsigned char)text[i+2];
+		if (c == 0xEF && i + 2 < src.size()) {
+			unsigned char c1 = (unsigned char)src[i+1];
+			unsigned char c2 = (unsigned char)src[i+2];
 			if (c1 == 0xBF && c2 == 0xBD) {
 				// Skip replacement character unless it's part of orichalum beads
-				if (i + 4 < text.size()) {
-					unsigned char c3 = (unsigned char)text[i+3];
+				if (i + 4 < src.size()) {
+					unsigned char c3 = (unsigned char)src[i+3];
 					// Orichalum beads:�� = 0xEF 0xBF 0xBD 0x04 0xEF 0xBF 0xBD
 					if (c3 == 0x04) {
-						out += text[i];
-						out += text[++i];
-						out += text[++i];
-						out += text[++i];
+						out += src[i];
+						out += src[++i];
+						out += src[++i];
+						out += src[++i];
 						continue;
 					}
 				}
@@ -128,24 +145,8 @@ Common::String cleanGameText(const Common::String &text) {
 				continue;
 			}
 		}
-		out += text[i];
+		out += src[i];
 	}
-	// Collapse multiple consecutive spaces
-	Common::String collapsed;
-	bool prevWasSpace = false;
-	for (size_t i = 0; i < out.size(); ++i) {
-		char c = out[i];
-		if (c == ' ') {
-			if (!prevWasSpace) {
-				collapsed += c;
-				prevWasSpace = true;
-			}
-		} else {
-			collapsed += c;
-			prevWasSpace = false;
-		}
-	}
-	out = collapsed;
 	// Trim leading/trailing whitespace (including newlines)
 	size_t start = 0;
 	while (start < out.size() && (unsigned char)out[start] <= 0x20) start++;
@@ -1231,11 +1232,14 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// 2-target verbs like 'give X to Y' still use doSentence.
 	bool isIndy4ActorClick = isIndy4Actor && targetB == 0;
 
+	// CMI (V8): dispatch via doSentence() directly.
+	bool isCMIClick = false;
+
 	// Loom interact: skip the entrypoint check entirely (verbId == -1 sentinel
 	// means we're dispatching via simulated scene click, not doSentence).
 	bool isLoomClick = (verbId == -1);
 
-	if (targetA != 0 && !isIndy4Actor && !isLoomClick) {
+	if (targetA != 0 && !isIndy4Actor && !isLoomClick && !isCMIClick) {
 		int ep = _vm->getVerbEntrypoint(targetA, verbId);
 		debug(1, "mcp: act entrypoint for obj %d verb %d = %d", targetA, verbId, ep);
 
@@ -1334,6 +1338,33 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
 
 		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+	} else if (isCMIClick) {
+		// CMI: place virtual mouse over target, select verb cursor, then dispatch
+		// a scene click via the input scripts. This is the same path the engine
+		// uses for real user clicks.
+		int objX = _vm->getObjX(targetA);
+		int objY = _vm->getObjY(targetA);
+		VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
+		int mouseX = objX - vs->xstart;
+		int mouseY = objY + vs->topline;
+		if (mouseX < 0) mouseX = 0;
+		if (mouseX > _vm->_screenWidth - 1) mouseX = _vm->_screenWidth - 1;
+		if (mouseY < 0) mouseY = 0;
+		if (mouseY > _vm->_screenHeight - 1) mouseY = _vm->_screenHeight - 1;
+
+		_vm->_mouse.x        = mouseX;
+		_vm->_mouse.y        = mouseY;
+		_vm->_virtualMouse.x = objX;
+		_vm->_virtualMouse.y = objY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
+
+		// Select verb cursor (kVerbClickArea, verbid, mode=1=activate cursor)
+		_vm->runInputScript(kVerbClickArea, verbId, 1);
+		// Dispatch the scene click (left button). Mode 1 = left click.
+		_vm->runInputScript(kSceneClickArea, 0, 1);
 	} else if (isLoomClick) {
 		// Convert object world coords to on-screen mouse coords (Passport Loom has
 		// horizontally scrolling rooms, so screen X != world X).
@@ -2296,7 +2327,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (!wasPresent) {
 			Common::String name = getObjName(this, obj);
 			if (name.empty()) name = Common::String::format("obj-%d", obj);
-			Common::String cleanName = cleanGameText(mcpSanitizeString(mcpLowerTrimmed(name)));
+			Common::String cleanName = cleanGameText(mcpSanitizeString(normalizeActionName(name)));
 			if (!cleanName.empty()) {
 				added.push_back(mcpJsonString(cleanName));
 			}
@@ -2313,7 +2344,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (_vm->getOwner(obj) == ego) continue;
 		Common::String name = getObjName(this, obj);
 		if (name.empty()) name = Common::String::format("obj-%d", obj);
-		Common::String cleanName = cleanGameText(mcpSanitizeString(mcpLowerTrimmed(name)));
+		Common::String cleanName = cleanGameText(mcpSanitizeString(normalizeActionName(name)));
 		if (!cleanName.empty()) {
 			removed.push_back(mcpJsonString(cleanName));
 		}
@@ -2480,6 +2511,15 @@ bool ScummMcpBridge::isActionDone() const {
 	} else {
 		if (ego && ego->_moving) return false;
 	}
+	// V8 (CMI): the sentence script orchestrates walk + verb execution. Wait
+	// until the sentence queue is empty so the verb script has dispatched.
+	if (_vm->_game.version == 8) {
+		if (_vm->_sentenceNum > 0) return false;
+		if (_vm->VAR_SENTENCE_SCRIPT != 0xFF) {
+			int sentScript = (int)_vm->VAR(_vm->VAR_SENTENCE_SCRIPT);
+			if (sentScript > 0 && _vm->isScriptRunning(sentScript)) return false;
+		}
+	}
 	return true;
 }
 
@@ -2602,6 +2642,17 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 Common::String ScummMcpBridge::normalizeActionName(const Common::String &action) {
 	Common::String s(action);
 	s.trim();
+	// V8 (Curse of Monkey Island) object names are formatted as
+	// "/<room>.<id>/<name>" — strip the leading metadata so the MCP client sees
+	// just "<name>". Apply only to strings starting with '/' to avoid affecting
+	// verbs or other engines.
+	if (!s.empty() && s[0] == '/') {
+		const char *str = s.c_str();
+		const char *secondSlash = strchr(str + 1, '/');
+		if (secondSlash) {
+			s = Common::String(secondSlash + 1);
+		}
+	}
 	s.toLowercase();
 	s.replace('-', '_');
 	s.replace(' ', '_');
@@ -2976,6 +3027,37 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		return true;
 	}
 
+	// Curse of Monkey Island (V8) verb IDs differ from V6. Empirically determined:
+	//   verb 6 -> look_at  (e.g. "Nice cannon balls.")
+	//   verb 7 -> pick_up  (e.g. "They're too heavy to carry.")
+	//   verb 8 -> talk_to  (opens dialog wheel)
+	//   verb 13 -> walk_to (default cursor action)
+	// Must be checked before the V6+ canonical lookup which would otherwise map
+	// look_at to verb 5 (the V6 canonical id, which is wrong for V8).
+	if (_vm->_game.id == GID_CMI) {
+		// Debug helper (gated by mcp_debug): accept "v_N"/"verb_N" to dispatch
+		// arbitrary verb IDs for testing.
+		if (_debugToolsEnabled && (normalized.hasPrefix("v_") || normalized.hasPrefix("verb_"))) {
+			const char *p = normalized.c_str() + (normalized.hasPrefix("v_") ? 2 : 5);
+			int id = atoi(p);
+			if (id > 0) {
+				verbId = id;
+				return true;
+			}
+		}
+		static const struct { const char *name; int id; } kCMIVerbs[] = {
+			{"walk_to", 13}, {"look_at", 6}, {"pick_up", 7},
+			{"talk_to",  8}, {"use",     7}, {nullptr,   0}
+		};
+		for (int ci = 0; kCMIVerbs[ci].name; ++ci) {
+			if (normalized == kCMIVerbs[ci].name) {
+				verbId = kCMIVerbs[ci].id;
+				debug(1, "mcp: resolveVerb CMI '%s' -> verbid=%d", normalized.c_str(), verbId);
+				return true;
+			}
+		}
+	}
+
 	// V6+: standard action verbs are image-based. Resolve by verbid directly.
 	if (_vm->_game.version >= 6) {
 		const V6VerbEntry *entry = nullptr;
@@ -3044,23 +3126,6 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		verbId = -1;
 		debug(1, "mcp: resolveVerb Loom interact -> click dispatch sentinel");
 		return true;
-	}
-
-	// Curse of Monkey Island (V8) uses a single-cursor click model similar to The Dig.
-	// Map all verbs to a click sentinel and let toolAct dispatch via a simulated scene click
-	// to preserve the game's natural input pipeline for verb actions.
-	if (_vm->_game.id == GID_CMI) {
-		static const struct { const char *name; int id; } kCMIVerbs[] = {
-			{"walk_to",  13}, {"talk_to",  6}, {"pick_up",  4},
-			{"look_at",   5}, {"use",      7}, {nullptr,   0}
-		};
-		for (int ci = 0; kCMIVerbs[ci].name; ++ci) {
-			if (normalized == kCMIVerbs[ci].name) {
-				verbId = -1;  // Click dispatch sentinel for CMI
-				debug(1, "mcp: resolveVerb CMI '%s' -> click dispatch sentinel", normalized.c_str());
-				return true;
-			}
-		}
 	}
 
 	// Fallback for v6/v7/v8 games that use right-click context menus: the verb

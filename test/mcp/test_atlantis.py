@@ -104,7 +104,7 @@ def test_07_atlantis_walk_to_mountain(atlantis_client: McpClient) -> None:
 def test_08_atlantis_pickup_tire_repair_kit(atlantis_client: McpClient) -> None:
     """Pick up tire repair kit."""
     result = atlantis_client.act("pick_up", "tire repair kit")
-    assert_inventory_contains(result, "tire repair kit")
+    assert_inventory_contains(result, "tire_repair_kit")
 
 
 def test_09_atlantis_close_crate(atlantis_client: McpClient) -> None:

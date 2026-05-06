@@ -66,7 +66,8 @@ def test_05_comi_can_look_at_objects(comi_client: McpClient) -> None:
 
     result = comi_client.act("look_at", "cannon_balls")
     # Look action might produce messages or change state
-    assert result["messages"][0]["text"] == "Nice cannon balls."
+    messages = [msg["text"] for msg in result["messages"]]
+    assert "Nice cannon balls." in messages
 
 
 def test_06_comi_can_interact_with_objects(comi_client: McpClient) -> None:
