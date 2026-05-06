@@ -951,7 +951,14 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				if (!hasWalkTo && walkToExists) compatVerbs.push_back(mcpJsonString(walkToLabel));
 			}
 
-			bool isPathway = (_vm->_game.id != GID_DIG && _vm->_game.id != GID_FT && _vm->_game.id != GID_CMI && !isInLoomSection()) && walkToHasHandler && (handlerCount == 1);
+			// CMI (V8): pathway objects have no action verb handlers (ep 6/7/8 all 0).
+			// These are exit hotspots where the game dispatches verb 1 (internal walk/default).
+			bool isCMIPathway = (_vm->_game.id == GID_CMI) &&
+			    _vm->getVerbEntrypoint(ne.numId, 6) == 0 &&
+			    _vm->getVerbEntrypoint(ne.numId, 7) == 0 &&
+			    _vm->getVerbEntrypoint(ne.numId, 8) == 0;
+			bool isPathway = isCMIPathway ||
+			    ((_vm->_game.id != GID_DIG && _vm->_game.id != GID_FT && _vm->_game.id != GID_CMI && !isInLoomSection()) && walkToHasHandler && (handlerCount == 1));
 
 			Common::JSONObject obj;
 			obj.setVal("id",               mcpJsonInt(ne.numId));
@@ -1457,14 +1464,26 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// the verb bar slot.
 		_vm->runInputScript(kVerbClickArea, verbId, 1);
 	} else if (_vm->_game.id == GID_CMI && verbId == 13) {
-		// CMI walk_to: just walk ego to the object's position. Dispatching
-		// doSentence(13, target) would invoke a non-existent walk verb script
-		// and produce a "No." default response.
-		Actor *ego = getEgoActor();
-		if (ego) {
-			int objX = _vm->getObjX(targetA);
-			int objY = _vm->getObjY(targetA);
-			ego->startWalkActor(objX, objY, -1);
+		// CMI walk_to: verb 13 has no entrypoint in the game, so doSentence(13,...)
+		// produces a "No." response. For objects with action handlers, startWalkActor
+		// to the stand position is correct. For exit/pathway objects (no action handlers),
+		// the game internally uses verb=1 (the walk/click verb) via doSentence — this
+		// goes through the sentence script which handles room transitions. Mirror that here.
+		bool hasActionHandler = (targetA != 0) &&
+		    (_vm->getVerbEntrypoint(targetA, 6) != 0 ||  // look_at
+		     _vm->getVerbEntrypoint(targetA, 7) != 0 ||  // pick_up / use
+		     _vm->getVerbEntrypoint(targetA, 8) != 0);   // talk_to
+		if (!hasActionHandler && targetA != 0) {
+			// Exit/pathway: dispatch via verb 1 (internal walk/default verb) just as the
+			// game's click handler does when the player clicks on this object.
+			_vm->doSentence(1, targetA, 0);
+		} else {
+			Actor *ego = getEgoActor();
+			if (ego) {
+				int objX = _vm->getObjX(targetA);
+				int objY = _vm->getObjY(targetA);
+				ego->startWalkActor(objX, objY, -1);
+			}
 		}
 	} else {
 		_vm->doSentence(verbId, targetA, targetB);
@@ -1988,6 +2007,33 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	}
 	out.setVal("verbs", new Common::JSONValue(verbs));
 
+	// Scan ALL room objects (including untouchable/hidden ones), useful for finding exits.
+	Common::JSONArray roomObjs;
+	for (int i = 1; _vm->_objs && i < _vm->_numLocalObjects; ++i) {
+		const ObjectData &od = _vm->_objs[i];
+		if (!od.obj_nr) continue;
+		Common::JSONObject ro;
+		ro.setVal("idx",         mcpJsonInt(i));
+		ro.setVal("id",          mcpJsonInt(od.obj_nr));
+		ro.setVal("x",           mcpJsonInt(_vm->getObjX(od.obj_nr)));
+		ro.setVal("y",           mcpJsonInt(_vm->getObjY(od.obj_nr)));
+		ro.setVal("state",       mcpJsonInt(od.state));
+		ro.setVal("untouchable", mcpJsonBool(_vm->getClass(od.obj_nr, kObjectClassUntouchable)));
+		Common::String name = getObjName(this, od.obj_nr);
+		ro.setVal("name", mcpJsonString(name.empty() ? Common::String::format("obj-%d", od.obj_nr) : normalizeActionName(name)));
+		// Check verb entrypoints for v6+ verbs
+		int ep6 = _vm->getVerbEntrypoint(od.obj_nr, 6);
+		int ep7 = _vm->getVerbEntrypoint(od.obj_nr, 7);
+		int ep8 = _vm->getVerbEntrypoint(od.obj_nr, 8);
+		int ep13 = _vm->getVerbEntrypoint(od.obj_nr, 13);
+		ro.setVal("ep_6",  mcpJsonInt(ep6));
+		ro.setVal("ep_7",  mcpJsonInt(ep7));
+		ro.setVal("ep_8",  mcpJsonInt(ep8));
+		ro.setVal("ep_13", mcpJsonInt(ep13));
+		roomObjs.push_back(new Common::JSONValue(ro));
+	}
+	out.setVal("room_objects", new Common::JSONValue(roomObjs));
+
 	return new Common::JSONValue(out);
 }
 
@@ -2328,11 +2374,11 @@ void ScummMcpBridge::pumpStream() {
 		// Use a longer settle window so we don't close before the question appears.
 		if (_vm->_game.version == 7 && !questionReady)
 			settleFrames = MAX(settleFrames, (uint32)45);
-		// V8 (CMI): dialog choices appear after walk + verb script finishes.
-		// Use a longer settle window (same as V7) so hasPendingQuestion() can
-		// fire before the stream closes — both for initial act() and answer() streams.
+		// V8 (CMI): isActionDone() now waits for the sentence/verb script to finish,
+		// which is what triggers dialog choices. A 25-frame window is enough for
+		// hasPendingQuestion() to detect them — both for act() and answer() streams.
 		if (_vm->_game.version == 8 && !questionReady)
-			settleFrames = MAX(settleFrames, (uint32)45);
+			settleFrames = MAX(settleFrames, (uint32)25);
 
 		// For V0 (Maniac Mansion): after ego reaches the target object, runObjectScript
 		// is called for the verb. Wait until that object script finishes (isScriptInUse
@@ -2906,7 +2952,7 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		RawEntry e;
 		e.kind = NamedEntity::kObject;
 		e.numId = od.obj_nr;
-		e.baseName = name.empty() ? Common::String::format("obj-%d", od.obj_nr)
+		e.baseName = name.empty() ? Common::String::format("obj_%d", od.obj_nr)
 		                          : normalizeActionName(name);
 		// Visibility mask: v0-v2 use only the intrinsic (on/off) bit; v3+ use the full
 		// lower nibble which encodes pickupable, untouchable, locked, and intrinsic.
@@ -2944,6 +2990,13 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 				}
 			}
 			if (hasWalkTo && !hasOther) e.isPathway = true;
+		}
+		// CMI (V8): exit hotspots have no action handlers (ep 6/7/8 all 0) — mark as pathway.
+		if (!e.isPathway && _vm->_game.id == GID_CMI &&
+		    _vm->getVerbEntrypoint(e.numId, 6) == 0 &&
+		    _vm->getVerbEntrypoint(e.numId, 7) == 0 &&
+		    _vm->getVerbEntrypoint(e.numId, 8) == 0) {
+			e.isPathway = true;
 		}
 		if (!name.empty()) {
 			bool hasCtrl = false;
