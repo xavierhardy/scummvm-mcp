@@ -6,19 +6,36 @@ from utils import McpClient, find_object_by_name
 
 
 def test_01_comi_state_reachable(comi_client: McpClient) -> None:
+    expected_object_names = {
+        "small_pirate",
+        "cannon_restraint_rope",
+        "cannon",
+        "rope",
+        "cannon_balls",
+        "keyhole",
+        "locked_door",
+        "grate",
+        "ramrod",
+    }
     state = comi_client.state()
     assert state.get("room") is not None
     assert isinstance(state.get("objects", []), list)
     assert len(state.get("objects", [])) > 0
+    assert state["inventory"] == ["helium_balloons"]
+    actual_object_names = {obj["name"] for obj in state["objects"]}
+    assert len(actual_object_names & expected_object_names) == len(
+        expected_object_names
+    )
 
 
 def test_02_comi_has_verbs(comi_client: McpClient) -> None:
     """Verify Monkey Island 3 (V8) has all 5 core verbs."""
     state = comi_client.state()
-    verbs = state.get("verbs", [])
     expected_verbs = {"walk to", "talk to", "pick up", "look at", "use"}
-    actual_verbs = set(verbs)
-    assert expected_verbs.issubset(actual_verbs), f"Missing verbs: {expected_verbs - actual_verbs}"
+    actual_verbs = set(state.get("verbs", []))
+    assert expected_verbs.issubset(actual_verbs), (
+        f"Missing verbs: {expected_verbs - actual_verbs}"
+    )
 
 
 def test_03_comi_objects_have_verbs(comi_client: McpClient) -> None:
@@ -28,8 +45,7 @@ def test_03_comi_objects_have_verbs(comi_client: McpClient) -> None:
 
     # At least some objects should support multiple verbs
     multiverb_objects = [
-        obj for obj in objects
-        if len(obj.get("compatible_verbs", [])) >= 2
+        obj for obj in objects if len(obj.get("compatible_verbs", [])) >= 2
     ]
     assert len(multiverb_objects) > 0, "No objects with multiple verbs found"
 
@@ -40,99 +56,79 @@ def test_03_comi_objects_have_verbs(comi_client: McpClient) -> None:
 
 def test_04_comi_can_walk(comi_client: McpClient) -> None:
     """Verify walking works."""
-    state = comi_client.state()
-    initial_pos = state.get("position")
-
     # Find an object to walk to
-    target_obj = find_object_by_name(state, "pirate")
-    if target_obj:
-        result = comi_client.act("walk_to", target_obj)
-        # Walk action should change position
-        assert result.get("position") is not None or result.get("inventory_added") is not None
+    result = comi_client.act("walk_to", "rope")
+    assert result.get("position") is not None
 
 
 def test_05_comi_can_look_at_objects(comi_client: McpClient) -> None:
     """Verify looking at objects works."""
-    state = comi_client.state()
 
-    # Find an object that supports look_at
-    objects_with_look = [
-        obj for obj in state.get("objects", [])
-        if "look at" in obj.get("compatible_verbs", [])
-    ]
-    if not objects_with_look:
-        pytest.skip("No objects support look_at in this room")
-
-    obj = objects_with_look[0]
-    result = comi_client.act("look_at", obj["name"])
+    result = comi_client.act("look_at", "cannon_balls")
     # Look action might produce messages or change state
-    assert isinstance(result, dict)
+    assert result["messages"][0]["text"] == "Nice cannon balls."
 
 
 def test_06_comi_can_interact_with_objects(comi_client: McpClient) -> None:
     """Verify general interaction works."""
-    state = comi_client.state()
+    result = comi_client.act("pick_up", "ramrod")
+    assert result["inventory_added"] == ["ramrod"]
 
-    # Find the ramrod (should be pickable)
-    ramrod = find_object_by_name(state, "ramrod")
-    if ramrod and "pick up" in state.get("verbs", []):
-        # Try to pick it up (may or may not succeed depending on game state)
-        result = comi_client.act("pick_up", ramrod)
-        assert isinstance(result, dict)
+
+def test_06a_comi_can_use_different_verbs(comi_client: McpClient) -> None:
+    """Verify general interaction works."""
+    result = comi_client.act("walk_to", "small_pirate")
+    assert result.get("position") is not None
+
+    result = comi_client.act("pick_up", "small_pirate")
+    assert "If I rough him up, he may shoot me." in [
+        msg["text"] for msg in result["messages"]
+    ]
+    result = comi_client.act("look_at", "small_pirate")
+    assert "I don't think I've ever seen a cuter pirate." in [
+        msg["text"] for msg in result["messages"]
+    ]
 
 
 def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> None:
     """Verify talking to small pirate triggers a dialog."""
-    state = comi_client.state()
+    result = comi_client.act("talk_to", "small_pirate")
+    assert len(result["messages"][0]["text"]) > 0
 
-    pirate = find_object_by_name(state, "pirate")
-    if not pirate:
-        pytest.skip("No pirate object found")
+    assert result["question"] == {
+        "choices": [
+            {"id": 1, "label": "I'm Guybrush Threepwood, who are you?"},
+            {"id": 2, "label": "You don't scare me, you mangy pirate!"},
+            {"id": 3, "label": "Hello.  Please don't kill me."},
+            {"id": 4, "label": "Aaargh!"},
+            {"id": 5, "label": "I'm selling these fine leather jackets."},
+            {"id": 6, "label": "Aren't you a little short for a pirate!"},
+        ]
+    }
+    result = comi_client.answer(6)
 
-    # Talk to the pirate
-    result = comi_client.act("talk_to", pirate)
+    assert [msg["text"] for msg in result["messages"]] == [
+        "Aren't you a little short for a pirate!",
+        "Hold yer tongue, captive!",
+        "Or I'll be holdin' it fer ya!",
+        "Eeewww!",
+    ]
 
-    # Check if we got a dialog question
-    if result.get("question"):
-        # Dialog was triggered!
-        choices = result.get("question", {}).get("choices", [])
-        assert len(choices) > 0, "Dialog has no choices"
-        print(f"✓ Dialog triggered with {len(choices)} choices")
-    else:
-        # Check messages for dialog text
-        messages = result.get("messages", [])
-        if messages:
-            print(f"Got messages instead of question: {messages}")
-        # This might be expected if dialog is in progress or needs more interaction
-        pytest.skip("Dialog question not returned - may need different game state")
+    assert result["question"] == {
+        "choices": [
+            {"id": 1, "label": "You sound pretty tough."},
+            {"id": 2, "label": "Are you wearing a fake beard?"},
+            {"id": 3, "label": "Is that a real eyepatch?"},
+            {"id": 4, "label": "Is that hook for real?"},
+            {"id": 5, "label": "Can I borrow your cannon for a second?"},
+            {"id": 6, "label": "It's been swell talking to you."},
+        ]
+    }
+    result = comi_client.answer(6)
 
-
-def test_08_comi_can_pickup_ramrod(comi_client: McpClient) -> None:
-    """Verify picking up the ramrod adds it to inventory."""
-    state = comi_client.state()
-    initial_inventory = state.get("inventory", [])
-
-    ramrod = find_object_by_name(state, "ramrod")
-    if not ramrod:
-        pytest.skip("No ramrod object found")
-
-    # Pick up the ramrod
-    result = comi_client.act("pick_up", ramrod)
-
-    # Check if item was added to inventory
-    inventory_added = result.get("inventory_added", [])
-    if inventory_added:
-        print(f"✓ Picked up items: {inventory_added}")
-        assert any("ramrod" in item.lower() for item in inventory_added), \
-            f"Expected ramrod in inventory_added, got {inventory_added}"
-    else:
-        # Check new state
-        new_state = comi_client.state()
-        new_inventory = new_state.get("inventory", [])
-        if len(new_inventory) > len(initial_inventory):
-            print(f"✓ Inventory grew from {len(initial_inventory)} to {len(new_inventory)} items")
-        else:
-            pytest.skip("Ramrod not picked up - may already be in inventory or game logic doesn't support it")
+    assert [msg["text"] for msg in result["messages"]] == [
+        "It's been swell talking to you.",
+    ]
 
 
 def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:
@@ -140,17 +136,12 @@ def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:
     state = comi_client.state()
     initial_room = state.get("room", {}).get("id")
 
-    if not initial_room:
-        pytest.skip("Could not get initial room ID")
-
     # Look for a pathway or exit object
     pathways = [
-        obj for obj in state.get("objects", [])
+        obj
+        for obj in state.get("objects", [])
         if obj.get("pathway") or "door" in obj.get("name", "").lower()
     ]
-
-    if not pathways:
-        pytest.skip("No pathways or doors found to change rooms")
 
     # Try to interact with the first pathway/door
     pathway = pathways[0]
@@ -159,14 +150,4 @@ def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:
 
     # Check if room changed
     room_changed = result.get("room_changed")
-    if room_changed:
-        print(f"✓ Room changed from {initial_room} to {room_changed}")
-        assert room_changed != initial_room, "Room should have changed"
-    else:
-        # Check new state
-        new_state = comi_client.state()
-        new_room = new_state.get("room", {}).get("id")
-        if new_room != initial_room:
-            print(f"✓ Room changed from {initial_room} to {new_room}")
-        else:
-            pytest.skip("Room did not change - may need specific interaction sequence")
+    assert room_changed != initial_room, "Room should have changed"

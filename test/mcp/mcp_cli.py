@@ -56,7 +56,9 @@ def _post_tool(client: McpClient, name: str, arguments: dict[str, Any]) -> Any:
         "params": {"name": name, "arguments": arguments},
     }
     headers = client._headers({"Accept": "application/json, text/event-stream"})
-    with client._client.stream("POST", client._url, json=payload, headers=headers) as resp:
+    with client._client.stream(
+        "POST", client._url, json=payload, headers=headers
+    ) as resp:
         ctype = resp.headers.get("content-type", "")
         if "text/event-stream" in ctype:
             return client._decode_stream_response(resp=resp, tool=name)
@@ -137,7 +139,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--port", type=int, default=23456)
     p.add_argument("--connect-timeout", type=float, default=MCP_CONNECT_TIMEOUT_SECS)
     p.add_argument("--timeout", type=float, default=MCP_TIMEOUT_SECS)
-    p.add_argument("--launch", help="Launch a known game id (e.g. 'pass') before connecting.")
+    p.add_argument(
+        "--launch", help="Launch a known game id (e.g. 'pass') before connecting."
+    )
 
     sub = p.add_subparsers(dest="cmd")
 
@@ -161,8 +165,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("skip").set_defaults(fn=cmd_skip)
 
     pnote = sub.add_parser("note")
-    pnote.add_argument("note", nargs="+",
-                       help="One or more notes to play in order, e.g. 'note e c e d'.")
+    pnote.add_argument(
+        "note",
+        nargs="+",
+        help="One or more notes to play in order, e.g. 'note e c e d'.",
+    )
     pnote.set_defaults(fn=cmd_note)
 
     panswer = sub.add_parser("answer")
@@ -218,21 +225,26 @@ def main() -> int:
 
     proc = maybe_launch(args)
     try:
-        client = wait_for_mcp(args.host, args.port,
-                              connect_timeout=args.connect_timeout,
-                              timeout=args.timeout)
+        client = wait_for_mcp(
+            args.host,
+            args.port,
+            connect_timeout=args.connect_timeout,
+            timeout=args.timeout,
+        )
 
         if args.cmd:
             result = args.fn(client, args)
             print(json.dumps(result, indent=2, default=str))
             return 0
 
-        print(f"Connected to {args.host}:{args.port}. "
-              "Commands: state | debug [--vars FROM-TO] | act <verb> [t1] [t2] | "
-              "walk X Y | skip | note <c|d|e|...|C> | answer <id> | "
-              "keystroke <key> [--ctrl --shift --alt] | "
-              "mouse_move X Y | mouse_click X Y [--button left|right|middle] [--double] | "
-              "q to quit.")
+        print(
+            f"Connected to {args.host}:{args.port}. "
+            "Commands: state | debug [--vars FROM-TO] | act <verb> [t1] [t2] | "
+            "walk X Y | skip | note <c|d|e|...|C> | answer <id> | "
+            "keystroke <key> [--ctrl --shift --alt] | "
+            "mouse_move X Y | mouse_click X Y [--button left|right|middle] [--double] | "
+            "q to quit."
+        )
         while True:
             try:
                 line = input("mcp> ").strip()

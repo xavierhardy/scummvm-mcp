@@ -1,4 +1,5 @@
 """Manual probe of Dig save scenario via MCP."""
+
 import json
 import os
 import sys
@@ -30,16 +31,23 @@ def answer(client, label, choice):
 
 def show_state(client, label):
     s = client.state()
-    dump(label, {
-        "room": s.get("room"),
-        "position": s.get("position"),
-        "objects": [(o["name"], o.get("x"), o.get("y")) for o in s.get("objects", [])],
-        "inventory": s.get("inventory"),
-        "question": s.get("question"),
-    })
+    dump(
+        label,
+        {
+            "room": s.get("room"),
+            "position": s.get("position"),
+            "objects": [
+                (o["name"], o.get("x"), o.get("y")) for o in s.get("objects", [])
+            ],
+            "inventory": s.get("inventory"),
+            "question": s.get("question"),
+        },
+    )
 
 
-proc = launch_scummvm("dig-demo", GAME_PATHS["dig-demo"], port=PORT, scummvm_binary=scummvm)
+proc = launch_scummvm(
+    "dig-demo", GAME_PATHS["dig-demo"], port=PORT, scummvm_binary=scummvm
+)
 try:
     client = wait_for_mcp(MCP_HOST, PORT, timeout=15.0)
     time.sleep(2.0)
@@ -59,7 +67,7 @@ try:
         time.sleep(1.0)
         s = client.state()
         verbs_in = s.get("verbs", [])
-        print(f"  +{i+1}s userPut? q={bool(s.get('question'))} verbs={verbs_in[:8]}")
+        print(f"  +{i + 1}s userPut? q={bool(s.get('question'))} verbs={verbs_in[:8]}")
         if s.get("question"):
             print("    choices:", s["question"]["choices"])
             break
@@ -82,7 +90,9 @@ try:
     show_state(client, "AFTER PLATFORM")
 
     # Step 6: use trowel on Maggie
-    act(client, "use trowel/maggie", verb="use item", target1="trowel", target2="maggie")
+    act(
+        client, "use trowel/maggie", verb="use item", target1="trowel", target2="maggie"
+    )
     show_state(client, "AFTER USE TROWEL MAGGIE")
 
     # Step 7: walk to clearing (id 53 — the lower-right one)

@@ -228,7 +228,9 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="PlayNote")
 
-    def call_capturing(self, name: str, arguments: dict) -> tuple[list[str], list[dict], dict | None]:
+    def call_capturing(
+        self, name: str, arguments: dict
+    ) -> tuple[list[str], list[dict], dict | None]:
         """Invoke any MCP tool, capturing every notification.
 
         Returns (notes, messages, result):
@@ -246,7 +248,9 @@ class McpClient:
         notes: list[str] = []
         messages: list[dict] = []
         result: dict | None = None
-        with self._client.stream("POST", self._url, json=payload, headers=headers) as resp:
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
             for line in resp.iter_lines():
                 if not line.startswith("data: "):
                     continue
@@ -461,9 +465,7 @@ def skip_intros(client: McpClient, max_skips: int = 20, poll_secs: float = 1.0) 
             pass
 
 
-def wait_for_interactive(
-    client: McpClient, timeout: float = 120.0
-) -> bool:
+def wait_for_interactive(client: McpClient, timeout: float = 120.0) -> bool:
     """Poll with skips until walk() succeeds (game accepts input)."""
     deadline = time.time() + timeout
     while time.time() < deadline:
