@@ -2328,10 +2328,10 @@ void ScummMcpBridge::pumpStream() {
 		// Use a longer settle window so we don't close before the question appears.
 		if (_vm->_game.version == 7 && !questionReady)
 			settleFrames = MAX(settleFrames, (uint32)45);
-		// V8 (CMI) answer stream: the dialog script updates each used choice's
-		// curmode to 0 after the response plays. Use a longer settle window so
-		// the new question reflects only currently-active choices.
-		if (_vm->_game.version == 8 && _sseAnswerStream)
+		// V8 (CMI): dialog choices appear after walk + verb script finishes.
+		// Use a longer settle window (same as V7) so hasPendingQuestion() can
+		// fire before the stream closes — both for initial act() and answer() streams.
+		if (_vm->_game.version == 8 && !questionReady)
 			settleFrames = MAX(settleFrames, (uint32)45);
 
 		// For V0 (Maniac Mansion): after ego reaches the target object, runObjectScript
