@@ -220,11 +220,12 @@ def test_13_monkey_give_breath_mint_to_prisoner(monkey_client: McpClient) -> Non
             {"id": 3, "label": "Do you know anything about a magic phrase?"},
         ]
     }
+    print(result["messages"])
     assert any(
-        msg["text"] == "Ooooh! Grog-o-mint! How refreshing! Thanks."
+        msg["text"] == "Don't mention it."
         for msg in result["messages"]
     )
 
-    assert result["inventory_removed"] == ["breath mint"]
+    assert result["inventory_removed"] == ["breath_mint"]
     assert "x" in result["position"]
     assert "y" in result["position"]

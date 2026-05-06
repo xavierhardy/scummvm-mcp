@@ -319,7 +319,8 @@ venv/
 scummvm.ini
 .pytest_cache/
 .ruff_cache/
-test/mcp/PROMPT.md
-test/mcp/debug_*
-test/mcp/logs/
-test/mcp/save_slots/maniac-c64/maniac-c64.s00
+/test/mcp/PROMPT.md
+/test/mcp/debug_*
+/test/mcp/logs/
+/test/mcp/save_slots/maniac-c64/maniac-c64.s00
+/test/debug

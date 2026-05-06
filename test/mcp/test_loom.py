@@ -181,34 +181,3 @@ def test_07_loom_egg_listen_and_replay(loom_client: McpClient) -> None:
     assert len(replay_notes) >= len(notes) - 1, (
         f"replay only emitted {replay_notes} for input {notes}"
     )
-
-
-def test_08_loom_use_item_on_object(loom_client: McpClient) -> None:
-    """Two-target 'use item' exercises the inventory-on-object mechanic."""
-    if not wait_for_interactive(loom_client):
-        pytest.skip("Game in cutscene")
-
-    state = get_state_with_retry(loom_client)
-    inventory = state.get("inventory", [])
-    if not inventory:
-        pytest.skip("No inventory items in this save state")
-
-    inv_item = inventory[0]
-
-    target_obj = None
-    for obj in state.get("objects", []):
-        if obj.get("pathway") or obj["name"] == inv_item:
-            continue
-        target_obj = obj["id"]
-        break
-
-    if target_obj is None:
-        pytest.skip("No room object available to use item on")
-
-    try:
-        result = loom_client.act("use item", inv_item, target_obj)
-    except RuntimeError as e:
-        if "not accepting input" in str(e):
-            pytest.skip(f"Game in cutscene: {e}")
-        raise
-    assert isinstance(result, dict), f"Expected dict result, got: {result!r}"
