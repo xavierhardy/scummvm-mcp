@@ -1474,9 +1474,26 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		     _vm->getVerbEntrypoint(targetA, 7) != 0 ||  // pick_up / use
 		     _vm->getVerbEntrypoint(targetA, 8) != 0);   // talk_to
 		if (!hasActionHandler && targetA != 0) {
-			// Exit/pathway: dispatch via verb 1 (internal walk/default verb) just as the
-			// game's click handler does when the player clicks on this object.
-			_vm->doSentence(1, targetA, 0);
+			// Exit/pathway: CMI exit hotspots are activated by the game's scene-click
+			// handler, which detects objects by bounding box. Simulate a left click at
+			// the object's bbox center — the scene script then walks ego there and
+			// triggers the room transition, exactly as a real player click would.
+			int idx = _vm->getObjectIndex(targetA);
+			if (idx >= 0) {
+				const ObjectData &od = _vm->_objs[idx];
+				int clickX = od.x_pos + od.width  / 2;
+				int clickY = od.y_pos + od.height / 2;
+				_vm->_mouse.x        = clickX;
+				_vm->_mouse.y        = clickY;
+				_vm->_virtualMouse.x = clickX;
+				_vm->_virtualMouse.y = clickY;
+				if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = clickX;
+				if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = clickY;
+				if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = clickX;
+				if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = clickY;
+				_vm->_lastInputScriptTime = _vm->_system->getMillis();
+				_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+			}
 		} else {
 			Actor *ego = getEgoActor();
 			if (ego) {

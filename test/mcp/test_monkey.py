@@ -221,10 +221,7 @@ def test_13_monkey_give_breath_mint_to_prisoner(monkey_client: McpClient) -> Non
         ]
     }
     print(result["messages"])
-    assert any(
-        msg["text"] == "Don't mention it."
-        for msg in result["messages"]
-    )
+    assert any(msg["text"] == "Don't mention it." for msg in result["messages"])
 
     assert result["inventory_removed"] == ["breath_mint"]
     assert "x" in result["position"]

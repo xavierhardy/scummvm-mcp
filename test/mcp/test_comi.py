@@ -127,7 +127,9 @@ def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> No
     }
     result = comi_client.answer(6)
 
-    assert "It's been swell talking to you." in [msg["text"] for msg in result["messages"]]
+    assert "It's been swell talking to you." in [
+        msg["text"] for msg in result["messages"]
+    ]
 
 
 def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:
@@ -136,17 +138,15 @@ def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:
     initial_room = state.get("room", {}).get("id")
 
     # Look for a pathway or exit object
-    pathways = [
-        obj
-        for obj in state.get("objects", [])
-        if obj.get("pathway") or "door" in obj.get("name", "").lower()
-    ]
+    pathways = [obj for obj in state.get("objects", []) if obj.get("pathway")]
 
     # Try to interact with the first pathway/door
     pathway = pathways[0]
-    print(f"Trying to use pathway/door: {pathway['name']}")
+    print(f"Trying to use pathway: {pathway['name']}")
     result = comi_client.act("walk_to", pathway["name"])
 
-    # Check if room changed
-    room_changed = result.get("room_changed")
-    assert room_changed != initial_room, "Room should have changed"
+    # room_changed is only present when the room actually changed
+    assert "room_changed" in result, (
+        "Room should have changed (room_changed missing from result)"
+    )
+    assert result["room_changed"] != initial_room
