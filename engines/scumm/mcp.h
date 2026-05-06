@@ -117,6 +117,11 @@ private:
 	int _ssePendingV7Choice = 0;
 	// Frame at which we should clear the simulated left-button msDown bit.
 	uint32 _sseButtonClearFrame = 0;
+	// True when streaming was triggered by toolAnswer() (dialog choice). For V8
+	// the verb slots remain populated with dialog choices throughout, so the
+	// hasPendingQuestion-based "done" signal cannot be used to close the stream
+	// early; we must wait for the dialog response (actorTalk lines) to play out.
+	bool _sseAnswerStream = false;
 
 	void pushMessage(const char *type, int actorId, const Common::String &text);
 

@@ -127,9 +127,7 @@ def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> No
     }
     result = comi_client.answer(6)
 
-    assert [msg["text"] for msg in result["messages"]] == [
-        "It's been swell talking to you.",
-    ]
+    assert "It's been swell talking to you." in [msg["text"] for msg in result["messages"]]
 
 
 def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:

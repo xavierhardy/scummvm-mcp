@@ -1087,7 +1087,11 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				}
 				bool allowAsChoice = true;
 				if (_vm->_game.version >= 7) {
-					allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+					if (_vm->_game.version == 8) {
+						allowAsChoice = (vs.curmode == 1);
+					} else {
+						allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+					}
 				} else {
 					if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
 					if (vs.curmode != 0 && vs.curmode != 1) allowAsChoice = false;
@@ -1290,6 +1294,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 
 	snapshotPreAction();
 	_streaming = true;
+	_sseAnswerStream = false;
 	_sseStartFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
@@ -1451,6 +1456,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// input script directly, the same way the engine handles a click on
 		// the verb bar slot.
 		_vm->runInputScript(kVerbClickArea, verbId, 1);
+	} else if (_vm->_game.id == GID_CMI && verbId == 13) {
+		// CMI walk_to: just walk ego to the object's position. Dispatching
+		// doSentence(13, target) would invoke a non-existent walk verb script
+		// and produce a "No." default response.
+		Actor *ego = getEgoActor();
+		if (ego) {
+			int objX = _vm->getObjX(targetA);
+			int objY = _vm->getObjY(targetA);
+			ego->startWalkActor(objX, objY, -1);
+		}
 	} else {
 		_vm->doSentence(verbId, targetA, targetB);
 	}
@@ -1537,7 +1552,14 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 			}
 			bool allowAsChoice = true;
 			if (_vm->_game.version >= 7) {
-				allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+				// V8 (CMI): used dialog choices stay in the slot list with curmode=0;
+				// only currently-active choices have curmode=1. Don't fall back to the
+				// numeric-key heuristic, which would let used choices through.
+				if (_vm->_game.version == 8) {
+					allowAsChoice = (vs.curmode == 1);
+				} else {
+					allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+				}
 			} else {
 				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
 				if (vs.curmode != 0 && vs.curmode != 1) allowAsChoice = false;
@@ -1570,6 +1592,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	const VerbSlot &vs = _vm->_verbs[chosenSlot];
 	snapshotPreAction();
 	_streaming = true;
+	_sseAnswerStream = true;
 	_sseStartFrame = _frameCounter;
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
@@ -1583,7 +1606,30 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
 	_sseInitialVerbScript = _sseVerbScript;
 	_sseVerbScriptChanged = false;
-	_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
+	// CMI (V8) dialog choices are rendered as text lines on the screen. To
+	// dispatch a choice we replicate a real click on the choice line: place the
+	// mouse inside the verb slot's rect and run the verb-click input script
+	// (mode 1 = activate / select).
+	if (_vm->_game.id == GID_CMI) {
+		const Common::Rect &rc = vs.curRect;
+		int mouseX = (rc.left + rc.right) / 2;
+		int mouseY = (rc.top + rc.bottom) / 2;
+		if (mouseX < 0) mouseX = 0;
+		if (mouseX > _vm->_screenWidth - 1) mouseX = _vm->_screenWidth - 1;
+		if (mouseY < 0) mouseY = 0;
+		if (mouseY > _vm->_screenHeight - 1) mouseY = _vm->_screenHeight - 1;
+		_vm->_mouse.x = mouseX;
+		_vm->_mouse.y = mouseY;
+		_vm->_virtualMouse.x = mouseX;
+		_vm->_virtualMouse.y = mouseY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = mouseX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = mouseY;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
+		_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
+	} else {
+		_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
+	}
 	_server->startStreaming();
 	return true;
 }
@@ -1910,6 +1956,38 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	}
 	out.setVal("vars", new Common::JSONValue(vars));
 
+	// Verb slots for debugging dialog choices etc.
+	Common::JSONArray verbs;
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid && vs.curmode == 0 && !vs.saveid) continue;
+		Common::JSONObject v;
+		v.setVal("slot",    mcpJsonInt(slot));
+		v.setVal("verbid",  mcpJsonInt(vs.verbid));
+		v.setVal("saveid",  mcpJsonInt(vs.saveid));
+		v.setVal("curmode", mcpJsonInt(vs.curmode));
+		v.setVal("color",   mcpJsonInt(vs.color));
+		v.setVal("dimcolor",mcpJsonInt(vs.dimcolor));
+		v.setVal("hicolor", mcpJsonInt(vs.hicolor));
+		v.setVal("key",     mcpJsonInt(vs.key));
+		v.setVal("type",    mcpJsonInt(vs.type));
+		v.setVal("center",  mcpJsonBool(vs.center));
+		Common::JSONObject rect;
+		rect.setVal("left",   mcpJsonInt(vs.curRect.left));
+		rect.setVal("top",    mcpJsonInt(vs.curRect.top));
+		rect.setVal("right",  mcpJsonInt(vs.curRect.right));
+		rect.setVal("bottom", mcpJsonInt(vs.curRect.bottom));
+		v.setVal("rect", new Common::JSONValue(rect));
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (ptr) {
+			byte textBuf[256] = {};
+			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+			v.setVal("label", mcpJsonString(mcpSanitizeString((const char *)textBuf)));
+		}
+		verbs.push_back(new Common::JSONValue(v));
+	}
+	out.setVal("verbs", new Common::JSONValue(verbs));
+
 	return new Common::JSONValue(out);
 }
 
@@ -2218,7 +2296,30 @@ void ScummMcpBridge::pumpStream() {
 		// V7: hasPendingQuestion() returns true whenever VAR_VERB_SCRIPT differs
 		// from the baseline, even during an answer stream that started in dialog
 		// mode. Suppress it for V7 here — dialog detection uses v7DialogReady.
-		bool questionReady = (_vm->_game.version == 7) ? false : hasPendingQuestion();
+		// V8 (CMI) during an answer stream: the stream should NOT close on the
+		// initial hasPendingQuestion (the response is still playing). Once enough
+		// frames have passed for the chosen line to be spoken, close as soon as
+		// either (a) a new question has appeared (signalling the next dialog turn
+		// is ready) or (b) dialog has ended (no more pending question and at
+		// least one message captured).
+		bool questionReady;
+		if (_vm->_game.version == 7) {
+			questionReady = false;
+		} else if (_vm->_game.version == 8 && _sseAnswerStream) {
+			bool hpq = hasPendingQuestion();
+			bool waitedEnough = (_frameCounter - _sseStartFrame >= 30);
+			bool gotMessage = !_sseMessages.empty();
+			// New dialog turn: a question is now pending after we've waited.
+			if (hpq && waitedEnough)
+				questionReady = true;
+			// End of dialog: no question pending and we already got a message.
+			else if (!hpq && gotMessage && waitedEnough)
+				questionReady = true;
+			else
+				questionReady = false;
+		} else {
+			questionReady = hasPendingQuestion();
+		}
 		uint32 settleFrames = (_vm->_game.version == 0) ? 3 : 10;
 		if (_vm->_game.version != 0 && _sseEgoMoved && !questionReady)
 			settleFrames = 20;
@@ -2226,6 +2327,11 @@ void ScummMcpBridge::pumpStream() {
 		// even when ego hasn't moved (hero was already near the actor).
 		// Use a longer settle window so we don't close before the question appears.
 		if (_vm->_game.version == 7 && !questionReady)
+			settleFrames = MAX(settleFrames, (uint32)45);
+		// V8 (CMI) answer stream: the dialog script updates each used choice's
+		// curmode to 0 after the response plays. Use a longer settle window so
+		// the new question reflects only currently-active choices.
+		if (_vm->_game.version == 8 && _sseAnswerStream)
 			settleFrames = MAX(settleFrames, (uint32)45);
 
 		// For V0 (Maniac Mansion): after ego reaches the target object, runObjectScript
@@ -2434,7 +2540,11 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 				}
 				bool allowAsChoice = true;
 				if (_vm->_game.version >= 7) {
-					allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+					if (_vm->_game.version == 8) {
+						allowAsChoice = (vs.curmode == 1);
+					} else {
+						allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+					}
 				} else {
 					if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
 					if (vs.curmode != 0 && vs.curmode != 1) allowAsChoice = false;
@@ -2579,8 +2689,12 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 			debug(1, "mcp: hasPendingQuestion   label='%s'", label.c_str());
 			bool allowAsChoice = true;
 			if (_vm->_game.version >= 7) {
-				// V7/V8: sentence-like labels or active mode or numbered keys
-				allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+				if (_vm->_game.version == 8) {
+					allowAsChoice = (vs.curmode == 1);
+				} else {
+					// V7: sentence-like labels or active mode or numbered keys
+					allowAsChoice = (vs.curmode == 1) || isSentenceLikeDialogLabel(label) || (vs.key >= '1' && vs.key <= '9');
+				}
 			} else {
 				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) allowAsChoice = false;
 				if (vs.curmode != 0 && vs.curmode != 1) allowAsChoice = false;
