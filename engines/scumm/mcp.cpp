@@ -1463,6 +1463,44 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// input script directly, the same way the engine handles a click on
 		// the verb bar slot.
 		_vm->runInputScript(kVerbClickArea, verbId, 1);
+	} else if (_vm->_game.id == GID_CMI && verbId == 7 && targetA != 0 && targetB != 0) {
+		// CMI "use A on B": dispatch through the sentence script. For two inventory
+		// items the sentence script looks up the combination table; for an inventory
+		// item on a room object it checks the object's verb-7 entrypoint.
+		if (_vm->whereIsObject(targetB) == WIO_INVENTORY) {
+			int epA = _vm->getVerbEntrypoint(targetA, verbId);
+			int epB = _vm->getVerbEntrypoint(targetB, verbId);
+			debug(1, "mcp: CMI inv-on-inv: targetA=%d epA=%d targetB=%d epB=%d", targetA, epA, targetB, epB);
+			_vm->doSentence(verbId, targetA, targetB);
+		} else {
+			// Arm targetA then scene-click at targetB's bounding-box center.
+			_vm->runInputScript(kInventoryClickArea, targetA, 0);
+			int idx = _vm->getObjectIndex(targetB);
+			int bx = _vm->getObjX(targetB);
+			int by = _vm->getObjY(targetB);
+			if (idx >= 0) {
+				const ObjectData &od = _vm->_objs[idx];
+				bx = od.x_pos + od.width  / 2;
+				by = od.y_pos + od.height / 2;
+			}
+			VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
+			int mx = bx - vs->xstart;
+			int my = by + vs->topline;
+			if (mx < 0) mx = 0;
+			if (mx > _vm->_screenWidth  - 1) mx = _vm->_screenWidth  - 1;
+			if (my < 0) my = 0;
+			if (my > _vm->_screenHeight - 1) my = _vm->_screenHeight - 1;
+			_vm->_mouse.x        = mx;
+			_vm->_mouse.y        = my;
+			_vm->_virtualMouse.x = bx;
+			_vm->_virtualMouse.y = by;
+			if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = bx;
+			if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = by;
+			if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mx;
+			if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = my;
+			_vm->_leftBtnPressed |= 0x03;
+			_sseButtonClearFrame = _frameCounter + 2;
+		}
 	} else if (_vm->_game.id == GID_CMI && verbId == 13) {
 		// CMI walk_to: verb 13 has no entrypoint in the game, so doSentence(13,...)
 		// produces a "No." response. For objects with action handlers, startWalkActor
