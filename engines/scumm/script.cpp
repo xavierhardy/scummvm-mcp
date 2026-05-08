@@ -1538,6 +1538,15 @@ bool ScummEngine::isScriptRunning(int script) const {
 	return false;
 }
 
+int ScummEngine::activeScriptCount() const {
+	int n = 0;
+	const ScriptSlot *ss = vm.slot;
+	for (int i = 0; i < NUM_SCRIPT_SLOT; ++i, ++ss)
+		if (ss->status != ssDead && ss->number != 0)
+			++n;
+	return n;
+}
+
 bool ScummEngine::isRoomScriptRunning(int script) const {
 	int i;
 	const ScriptSlot *ss = vm.slot;

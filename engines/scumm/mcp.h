@@ -86,6 +86,20 @@ private:
 	bool _sseEgoMoved;          // ego moved at any point during this stream
 	int _sseTargetObject;       // V0: primary object acted on; 0 if none or non-V0
 	Common::Array<uint16> _ssePreInventory;
+	// Names captured at snapshot time so removed items can still be
+	// reported by name after the engine unloads them (e.g. CMI inv-on-inv
+	// combine consumes both inputs and the object data is no longer loaded).
+	Common::Array<Common::String> _ssePreInventoryNames;
+	// Last-seen inventory contents during a stream; bumps _sseLastEventFrame
+	// whenever the set changes so the settling window extends through the
+	// long deferred animations CMI dispatches after a sentence completes.
+	Common::Array<uint16> _sseLastInventorySnapshot;
+	uint                  _sseLastInventoryHashCount = 0;
+	// Baseline of active script slots at action start. While the number of
+	// active scripts exceeds this baseline (CMI chains animation/object
+	// scripts after the sentence finishes), keep extending the settle window.
+	int                   _ssePreActiveScriptCount = 0;
+	int                   _sseLastActiveScriptCount = 0;
 	Common::Array<ObjStateSnap> _ssePreObjectStates;
 	int _ssePreRoom;
 	int _ssePrePosX, _ssePrePosY;

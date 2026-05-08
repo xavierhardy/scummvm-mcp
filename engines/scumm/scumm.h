@@ -1087,6 +1087,10 @@ protected:
 	bool isScriptInUse(int script) const;
 	bool isRoomScriptRunning(int script) const;
 	bool isScriptRunning(int script) const;
+	// Number of script slots that are active (not ssDead). Used by the MCP
+	// bridge to detect background activity (chained verb/object scripts) so
+	// streaming actions can wait for deferred animations to finish.
+	int activeScriptCount() const;
 
 	void killAllScriptsExceptCurrent();
 	void killScriptsAndResources();

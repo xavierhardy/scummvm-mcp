@@ -1464,43 +1464,14 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// the verb bar slot.
 		_vm->runInputScript(kVerbClickArea, verbId, 1);
 	} else if (_vm->_game.id == GID_CMI && verbId == 7 && targetA != 0 && targetB != 0) {
-		// CMI "use A on B": dispatch through the sentence script. For two inventory
-		// items the sentence script looks up the combination table; for an inventory
-		// item on a room object it checks the object's verb-7 entrypoint.
-		if (_vm->whereIsObject(targetB) == WIO_INVENTORY) {
-			int epA = _vm->getVerbEntrypoint(targetA, verbId);
-			int epB = _vm->getVerbEntrypoint(targetB, verbId);
-			debug(1, "mcp: CMI inv-on-inv: targetA=%d epA=%d targetB=%d epB=%d", targetA, epA, targetB, epB);
-			_vm->doSentence(verbId, targetA, targetB);
-		} else {
-			// Arm targetA then scene-click at targetB's bounding-box center.
-			_vm->runInputScript(kInventoryClickArea, targetA, 0);
-			int idx = _vm->getObjectIndex(targetB);
-			int bx = _vm->getObjX(targetB);
-			int by = _vm->getObjY(targetB);
-			if (idx >= 0) {
-				const ObjectData &od = _vm->_objs[idx];
-				bx = od.x_pos + od.width  / 2;
-				by = od.y_pos + od.height / 2;
-			}
-			VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
-			int mx = bx - vs->xstart;
-			int my = by + vs->topline;
-			if (mx < 0) mx = 0;
-			if (mx > _vm->_screenWidth  - 1) mx = _vm->_screenWidth  - 1;
-			if (my < 0) my = 0;
-			if (my > _vm->_screenHeight - 1) my = _vm->_screenHeight - 1;
-			_vm->_mouse.x        = mx;
-			_vm->_mouse.y        = my;
-			_vm->_virtualMouse.x = bx;
-			_vm->_virtualMouse.y = by;
-			if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = bx;
-			if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = by;
-			if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mx;
-			if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = my;
-			_vm->_leftBtnPressed |= 0x03;
-			_sseButtonClearFrame = _frameCounter + 2;
-		}
+		// CMI "use A on B": the engine's sentence dispatcher uses verb id 5
+		// (the same id the engine raises when the player clicks an armed
+		// inventory item on a target). doSentence(7, ...) does nothing —
+		// the combination table and scripted use-handlers are wired to verb 5.
+		// This works uniformly for inv-on-inv (combine table → new item) and
+		// inv-on-room (target's verb-5 entrypoint runs with VAR_USE_OBJECT set).
+		const int kCmiUseVerb = 5;
+		_vm->doSentence(kCmiUseVerb, targetA, targetB);
 	} else if (_vm->_game.id == GID_CMI && verbId == 13) {
 		// CMI walk_to: verb 13 has no entrypoint in the game, so doSentence(13,...)
 		// produces a "No." response. For objects with action handlers, startWalkActor
@@ -2295,6 +2266,54 @@ void ScummMcpBridge::pumpStream() {
 			_sseEgoMoved = true;
 	}
 
+	// Track inventory changes (additions or removals): in CMI long actions
+	// (e.g. use gaff on debris) the verb script dispatches a chained animation
+	// that updates the inventory many frames after the sentence script ends.
+	// Treat any inventory-set transition vs the pre-action snapshot as an event
+	// so the settling window keeps extending until the inventory is stable.
+	{
+		Common::Array<uint16> currentInv;
+		int egoForInv = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
+		for (int i = 0; _vm->_inventory && i < _vm->_numInventory; ++i) {
+			uint16 obj = _vm->_inventory[i];
+			if (obj && _vm->getOwner(obj) == egoForInv)
+				currentInv.push_back(obj);
+		}
+		auto invSetMatches = [&](const Common::Array<uint16> &a,
+		                         const Common::Array<uint16> &b) -> bool {
+			if (a.size() != b.size()) return false;
+			for (uint i = 0; i < a.size(); ++i) {
+				bool found = false;
+				for (uint j = 0; j < b.size(); ++j) if (a[i] == b[j]) { found = true; break; }
+				if (!found) return false;
+			}
+			return true;
+		};
+		if (currentInv.size() != _sseLastInventoryHashCount ||
+		    !invSetMatches(currentInv, _sseLastInventorySnapshot)) {
+			_sseLastInventoryHashCount = currentInv.size();
+			_sseLastInventorySnapshot = currentInv;
+			_sseLastEventFrame = _frameCounter;
+		}
+	}
+
+	// V8 (CMI): use-on-X actions chain follow-up scripts (animation cues +
+	// deferred inventory updates) that start in fresh slots after the
+	// sentence script ends. Whenever a NEW script appears (count rises since
+	// the previous frame), or the count is currently above the pre-action
+	// baseline (a chained script is still running), bump the event frame so
+	// the settling window keeps extending while the chain is in progress.
+	if (_vm->_game.version == 8) {
+		int curCount = _vm->activeScriptCount();
+		// Only bump on a new script appearing this frame (count went up
+		// since the last frame). Stable counts (background music etc.) and
+		// counts above the pre-action baseline are not enough — those would
+		// keep the stream open indefinitely for plain walk_to actions.
+		if (curCount > _sseLastActiveScriptCount)
+			_sseLastEventFrame = _frameCounter;
+		_sseLastActiveScriptCount = curCount;
+	}
+
 	// Early-close: if the room has already changed, there is nothing left to settle —
 	// no dialogue will appear in the old room and accessing old-room state is unsafe.
 	if ((int)_vm->_currentRoom != _ssePreRoom) {
@@ -2487,14 +2506,22 @@ void ScummMcpBridge::pumpStream() {
 void ScummMcpBridge::snapshotPreAction() {
 	_ssePreRoom = _vm->_currentRoom;
 	_ssePreInventory.clear();
+	_ssePreInventoryNames.clear();
+	_sseLastInventorySnapshot.clear();
 	{
 		int ego = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
 		for (int i = 0; _vm->_inventory && i < _vm->_numInventory; ++i) {
 			uint16 obj = _vm->_inventory[i];
-			if (obj && _vm->getOwner(obj) == ego)
+			if (obj && _vm->getOwner(obj) == ego) {
 				_ssePreInventory.push_back(obj);
+				_ssePreInventoryNames.push_back(getObjName(this, obj));
+				_sseLastInventorySnapshot.push_back(obj);
+			}
 		}
 	}
+	_sseLastInventoryHashCount = _sseLastInventorySnapshot.size();
+	_ssePreActiveScriptCount = _vm->activeScriptCount();
+	_sseLastActiveScriptCount = _ssePreActiveScriptCount;
 	Actor *ego = getEgoActor();
 	if (ego) {
 		_ssePrePosX = ego->getRealPos().x;
@@ -2550,6 +2577,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (_vm->_numGlobalObjects > 0 && obj >= _vm->_numGlobalObjects) continue;
 		if (_vm->getOwner(obj) == ego) continue;
 		Common::String name = getObjName(this, obj);
+		if (name.empty() && j < _ssePreInventoryNames.size())
+			name = _ssePreInventoryNames[j];
 		if (name.empty()) name = Common::String::format("obj-%d", obj);
 		Common::String cleanName = cleanGameText(mcpSanitizeString(normalizeActionName(name)));
 		if (!cleanName.empty()) {
