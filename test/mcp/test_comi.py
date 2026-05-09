@@ -130,6 +130,8 @@ def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> No
     assert "It's been swell talking to you." in [
         msg["text"] for msg in result["messages"]
     ]
+    state = comi_client.state()
+    assert set(state["verbs"]) == {"walk to", "talk to", "pick up", "look at", "use"}
 
 
 def test_08a_comi_s3_use_combines_inventory_items(

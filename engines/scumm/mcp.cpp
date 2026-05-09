@@ -866,7 +866,11 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 
 	// Curse of Monkey Island (V8) uses a single-cursor model similar to The Dig
 	// and Full Throttle, with no persistent verb bar. Expose the 5 core verbs.
-	if (_vm->_game.id == GID_CMI && !questionPending && activeVerbs.empty()) {
+	// Always clear whatever the text-slot scan may have picked up (e.g. lingering
+	// dialog-choice slots after a conversation ends) and replace with the fixed set.
+	if (_vm->_game.id == GID_CMI && !questionPending) {
+		verbsArr.clear();
+		activeVerbs.clear();
 		struct FallbackVerb { int id; const char *name; const char *label; };
 		static const FallbackVerb kCMIFallback[] = {
 			{13, "walk_to", "walk to"},
