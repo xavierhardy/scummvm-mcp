@@ -2332,8 +2332,13 @@ void ScummMcpBridge::pumpStream() {
 	// This includes both idle and animated states (e.g., cutscenes with ego moving).
 	// Use a short timeout when no events have occurred yet (action had no visible
 	// effect and completed quickly), and a longer one when we've seen activity.
+	// V8 (CMI) exception: userPut locked with no talkDelay means the dialog script
+	// is between lines deciding what to say next — not frozen. isActionDone() already
+	// guards this via its own userPut check, so skip stuck-close entirely here.
 	{
 		bool stuck = _vm->_talkDelay == 0 && _vm->_userPut <= 0;
+		if (_vm->_game.version == 8 && _vm->_userPut <= 0)
+			stuck = false;
 		if (stuck) {
 			if (_sseStuckAtFrame == 0) _sseStuckAtFrame = _frameCounter;
 			bool hadActivity = _sseLastEventFrame > 0 || _sseEgoMoved;
@@ -2350,12 +2355,21 @@ void ScummMcpBridge::pumpStream() {
 		}
 	}
 
-	// Hard timeout: 600 frames (~20 s).
-	if (_frameCounter - _sseStartFrame > 600) {
-		debug(1, "mcp: stream timeout after 600 frames");
-		_streaming = false;
-		_server->endStream(nullptr, false, "action timed out");
-		return;
+	// Hard timeout: 600 frames (~20 s) since the last event (or stream start).
+	// For V8 (CMI), anchor to _sseLastEventFrame so that each new dialog line
+	// resets the deadline — long exchanges don't time out between lines.
+	// A hard ceiling of 3600 frames (~120 s) still guards against infinite loops.
+	{
+		uint32 timeoutAnchor = (_vm->_game.version == 8 && _sseLastEventFrame > 0)
+		    ? _sseLastEventFrame : _sseStartFrame;
+		bool absoluteTimeout = (_frameCounter - _sseStartFrame > 3600);
+		if (absoluteTimeout || _frameCounter - timeoutAnchor > 600) {
+			debug(1, "mcp: stream timeout (anchor=%u, start=%u, last=%u, now=%u)",
+			      timeoutAnchor, _sseStartFrame, _sseLastEventFrame, _frameCounter);
+			_streaming = false;
+			_server->endStream(nullptr, false, "action timed out");
+			return;
+		}
 	}
 
 	// V7: if the game switched to a dialog input script (VAR_VERB_SCRIPT changed),

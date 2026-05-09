@@ -134,6 +134,40 @@ def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> No
     assert set(state["verbs"]) == {"walk to", "talk to", "pick up", "look at", "use"}
 
 
+def test_07b_comi_exhausts_pirate_dialog_no_timeout(comi_client: McpClient) -> None:
+    """Exhaust every remaining pirate dialog choice without hitting MCP timeout.
+
+    After test_07's goodbye, topics 1-5 are still available.  Picking each
+    in turn exercises the longer back-and-forth exchanges that previously caused
+    the SSE stream to close prematurely (stuck-detection fired between lines, or
+    the 600-frame hard timeout fired on a multi-line exchange).
+    """
+    result = comi_client.act("talk_to", "small_pirate")
+    if result.get("question") is None:
+        pytest.skip("No dialog choices available from pirate after prior exchange")
+
+    # Cycle through all choices, always picking the first one (longer exchanges)
+    # until only the farewell remains, then say goodbye.
+    MAX_TURNS = 20
+    for _ in range(MAX_TURNS):
+        question = result.get("question")
+        if question is None:
+            break
+        choices = question["choices"]
+        # If only one option remains it must be the farewell — take it and stop.
+        if len(choices) == 1:
+            result = comi_client.answer(choices[0]["id"])
+            break
+        # Pick the first (non-farewell) choice; it should produce at least one message.
+        result = comi_client.answer(choices[0]["id"])
+        assert len(result["messages"]) > 0, (
+            f"Expected dialog messages for choice {choices[0]['id']!r}, got none"
+        )
+
+    state = comi_client.state()
+    assert set(state["verbs"]) == {"walk to", "talk to", "pick up", "look at", "use"}
+
+
 def test_08a_comi_s3_use_combines_inventory_items(
     comi_s3_client: McpClient,
 ) -> None:
