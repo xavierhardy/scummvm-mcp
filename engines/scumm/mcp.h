@@ -146,6 +146,7 @@ private:
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolShootCannon(const Common::JSONValue &args, Common::String &errorOut);
 
 	// Debug tools (gated by mcp_debug ini option). Engine-version-agnostic.
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut);

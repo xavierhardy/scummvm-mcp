@@ -568,6 +568,29 @@ void ScummMcpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
+	// --- shoot_cannon (CMI cannon minigame only) ---
+	if (_vm->_game.id == GID_CMI) {
+		Common::JSONObject props;
+		props.setVal("x", mcpProp("integer",
+		    "Screen X coordinate to aim the cannon at (0–639)."));
+		props.setVal("y", mcpProp("integer",
+		    "Screen Y coordinate to aim the cannon at (0–479)."));
+		const char *req[] = {"x", "y"};
+		Networking::McpServer::ToolSpec spec;
+		spec.name = "shoot_cannon";
+		spec.description =
+		    "Aim the cannon at screen position (x, y) and fire a cannonball. "
+		    "Only available in the Curse of Monkey Island cannon minigame. "
+		    "Moves the mouse cursor to the target coordinates and simulates a "
+		    "left click to fire. Blocks until the shot resolves — cannonball "
+		    "flight, explosion, and any resulting speech (e.g. Guybrush "
+		    "apologising if the fort is hit) — then returns state changes.";
+		spec.inputSchema  = mcpObjectSchema(props, req, 2);
+		spec.outputSchema = makeChangesSchema();
+		spec.streaming    = true;
+		_server->registerTool(spec);
+	}
+
 	// --- debug tools (gated by mcp_debug ini option) ---
 	if (_debugToolsEnabled) {
 		// debug — return raw engine state for diagnostics
@@ -684,6 +707,10 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 	}
 	if (name == "play_note") {
 		if (!toolPlayNote(args, errorOut)) return nullptr;
+		return nullptr;
+	}
+	if (name == "shoot_cannon") {
+		if (!toolShootCannon(args, errorOut)) return nullptr;
 		return nullptr;
 	}
 	if (name == "debug")        return toolDebug(args, errorOut);
@@ -2065,6 +2092,74 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	out.setVal("room_objects", new Common::JSONValue(roomObjs));
 
 	return new Common::JSONValue(out);
+}
+
+// ---------------------------------------------------------------------------
+// Tool: shoot_cannon (CMI cannon minigame)
+// ---------------------------------------------------------------------------
+
+bool ScummMcpBridge::toolShootCannon(const Common::JSONValue &args, Common::String &errorOut) {
+	if (_streaming) {
+		errorOut = "shoot_cannon: another action is already in progress";
+		return false;
+	}
+	if (_vm->_game.id != GID_CMI) {
+		errorOut = "shoot_cannon: only available in Curse of Monkey Island";
+		return false;
+	}
+	if (_vm->_userPut <= 0) {
+		errorOut = "shoot_cannon: game is not accepting input right now";
+		return false;
+	}
+	if (!args.isObject()) {
+		errorOut = "shoot_cannon: arguments must be an object";
+		return false;
+	}
+	const Common::JSONObject &a = args.asObject();
+	if (!a.contains("x") || !a["x"]->isIntegerNumber() ||
+	    !a.contains("y") || !a["y"]->isIntegerNumber()) {
+		errorOut = "shoot_cannon: integer 'x' and 'y' coordinates are required";
+		return false;
+	}
+
+	int x = (int)a["x"]->asIntegerNumber();
+	int y = (int)a["y"]->asIntegerNumber();
+	int maxX = (_vm->_screenWidth  > 0 ? _vm->_screenWidth  : 640) - 1;
+	int maxY = (_vm->_screenHeight > 0 ? _vm->_screenHeight : 480) - 1;
+	x = CLIP<int>(x, 0, maxX);
+	y = CLIP<int>(y, 0, maxY);
+
+	// Move the virtual mouse cursor to the target and fire.
+	_vm->_mouse.x        = x;
+	_vm->_mouse.y        = y;
+	_vm->_virtualMouse.x = x;
+	_vm->_virtualMouse.y = y;
+	if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = x;
+	if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = y;
+	if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = x;
+	if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = y;
+	_vm->_lastInputScriptTime = _vm->_system->getMillis();
+	_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+
+	snapshotPreAction();
+	_streaming = true;
+	_sseAnswerStream = false;
+	_sseStartFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
+	_sseEgoMoved = false;
+	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
+	_sseButtonClearFrame = _frameCounter + 2;
+	_ssePendingV7Choice = 0;
+	_sseVerbScript = 0;
+	_sseInitialVerbScript = 0;
+	_sseVerbScriptChanged = false;
+	_sseTargetObject = 0;
+	_server->startStreaming();
+	return true;
 }
 
 bool ScummMcpBridge::toolKeystroke(const Common::JSONValue &args, Common::String &errorOut) {

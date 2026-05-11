@@ -271,6 +271,31 @@ def comi_s3_client() -> McpClient:
 
 
 @pytest.fixture(scope="session")
+def comi_s4_client() -> McpClient:
+    """Launch Curse of Monkey Island demo (save slot 4, cannon minigame)."""
+    mcp_port = 23471
+
+    require_game_path("comi-demo")
+    scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
+    proc = launch_scummvm(
+        "comi-demo",
+        GAME_PATHS["comi-demo"],
+        port=mcp_port,
+        scummvm_binary=scummvm_binary,
+        save_slot=4,
+    )
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    yield client
+    client.close()
+    proc.kill()
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()
+
+
+@pytest.fixture(scope="session")
 def comi_client() -> McpClient:
     """Launch Curse of Monkey Island demo and return MCP client."""
     mcp_port = 23469
