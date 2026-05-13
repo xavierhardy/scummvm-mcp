@@ -3167,11 +3167,25 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		// Exclude objects the player cannot interact with (mirrors findObject()).
 		if (!isObjectSelectable(od)) continue;
 		Common::String name = getObjName(this, od.obj_nr);
+		// In the Passport-to-Adventure Loom segment, scene pathways/exits have
+		// no OBNA name (they're invisible hotspots authored without a label).
+		// Surface them under a stable, action-friendly name so the MCP client
+		// can target them by name instead of by hardcoded id. We restrict this
+		// to PASS+Loom; other games keep their existing placeholder behavior.
+		bool isLoomPassPathway = false;
+		if (name.empty() && _vm->_game.id == GID_PASS && isInLoomSection() &&
+		    (od.x_pos != 0 || od.y_pos != 0) && od.width > 0 && od.height > 0) {
+			isLoomPassPathway = true;
+		}
 		RawEntry e;
 		e.kind = NamedEntity::kObject;
 		e.numId = od.obj_nr;
-		e.baseName = name.empty() ? Common::String::format("obj_%d", od.obj_nr)
-		                          : normalizeActionName(name);
+		if (isLoomPassPathway) {
+			e.baseName = Common::String::format("pathway_%d", od.obj_nr);
+		} else {
+			e.baseName = name.empty() ? Common::String::format("obj_%d", od.obj_nr)
+			                          : normalizeActionName(name);
+		}
 		// Visibility mask: v0-v2 use only the intrinsic (on/off) bit; v3+ use the full
 		// lower nibble which encodes pickupable, untouchable, locked, and intrinsic.
 		const int mask = (_vm->_game.version <= 2)

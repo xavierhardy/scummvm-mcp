@@ -223,19 +223,30 @@ def test_08_loom_leaf_fall(loom_leaf_client) -> None:
     )
 
 
-def test_09_loom_pathway_room_change(loom_leaf_client) -> None:
-    """Repeated interacts with the unnamed pathway object (id 460) on the
-    left of room 36 walk Bobbin all the way left and trigger a room change
-    to room 39. The pathway requires multiple steps because Bobbin's walk
-    is interrupted at intermediate stand points.
+def test_09_loom_pathway_named(loom_leaf_client) -> None:
+    """Loom/PASS exclusive: pathway objects with no OBNA name are renamed
+    `pathway_<id>` in the MCP state, so the agent can target them by name.
+    """
+    state = get_state_with_retry(loom_leaf_client)
+    names = {o["name"]: o["id"] for o in state.get("objects", [])}
+    assert "pathway_460" in names, (
+        f"Expected `pathway_460` (renamed from unnamed obj 460) in room 36, got: {list(names)}"
+    )
+    assert names["pathway_460"] == 460
+
+
+def test_10_loom_pathway_room_change(loom_leaf_client) -> None:
+    """Repeated interacts with `pathway_460` walk Bobbin all the way left
+    and trigger a room change from room 36 to room 39. The pathway
+    requires multiple steps because Bobbin's walk is interrupted at
+    intermediate stand points.
     """
     if not wait_for_interactive(loom_leaf_client):
         pytest.skip("Save did not reach interactive state")
 
     state = get_state_with_retry(loom_leaf_client)
-    pathway_id = 460
-    if not any(o["id"] == pathway_id for o in state.get("objects", [])):
-        pytest.skip(f"pathway object {pathway_id} not present in current room")
+    if not any(o["name"] == "pathway_460" for o in state.get("objects", [])):
+        pytest.skip("pathway_460 not present in current room")
 
     initial_room = state["room"]["id"]
     changed_to: int | None = None
@@ -245,7 +256,7 @@ def test_09_loom_pathway_room_change(loom_leaf_client) -> None:
             changed_to = cur["room"]["id"]
             break
         try:
-            result = loom_leaf_client.act("interact", pathway_id)
+            result = loom_leaf_client.act("interact", "pathway_460")
         except RuntimeError:
             sleep(1)
             continue
