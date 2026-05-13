@@ -222,6 +222,35 @@ def loom_client() -> McpClient:
 
 
 @pytest.fixture(scope="session")
+def loom_leaf_client() -> McpClient:
+    """Passport to Adventure, Loom segment save slot 2 — leaf/pathway scene.
+
+    pass.s02 drops Bobbin in room 36 next to a tree with a `leaf` object,
+    and an unnamed pathway object (id 460) on the left that walks to room 39.
+    """
+    mcp_port = 23472
+
+    require_game_path("pass")
+    scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
+    proc = launch_scummvm(
+        "pass",
+        GAME_PATHS["pass"],
+        port=mcp_port,
+        scummvm_binary=scummvm_binary,
+        save_slot=2,
+    )
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    yield client
+    client.close()
+    proc.kill()
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()
+
+
+@pytest.fixture(scope="session")
 def dig_client() -> McpClient:
     """Launch The Dig demo and return MCP client."""
     mcp_port = 23460

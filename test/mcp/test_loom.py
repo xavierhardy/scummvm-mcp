@@ -181,3 +181,84 @@ def test_07_loom_egg_listen_and_replay(loom_client: McpClient) -> None:
     assert len(replay_notes) >= len(notes) - 1, (
         f"replay only emitted {replay_notes} for input {notes}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests for save slot 2: leaf-on-a-tree scene with a left-side pathway.
+# ---------------------------------------------------------------------------
+
+
+def test_08_loom_leaf_fall(loom_leaf_client) -> None:
+    """Interacting with the `leaf` in room 36 makes Bobbin say his line
+    and the leaf disappears from the room (state change).
+
+    Single-cursor model: MCP "interact" issues the click + queued second
+    click (Loom double-click) on the leaf's bbox center. The engine then
+    runs Bobbin's walk-arrival script, which prints the actor line and
+    removes the leaf from the room.
+    """
+    if not wait_for_interactive(loom_leaf_client):
+        pytest.skip("Save did not reach interactive state")
+
+    state = get_state_with_retry(loom_leaf_client)
+    assert state["room"]["id"] == 36, f"Expected room 36, got {state['room']}"
+    leaf = _find_id(state, "leaf")
+    assert leaf is not None, "Expected `leaf` object in room 36"
+
+    notes, messages, result = loom_leaf_client.call_capturing(
+        "act", {"verb": "interact", "target1": leaf}
+    )
+
+    texts = [m.get("text") for m in messages]
+    assert "Last leaf of the year." in texts, (
+        f"Expected Bobbin's leaf line, got messages: {messages}"
+    )
+
+    # Wait for the falling animation to complete and the leaf to be removed.
+    sleep(2)
+    new_state = get_state_with_retry(loom_leaf_client)
+    names_after = [o["name"] for o in new_state.get("objects", [])]
+    assert "leaf" not in names_after, (
+        f"leaf should have fallen and left the room object list, got: {names_after}"
+    )
+
+
+def test_09_loom_pathway_room_change(loom_leaf_client) -> None:
+    """Repeated interacts with the unnamed pathway object (id 460) on the
+    left of room 36 walk Bobbin all the way left and trigger a room change
+    to room 39. The pathway requires multiple steps because Bobbin's walk
+    is interrupted at intermediate stand points.
+    """
+    if not wait_for_interactive(loom_leaf_client):
+        pytest.skip("Save did not reach interactive state")
+
+    state = get_state_with_retry(loom_leaf_client)
+    pathway_id = 460
+    if not any(o["id"] == pathway_id for o in state.get("objects", [])):
+        pytest.skip(f"pathway object {pathway_id} not present in current room")
+
+    initial_room = state["room"]["id"]
+    changed_to: int | None = None
+    for _ in range(6):
+        cur = get_state_with_retry(loom_leaf_client)
+        if cur["room"]["id"] != initial_room:
+            changed_to = cur["room"]["id"]
+            break
+        try:
+            result = loom_leaf_client.act("interact", pathway_id)
+        except RuntimeError:
+            sleep(1)
+            continue
+        if result.get("room_changed"):
+            changed_to = result["room_changed"]
+            break
+        sleep(1)
+
+    if changed_to is None:
+        cur = get_state_with_retry(loom_leaf_client)
+        if cur["room"]["id"] != initial_room:
+            changed_to = cur["room"]["id"]
+
+    assert changed_to == 39, (
+        f"Expected pathway to lead to room 39, got room {changed_to} from {initial_room}"
+    )

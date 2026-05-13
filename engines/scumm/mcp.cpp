@@ -1411,8 +1411,24 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	} else if (isLoomClick) {
 		// Convert object world coords to on-screen mouse coords (Passport Loom has
 		// horizontally scrolling rooms, so screen X != world X).
+		// For V3/V4 Loom rooms, getObjX/Y returns the object's walk-to coordinate
+		// (od.walk_x/walk_y) which is where ego walks to — *not* the visible
+		// bounding box. The engine's findObject() runs at the click coordinate,
+		// so clicking on the walk-to point often misses the leaf/etc bbox. Use
+		// the bbox center (od.x_pos + width/2, od.y_pos + height/2) for room
+		// objects in V3/V4 so the click actually lands inside the object.
 		int objX = _vm->getObjX(targetA);
 		int objY = _vm->getObjY(targetA);
+		if (_vm->_game.version <= 4 && targetA != 0 && !_vm->objIsActor(targetA)) {
+			int idx = _vm->getObjectIndex(targetA);
+			if (idx >= 0 && _vm->_objs) {
+				const ObjectData &od = _vm->_objs[idx];
+				if (od.width > 0 && od.height > 0) {
+					objX = od.x_pos + od.width / 2;
+					objY = od.y_pos + od.height / 2;
+				}
+			}
+		}
 		VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
 		int mouseX = objX - vs->xstart;
 		int mouseY = objY + vs->topline;
@@ -1481,8 +1497,13 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			// double-click cadence required for the egg listen/replay puzzle.
 			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
 
-			Common::String targetName = mcpLowerTrimmed(getObjName(this, targetA));
-			if (targetName.contains("egg")) {
+			// In Loom's single-cursor model, a single click on a room object
+			// just walks ego there (and the engine reports the object's name);
+			// the actual interaction (egg singing, leaf falling, etc.) needs a
+			// second click after ego has arrived. Queue a second click for any
+			// non-actor room object so MCP "interact" matches a player's
+			// double-click on the scene.
+			if (targetA != 0 && !_vm->objIsActor(targetA)) {
 				_ssePendingSecondClick = true;
 				_sseClickMouseX = mouseX;
 				_sseClickMouseY = mouseY;
