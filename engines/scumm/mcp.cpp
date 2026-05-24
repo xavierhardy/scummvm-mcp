@@ -399,6 +399,55 @@ void ScummMcpBridge::onV7BlastTextSnapshot() {
 		c.y = bt.ypos;
 		fresh.push_back(c);
 	}
+	// The Dig draws conversation choices as picture-icon blast OBJECTS in the
+	// bottom dialog panel rather than blast text. Capture them while a dialog
+	// input script is active. Each choice icon is a blast object nested inside
+	// a wider "dialog background" blast object; the nested ones are the
+	// selectable choices. The blast rect is in room coordinates (its top was
+	// offset by _screenTop at enqueue time), so the on-screen click target is
+	// the rect centre with _screenTop subtracted back out; x carries no scroll.
+	if (fresh.empty() && _vm->_game.id == GID_DIG) {
+		bool dialogPending = (_baseVerbScript != 0 && _vm->VAR_VERB_SCRIPT != 0xFF &&
+		                      (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) != _baseVerbScript);
+		if (dialogPending) {
+			ScummEngine_v6 *v6 = (ScummEngine_v6 *)_vm;
+			int n = v6->_blastObjectQueuePos;
+			if (n > (int)ARRAYSIZE(v6->_blastObjectQueue))
+				n = ARRAYSIZE(v6->_blastObjectQueue);
+			for (int i = 0; i < n; ++i) {
+				const ScummEngine_v6::BlastObject &eo = v6->_blastObjectQueue[i];
+				// A choice icon sits inside a strictly larger blast object (the
+				// dialog background). Standalone panels contain nothing and are
+				// skipped.
+				bool nested = false;
+				for (int j = 0; j < n; ++j) {
+					if (j == i) continue;
+					const Common::Rect &o = v6->_blastObjectQueue[j].rect;
+					if (o.left <= eo.rect.left && o.right >= eo.rect.right &&
+					    o.top <= eo.rect.top && o.bottom >= eo.rect.bottom &&
+					    (o.width() > eo.rect.width() || o.height() > eo.rect.height())) {
+						nested = true;
+						break;
+					}
+				}
+				if (!nested)
+					continue;
+				V7Choice c;
+				c.objNumber = eo.number;
+				Common::String nm = safeUtf8(getObjName(this, eo.number));
+				c.text = nm.empty() ? Common::String::format("icon_%d", eo.number)
+				                    : normalizeActionName(nm);
+				// Store the icon centre in ROOM coordinates. The dialog input
+				// script hit-tests VAR_VIRT_MOUSE (room space) against the icon
+				// positions, so the click dispatch needs room — not screen —
+				// coordinates. The blast rect is already room space (its top was
+				// offset by _screenTop at enqueue time).
+				c.x = (eo.rect.left + eo.rect.right) / 2;
+				c.y = (eo.rect.top + eo.rect.bottom) / 2;
+				fresh.push_back(c);
+			}
+		}
+	}
 	// Only overwrite when the new snapshot is non-empty: between
 	// re-renders the script briefly empties the queue, and we'd lose the
 	// choices if we cleared on every frame.
@@ -1162,7 +1211,9 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			Common::Array<V7Choice> sorted = _v7DialogChoices;
 			for (uint i = 0; i + 1 < sorted.size(); ++i) {
 				for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
-					if (sorted[j].y > sorted[j + 1].y) {
+					bool swap = (sorted[j].y > sorted[j + 1].y) ||
+					            (sorted[j].y == sorted[j + 1].y && sorted[j].x > sorted[j + 1].x);
+					if (swap) {
 						V7Choice tmp = sorted[j];
 						sorted[j] = sorted[j + 1];
 						sorted[j + 1] = tmp;
@@ -2674,13 +2725,17 @@ void ScummMcpBridge::pumpStream() {
 	}
 
 	// Hard timeout: 600 frames (~20 s) since the last event (or stream start).
-	// For V8 (CMI), anchor to _sseLastEventFrame so that each new dialog line
-	// resets the deadline — long exchanges don't time out between lines.
-	// A hard ceiling of 3600 frames (~120 s) still guards against infinite loops.
+	// For V7 (Dig/FT) and V8 (CMI), anchor to _sseLastEventFrame so that each
+	// new dialog line resets the deadline — long exchanges and room-transition
+	// cutscenes (e.g. walking out of a scene while characters talk) don't time
+	// out between lines. Those games can have cutscenes far longer than two
+	// minutes, so the absolute 3600-frame (~120 s) ceiling only guards the
+	// older games; for V7/V8 the per-event 600-frame deadline (which still
+	// fires 20 s after dialogue genuinely stalls) is the sole safety net.
 	{
-		uint32 timeoutAnchor = (_vm->_game.version == 8 && _sseLastEventFrame > 0)
+		uint32 timeoutAnchor = (_vm->_game.version >= 7 && _sseLastEventFrame > 0)
 		    ? _sseLastEventFrame : _sseStartFrame;
-		bool absoluteTimeout = (_frameCounter - _sseStartFrame > 3600);
+		bool absoluteTimeout = (_vm->_game.version < 7) && (_frameCounter - _sseStartFrame > 3600);
 		if (absoluteTimeout || _frameCounter - timeoutAnchor > 600) {
 			debug(1, "mcp: stream timeout (anchor=%u, start=%u, last=%u, now=%u)",
 			      timeoutAnchor, _sseStartFrame, _sseLastEventFrame, _frameCounter);
@@ -2731,19 +2786,27 @@ void ScummMcpBridge::pumpStream() {
 	}
 
 	// V7: feed a deferred dialog-choice click once the game is ready.
-	// toolAnswer() stores the choice here. Dialog choices in V7 (The Dig / FT) are
-	// selected by a scene click (kSceneClickArea) at the Y coordinate of the chosen
-	// line — script 69 reads VAR_MOUSE_Y to determine which choice was made.
-	// The Y comes from the live blast-text snapshot captured each frame.
+	// toolAnswer() stores the choice here. The two V7 games render choices
+	// differently, so they are dispatched differently:
+	//   * The Dig — horizontal picture icons captured as blast OBJECTS, stored
+	//     in ROOM coordinates (objNumber != 0). The dialog input script hit-
+	//     tests VAR_VIRT_MOUSE (room space), so we point the virtual mouse at
+	//     the icon, the screen mouse at the matching on-screen spot, and press
+	//     the left button — exactly like a player clicking the icon.
+	//   * Full Throttle — text lines captured as blast TEXT, stored in SCREEN
+	//     coordinates (objNumber == 0). Its script reads VAR_MOUSE, so we keep
+	//     the original screen-mouse + scene-click dispatch untouched.
 	if (_ssePendingV7Choice != 0 && _vm->_userPut > 0 &&
 	    _frameCounter - _sseStartFrame >= 3) {
-		int choiceX = 160;
-		int choiceY = 163 + (_ssePendingV7Choice - 1) * 4;
+		bool haveChoice = false;
+		V7Choice chosen;
 		if (!_v7DialogChoices.empty()) {
 			Common::Array<V7Choice> sorted = _v7DialogChoices;
 			for (uint i = 0; i + 1 < sorted.size(); ++i) {
 				for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
-					if (sorted[j].y > sorted[j + 1].y) {
+					bool swap = (sorted[j].y > sorted[j + 1].y) ||
+					            (sorted[j].y == sorted[j + 1].y && sorted[j].x > sorted[j + 1].x);
+					if (swap) {
 						V7Choice tmp = sorted[j];
 						sorted[j] = sorted[j + 1];
 						sorted[j + 1] = tmp;
@@ -2751,18 +2814,46 @@ void ScummMcpBridge::pumpStream() {
 				}
 			}
 			int idx = CLIP<int>(_ssePendingV7Choice - 1, 0, (int)sorted.size() - 1);
-			choiceX = sorted[idx].x;
-			choiceY = sorted[idx].y;
+			chosen = sorted[idx];
+			haveChoice = true;
 		}
-		debug(1, "mcp: feeding V7 dialog choice %d as scene click at (%d,%d) frame %d",
-		      _ssePendingV7Choice, choiceX, choiceY, _frameCounter);
-		_vm->_mouse.x = choiceX;
-		_vm->_mouse.y = choiceY;
-		if (_vm->VAR_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_MOUSE_X) = choiceX;
-		if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = choiceY;
-		_vm->runInputScript(kSceneClickArea, 0, 1);
+
+		if (haveChoice && chosen.objNumber != 0) {
+			// The Dig: room-space icon. Drive the virtual mouse + a real click.
+			int roomX = chosen.x;
+			int roomY = chosen.y;
+			VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
+			int screenX = CLIP<int>(roomX - vs->xstart, 0, _vm->_screenWidth - 1);
+			int screenY = CLIP<int>(roomY - _vm->_screenTop, 0, _vm->_screenHeight - 1);
+			debug(1, "mcp: feeding Dig dialog choice %d as left click at room (%d,%d) screen (%d,%d) frame %d",
+			      _ssePendingV7Choice, roomX, roomY, screenX, screenY, _frameCounter);
+			_vm->_mouse.x = screenX;
+			_vm->_mouse.y = screenY;
+			_vm->_virtualMouse.x = roomX;
+			_vm->_virtualMouse.y = roomY;
+			if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = screenX;
+			if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = screenY;
+			if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = roomX;
+			if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = roomY;
+			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown — a real left click
+			_sseButtonClearFrame = _frameCounter + 2;
+			_vm->runInputScript(kSceneClickArea, 0, 1);
+		} else {
+			// Full Throttle (screen-space text lines) and the no-capture
+			// fallback: place the screen mouse on the choice and run the
+			// scene-click input script — the original, proven dispatch.
+			int screenX = haveChoice ? chosen.x : 160;
+			int screenY = haveChoice ? chosen.y : (163 + (_ssePendingV7Choice - 1) * 4);
+			debug(1, "mcp: feeding V7 dialog choice %d as scene click at (%d,%d) frame %d",
+			      _ssePendingV7Choice, screenX, screenY, _frameCounter);
+			_vm->_mouse.x = screenX;
+			_vm->_mouse.y = screenY;
+			if (_vm->VAR_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_MOUSE_X) = screenX;
+			if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = screenY;
+			_vm->runInputScript(kSceneClickArea, 0, 1);
+		}
 		_ssePendingV7Choice = 0;
-	_ssePendingV7UseClick = false;
+		_ssePendingV7UseClick = false;
 		// Reset settle window so we capture messages produced by this choice.
 		_sseDoneAtFrame = 0;
 	}

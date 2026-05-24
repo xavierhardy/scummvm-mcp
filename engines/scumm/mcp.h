@@ -73,11 +73,15 @@ private:
 		int state;
 	};
 
-	// V7 dialog-choice snapshot (captured from the blast-text queue each frame).
+	// V7 dialog-choice snapshot (captured each frame). Full Throttle draws
+	// choices as blast text; The Dig draws them as picture-icon blast objects,
+	// in which case objNumber identifies the icon and x/y hold its on-screen
+	// click target.
 	struct V7Choice {
 		Common::String text;
 		int x;
 		int y;
+		int objNumber = 0;
 	};
 
 	ScummEngine *_vm;

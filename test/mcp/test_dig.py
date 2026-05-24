@@ -15,6 +15,36 @@ import pytest
 from utils import McpClient
 
 
+def _open_brink_dialog(client: McpClient) -> list:
+    """Open Brink's conversation and return its choice list.
+
+    Interacting with an actor may briefly leave the game not accepting input
+    while the hero walks over and speaks, so retry until the dialog appears.
+    """
+    for _ in range(10):
+        q = client.state().get("question")
+        if q:
+            return q["choices"]
+        try:
+            client.act("interact", "brink")
+        except RuntimeError:
+            pass
+        q = client.state().get("question")
+        if q:
+            return q["choices"]
+    raise AssertionError("could not open Brink's dialog")
+
+
+def _close_dialog(client: McpClient) -> None:
+    """Leave any open conversation by selecting its last icon ('Thanks')."""
+    for _ in range(10):
+        q = client.state().get("question")
+        if not q:
+            return
+        client.answer(len(q["choices"]))
+    assert not client.state().get("question"), "dialog did not close"
+
+
 def test_01_dig_initial_state(dig_client: McpClient) -> None:
     """Save loads cleanly and we can read state with no intro to skip."""
     state = dig_client.state()
@@ -64,11 +94,48 @@ def test_05_dig_interact_actor(dig_client: McpClient) -> None:
     assert any("brink" in m["text"].lower() for m in msgs), (
         f"Expected hero to acknowledge Brink, got: {msgs}"
     )
-    # The Dig demo uses blast-object icons for dialog choices (no captured
-    # labels). Dismiss any pending dialog so subsequent session-scoped tests
-    # start in the normal verb script.
-    if dig_client.state().get("question"):
-        dig_client.answer(1)
+    # The conversation opens with one icon per topic. The Dig draws these as
+    # picture-icon blast objects, captured and exposed as choices with stable
+    # per-icon labels.
+    choices = dig_client.state().get("question", {}).get("choices")
+    assert choices, f"Expected dialog choices after talking to Brink, got: {choices}"
+    assert len(choices) >= 2, f"Expected multiple topic icons, got: {choices}"
+    # Dismiss so subsequent session-scoped tests start in the normal verb script.
+    _close_dialog(dig_client)
+
+
+def test_05b_dig_dialog_choices_distinct(dig_client: McpClient) -> None:
+    """Each topic icon must dispatch a *different* conversation branch.
+
+    Regression test for the V7 dialog dispatch. The Dig's choices are
+    horizontal picture icons whose click target lives only in the blast-object
+    queue (room coordinates). The old dispatch set VAR_MOUSE but never the
+    room-space VAR_VIRT_MOUSE the dialog script hit-tests, so every answer
+    missed the icons and fell through to the hero's "Nothing important." brush
+    -off. With the virtual mouse pointed at the icon and a real left click,
+    each icon now drives its own branch.
+    """
+    # Topic icon 1: "How are you doing, Brink?" -> Brink answers.
+    _open_brink_dialog(dig_client)
+    r1 = dig_client.answer(1)
+    t1 = " ".join(m["text"].lower() for m in r1.get("messages", []))
+    assert "how are you" in t1, f"Expected the 'how are you' topic, got: {r1.get('messages')}"
+    assert any(m.get("actor") == "brink" for m in r1.get("messages", [])), (
+        f"Expected Brink to respond to topic 1, got: {r1.get('messages')}"
+    )
+    assert "nothing important" not in t1, "Topic 1 fell through to the cancel line"
+    _close_dialog(dig_client)
+
+    # Topic icon 2: "This place is eerie." -> Brink: "...desolate..."
+    _open_brink_dialog(dig_client)
+    r2 = dig_client.answer(2)
+    t2 = " ".join(m["text"].lower() for m in r2.get("messages", []))
+    assert "eerie" in t2, f"Expected the 'eerie' topic, got: {r2.get('messages')}"
+    assert "desolate" in t2, f"Expected Brink's 'desolate' reply, got: {r2.get('messages')}"
+    _close_dialog(dig_client)
+
+    # The two branches must differ — the core of the bug was that they didn't.
+    assert t1 != t2, "Topics 1 and 2 produced identical dialog"
 
 
 def test_06_dig_interact_scenery(dig_client: McpClient) -> None:
@@ -112,19 +179,25 @@ def test_10_dig_use_item_on_actor_male(dig_client: McpClient) -> None:
 
 
 def test_08_dig_leave_scene(dig_client: McpClient) -> None:
-    """Walking ego into the right-side clearing fires Maggie's exit line.
+    """Leaving room 15 plays a long cutscene that must NOT time out.
 
-    Object 53 ('clearing' on the right) is the pathway out of room 15. Trying
-    to leave alone triggers Maggie's scripted protest ("Easy boys...") rather
-    than transitioning the room — but it proves the pathway's verb 13
-    entrypoint ran, which the previous MCP routing (doSentence verb 7) never
-    reached. Maggie's line is captured via the streaming notifications
-    regardless of whether the action ultimately settles within the default
-    timeout.
+    Object 53 ('clearing' on the right) is the pathway out of room 15. Walking
+    there triggers a ~minute-long scripted argument (Low/Brink/Maggie debate who
+    leads) before the team finally moves to room 16. The dialogue lines come
+    seconds apart but the whole exchange runs well past the old 600-frame
+    (~20 s) timeout, which previously aborted the action with "action timed
+    out" mid-cutscene. With the timeout anchored to the last streamed event for
+    V7/V8, each line resets the deadline so the cutscene plays to completion and
+    the action settles cleanly with the room transition.
     """
-    notes, messages, _ = dig_client.call_capturing(
+    notes, messages, result = dig_client.call_capturing(
         "act", {"verb": "interact", "target1": 53}
     )
+    # A None result means the stream ended in an error (e.g. the old timeout).
+    assert result is not None, (
+        "Leave-scene action errored/timed out instead of completing the cutscene"
+    )
+
     actor_lines = [
         m for m in messages
         if m.get("type") == "actor" and m.get("actor") == "maggie"
@@ -132,3 +205,9 @@ def test_08_dig_leave_scene(dig_client: McpClient) -> None:
     assert any(
         "stick to" in m.get("text", "").lower() for m in actor_lines
     ), f"Expected Maggie's 'stick together' line, got: {messages}"
+
+    # The cutscene resolves by moving the team into room 16; the action must
+    # stay alive through the whole exchange to observe the transition.
+    assert result.get("room_changed") == 16 or dig_client.state()["room"]["id"] == 16, (
+        f"Expected transition to room 16 after the cutscene, got: {result}"
+    )
