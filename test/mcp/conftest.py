@@ -44,6 +44,30 @@ def monkey_client() -> McpClient:
 
 
 @pytest.fixture(scope="session")
+def monkey_de_client() -> McpClient:
+    """Launch German Monkey Island 1 EGA demo and return MCP client."""
+    mcp_port = 23473
+
+    require_game_path("monkey-ega-demo-de")
+    scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
+    proc = launch_scummvm(
+        "monkey-ega-demo-de",
+        GAME_PATHS["monkey-ega-demo-de"],
+        port=mcp_port,
+        scummvm_binary=scummvm_binary,
+    )
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    yield client
+    client.close()
+    proc.kill()
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()
+
+
+@pytest.fixture(scope="session")
 def maniac_client() -> McpClient:
     """Launch Maniac Mansion C64 demo and return MCP client."""
     mcp_port = 23457

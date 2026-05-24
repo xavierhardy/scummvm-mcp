@@ -11,6 +11,7 @@
 #include "common/hashmap.h"
 #include "common/hash-str.h"
 #include "common/util.h"
+#include "common/ustr.h"
 
 #include "scumm/actor.h"
 #include "scumm/scumm_v0.h"
@@ -389,7 +390,7 @@ void ScummMcpBridge::onV7BlastTextSnapshot() {
 		// Dialog choices in The Dig / Full Throttle are drawn in the bottom
 		// status area (y >= ~160). Actor speech (y around 8) is excluded.
 		if (bt.ypos < 160) continue;
-		Common::String text = cleanGameText(mcpSanitizeString(Common::String((const char *)bt.text)));
+		Common::String text = cleanGameText(safeUtf8(Common::String((const char *)bt.text)));
 		text.trim();
 		if (text.empty()) continue;
 		V7Choice c;
@@ -798,7 +799,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			for (uint ci = 0; ci < rn.size(); ++ci)
 				if ((unsigned char)rn[ci] < 0x20) { hasCtrl = true; break; }
 			if (!hasCtrl)
-				roomObj.setVal("name", mcpJsonString(mcpSanitizeString(rn)));
+				roomObj.setVal("name", mcpJsonString(safeUtf8(rn)));
 		}
 	}
 	out.setVal("room", new Common::JSONValue(roomObj));
@@ -839,8 +840,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			for (uint ci = 0; ci < label.size(); ++ci)
 				if ((unsigned char)label[ci] < 0x20) { labelHasCtrl = true; break; }
 			if (labelHasCtrl) continue;
-			Common::String safe2 = mcpSanitizeString(normalizeActionName(label));
-			Common::String safeLabel = mcpSanitizeString(label);
+			Common::String safe2 = safeUtf8(normalizeActionName(label));
+			Common::String safeLabel = safeUtf8(label);
 			verbsArr.push_back(mcpJsonString(safeLabel));
 			VerbInfo vi;
 			vi.verbId = vs.verbid;
@@ -976,7 +977,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	Common::JSONArray inventory, objects;
 	for (uint i = 0; i < entities.size(); ++i) {
 		const NamedEntity &ne = entities[i];
-		Common::String safe = mcpSanitizeString(ne.displayName);
+		// displayName is already UTF-8 (buildEntityMap normalized it).
+		Common::String safe = ne.displayName;
 		switch (ne.kind) {
 		case NamedEntity::kInventory: {
 			Common::String cleanItem = cleanGameText(safe);
@@ -1120,7 +1122,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	Common::JSONArray msgsArr;
 	for (uint i = 0; i < _messages.size(); ++i) {
 		const MessageEntry &m = _messages[i];
-		Common::String cleanText = cleanGameText(mcpSanitizeString(m.text));
+		Common::String cleanText = cleanGameText(safeUtf8(m.text));
 		if (cleanText.empty()) continue;
 		Common::JSONObject entry;
 		if (m.actorId >= 0) {
@@ -1129,7 +1131,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			if (_vm->_numGlobalObjects <= 0 || objId < _vm->_numGlobalObjects) {
 				Common::String actorName = getObjName(this, objId);
 				if (!actorName.empty()) {
-					Common::String safe = mcpSanitizeString(mcpLowerTrimmed(actorName));
+					Common::String safe = safeUtf8(mcpLowerTrimmed(actorName));
 					entry.setVal("actor", mcpJsonString(safe));
 				}
 			}
@@ -1197,7 +1199,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
 					byte textBuf[256] = {};
 					_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-					label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+					label = cleanGameText(safeUtf8(Common::String((const char *)textBuf)));
 				}
 				bool allowAsChoice = true;
 				if (_vm->_game.version >= 7) {
@@ -1229,7 +1231,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				byte textBuf[256];
 				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 				if (!textBuf[0]) continue;
-				Common::String cleanLabel = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+				Common::String cleanLabel = cleanGameText(safeUtf8(Common::String((const char *)textBuf)));
 				if (cleanLabel.empty()) continue;
 				Common::JSONObject choice;
 				choice.setVal("id",    mcpJsonInt(++choiceCount));
@@ -1774,7 +1776,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 			if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
 				byte textBuf[256] = {};
 				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-				label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+				label = cleanGameText(safeUtf8(Common::String((const char *)textBuf)));
 			}
 			bool allowAsChoice = true;
 			if (_vm->_game.version >= 7) {
@@ -2209,7 +2211,7 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 		if (ptr) {
 			byte textBuf[256] = {};
 			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-			v.setVal("label", mcpJsonString(mcpSanitizeString((const char *)textBuf)));
+			v.setVal("label", mcpJsonString(safeUtf8((const char *)textBuf)));
 		}
 		verbs.push_back(new Common::JSONValue(v));
 	}
@@ -2258,7 +2260,7 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 			s.setVal("center",  mcpJsonBool(st.center));
 			s.setVal("wrap",    mcpJsonBool(st.wrap));
 			s.setVal("speech",  mcpJsonBool(st.actorSpeechMsg));
-			s.setVal("text",    mcpJsonString(mcpSanitizeString(cleanGameText(Common::String((const char *)st.text)))));
+			s.setVal("text",    mcpJsonString(safeUtf8(cleanGameText(Common::String((const char *)st.text)))));
 			subs.push_back(new Common::JSONValue(s));
 		}
 		out.setVal("subtitle_queue", new Common::JSONValue(subs));
@@ -2491,15 +2493,15 @@ void ScummMcpBridge::emitPendingMessages() {
 			if (_vm->_numGlobalObjects <= 0 || objId < _vm->_numGlobalObjects) {
 				Common::String actorName = getObjName(this, objId);
 				if (!actorName.empty()) {
-					Common::String safe = mcpSanitizeString(mcpLowerTrimmed(actorName));
+					Common::String safe = safeUtf8(mcpLowerTrimmed(actorName));
 					params.setVal("actor", mcpJsonString(safe));
 				}
 			}
 		}
-		Common::String cleanText = cleanGameText(mcpSanitizeString(m.text));
+		Common::String cleanText = cleanGameText(safeUtf8(m.text));
 		if (!cleanText.empty()) {
 			params.setVal("text", mcpJsonString(cleanText));
-			params.setVal("type", mcpJsonString(mcpSanitizeString(m.type)));
+			params.setVal("type", mcpJsonString(safeUtf8(m.type)));
 			_server->emitNotification(params);
 		}
 		_messages.remove_at(0);
@@ -2929,7 +2931,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (!wasPresent) {
 			Common::String name = getObjName(this, obj);
 			if (name.empty()) name = Common::String::format("obj-%d", obj);
-			Common::String cleanName = cleanGameText(mcpSanitizeString(normalizeActionName(name)));
+			Common::String cleanName = cleanGameText(safeUtf8(normalizeActionName(name)));
 			if (!cleanName.empty()) {
 				added.push_back(mcpJsonString(cleanName));
 			}
@@ -2948,7 +2950,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (name.empty() && j < _ssePreInventoryNames.size())
 			name = _ssePreInventoryNames[j];
 		if (name.empty()) name = Common::String::format("obj-%d", obj);
-		Common::String cleanName = cleanGameText(mcpSanitizeString(normalizeActionName(name)));
+		Common::String cleanName = cleanGameText(safeUtf8(normalizeActionName(name)));
 		if (!cleanName.empty()) {
 			removed.push_back(mcpJsonString(cleanName));
 		}
@@ -2990,7 +2992,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		Common::String name = getObjName(this, od.obj_nr);
 		if (name.empty()) name = Common::String::format("obj-%d", od.obj_nr);
 		Common::JSONObject entry;
-		entry.setVal("name",      mcpJsonString(mcpSanitizeString(mcpLowerTrimmed(name))));
+		entry.setVal("name",      mcpJsonString(safeUtf8(mcpLowerTrimmed(name))));
 		entry.setVal("old_state", mcpJsonInt(preState));
 		entry.setVal("new_state", mcpJsonInt(newState));
 		objChanges.push_back(new Common::JSONValue(entry));
@@ -3002,14 +3004,14 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		Common::JSONArray msgs;
 		for (uint i = 0; i < _sseMessages.size(); ++i) {
 			const MessageEntry &me = _sseMessages[i];
-			Common::String cleanText = cleanGameText(mcpSanitizeString(me.text));
+			Common::String cleanText = cleanGameText(safeUtf8(me.text));
 			if (cleanText.empty()) continue;
 			Common::JSONObject m;
 			m.setVal("text", mcpJsonString(cleanText));
 			if (me.actorId > 0) {
 				const byte *actorNamePtr = callGetObjOrActorName(me.actorId);
 				if (actorNamePtr) {
-					Common::String actorName = mcpSanitizeString(mcpLowerTrimmed(Common::String((const char *)actorNamePtr)));
+					Common::String actorName = safeUtf8(mcpLowerTrimmed(Common::String((const char *)actorNamePtr)));
 					if (!actorName.empty())
 						m.setVal("actor", mcpJsonString(actorName));
 				}
@@ -3034,7 +3036,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 				if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
 					byte textBuf[256] = {};
 					_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-					label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+					label = cleanGameText(safeUtf8(Common::String((const char *)textBuf)));
 				}
 				bool allowAsChoice = true;
 				if (_vm->_game.version >= 7) {
@@ -3067,7 +3069,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 				byte textBuf[256];
 				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 				if (!textBuf[0]) continue;
-				Common::String cleanLabel = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+				Common::String cleanLabel = cleanGameText(safeUtf8(Common::String((const char *)textBuf)));
 				if (cleanLabel.empty()) continue;
 				Common::JSONObject choice;
 				choice.setVal("id",    mcpJsonInt(++choiceCount));
@@ -3182,7 +3184,7 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 			if (const byte *ptr = _vm->getResourceAddress(rtVerb, slot)) {
 				byte textBuf[256] = {};
 				_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-				label = cleanGameText(mcpSanitizeString(Common::String((const char *)textBuf)));
+				label = cleanGameText(safeUtf8(Common::String((const char *)textBuf)));
 			}
 			debug(1, "mcp: hasPendingQuestion   label='%s'", label.c_str());
 			bool allowAsChoice = true;
@@ -3250,6 +3252,14 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 // ---------------------------------------------------------------------------
 // Name resolution
 // ---------------------------------------------------------------------------
+
+Common::String ScummMcpBridge::safeUtf8(const Common::String &raw) const {
+	if (raw.empty()) return raw;
+	if (!_vm) return mcpSanitizeString(raw);
+	Common::CodePage cp = _vm->getDialogCodePage();
+	if (cp == Common::kUtf8) return mcpSanitizeString(raw);
+	return Common::U32String(raw, cp).encode(Common::kUtf8);
+}
 
 Common::String ScummMcpBridge::normalizeActionName(const Common::String &action) {
 	Common::String s(action);
@@ -3391,7 +3401,7 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		RawEntry e;
 		e.kind = NamedEntity::kInventory;
 		e.numId = obj;
-		e.baseName = normalizeActionName(name);
+		e.baseName = normalizeActionName(safeUtf8(name));
 		raw.push_back(e);
 	}
 
@@ -3418,7 +3428,7 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 			e.baseName = Common::String::format("pathway_%d", od.obj_nr);
 		} else {
 			e.baseName = name.empty() ? Common::String::format("obj_%d", od.obj_nr)
-			                          : normalizeActionName(name);
+			                          : normalizeActionName(safeUtf8(name));
 		}
 		// Visibility mask: v0-v2 use only the intrinsic (on/off) bit; v3+ use the full
 		// lower nibble which encodes pickupable, untouchable, locked, and intrinsic.
@@ -3503,7 +3513,7 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		e.numId = a->_number;
 		e.visible = a->_visible;
 		e.baseName = name.empty() ? Common::String::format("actor-%d", a->_number)
-		                          : normalizeActionName(name);
+		                          : normalizeActionName(safeUtf8(name));
 		if (!name.empty()) {
 			bool hasCtrl = false;
 			for (uint ci = 0; ci < e.baseName.size(); ++ci)
@@ -3581,7 +3591,7 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 				if (_vm->_numGlobalObjects > 0 && od.obj_nr >= _vm->_numGlobalObjects) continue;
 				Common::String objName = getObjName(this, od.obj_nr);
 				if (objName.empty()) continue;
-				if (normalizeActionName(objName) == normalized) {
+				if (normalizeActionName(safeUtf8(objName)) == normalized) {
 					out.kind        = NamedEntity::kObject;
 					out.numId       = od.obj_nr;
 					out.displayName = normalized;
@@ -3607,7 +3617,7 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		byte textBuf[256] = {};
 		if (ptr) _vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-		Common::String rawLabel((const char *)textBuf);
+		Common::String rawLabel = safeUtf8(Common::String((const char *)textBuf));
 		Common::String normLabel = normalizeActionName(rawLabel);
 		debug(1, "mcp:   slot=%d verbid=%d saveid=%d curmode=%d key=%d label='%s'",
 		      slot, vs.verbid, vs.saveid, vs.curmode, vs.key, rawLabel.c_str());
@@ -3740,7 +3750,7 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 			if (!ptr) continue;
 			byte textBuf[256] = {};
 			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-			Common::String label = mcpLowerTrimmed((const char *)textBuf);
+			Common::String label = mcpLowerTrimmed(safeUtf8((const char *)textBuf));
 			if (label.empty()) continue;
 			if (normalizeActionName(label) == normalized) {
 				verbId = vs.verbid;

@@ -208,6 +208,11 @@ private:
 	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
 	bool resolveVerb(const Common::String &action, int &verbId) const;
 
+	// Convert raw text in the game's native dialog code page (e.g. CP-850, CP-1252)
+	// to UTF-8 so non-ASCII labels round-trip correctly through MCP JSON.
+	// Falls back to byte-level sanitization when the engine is unavailable.
+	Common::String safeUtf8(const Common::String &raw) const;
+
 	// Selectability helpers: mirror the engine's findObject() / getActorFromPos() rules
 	// so that non-interactive entities are excluded from the MCP entity list.
 	bool isObjectSelectable(const ObjectData &od) const;

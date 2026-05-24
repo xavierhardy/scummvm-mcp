@@ -395,6 +395,10 @@ def launch_scummvm(
 
 GAME_PATHS = {
     "monkey-ega-demo": os.environ.get("MONKEY_DEMO_PATH", "/home/pi/games/MonkeyDemo"),
+    "monkey-ega-demo-de": os.environ.get(
+        "MONKEY_DEMO_DE_PATH",
+        "/Users/xhardy/Personal/llm/scummvm/games/monkey1-dos-ega-demo-de",
+    ),
     "maniac-c64": os.environ.get("MANIAC_C64_PATH", "/home/pi/games/ManiacC64"),
     "atlantis": os.environ.get("ATLANTIS_DEMO_PATH", "/home/pi/games/Indy4Demo"),
     "samnmax": os.environ.get(

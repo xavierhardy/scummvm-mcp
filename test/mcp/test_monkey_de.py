@@ -1,0 +1,149 @@
+"""
+Integration tests for the German Monkey Island 1 EGA demo.
+
+Mirrors the structure of test_monkey.py but exercises the same walkthrough
+through the German release. Validates that the MCP server transports
+non-ASCII labels and dialog text (umlauts, eszett) as UTF-8 in both
+directions: state output is UTF-8 encoded, and verb/target arguments
+containing UTF-8 multibyte characters are matched against the game's
+native code page (CP-850) entries.
+
+The German demo's verb bar carries a different verb set than the English
+one (no "öffne"/open; the door initially shows "schließe"/close), so the
+post-troll-dialog steps diverge from the English walkthrough. The
+encoding-critical steps — the door labelled "tür", the verb "schließe",
+and the dialog answer with the eszett-bearing troll line — are the focus.
+"""
+
+from assertions import assert_inventory_does_not_contain, assert_inventory_contains
+from utils import McpClient
+
+
+def test_01_de_initial_state(monkey_de_client: McpClient) -> None:
+    """Verify initial game state and that the German door surfaces as 'tür'."""
+    state = monkey_de_client.state()
+    assert "room" in state
+    assert state["room"]["id"] == 55
+    assert state.get("objects") is not None
+    assert isinstance(state.get("objects"), list)
+    assert len(state.get("objects", [])) > 0
+    assert len(state.get("inventory", [])) == 0
+    assert "position" in state
+    assert state["position"] == {"y": 132, "x": 235}
+    assert len(state.get("messages", [])) == 0
+
+    # German object names with umlauts must transit MCP as UTF-8 (no U+FFFD).
+    names = {o["name"] for o in state["objects"]}
+    assert names == {"torbogen", "tür"}, f"Unexpected objects: {sorted(names)}"
+
+    # German verb bar must round-trip ß and ü intact.
+    assert "schließe" in state["verbs"]
+    assert "drücke" in state["verbs"]
+    assert "rede mit" in state["verbs"]
+
+
+def test_02_de_walk_to_troll(monkey_de_client: McpClient) -> None:
+    """Walk to Troll. The troll greets in German."""
+    state = monkey_de_client.state()
+    assert state["room"]["id"] == 55
+
+    result = monkey_de_client.walk(120, 132)
+    assert "x" in result["position"]
+    assert "y" in result["position"]
+    assert result["messages"] == [{"actor": "troll", "text": "Keiner kommt vorbei!"}]
+
+    monkey_de_client.act("geh zu", "troll")
+
+    state = monkey_de_client.state()
+    assert state["position"]["x"] < 200, (
+        f"Expected Guybrush near troll, got {state['position']}"
+    )
+
+
+def test_03_de_talk_to_troll(monkey_de_client: McpClient) -> None:
+    """Talk to Troll to trigger German dialog with eszett and umlauts."""
+    state = monkey_de_client.state()
+    assert state["room"]["id"] == 55
+
+    result = monkey_de_client.act("rede mit", "troll")
+    expected = {
+        "question": {
+            "choices": [
+                {"id": 1, "label": "Aber ich will Pirat werden!"},
+                {"id": 2, "label": "Warum?"},
+                {"id": 3, "label": "Bitte, bitte?"},
+            ]
+        },
+        "messages": [
+            {"text": "Hi. Ich bin Guybrush Threepwood und--", "actor": "guybrush"},
+            {
+                "text": (
+                    "Ist mir egal, wie du heißt oder was du willst, du "
+                    "schlubbriger Schlobber von schlabbrigem Schleim!\xa0 "
+                    "Niemand kommt ohne den Zauberspruch hier durch."
+                ),
+                "actor": "troll",
+            },
+        ],
+    }
+    assert result == expected
+
+    # heißt contains an eszett — confirm at the byte level.
+    troll_line = result["messages"][1]["text"]
+    assert "heißt" in troll_line
+    assert "ß".encode("utf-8") in troll_line.encode("utf-8")
+
+    state = monkey_de_client.state()
+    assert state.get("question") is not None
+
+
+def test_04_de_answer_troll_dialog(monkey_de_client: McpClient) -> None:
+    """Answer dialog choice 3 (Bitte, bitte?)."""
+    state = monkey_de_client.state()
+    assert state["room"]["id"] == 55
+
+    result = monkey_de_client.answer(3)
+    assert result == {
+        "messages": [
+            {"text": "Bitte, bitte?", "actor": "guybrush"},
+            {
+                "text": (
+                    "Heh, nicht diesen Zauberspruch, du vor Höflichkeit "
+                    "stinkender Traum-Schwiegersohn, den anderen Zauberspruch!"
+                    "\xa0 --seufz--"
+                ),
+                "actor": "troll",
+            },
+        ]
+    }
+
+    # Höflichkeit carries an umlaut — confirm round-trip.
+    assert "Höflichkeit" in result["messages"][1]["text"]
+
+
+def test_05_de_walk_to_door(monkey_de_client: McpClient) -> None:
+    """Walk to the door — target name 'tür' is sent as UTF-8 and matched
+    against the game's CP-850 'Tür' label."""
+    state = monkey_de_client.state()
+    assert state["room"]["id"] == 55
+
+    result = monkey_de_client.act("geh zu", "tür")
+    assert result == {"position": {"y": 132, "x": 361}}
+
+
+def test_06_de_close_door(monkey_de_client: McpClient) -> None:
+    """Dispatch the 'schließe' verb (with ß) on the German door. This
+    proves the inbound UTF-8 verb name resolves to the correct verb id."""
+    state = monkey_de_client.state()
+    assert state["room"]["id"] == 55
+
+    # The German EGA demo door exposes only "schließe" and "geh zu" as
+    # compatible verbs — confirm the listing and that the verb dispatches
+    # without an "unknown verb" error.
+    door = next(o for o in state["objects"] if o["id"] == 422)
+    assert door["name"] == "tür"
+    assert "schließe" in door["compatible_verbs"]
+
+    # Should not raise an unknown-verb error — the engine accepts the UTF-8
+    # input and matches it to the game's "Schließe" verb label.
+    monkey_de_client.act("schließe", "tür")

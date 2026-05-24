@@ -234,7 +234,7 @@ def main() -> int:
 
         if args.cmd:
             result = args.fn(client, args)
-            print(json.dumps(result, indent=2, default=str))
+            print(json.dumps(result, indent=2, default=str, ensure_ascii=False))
             return 0
 
         print(
@@ -267,7 +267,7 @@ def main() -> int:
                 continue
             try:
                 result = ns.fn(client, ns)
-                print(json.dumps(result, indent=2, default=str))
+                print(json.dumps(result, indent=2, default=str, ensure_ascii=False))
             except Exception as e:
                 print(f"error: {e}")
         return 0
