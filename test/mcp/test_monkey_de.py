@@ -8,11 +8,13 @@ directions: state output is UTF-8 encoded, and verb/target arguments
 containing UTF-8 multibyte characters are matched against the game's
 native code page (CP-850) entries.
 
-The German demo's verb bar carries a different verb set than the English
-one (no "öffne"/open; the door initially shows "schließe"/close), so the
-post-troll-dialog steps diverge from the English walkthrough. The
+The German "Öffne" (open) verb starts with an uppercase umlaut. Verb names
+are matched case-insensitively, but ScummVM's Common::String::toLowercase()
+only folds ASCII, so the lowercase "öffne" sent by MCP clients used to miss
+the "Öffne" label and fail with "unknown verb". The fix makes the matcher
+fold Latin-1 uppercase letters too; test_06 guards it. The other
 encoding-critical steps — the door labelled "tür", the verb "schließe",
-and the dialog answer with the eszett-bearing troll line — are the focus.
+and the dialog answer with the eszett-bearing troll line — round-trip ß and ü.
 """
 
 from assertions import assert_inventory_does_not_contain, assert_inventory_contains
@@ -131,7 +133,33 @@ def test_05_de_walk_to_door(monkey_de_client: McpClient) -> None:
     assert result == {"position": {"y": 132, "x": 361}}
 
 
-def test_06_de_close_door(monkey_de_client: McpClient) -> None:
+def test_06_de_open_door_lowercase(monkey_de_client: McpClient) -> None:
+    """Open the door with the *lowercase* 'öffne' verb.
+
+    Regression test for the umlaut-folding bug: the game's verb label is
+    "Öffne" (leading uppercase Ö). MCP clients send verbs lowercased, so they
+    pass "öffne". The matcher folds case before comparing, but the old
+    ASCII-only fold left the leading Ö untouched, so "öffne" never matched
+    "Öffne" and the call failed with "unknown verb 'öffne'" — even though the
+    capitalised "Öffne" resolved fine. The fix folds Latin-1 uppercase letters
+    too, so the lowercase form now resolves and the door opens (state 0 -> 1).
+    """
+    state = monkey_de_client.state()
+    assert state["room"]["id"] == 55
+
+    door = next(o for o in state["objects"] if o["id"] == 422)
+    assert door["name"] == "tür"
+    assert door["state"] == 0, "door should start closed in a fresh demo"
+
+    # Must not raise "unknown verb 'öffne'": the leading umlaut is folded so
+    # the lowercase client verb matches the game's "Öffne" label.
+    result = monkey_de_client.act("öffne", "tür")
+    assert result["objects_changed"] == [
+        {"name": "tür", "old_state": 0, "new_state": 1}
+    ]
+
+
+def test_07_de_close_door(monkey_de_client: McpClient) -> None:
     """Dispatch the 'schließe' verb (with ß) on the German door. This
     proves the inbound UTF-8 verb name resolves to the correct verb id."""
     state = monkey_de_client.state()
@@ -144,6 +172,9 @@ def test_06_de_close_door(monkey_de_client: McpClient) -> None:
     assert door["name"] == "tür"
     assert "schließe" in door["compatible_verbs"]
 
-    # Should not raise an unknown-verb error — the engine accepts the UTF-8
-    # input and matches it to the game's "Schließe" verb label.
-    monkey_de_client.act("schließe", "tür")
+    # Door was opened by test_06; closing it now is a real state change
+    # (1 -> 0) and proves the eszett-bearing "Schließe" label resolves.
+    result = monkey_de_client.act("schließe", "tür")
+    assert result["objects_changed"] == [
+        {"name": "tür", "old_state": 1, "new_state": 0}
+    ]

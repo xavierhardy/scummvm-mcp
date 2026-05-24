@@ -3261,6 +3261,34 @@ Common::String ScummMcpBridge::safeUtf8(const Common::String &raw) const {
 	return Common::U32String(raw, cp).encode(Common::kUtf8);
 }
 
+// Lowercase a string covering both ASCII and the UTF-8 Latin-1 Supplement
+// uppercase letters (U+00C0–U+00DE, e.g. the German Ö/Ä/Ü). SCUMM's
+// Common::String::toLowercase() only folds ASCII A–Z, so a verb label whose
+// first letter is an accented uppercase character — the German "Öffne" (open)
+// verb — never matched the lowercase "öffne" sent by MCP clients. CP-850 (and
+// other single-byte) input is left untouched: a lone high byte is neither ASCII
+// nor a 0xC3 UTF-8 lead, so it falls through unchanged, exactly as before.
+static Common::String mcpUtf8ToLower(const Common::String &s) {
+	Common::String out;
+	for (uint i = 0; i < s.size(); ++i) {
+		unsigned char c = (unsigned char)s[i];
+		if (c >= 'A' && c <= 'Z') {
+			out += (char)(c + 0x20);
+		} else if (c == 0xC3 && i + 1 < s.size()) {
+			unsigned char d = (unsigned char)s[i + 1];
+			// U+00C0–U+00DE -> +0x20 on the trailing byte, skipping U+00D7 (×).
+			if (d >= 0x80 && d <= 0x9E && d != 0x97)
+				d += 0x20;
+			out += (char)c;
+			out += (char)d;
+			++i;
+		} else {
+			out += (char)c;
+		}
+	}
+	return out;
+}
+
 Common::String ScummMcpBridge::normalizeActionName(const Common::String &action) {
 	Common::String s(action);
 	s.trim();
@@ -3275,7 +3303,7 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 			s = Common::String(secondSlash + 1);
 		}
 	}
-	s.toLowercase();
+	s = mcpUtf8ToLower(s);
 	s.replace('-', '_');
 	s.replace(' ', '_');
 	if (s == "walk")    return "walk_to";
