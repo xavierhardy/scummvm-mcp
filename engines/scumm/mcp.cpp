@@ -2763,8 +2763,36 @@ void ScummMcpBridge::pumpStream() {
 	// Clear the simulated mouse-button msDown bit a couple frames after the click
 	// so that the dialog input script (V7 script 69) does not see a held button.
 	if (_sseButtonClearFrame != 0 && _frameCounter >= _sseButtonClearFrame) {
-		_vm->_leftBtnPressed &= ~0x01; // clear msDown
+		_vm->_leftBtnPressed  &= ~0x01; // clear msDown
+		_vm->_rightBtnPressed &= ~0x01; // clear msDown (Dig pickup deselect)
 		_sseButtonClearFrame = 0;
+	}
+
+	// The Dig: picking up a scene object grabs it onto the mouse cursor, turning
+	// every subsequent click into "use <item> on X". Each MCP action is
+	// discrete, so once a pickup has added a new inventory item we deposit it by
+	// simulating the player's right-click — the game's input script puts the
+	// held item back into the inventory and restores the default cursor. Fire
+	// once per stream, after the item appears and the game accepts input.
+	if (_vm->_game.id == GID_DIG && !_sseDigDeselectDone && _vm->_userPut > 0 &&
+	    _frameCounter - _sseStartFrame >= 3) {
+		int egoForPick = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
+		bool pickedUp = false;
+		for (int i = 0; _vm->_inventory && i < _vm->_numInventory && !pickedUp; ++i) {
+			uint16 obj = _vm->_inventory[i];
+			if (!obj || _vm->getOwner(obj) != egoForPick) continue;
+			bool wasHeldBefore = false;
+			for (uint k = 0; k < _ssePreInventory.size(); ++k)
+				if (_ssePreInventory[k] == obj) { wasHeldBefore = true; break; }
+			if (!wasHeldBefore) pickedUp = true;
+		}
+		if (pickedUp) {
+			debug(1, "mcp: Dig — depositing picked-up item via right-click at frame %d", _frameCounter);
+			_vm->_rightBtnPressed |= 0x03; // msClicked | msDown
+			_sseButtonClearFrame = _frameCounter + 2;
+			_sseDigDeselectDone = true;
+			_sseDoneAtFrame = 0; // re-settle so the deselect completes before closing
+		}
 	}
 
 	// V7: fire the deferred use-item scene click once the engine has had a
@@ -2965,6 +2993,7 @@ void ScummMcpBridge::pumpStream() {
 // ---------------------------------------------------------------------------
 
 void ScummMcpBridge::snapshotPreAction() {
+	_sseDigDeselectDone = false;
 	_ssePreRoom = _vm->_currentRoom;
 	_ssePreInventory.clear();
 	_ssePreInventoryNames.clear();

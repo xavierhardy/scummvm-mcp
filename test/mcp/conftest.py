@@ -299,6 +299,36 @@ def dig_client() -> McpClient:
 
 
 @pytest.fixture(scope="session")
+def dig_wreck_client() -> McpClient:
+    """The Dig demo at the wreck interior (save slot 5, room 19).
+
+    dig-demo.s05 drops Low in front of the open chest with a takeable 'wire'
+    object in the scene and Brink/Maggie present — the setup for the pickup-
+    deposit regression test (picking up the wire must not leave it stuck on
+    the cursor)."""
+    mcp_port = 23474
+
+    require_game_path("dig-demo")
+    scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
+    proc = launch_scummvm(
+        "dig-demo",
+        GAME_PATHS["dig-demo"],
+        port=mcp_port,
+        scummvm_binary=scummvm_binary,
+        save_slot=5,
+    )
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    yield client
+    client.close()
+    proc.kill()
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()
+
+
+@pytest.fixture(scope="session")
 def comi_s3_client() -> McpClient:
     """Launch Curse of Monkey Island demo (save slot 3, by the cannon debris)."""
     mcp_port = 23470

@@ -162,8 +162,14 @@ private:
 	int  _ssePendingV7UseMouseY = 0;
 	int  _ssePendingV7UseObjX = 0;
 	int  _ssePendingV7UseObjY = 0;
-	// Frame at which we should clear the simulated left-button msDown bit.
+	// Frame at which we should clear the simulated left/right-button msDown bit.
 	uint32 _sseButtonClearFrame = 0;
+	// The Dig: picking up a scene object leaves it held as the mouse cursor
+	// (the game's held-item global, var 34, flips to 1), so every later click
+	// becomes "use <item> on X". Since each MCP action is self-contained, we
+	// deposit the item back into the inventory by simulating the player's
+	// right-click once the pickup settles. Tracked per stream so it fires once.
+	bool _sseDigDeselectDone = false;
 	// True when streaming was triggered by toolAnswer() (dialog choice). For V8
 	// the verb slots remain populated with dialog choices throughout, so the
 	// hasPendingQuestion-based "done" signal cannot be used to close the stream
