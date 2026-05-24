@@ -263,6 +263,24 @@ void ScummMcpBridge::pump() {
 		_lastV7TalkActor = 0;
 	}
 
+	// Release the simulated mouse button a couple frames after a debug
+	// mouse_click so the engine sees a complete press/release cycle.
+	if (_debugButtonReleaseFrame != 0 && _frameCounter >= _debugButtonReleaseFrame) {
+		_vm->_leftBtnPressed  &= ~0x01; // clear msDown
+		_vm->_rightBtnPressed &= ~0x01;
+		_debugButtonReleaseFrame = 0;
+	}
+
+	// Drop cached dialog choices once V7 leaves dialog mode (verb script is
+	// back to its baseline). Otherwise stale choices from the prior turn
+	// would leak into state.
+	if (_vm && _vm->_game.version == 7 && _vm->VAR_VERB_SCRIPT != 0xFF &&
+	    _baseVerbScript != 0 &&
+	    (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) == _baseVerbScript &&
+	    !_v7DialogChoices.empty()) {
+		_v7DialogChoices.clear();
+	}
+
 	_server->pump();
 }
 
@@ -352,6 +370,39 @@ void ScummMcpBridge::onSystemLine(const Common::String &text) {
 }
 void ScummMcpBridge::onDialogPrompt(const Common::String &text) {
 	pushMessage("dialog", -1, text);
+}
+
+void ScummMcpBridge::onV7BlastTextSnapshot() {
+	if (!_vm || _vm->_game.version != 7) return;
+	ScummEngine_v7 *v7 = (ScummEngine_v7 *)_vm;
+	// Capture each frame regardless of script state. Dialog-mode gating is
+	// applied in toolState/toolAnswer; cleanup happens in pump() once the
+	// verb script returns to its baseline. The blast text queue holds new
+	// items for one frame only (the engine drains it after drawing), so we
+	// have to grab them whenever they appear, including the brief moments
+	// between the talk script finishing and the dialog script taking over.
+
+	Common::Array<V7Choice> fresh;
+	for (int i = 0; i < v7->_blastTextQueuePos &&
+	     i < (int)ARRAYSIZE(v7->_blastTextQueue); ++i) {
+		const ScummEngine_v7::BlastText &bt = v7->_blastTextQueue[i];
+		// Dialog choices in The Dig / Full Throttle are drawn in the bottom
+		// status area (y >= ~160). Actor speech (y around 8) is excluded.
+		if (bt.ypos < 160) continue;
+		Common::String text = cleanGameText(mcpSanitizeString(Common::String((const char *)bt.text)));
+		text.trim();
+		if (text.empty()) continue;
+		V7Choice c;
+		c.text = text;
+		c.x = bt.xpos;
+		c.y = bt.ypos;
+		fresh.push_back(c);
+	}
+	// Only overwrite when the new snapshot is non-empty: between
+	// re-renders the script briefly empties the queue, and we'd lose the
+	// choices if we cleared on every frame.
+	if (!fresh.empty())
+		_v7DialogChoices = fresh;
 }
 
 const byte *ScummMcpBridge::callGetObjOrActorName(int obj) const {
@@ -1099,15 +1150,40 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		                        _vm->VAR_VERB_SCRIPT != 0xFF &&
 		                        (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) != _baseVerbScript);
 		if (v7DialogPending) {
-			// Expose up to 9 generic choices; the client selects by index.
-			// Use a small fixed count (5) as a reasonable upper bound for The Dig dialog.
-			const int kV7MaxChoices = 9;
-			for (int i = 1; i <= kV7MaxChoices; ++i) {
-				Common::JSONObject choice;
-				choice.setVal("id",    mcpJsonInt(i));
-				choice.setVal("label", mcpJsonString(Common::String::format("Choice %d", i)));
-				choiceList.push_back(new Common::JSONValue(choice));
-				choiceCount = i;
+			// V7 (Dig/FT) dialog choices are drawn directly via the blast-text
+			// queue (no verb slots are populated). The bridge snapshots the
+			// queue in onV7BlastTextSnapshot(); sort the captured lines by Y so
+			// choice IDs match top-to-bottom screen order. For The Dig demo the
+			// choices are icon blast-OBJECTS instead, so _v7DialogChoices may be
+			// empty — in that case expose 9 numbered placeholders so callers can
+			// at least dismiss the dialog.
+			Common::Array<V7Choice> sorted = _v7DialogChoices;
+			for (uint i = 0; i + 1 < sorted.size(); ++i) {
+				for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
+					if (sorted[j].y > sorted[j + 1].y) {
+						V7Choice tmp = sorted[j];
+						sorted[j] = sorted[j + 1];
+						sorted[j + 1] = tmp;
+					}
+				}
+			}
+			if (sorted.empty()) {
+				const int kV7MaxChoices = 9;
+				for (int i = 1; i <= kV7MaxChoices; ++i) {
+					Common::JSONObject choice;
+					choice.setVal("id",    mcpJsonInt(i));
+					choice.setVal("label", mcpJsonString(Common::String::format("Choice %d", i)));
+					choiceList.push_back(new Common::JSONValue(choice));
+					choiceCount = i;
+				}
+			} else {
+				for (uint i = 0; i < sorted.size(); ++i) {
+					Common::JSONObject choice;
+					choice.setVal("id",    mcpJsonInt((int)i + 1));
+					choice.setVal("label", mcpJsonString(sorted[i].text));
+					choiceList.push_back(new Common::JSONValue(choice));
+					++choiceCount;
+				}
 			}
 		} else if (_vm->_game.version >= 6) {
 			// V6+/V8 dialog choices are usually non-action verb slots. In COMI (V8)
@@ -1281,7 +1357,15 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// means we're dispatching via simulated scene click, not doSentence).
 	bool isLoomClick = (verbId == -1);
 
-	if (targetA != 0 && !isIndy4Actor && !isLoomClick && !isCMIClick) {
+	// V7 (The Dig / Full Throttle) single-cursor model: route every act() with
+	// a target through a simulated scene click so the engine's verb script
+	// picks the right action — talk for actors, look/pick-up for scenery,
+	// walk-to + room transition for pathway clearings (which have ep_13 but no
+	// ep_7, so doSentence(7, ...) would never trigger their walk_to handler).
+	bool isV7NaturalClick = (targetA != 0) &&
+	                        (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT);
+
+	if (targetA != 0 && !isIndy4Actor && !isLoomClick && !isCMIClick && !isV7NaturalClick) {
 		int ep = _vm->getVerbEntrypoint(targetA, verbId);
 		debug(1, "mcp: act entrypoint for obj %d verb %d = %d", targetA, verbId, ep);
 
@@ -1343,6 +1427,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_ssePendingNotes.clear();
 	_sseButtonClearFrame = 0;
 	_ssePendingV7Choice = 0;
+	_ssePendingV7UseClick = false;
 	// Capture the current input script so we can detect when the game switches
 	// to a dialog-mode script (V7: VAR_VERB_SCRIPT changes to a different value).
 	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
@@ -1408,7 +1493,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		_vm->runInputScript(kVerbClickArea, verbId, 1);
 		// Dispatch the scene click (left button). Mode 1 = left click.
 		_vm->runInputScript(kSceneClickArea, 0, 1);
-	} else if (isLoomClick) {
+	} else if (isLoomClick || isV7NaturalClick) {
 		// Convert object world coords to on-screen mouse coords (Passport Loom has
 		// horizontally scrolling rooms, so screen X != world X).
 		// For V3/V4 Loom rooms, getObjX/Y returns the object's walk-to coordinate
@@ -1463,10 +1548,30 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			// decide with whatever cursor is currently held — typically none, which
 			// gives the natural talk action when clicking an actor. For "use item"
 			// (targetB!=0) we first arm the inventory item as the held cursor.
-			if (targetB != 0) {
-				_vm->runInputScript(kInventoryClickArea, targetA, 0);
-				// Recompute mouse position over targetB so the next click
-				// resolves to it instead of the inventory item.
+			if (targetB != 0 && _vm->_game.id == GID_DIG) {
+				// V7 The Dig "use item on target": the engine's sentence script
+				// dispatches verb 3 with the *target* as object A and the item
+				// as object B (the trowel has the verb-3 entrypoint that
+				// branches on B's class — actors get "I don't think she'd want
+				// that", scenery gets "I can't use these things together", and
+				// scripted objects get their own handler). Simulating the click
+				// pipeline does not arm the held cursor in this game, so the
+				// click on an actor falls back to plain talk_to ("Robbins...");
+				// dispatching the sentence directly drives the correct script.
+				_vm->doSentence(3, targetB, targetA);
+				_server->startStreaming();
+				return true;
+			}
+			if (targetB != 0 && _vm->_game.id == GID_FT) {
+				// V7: arm the inventory cursor, then defer the scene click by a
+				// frame. The engine schedules the "held cursor" update via a
+				// follow-up script (started from kInventoryClickArea) and that
+				// state must be in place before the scene-click handler reads
+				// it, otherwise the click on an actor is dispatched as plain
+				// talk_to instead of use-item.
+				_vm->runInputScript(kInventoryClickArea, targetA, 1);
+				// Recompute mouse position over targetB so pumpStream's deferred
+				// click resolves to it instead of the inventory item.
 				int objX2 = _vm->getObjX(targetB);
 				int objY2 = _vm->getObjY(targetB);
 				VirtScreen *vs2 = &_vm->_virtscr[kMainVirtScreen];
@@ -1476,21 +1581,36 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 				if (mx > _vm->_screenWidth - 1) mx = _vm->_screenWidth - 1;
 				if (my < 0) my = 0;
 				if (my > _vm->_screenHeight - 1) my = _vm->_screenHeight - 1;
-				_vm->_mouse.x        = mx;
-				_vm->_mouse.y        = my;
-				_vm->_virtualMouse.x = objX2;
-				_vm->_virtualMouse.y = objY2;
-				if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX2;
-				if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY2;
-				if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mx;
-				if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = my;
+				_ssePendingV7UseClick = true;
+				_ssePendingV7UseMouseX = mx;
+				_ssePendingV7UseMouseY = my;
+				_ssePendingV7UseObjX   = objX2;
+				_ssePendingV7UseObjY   = objY2;
+			} else {
+				if (targetB != 0) {
+					// CMI / V8 path retained from the original code.
+					_vm->runInputScript(kInventoryClickArea, targetA, 0);
+					int objX2 = _vm->getObjX(targetB);
+					int objY2 = _vm->getObjY(targetB);
+					VirtScreen *vs2 = &_vm->_virtscr[kMainVirtScreen];
+					int mx = objX2 - vs2->xstart;
+					int my = objY2 + vs2->topline;
+					if (mx < 0) mx = 0;
+					if (mx > _vm->_screenWidth - 1) mx = _vm->_screenWidth - 1;
+					if (my < 0) my = 0;
+					if (my > _vm->_screenHeight - 1) my = _vm->_screenHeight - 1;
+					_vm->_mouse.x        = mx;
+					_vm->_mouse.y        = my;
+					_vm->_virtualMouse.x = objX2;
+					_vm->_virtualMouse.y = objY2;
+					if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX2;
+					if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY2;
+					if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mx;
+					if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = my;
+				}
+				_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+				_sseButtonClearFrame = _frameCounter + 2;
 			}
-			// Drive the engine's natural input pipeline: set the left button as
-			// pressed and let checkExecVerbs() route the scene click. This goes
-			// through the same code path as a real user click and lets the game
-			// scripts decide the action.
-			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
-			_sseButtonClearFrame = _frameCounter + 2;
 		} else {
 			// Loom (V3/V4) — keep the original _leftBtnPressed pipeline so that
 			// the engine processes the click on the next frame, preserving the
@@ -1599,16 +1719,25 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	}
 
 	// V7 (Dig/FT): dialog choices are not in verb slots. The dialog input script
-	// (e.g., script 69 in The Dig) handles number-key input from kKeyClickArea.
-	// Send the choice as a digit keystroke rather than a verb-slot click.
+	// (e.g., script 69 in The Dig) reads VAR_MOUSE_Y to pick the choice. The
+	// real click target is the Y coordinate of the dialog line as snapshotted
+	// by onV7BlastTextSnapshot().
 	const bool isV7Dialog = (_vm->_game.version == 7 && _baseVerbScript != 0 &&
 	                         _vm->VAR_VERB_SCRIPT != 0xFF &&
 	                         (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) != _baseVerbScript);
 	if (isV7Dialog) {
+		// If we have captured blast-text choices (Full Throttle path), reject
+		// out-of-range.
+		if (!_v7DialogChoices.empty() && choiceIdx > (int)_v7DialogChoices.size()) {
+			errorOut = Common::String::format("answer: choice %d not available (only %u shown)",
+			                                  choiceIdx, _v7DialogChoices.size());
+			return false;
+		}
 		if (choiceIdx > 9) {
 			errorOut = Common::String::format("answer: V7 dialog supports up to 9 choices, got %d", choiceIdx);
 			return false;
 		}
+
 		snapshotPreAction();
 		_streaming = true;
 		_sseStartFrame = _frameCounter;
@@ -2057,9 +2186,10 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	Common::JSONArray verbs;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid && vs.curmode == 0 && !vs.saveid) continue;
+		if (slot >= 50) break;
 		Common::JSONObject v;
 		v.setVal("slot",    mcpJsonInt(slot));
+		v.setVal("imgindex", mcpJsonInt(vs.imgindex));
 		v.setVal("verbid",  mcpJsonInt(vs.verbid));
 		v.setVal("saveid",  mcpJsonInt(vs.saveid));
 		v.setVal("curmode", mcpJsonInt(vs.curmode));
@@ -2111,6 +2241,73 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 		roomObjs.push_back(new Common::JSONValue(ro));
 	}
 	out.setVal("room_objects", new Common::JSONValue(roomObjs));
+
+	// V7-specific introspection: dump the subtitle queue so callers can see
+	// which dialog choice lines are currently rendered and at what coords.
+	if (_vm->_game.version == 7) {
+		ScummEngine_v7 *v7 = (ScummEngine_v7 *)_vm;
+		Common::JSONArray subs;
+		for (int i = 0; i < v7->_subtitleQueuePos && i < (int)ARRAYSIZE(v7->_subtitleQueue); ++i) {
+			const ScummEngine_v7::SubtitleText &st = v7->_subtitleQueue[i];
+			Common::JSONObject s;
+			s.setVal("idx",     mcpJsonInt(i));
+			s.setVal("x",       mcpJsonInt(st.xpos));
+			s.setVal("y",       mcpJsonInt(st.ypos));
+			s.setVal("color",   mcpJsonInt(st.color));
+			s.setVal("charset", mcpJsonInt(st.charset));
+			s.setVal("center",  mcpJsonBool(st.center));
+			s.setVal("wrap",    mcpJsonBool(st.wrap));
+			s.setVal("speech",  mcpJsonBool(st.actorSpeechMsg));
+			s.setVal("text",    mcpJsonString(mcpSanitizeString(cleanGameText(Common::String((const char *)st.text)))));
+			subs.push_back(new Common::JSONValue(s));
+		}
+		out.setVal("subtitle_queue", new Common::JSONValue(subs));
+		Common::JSONArray choices;
+		for (uint i = 0; i < _v7DialogChoices.size(); ++i) {
+			Common::JSONObject c;
+			c.setVal("text", mcpJsonString(_v7DialogChoices[i].text));
+			c.setVal("x",    mcpJsonInt(_v7DialogChoices[i].x));
+			c.setVal("y",    mcpJsonInt(_v7DialogChoices[i].y));
+			choices.push_back(new Common::JSONValue(c));
+		}
+		out.setVal("v7_dialog_choices", new Common::JSONValue(choices));
+		// Dump the blast-object queue: in The Dig the dialog topic icons are
+		// drawn here, with `number` mapped to the topic's room object.
+		Common::JSONArray bos;
+		ScummEngine_v6 *v6 = (ScummEngine_v6 *)_vm;
+		for (int i = 0; i < v6->_blastObjectQueuePos &&
+		     i < (int)ARRAYSIZE(v6->_blastObjectQueue); ++i) {
+			const ScummEngine_v6::BlastObject &eo = v6->_blastObjectQueue[i];
+			Common::JSONObject bo;
+			bo.setVal("number", mcpJsonInt(eo.number));
+			bo.setVal("left",   mcpJsonInt(eo.rect.left));
+			bo.setVal("top",    mcpJsonInt(eo.rect.top));
+			bo.setVal("right",  mcpJsonInt(eo.rect.right));
+			bo.setVal("bottom", mcpJsonInt(eo.rect.bottom));
+			Common::String nm = getObjName(this, eo.number);
+			bo.setVal("name", mcpJsonString(nm));
+			bo.setVal("image", mcpJsonInt(eo.image));
+			bo.setVal("mode",  mcpJsonInt(eo.mode));
+			bos.push_back(new Common::JSONValue(bo));
+		}
+		out.setVal("blast_objects", new Common::JSONValue(bos));
+		out.setVal("screen_top",      mcpJsonInt(_vm->_screenTop));
+		out.setVal("main_vs_h",       mcpJsonInt(_vm->_virtscr[kMainVirtScreen].h));
+		out.setVal("main_vs_topline", mcpJsonInt(_vm->_virtscr[kMainVirtScreen].topline));
+		out.setVal("verb_vs_h",       mcpJsonInt(_vm->_virtscr[kVerbVirtScreen].h));
+		out.setVal("verb_vs_topline", mcpJsonInt(_vm->_virtscr[kVerbVirtScreen].topline));
+		out.setVal("text_vs_h",       mcpJsonInt(_vm->_virtscr[kTextVirtScreen].h));
+		out.setVal("text_vs_topline", mcpJsonInt(_vm->_virtscr[kTextVirtScreen].topline));
+		out.setVal("screen_width",    mcpJsonInt(_vm->_screenWidth));
+		out.setVal("screen_height",   mcpJsonInt(_vm->_screenHeight));
+		out.setVal("var_mouse_x", mcpJsonInt(_vm->VAR_MOUSE_X != 0xFF ? (int)_vm->VAR(_vm->VAR_MOUSE_X) : -2));
+		out.setVal("var_mouse_y", mcpJsonInt(_vm->VAR_MOUSE_Y != 0xFF ? (int)_vm->VAR(_vm->VAR_MOUSE_Y) : -2));
+		out.setVal("var_virt_mouse_x", mcpJsonInt(_vm->VAR_VIRT_MOUSE_X != 0xFF ? (int)_vm->VAR(_vm->VAR_VIRT_MOUSE_X) : -2));
+		out.setVal("var_virt_mouse_y", mcpJsonInt(_vm->VAR_VIRT_MOUSE_Y != 0xFF ? (int)_vm->VAR(_vm->VAR_VIRT_MOUSE_Y) : -2));
+		out.setVal("base_verb_script", mcpJsonInt(_baseVerbScript));
+		if (_vm->VAR_VERB_SCRIPT != 0xFF)
+			out.setVal("verb_script", mcpJsonInt((int)_vm->VAR(_vm->VAR_VERB_SCRIPT)));
+	}
 
 	return new Common::JSONValue(out);
 }
@@ -2175,6 +2372,7 @@ bool ScummMcpBridge::toolShootCannon(const Common::JSONValue &args, Common::Stri
 	_ssePendingNotes.clear();
 	_sseButtonClearFrame = _frameCounter + 2;
 	_ssePendingV7Choice = 0;
+	_ssePendingV7UseClick = false;
 	_sseVerbScript = 0;
 	_sseInitialVerbScript = 0;
 	_sseVerbScriptChanged = false;
@@ -2265,6 +2463,9 @@ bool ScummMcpBridge::toolMouseClick(const Common::JSONValue &args, Common::Strin
 	} else {
 		_vm->_leftBtnPressed |= mask;
 	}
+	// Schedule a button-up so the engine sees a complete click cycle. Without
+	// this V7 input scripts treat the held button as a drag.
+	_debugButtonReleaseFrame = _frameCounter + 2;
 
 	// For a double click, we tweak _lastInputScriptTime so the engine's 250-500ms
 	// delta check inside runInputScript flags this click as the second of a pair.
@@ -2363,10 +2564,9 @@ void ScummMcpBridge::pumpStream() {
 	// directly (kKeyClickArea). Each runInputScript invocation runs Script 97
 	// (Loom's input handler) which kills any prior instance — meaning two
 	// notes in rapid succession would have the second overwrite the first.
-	// Pace feeds at roughly the same rate a human player can type (~500 ms),
-	// fast enough that the script's draft-buffer timeout doesn't fire mid-
-	// sequence but slow enough that each note's script completes.
-	const uint32 kNoteSpacingFrames = 30;
+	// Pace feeds fast enough that the script's draft-buffer timeout doesn't
+	// fire mid-sequence but slow enough that each note's script completes.
+	const uint32 kNoteSpacingFrames = 15;
 	if (!_ssePendingNotes.empty()
 	    && (_sseLastNoteFedFrame == 0
 	        || _frameCounter - _sseLastNoteFedFrame >= kNoteSpacingFrames)) {
@@ -2510,15 +2710,48 @@ void ScummMcpBridge::pumpStream() {
 		_sseButtonClearFrame = 0;
 	}
 
+	// V7: fire the deferred use-item scene click once the engine has had a
+	// frame to commit the held-cursor state queued by the inventory click.
+	if (_ssePendingV7UseClick && _vm->_userPut > 0 &&
+	    _frameCounter - _sseStartFrame >= 2) {
+		_vm->_mouse.x        = _ssePendingV7UseMouseX;
+		_vm->_mouse.y        = _ssePendingV7UseMouseY;
+		_vm->_virtualMouse.x = _ssePendingV7UseObjX;
+		_vm->_virtualMouse.y = _ssePendingV7UseObjY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = _ssePendingV7UseObjX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = _ssePendingV7UseObjY;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = _ssePendingV7UseMouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = _ssePendingV7UseMouseY;
+		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+		_sseButtonClearFrame = _frameCounter + 2;
+		_ssePendingV7UseClick = false;
+		_sseDoneAtFrame = 0;
+	}
+
 	// V7: feed a deferred dialog-choice click once the game is ready.
 	// toolAnswer() stores the choice here. Dialog choices in V7 (The Dig / FT) are
 	// selected by a scene click (kSceneClickArea) at the Y coordinate of the chosen
 	// line — script 69 reads VAR_MOUSE_Y to determine which choice was made.
-	// Empirical Y layout (The Dig, 320x200 game coords): choice N is at y = 163 + (N-1)*4.
+	// The Y comes from the live blast-text snapshot captured each frame.
 	if (_ssePendingV7Choice != 0 && _vm->_userPut > 0 &&
 	    _frameCounter - _sseStartFrame >= 3) {
 		int choiceX = 160;
 		int choiceY = 163 + (_ssePendingV7Choice - 1) * 4;
+		if (!_v7DialogChoices.empty()) {
+			Common::Array<V7Choice> sorted = _v7DialogChoices;
+			for (uint i = 0; i + 1 < sorted.size(); ++i) {
+				for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
+					if (sorted[j].y > sorted[j + 1].y) {
+						V7Choice tmp = sorted[j];
+						sorted[j] = sorted[j + 1];
+						sorted[j + 1] = tmp;
+					}
+				}
+			}
+			int idx = CLIP<int>(_ssePendingV7Choice - 1, 0, (int)sorted.size() - 1);
+			choiceX = sorted[idx].x;
+			choiceY = sorted[idx].y;
+		}
 		debug(1, "mcp: feeding V7 dialog choice %d as scene click at (%d,%d) frame %d",
 		      _ssePendingV7Choice, choiceX, choiceY, _frameCounter);
 		_vm->_mouse.x = choiceX;
@@ -2527,6 +2760,7 @@ void ScummMcpBridge::pumpStream() {
 		if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = choiceY;
 		_vm->runInputScript(kSceneClickArea, 0, 1);
 		_ssePendingV7Choice = 0;
+	_ssePendingV7UseClick = false;
 		// Reset settle window so we capture messages produced by this choice.
 		_sseDoneAtFrame = 0;
 	}

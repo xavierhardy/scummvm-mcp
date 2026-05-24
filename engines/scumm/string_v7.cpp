@@ -26,6 +26,7 @@
 #include "scumm/actor.h"
 #include "scumm/charset.h"
 #include "scumm/scumm_v8.h"
+#include "scumm/mcp.h"
 #include "scumm/sound.h"
 #include "scumm/string_v7.h"
 
@@ -469,6 +470,11 @@ void ScummEngine_v7::drawTextImmediately(const byte *text, Common::Rect *clipRec
 }
 
 void ScummEngine_v7::drawBlastTexts() {
+	// Let the MCP bridge snapshot the blast-text queue before it is consumed
+	// here, so dialog-choice text can be exposed via the MCP state API.
+	if (_mcpBridge)
+		_mcpBridge->onV7BlastTextSnapshot();
+
 	VirtScreen *vs = &_virtscr[kMainVirtScreen];
 
 #ifdef USE_TTS

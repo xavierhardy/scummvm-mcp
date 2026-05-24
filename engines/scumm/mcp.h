@@ -32,6 +32,12 @@ public:
 	void onSystemLine(const Common::String &text);
 	void onDialogPrompt(const Common::String &text);
 
+	// V7-only: invoked once per frame, just before the engine draws/clears the
+	// blast text queue. The bridge snapshots dialog-choice text + click target
+	// coordinates so toolState can expose the real labels and toolAnswer /
+	// pumpStream can route the click to the correct screen position.
+	void onV7BlastTextSnapshot();
+
 	static Common::String normalizeActionName(const Common::String &action);
 
 	// Accessor for protected getObjOrActorName used by helpers.
@@ -65,6 +71,13 @@ private:
 	struct ObjStateSnap {
 		int objNr;
 		int state;
+	};
+
+	// V7 dialog-choice snapshot (captured from the blast-text queue each frame).
+	struct V7Choice {
+		Common::String text;
+		int x;
+		int y;
 	};
 
 	ScummEngine *_vm;
@@ -117,6 +130,9 @@ private:
 	Common::String _lastV7TalkText;
 	int _lastV7TalkActor = 0;
 
+	// V7 dialog-choice cache, refreshed each frame from the blast-text queue.
+	Common::Array<V7Choice> _v7DialogChoices;
+
 	// V7: VAR_VERB_SCRIPT "normal" value observed before first action; used to
 	// detect when the game has switched to a dialog input handler.
 	int _baseVerbScript = 0;
@@ -129,6 +145,19 @@ private:
 	// V7: pending dialog choice digit (1-9); fed to the dialog script when
 	// the game is ready to accept input. 0 means no choice is pending.
 	int _ssePendingV7Choice = 0;
+	// Auto-release frame for stand-alone mouse_click (debug tool): the engine
+	// expects a button-down followed by a button-up; without the release V7
+	// scripts treat the click as a drag and skip the action handler.
+	uint32 _debugButtonReleaseFrame = 0;
+	// V7 use-item: deferred scene click after arming the inventory cursor.
+	// The engine needs a frame between arming the cursor in the inventory
+	// click handler and firing the scene click so the held-item state is
+	// committed to script globals before the verb script reads it.
+	bool _ssePendingV7UseClick = false;
+	int  _ssePendingV7UseMouseX = 0;
+	int  _ssePendingV7UseMouseY = 0;
+	int  _ssePendingV7UseObjX = 0;
+	int  _ssePendingV7UseObjY = 0;
 	// Frame at which we should clear the simulated left-button msDown bit.
 	uint32 _sseButtonClearFrame = 0;
 	// True when streaming was triggered by toolAnswer() (dialog choice). For V8

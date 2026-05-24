@@ -26,7 +26,10 @@
 
 namespace Scumm {
 
+class ScummMcpBridge;
+
 class ScummEngine_v6 : public ScummEngine {
+	friend class ScummMcpBridge;
 protected:
 	enum ArrayType {
 		kBitArray = 1,
