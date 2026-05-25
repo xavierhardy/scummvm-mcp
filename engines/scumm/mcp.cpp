@@ -238,8 +238,15 @@ void ScummMcpBridge::pump() {
 	// V7: snapshot the "normal" verb script on the first pump frame where it is
 	// non-zero and we're not in a stream. This lets hasPendingQuestion() detect
 	// when the game switches to a dialog input handler (e.g., script 38 → 69).
+	// Only snapshot once the engine has handed input back to the player
+	// (_userPut > 0). Full Throttle's intro/dumpster cutscene runs a different
+	// verb script (25) than normal gameplay (302); snapshotting during the
+	// cutscene would record 25 and make hasPendingQuestion() believe a dialog
+	// is always pending once gameplay's 302 takes over. Gating on _userPut > 0
+	// captures the true gameplay baseline. The Dig's first interactive frame
+	// already carries its gameplay value, so this does not change its behavior.
 	if (_vm && _vm->_game.version == 7 && _baseVerbScript == 0 && !_streaming &&
-	    _vm->VAR_VERB_SCRIPT != 0xFF) {
+	    _vm->_userPut > 0 && _vm->VAR_VERB_SCRIPT != 0xFF) {
 		int cur = (int)_vm->VAR(_vm->VAR_VERB_SCRIPT);
 		if (cur != 0)
 			_baseVerbScript = cur;
@@ -248,12 +255,25 @@ void ScummMcpBridge::pump() {
 	if (_vm && _vm->_game.version == 7 && _vm->_haveMsg) {
 		const byte *p = _vm->_charsetBuffer;
 		const byte *end = p + sizeof(_vm->_charsetBuffer);
-		while (p < end && *p == 0xFF)
+		// Skip the leading metadata: Full Throttle (and The Dig) prefix each spoken
+		// line with one or more 0xFF-coded 4-byte talkie/sound blocks
+		// (0xFF <code> <id-lo> <id-hi>). Advance past every such block.
+		while (p + 3 < end && *p == 0xFF)
 			p += 4;
 		if (p < end && *p != 0) {
 			Common::String text((const char *)p);
 			int actor = _vm->getTalkingActor();
-			if (text != _lastV7TalkText || actor != _lastV7TalkActor) {
+			// Reject fragments that carry no printable ASCII letter or digit: between
+			// real lines the buffer momentarily holds only embedded sound codes
+			// (e.g. 0xFF 0x0A <id>), which would otherwise surface as garbage
+			// "messages". Real dialog always contains alphanumeric text.
+			bool hasAlnum = false;
+			for (uint ti = 0; ti < text.size(); ++ti) {
+				byte c = (byte)text[ti];
+				if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+				    (c >= '0' && c <= '9')) { hasAlnum = true; break; }
+			}
+			if (hasAlnum && (text != _lastV7TalkText || actor != _lastV7TalkActor)) {
 				_lastV7TalkText = text;
 				_lastV7TalkActor = actor;
 				onActorLine(actor == 0xFF ? -1 : actor, text);
@@ -364,6 +384,35 @@ void ScummMcpBridge::pushMessage(const char *type, int actorId, const Common::St
 }
 
 void ScummMcpBridge::onActorLine(int actorId, const Common::String &text) {
+	// V6 (Sam & Max) and V7 (The Dig / Full Throttle): spoken lines arrive
+	// straight from _charsetBuffer (actor.cpp and the V7 pump() both feed this
+	// hook), prefixed by one or more 0xFF-coded 4-byte talkie/sound blocks
+	// (0xFF <code> <id-lo> <id-hi>). Strip them, then drop the fragments that
+	// hold only embedded sound codes with no readable text — e.g. Sam & Max's
+	// voice-only reaction cues, which would otherwise surface as garbage
+	// "messages". Restricted to V6/V7 so older text engines pass through
+	// untouched.
+	if (_vm && _vm->_game.version >= 6) {
+		const byte *p = (const byte *)text.c_str();
+		const byte *end = p + text.size();
+		while (p + 3 < end && *p == 0xFF)
+			p += 4;
+		Common::String line((const char *)p);
+		// Require at least two ASCII letters: a real spoken line is a word, while
+		// a leftover sound-code fragment (e.g. 0xFF 0x0A 'L') carries at most a
+		// stray byte that happens to fall in the letter range.
+		int letters = 0;
+		for (uint i = 0; i < line.size(); ++i) {
+			byte c = (byte)line[i];
+			if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))
+				++letters;
+		}
+		bool hasAlnum = (letters >= 2);
+		if (!hasAlnum)
+			return;
+		pushMessage("actor", actorId, line);
+		return;
+	}
 	pushMessage("actor", actorId, text);
 }
 void ScummMcpBridge::onSystemLine(const Common::String &text) {
@@ -928,7 +977,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	// The Dig and Full Throttle (both V7) use single-cursor / pie-menu interfaces
 	// with no persistent verb bar. Expose 'interact' (universal context action)
 	// and 'use_item' (inventory item on room object) — both map to verb ID 7 internally.
-	if ((_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) && !questionPending && activeVerbs.empty()) {
+	if (_vm->_game.id == GID_DIG && !questionPending && activeVerbs.empty()) {
 		struct FallbackVerb { int id; const char *name; const char *label; };
 		static const FallbackVerb kV7Fallback[] = {
 			{7, "interact", "interact"},
@@ -941,6 +990,32 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			vi.verbId = kV7Fallback[i].id;
 			vi.name   = kV7Fallback[i].name;
 			vi.label  = kV7Fallback[i].label;
+			activeVerbs.push_back(vi);
+		}
+	}
+
+	// Full Throttle uses a verb-coin: holding over a hotspot pops up three icons
+	// around Ben's head — fist (grab/punch/use), kick (boot), mouth (talk/look) —
+	// plus a generic single-click action. Expose the three coin verbs, a generic
+	// 'interact', and 'use item' (inventory item on a target). Each maps to a real
+	// per-object verb script (fist=9, mouth=8, kick=5); 'interact' picks the
+	// object's best available action at dispatch time.
+	if (_vm->_game.id == GID_FT && !questionPending && activeVerbs.empty()) {
+		struct FallbackVerb { int id; const char *name; const char *label; };
+		static const FallbackVerb kFtFallback[] = {
+			{9,  "fist",     "fist"},
+			{5,  "kick",     "kick"},
+			{8,  "mouth",    "mouth"},
+			{-1, "interact", "interact"},
+			{-1, "use_item", "use item"},
+			{0,  nullptr,    nullptr}
+		};
+		for (int i = 0; kFtFallback[i].name; ++i) {
+			verbsArr.push_back(mcpJsonString(kFtFallback[i].label));
+			VerbInfo vi;
+			vi.verbId = kFtFallback[i].id;
+			vi.name   = kFtFallback[i].name;
+			vi.label  = kFtFallback[i].label;
 			activeVerbs.push_back(vi);
 		}
 	}
@@ -1058,7 +1133,20 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// Loom (and the Loom segment of Passport to Adventure) similarly uses a
 			// single-cursor model where 'interact' applies to every selectable object.
 			// Curse of Monkey Island (V8) also uses a single-cursor model.
-			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || _vm->_game.id == GID_CMI || isInLoomSection()) {
+			if (_vm->_game.id == GID_FT) {
+				// Full Throttle objects carry real per-verb entrypoints. List only
+				// the coin verbs (fist=9/mouth=8/kick=5) the object actually scripts,
+				// then always offer the generic 'interact' and 'use item'.
+				for (uint k = 0; k < activeVerbs.size(); ++k) {
+					const VerbInfo &v = activeVerbs[k];
+					bool include = (v.verbId == -1) ||
+					               (_vm->getVerbEntrypoint(ne.numId, v.verbId) != 0);
+					if (include) {
+						compatVerbs.push_back(mcpJsonString(v.label));
+						if (v.verbId != -1) handlerCount++;
+					}
+				}
+			} else if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_CMI || isInLoomSection()) {
 				for (uint k = 0; k < activeVerbs.size(); ++k) {
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 					handlerCount++;
@@ -1390,6 +1478,23 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	debug(1, "mcp: act verb='%s' verbId=%d targetA=%d targetB=%d",
 	      verbStr.c_str(), verbId, targetA, targetB);
 
+	// Full Throttle "interact" (generic single-action button): the verb-coin
+	// sentinel (-1) with a single target resolves to whichever verb-coin action
+	// the object actually scripts — preferring fist (9, use/grab), then mouth
+	// (8, examine/talk), then kick (5). This mirrors the default action a single
+	// click performs in-game and gives a useful response instead of the no-op a
+	// raw scene click produces. "use item" (two targets) keeps the click path.
+	if (_vm->_game.id == GID_FT && verbId == -1 && targetA != 0 && targetB == 0) {
+		static const int kFtCoinVerbs[] = {9, 8, 5};
+		for (int i = 0; i < 3; ++i) {
+			if (_vm->getVerbEntrypoint(targetA, kFtCoinVerbs[i]) != 0) {
+				verbId = kFtCoinVerbs[i];
+				break;
+			}
+		}
+		debug(1, "mcp: FT interact resolved to verbId=%d for target %d", verbId, targetA);
+	}
+
 	// For Indy4, actors are handled by the sentence script, not verb entrypoints.
 	// Skip the entrypoint check for actors and proceed to doSentence.
 	bool isIndy4Actor = _vm->_game.id == GID_INDY4 && targetA != 0 && _vm->objIsActor(targetA);
@@ -1415,8 +1520,13 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// picks the right action — talk for actors, look/pick-up for scenery,
 	// walk-to + room transition for pathway clearings (which have ep_13 but no
 	// ep_7, so doSentence(7, ...) would never trigger their walk_to handler).
+	// The Dig: every targeted act routes through a simulated scene click.
+	// Full Throttle: only the generic "interact"/"use_item" sentinel (verbId==-1)
+	// uses the click path; explicit verb-coin actions (fist/kick/mouth) carry a
+	// real verb id and are dispatched via doSentence below.
 	bool isV7NaturalClick = (targetA != 0) &&
-	                        (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT);
+	                        (_vm->_game.id == GID_DIG ||
+	                         (_vm->_game.id == GID_FT && verbId == -1));
 
 	if (targetA != 0 && !isIndy4Actor && !isLoomClick && !isCMIClick && !isV7NaturalClick) {
 		int ep = _vm->getVerbEntrypoint(targetA, verbId);
@@ -2294,6 +2404,26 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 		roomObjs.push_back(new Common::JSONValue(ro));
 	}
 	out.setVal("room_objects", new Common::JSONValue(roomObjs));
+
+	// V6+ blast-object queue (icon dialog choices in Sam & Max draw here, as in
+	// The Dig). Dump for any V6+ game so dialog-icon debugging works for S&M too.
+	if (_vm->_game.version >= 6) {
+		Common::JSONArray bos6;
+		ScummEngine_v6 *v6dbg = (ScummEngine_v6 *)_vm;
+		for (int i = 0; i < v6dbg->_blastObjectQueuePos &&
+		     i < (int)ARRAYSIZE(v6dbg->_blastObjectQueue); ++i) {
+			const ScummEngine_v6::BlastObject &eo = v6dbg->_blastObjectQueue[i];
+			Common::JSONObject bo;
+			bo.setVal("number", mcpJsonInt(eo.number));
+			bo.setVal("name", mcpJsonString(getObjName(this, eo.number)));
+			bo.setVal("image", mcpJsonInt(eo.image));
+			bo.setVal("mode",  mcpJsonInt(eo.mode));
+			bo.setVal("rect_left",  mcpJsonInt(eo.rect.left));
+			bo.setVal("rect_top",   mcpJsonInt(eo.rect.top));
+			bos6.push_back(new Common::JSONValue(bo));
+		}
+		out.setVal("blast_objects_v6", new Common::JSONValue(bos6));
+	}
 
 	// V7-specific introspection: dump the subtitle queue so callers can see
 	// which dialog choice lines are currently rendered and at what coords.
@@ -3816,6 +3946,30 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		verbId = -1;
 		debug(1, "mcp: resolveVerb V7 interact/use_item -> click dispatch sentinel");
 		return true;
+	}
+
+	// Full Throttle verb-coin verbs: fist (grab/punch/use), kick (boot), mouth
+	// (talk/look) map to the per-object verb scripts 9/5/8; the generic 'interact'
+	// uses the click-dispatch sentinel (-1), resolved to the object's best
+	// available coin verb in toolAct().
+	if (_vm->_game.id == GID_FT) {
+		if (normalized == "fist")     { verbId = 9;  return true; }
+		if (normalized == "kick")     { verbId = 5;  return true; }
+		if (normalized == "mouth")    { verbId = 8;  return true; }
+		if (normalized == "interact") { verbId = -1; return true; }
+	}
+
+	// Full Throttle verb-coin actions dispatched via doSentence (objects carry
+	// real per-verb entrypoints, unlike The Dig). Debug helper: "v_N"/"verb_N"
+	// dispatches an arbitrary verb id for empirical mapping.
+	if (_vm->_game.id == GID_FT && _debugToolsEnabled &&
+	    (normalized.hasPrefix("v_") || normalized.hasPrefix("verb_"))) {
+		const char *p = normalized.c_str() + (normalized.hasPrefix("v_") ? 2 : 5);
+		int id = atoi(p);
+		if (id > 0) {
+			verbId = id;
+			return true;
+		}
 	}
 
 	// Curse of Monkey Island (V8) verb IDs differ from V6. Empirically determined:
