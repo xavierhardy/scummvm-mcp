@@ -1006,6 +1006,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			{9,  "fist",     "fist"},
 			{5,  "kick",     "kick"},
 			{8,  "mouth",    "mouth"},
+			{-3, "walk_to",  "walk to"},
 			{-1, "interact", "interact"},
 			{-1, "use_item", "use item"},
 			{0,  nullptr,    nullptr}
@@ -1139,11 +1140,14 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 				// then always offer the generic 'interact' and 'use item'.
 				for (uint k = 0; k < activeVerbs.size(); ++k) {
 					const VerbInfo &v = activeVerbs[k];
-					bool include = (v.verbId == -1) ||
+					// Negative ids are generic sentinels (interact / use item /
+					// walk to) that apply to every object; coin verbs (>0) are
+					// listed only when the object actually scripts them.
+					bool include = (v.verbId < 0) ||
 					               (_vm->getVerbEntrypoint(ne.numId, v.verbId) != 0);
 					if (include) {
 						compatVerbs.push_back(mcpJsonString(v.label));
-						if (v.verbId != -1) handlerCount++;
+						if (v.verbId > 0) handlerCount++;
 					}
 				}
 			} else if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_CMI || isInLoomSection()) {
@@ -1846,6 +1850,13 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 				ego->startWalkActor(objX, objY, -1);
 			}
 		}
+	} else if (_vm->_game.id == GID_FT && verbId == -3 && targetA != 0) {
+		// Full Throttle walk_to: walk Ben to the target's stand position. FT has
+		// no per-object walk entrypoint (walking is a scene-click in-game), so
+		// drive the ego actor directly for a deterministic result.
+		Actor *ego = getEgoActor();
+		if (ego)
+			ego->startWalkActor(_vm->getObjX(targetA), _vm->getObjY(targetA), -1);
 	} else {
 		_vm->doSentence(verbId, targetA, targetB);
 	}
@@ -2077,7 +2088,27 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	_ssePendingSecondClick = false;
 	_ssePendingNotes.clear();
 	_sseTargetObject = 0;  // walk has no target object
-	ego->startWalkActor(wx, wy, -1);
+	_sseButtonClearFrame = 0;
+	if (_vm->_game.id == GID_FT) {
+		// Full Throttle's walk + exit hotspots (e.g. climbing out of the opening
+		// dumpster in the start room) are driven by the scene-click input script,
+		// not startWalkActor. Simulate a real left click at the target point so
+		// the verb script walks Ben there and fires any exit/transition handler.
+		// Mirror the debug mouse_click path exactly (raw coords + a button release
+		// scheduled in pump()), which is known to trigger the dumpster climb-out.
+		_vm->_mouse.x        = wx;
+		_vm->_mouse.y        = wy;
+		_vm->_virtualMouse.x = wx;
+		_vm->_virtualMouse.y = wy;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = wx;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = wy;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = wx;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = wy;
+		_vm->_leftBtnPressed |= 0x03;       // msClicked | msDown
+		_debugButtonReleaseFrame = _frameCounter + 2;
+	} else {
+		ego->startWalkActor(wx, wy, -1);
+	}
 	_server->startStreaming();
 	return true;
 }
@@ -3399,8 +3430,19 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 	if (_vm->_game.version == 7 && _baseVerbScript != 0 &&
 	    _vm->VAR_VERB_SCRIPT != 0xFF) {
 		int cur = (int)_vm->VAR(_vm->VAR_VERB_SCRIPT);
-		if (cur != _baseVerbScript)
+		if (cur != _baseVerbScript) {
+			// Full Throttle reuses the verb-script slot for transient action
+			// sequences too — selecting an icon on the verb coin (fist/kick/mouth)
+			// briefly swaps VAR_VERB_SCRIPT to a coin/action handler that is NOT a
+			// dialog. A real conversation always renders its choice lines to the
+			// bottom status area, which onV7BlastTextSnapshot() captures. Require
+			// those captured choices so a punch/kick is not mistaken for a dialog.
+			// The Dig keeps the simpler heuristic (its action verbs don't touch
+			// the verb script, so it never false-positives).
+			if (_vm->_game.id == GID_FT)
+				return !_v7DialogChoices.empty();
 			return true;
+		}
 	}
 
 	// V6+ (Sam & Max and later): dialog uses icon verb slots. The game saves the
@@ -3956,6 +3998,7 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		if (normalized == "fist")     { verbId = 9;  return true; }
 		if (normalized == "kick")     { verbId = 5;  return true; }
 		if (normalized == "mouth")    { verbId = 8;  return true; }
+		if (normalized == "walk_to")  { verbId = -3; return true; }
 		if (normalized == "interact") { verbId = -1; return true; }
 	}
 
