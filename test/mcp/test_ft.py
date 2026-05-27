@@ -265,3 +265,88 @@ def test_09_ft_use_item_two_targets(ft_escaped: McpClient) -> None:
     except (AssertionError, RuntimeError):
         pytest.skip("game busy / target stale for use item")
     assert isinstance(result, dict), f"Expected dict result, got: {result!r}"
+
+
+# ---------------------------------------------------------------------------
+# Pathway / room-transition tests
+#
+# These run on a dedicated FT instance (ft_client_pathways) because they
+# deliberately change rooms; sharing the main client would move Ben out of the
+# object-rich opening alley and starve the scenery tests above of targets.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def ft_alley(ft_client_pathways: McpClient) -> McpClient:
+    """Skip the intro, land in the dumpster and climb out into the alley, once."""
+    if _room(ft_client_pathways) == 10:
+        _sweep_out(ft_client_pathways)
+    elif _reach_dumpster(ft_client_pathways) == 10:
+        _sweep_out(ft_client_pathways)
+    assert _room(ft_client_pathways) != 10, "Could not climb out of the dumpster during setup"
+    return ft_client_pathways
+
+
+def test_10_ft_pathways_detected(ft_alley: McpClient) -> None:
+    """Full Throttle exit hotspots are flagged as pathways.
+
+    Regression: FT objects were never marked pathway=true (the alley exits were
+    invisible to clients looking for room transitions). Exit hotspots have no
+    verb-coin handler (no fist/kick/mouth), so they expose only the generic
+    walk to / interact / use item verbs and must be flagged as pathways — exactly
+    like Curse of Monkey Island exit hotspots. An object that DOES script a coin
+    verb (e.g. a kickable door) is not a pure pathway and must not be flagged.
+    """
+    state = _interactive_state(ft_alley)
+    pathways = [o for o in state.get("objects", []) if o.get("pathway")]
+    assert pathways, (
+        f"Expected at least one pathway (exit hotspot) in room {state.get('room')}, "
+        f"got objects: {[o['name'] for o in state.get('objects', [])]}"
+    )
+    for p in pathways:
+        cv = set(p.get("compatible_verbs", []))
+        assert "fist" not in cv and "kick" not in cv and "mouth" not in cv, (
+            f"pathway {p['name']!r} should not advertise coin verbs, got {cv}"
+        )
+    # Conversely, an object that scripts a coin verb must NOT be flagged a pathway.
+    for o in state.get("objects", []):
+        cv = set(o.get("compatible_verbs", []))
+        if cv & {"fist", "kick", "mouth"}:
+            assert not o.get("pathway"), (
+                f"{o['name']!r} scripts a coin verb and must not be a pathway, got {cv}"
+            )
+
+
+def test_11_ft_walk_to_pathway_changes_room(ft_alley: McpClient) -> None:
+    """'walk_to' a pathway drives the scene-click input script and changes rooms.
+
+    Regression: FT walk_to used startWalkActor, which moves Ben but never fired
+    the exit/room-transition handler — so walking to a scene exit (or through a
+    door that was just kicked open in room 6) did nothing. walk_to now simulates
+    the scene click the engine's verb script needs, producing a real transition.
+    """
+    state = _interactive_state(ft_alley)
+    initial_room = state.get("room", {}).get("id")
+    pathways = [o for o in state.get("objects", []) if o.get("pathway")]
+    assert pathways, f"no pathway to walk to in room {initial_room}"
+
+    changed = False
+    for p in pathways:
+        try:
+            result = ft_alley.act("walk_to", p["name"])
+        except RuntimeError:
+            try:
+                ft_alley.skip()
+            except Exception:
+                pass
+            sleep(1.0)
+            continue
+        if result.get("room_changed") not in (None, initial_room):
+            changed = True
+            break
+        sleep(0.5)
+
+    assert changed, (
+        f"walk_to a pathway from room {initial_room} did not produce a room "
+        f"transition (tried {[p['name'] for p in pathways]})"
+    )

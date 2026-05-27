@@ -1182,7 +1182,17 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			    _vm->getVerbEntrypoint(ne.numId, 6) == 0 &&
 			    _vm->getVerbEntrypoint(ne.numId, 7) == 0 &&
 			    _vm->getVerbEntrypoint(ne.numId, 8) == 0;
-			bool isPathway = isCMIPathway ||
+			// Full Throttle (V7): exit hotspots (e.g. the alley scene exits) have no
+			// verb-coin handlers — fist (9), mouth (8) and kick (5) all 0. Mirror CMI:
+			// these are pure walk-through pathways the player clicks to change rooms.
+			// Objects that DO script a coin verb (a kickable door, a usable lever) are
+			// not flagged, even when they double as an exit, since they advertise real
+			// actions.
+			bool isFTPathway = (_vm->_game.id == GID_FT) &&
+			    _vm->getVerbEntrypoint(ne.numId, 9) == 0 &&
+			    _vm->getVerbEntrypoint(ne.numId, 8) == 0 &&
+			    _vm->getVerbEntrypoint(ne.numId, 5) == 0;
+			bool isPathway = isCMIPathway || isFTPathway ||
 			    ((_vm->_game.id != GID_DIG && _vm->_game.id != GID_FT && _vm->_game.id != GID_CMI && !isInLoomSection()) && walkToHasHandler && (handlerCount == 1));
 
 			Common::JSONObject obj;
@@ -1851,12 +1861,25 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			}
 		}
 	} else if (_vm->_game.id == GID_FT && verbId == -3 && targetA != 0) {
-		// Full Throttle walk_to: walk Ben to the target's stand position. FT has
-		// no per-object walk entrypoint (walking is a scene-click in-game), so
-		// drive the ego actor directly for a deterministic result.
-		Actor *ego = getEgoActor();
-		if (ego)
-			ego->startWalkActor(_vm->getObjX(targetA), _vm->getObjY(targetA), -1);
+		// Full Throttle walk_to: walking is a scene-click in-game, and exit
+		// hotspots (scene pathways, and doors once opened — e.g. the room 6 door
+		// after it has been kicked open) only transition when the scene-click
+		// input script runs, not via startWalkActor. Simulate a left click at the
+		// target's location so the verb script walks Ben there and fires any
+		// exit/room-transition handler — the same proven path toolWalk() uses for
+		// the dumpster climb-out.
+		int clickX = _vm->getObjX(targetA);
+		int clickY = _vm->getObjY(targetA);
+		_vm->_mouse.x        = clickX;
+		_vm->_mouse.y        = clickY;
+		_vm->_virtualMouse.x = clickX;
+		_vm->_virtualMouse.y = clickY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = clickX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = clickY;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = clickX;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = clickY;
+		_vm->_leftBtnPressed |= 0x03;       // msClicked | msDown
+		_debugButtonReleaseFrame = _frameCounter + 2;
 	} else {
 		_vm->doSentence(verbId, targetA, targetB);
 	}
@@ -3093,10 +3116,13 @@ void ScummMcpBridge::pumpStream() {
 		uint32 settleFrames = (_vm->_game.version == 0) ? 3 : 10;
 		if (_vm->_game.version != 0 && _sseEgoMoved && !questionReady)
 			settleFrames = 20;
-		// V7 (Dig/FT): dialog choices may appear after a brief script delay
+		// The Dig (V7): dialog choices may appear after a brief script delay
 		// even when ego hasn't moved (hero was already near the actor).
 		// Use a longer settle window so we don't close before the question appears.
-		if (_vm->_game.version == 7 && !questionReady)
+		// Full Throttle (also V7) does not need this floor: it detects dialog via a
+		// VAR_VERB_SCRIPT change (which resets the settle window) and v7DialogReady,
+		// so the extra wait only adds dead time after every action. Keep FT snappy.
+		if (_vm->_game.id == GID_DIG && !questionReady)
 			settleFrames = MAX(settleFrames, (uint32)45);
 		// V8 (CMI): isActionDone() now waits for the sentence/verb script to finish,
 		// which is what triggers dialog choices. A 25-frame window is enough for

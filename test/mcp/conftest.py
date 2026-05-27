@@ -163,6 +163,32 @@ def ft_client() -> McpClient:
 
 
 @pytest.fixture(scope="session")
+def ft_client_pathways() -> McpClient:
+    """A second Full Throttle instance dedicated to the pathway/room-transition
+    tests, which deliberately change rooms and would otherwise starve the
+    scenery tests that share the main ft_client of interactable objects."""
+    mcp_port = 23462
+
+    require_game_path("ft-demo")
+    scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
+    proc = launch_scummvm(
+        "ft-demo",
+        GAME_PATHS["ft-demo"],
+        port=mcp_port,
+        scummvm_binary=scummvm_binary,
+    )
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    yield client
+    client.close()
+    proc.kill()
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()
+
+
+@pytest.fixture(scope="session")
 def indy3_client() -> McpClient:
     """Launch Passport to Adventure (Indy3 segment, save slot 3) and return MCP client.
 
