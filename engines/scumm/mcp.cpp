@@ -8,6 +8,7 @@
 
 #include "common/config-manager.h"
 #include "common/debug.h"
+#include "common/system.h"
 #include "common/hashmap.h"
 #include "common/hash-str.h"
 #include "common/util.h"
@@ -65,6 +66,15 @@ static bool isSentenceLikeDialogLabel(const Common::String &label) {
 }
 
 // Canonical V6 verb label table (verbid → name/label for image-verb games).
+// Sam & Max (V6) has no verb bar: a right-click cycles a context cursor through
+// the available verbs, and a left-click runs the current verb. The current verb
+// cursor is mirrored in script var 177; the "mouth" (talk) cursor is object 877.
+// talk_to is therefore dispatched (see toolAct/pumpStream) by cycling the cursor
+// to the mouth and then clicking the actor — resolveVerb maps it to a sentinel.
+static const int kSnmCursorVerbVar = 177;
+static const int kSnmMouthCursor   = 877;
+static const int kSnmTalkSentinel  = -200;
+
 struct V6VerbEntry { int id; const char *name; const char *label; };
 static const V6VerbEntry kV6CanonicalVerbs[] = {
 	// Common V6 mapping used by several games
@@ -427,42 +437,104 @@ void ScummMcpBridge::onDialogPrompt(const Common::String &text) {
 	pushMessage("dialog", -1, text);
 }
 
+void ScummMcpBridge::collectSamnMaxDialogChoices(Common::Array<V7Choice> &out) {
+	out.clear();
+	if (!_vm || _vm->_game.id != GID_SAMNMAX || !_vm->_objs)
+		return;
+
+	// The conversation panel is a horizontal row of equal-width icon slots drawn
+	// in the bottom verb strip. Each slot is a floating object (fl_object_index
+	// != 0) about 40x24 px wide. Unused slots all share one blank "box" image;
+	// real topic icons each carry a distinct image. Collect candidate slots,
+	// keep the densest screen row, then drop the blank (duplicate-image) ones.
+	struct Slot { int obj; int x; int cx; int cy; uint32 sum; };
+	Common::Array<Slot> slots;
+	const int stripTop = _vm->_screenHeight * 3 / 4; // bottom quarter (y>=150 @200px)
+	for (int i = 1; i < _vm->_numLocalObjects; ++i) {
+		const ObjectData &od = _vm->_objs[i];
+		if (!od.obj_nr || od.fl_object_index == 0)
+			continue;
+		if (od.width < 24 || od.width > 56 || od.height < 12 || od.height > 40)
+			continue;
+		int oy = _vm->getObjY(od.obj_nr);
+		if (oy < stripTop)
+			continue;
+		// Skip real inventory items that may share the strip.
+		bool isInv = false;
+		for (int k = 0; _vm->_inventory && k < _vm->_numInventory; ++k)
+			if (_vm->_inventory[k] == od.obj_nr) { isInv = true; break; }
+		if (isInv)
+			continue;
+		// The strip icons track the camera so they stay screen-fixed: getObjX
+		// returns room coordinates (offset by the scroll). Convert to screen X so
+		// the click target is correct even when the room has scrolled.
+		int ox = _vm->getObjX(od.obj_nr) - _vm->_virtscr[kMainVirtScreen].xstart;
+		uint32 sum = 0;
+		const byte *im = _vm->getObjectImage(_vm->getOBIMFromObjectData(od), _vm->getState(od.obj_nr));
+		if (im)
+			for (int b = 0; b < 256; ++b)
+				sum = sum * 31u + im[b];
+		Slot s;
+		s.obj = od.obj_nr;
+		s.x   = ox;
+		s.cx  = ox + od.width / 2;
+		s.cy  = oy + od.height / 2;
+		s.sum = sum;
+		slots.push_back(s);
+	}
+	if (slots.size() < 2)
+		return; // a lone strip flobject (e.g. the inventory tab) is not a dialog
+
+	// Keep only the densest screen row (the topic icons all share one y).
+	int bestY = slots[0].cy, bestCount = 0;
+	for (uint i = 0; i < slots.size(); ++i) {
+		int cnt = 0;
+		for (uint j = 0; j < slots.size(); ++j)
+			if (slots[j].cy == slots[i].cy) ++cnt;
+		if (cnt > bestCount) { bestCount = cnt; bestY = slots[i].cy; }
+	}
+	Common::Array<Slot> row;
+	for (uint i = 0; i < slots.size(); ++i)
+		if (slots[i].cy == bestY) row.push_back(slots[i]);
+	if (row.size() < 2)
+		return;
+
+	// Identify the blank-slot image: the most frequent checksum in the row,
+	// but only when it actually repeats (>= 2 slots share it).
+	uint32 blankSum = 0;
+	int blankCount = 1;
+	for (uint i = 0; i < row.size(); ++i) {
+		int cnt = 0;
+		for (uint j = 0; j < row.size(); ++j)
+			if (row[j].sum == row[i].sum) ++cnt;
+		if (cnt > blankCount) { blankCount = cnt; blankSum = row[i].sum; }
+	}
+	bool haveBlank = (blankCount >= 2);
+
+	// Real topics: row slots that are not the blank box, left-to-right.
+	for (uint i = 0; i + 1 < row.size(); ++i)
+		for (uint j = 0; j + 1 < row.size() - i; ++j)
+			if (row[j].x > row[j + 1].x) { Slot t = row[j]; row[j] = row[j + 1]; row[j + 1] = t; }
+	for (uint i = 0; i < row.size(); ++i) {
+		if (haveBlank && row[i].sum == blankSum)
+			continue;
+		V7Choice c;
+		c.objNumber = row[i].obj;
+		c.text = Common::String::format("icon_%d", row[i].obj);
+		c.x = row[i].cx;
+		c.y = row[i].cy;
+		out.push_back(c);
+	}
+}
+
 void ScummMcpBridge::onV7BlastTextSnapshot() {
 	if (!_vm || (_vm->_game.version != 7 && _vm->_game.id != GID_SAMNMAX)) return;
 	if (_vm->_game.id == GID_SAMNMAX) {
-		ScummEngine_v6 *v6 = (ScummEngine_v6 *)_vm;
-		Common::Array<V7Choice> fresh;
-		int n = v6->_blastObjectQueuePos;
-		if (n > (int)ARRAYSIZE(v6->_blastObjectQueue))
-			n = ARRAYSIZE(v6->_blastObjectQueue);
-		for (int i = 0; i < n; ++i) {
-			const ScummEngine_v6::BlastObject &eo = v6->_blastObjectQueue[i];
-			if (eo.rect.top < 120)
-				continue;
-			bool nested = false;
-			for (int j = 0; j < n; ++j) {
-				if (j == i) continue;
-				const Common::Rect &o = v6->_blastObjectQueue[j].rect;
-				if (o.left <= eo.rect.left && o.right >= eo.rect.right &&
-				    o.top <= eo.rect.top && o.bottom >= eo.rect.bottom &&
-				    (o.width() > eo.rect.width() || o.height() > eo.rect.height())) {
-					nested = true;
-					break;
-				}
-			}
-			if (!nested)
-				continue;
-			V7Choice c;
-			c.objNumber = eo.number;
-			Common::String nm = safeUtf8(getObjName(this, eo.number));
-			c.text = nm.empty() ? Common::String::format("icon_%d", eo.number)
-			                    : normalizeActionName(nm);
-			c.x = (eo.rect.left + eo.rect.right) / 2;
-			c.y = (eo.rect.top + eo.rect.bottom) / 2;
-			fresh.push_back(c);
-		}
-		if (!fresh.empty())
-			_v7DialogChoices = fresh;
+		// Sam & Max conversations are not blast objects (unlike The Dig). The
+		// topic icons are drawn as a row of equal-width floating objects in the
+		// bottom verb strip; the choices are refreshed here every frame and
+		// consumed by hasPendingQuestion()/toolState()/toolAnswer().
+		collectSamnMaxDialogChoices(_v7DialogChoices);
 		return;
 	}
 	ScummEngine_v7 *v7 = (ScummEngine_v7 *)_vm;
@@ -1663,6 +1735,8 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseButtonClearFrame = 0;
 	_ssePendingV7Choice = 0;
 	_ssePendingV7UseClick = false;
+	_sseSnmTalkActor = 0;
+	_sseSnmTalkClicks = 0;
 	// Capture the current input script so we can detect when the game switches
 	// to a dialog-mode script (V7: VAR_VERB_SCRIPT changes to a different value).
 	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
@@ -1672,7 +1746,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// V0 scripts do not lock _userPut during execution, unlike V5, so script-slot polling
 	// is the only reliable signal that the verb script has completed.
 	_sseTargetObject = (_vm->_game.version == 0) ? targetA : 0;
-	if (isIndy4ActorClick) {
+	if (_vm->_game.id == GID_SAMNMAX && verbId == kSnmTalkSentinel &&
+	    targetA != 0 && _vm->objIsActor(targetA)) {
+		// Sam & Max talk_to: there is no talk verb to dispatch — instead drive
+		// the in-game interface. pumpStream right-clicks to cycle the context
+		// cursor to the "mouth" icon over the actor, then left-clicks to open
+		// the conversation (whose topic icons are then exposed as choices).
+		_sseSnmTalkActor = targetA;
+		_sseSnmTalkClicks = 0;
+		_sseSnmTalkNextFrame = _frameCounter + 1;
+	} else if (isIndy4ActorClick) {
 		// Activate the verb on the verb bar (sets the cursor verb). Equivalent
 		// to the user pressing the verb's keyboard shortcut.
 		_vm->runInputScript(kVerbClickArea, verbId, 1);
@@ -2445,7 +2528,16 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	if (to >= _vm->_numVariables) to = _vm->_numVariables - 1;
 	if (to < from) to = from;
 
+	// Debug-only: trigger ScummVM's own screenshot capture (saved to the
+	// configured screenshotpath) so MCP callers can inspect the rendered frame.
+	bool wantScreenshot = args.isObject() && args.asObject().contains("screenshot") &&
+	                      args.asObject()["screenshot"]->isBool() &&
+	                      args.asObject()["screenshot"]->asBool();
+	if (wantScreenshot && g_system)
+		g_system->saveScreenshot();
+
 	Common::JSONObject out;
+	out.setVal("screenshot_saved", mcpJsonBool(wantScreenshot));
 	out.setVal("game_id",       mcpJsonInt((int)_vm->_game.id));
 	out.setVal("game_version",  mcpJsonInt(_vm->_game.version));
 	out.setVal("current_room",  mcpJsonInt(_vm->_currentRoom));
@@ -3171,6 +3263,43 @@ void ScummMcpBridge::pumpStream() {
 		_sseDoneAtFrame = 0;
 	}
 
+	// Sam & Max talk_to: cycle the context cursor to the "mouth" verb over the
+	// target actor (right-clicks), then left-click to open the conversation.
+	if (_sseSnmTalkActor != 0 && _vm->_userPut > 0 && _frameCounter >= _sseSnmTalkNextFrame) {
+		int objX = _vm->getObjX(_sseSnmTalkActor);
+		int objY = _vm->getObjY(_sseSnmTalkActor);
+		VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
+		int mouseX = CLIP<int>(objX - vs->xstart, 0, _vm->_screenWidth - 1);
+		int mouseY = CLIP<int>(objY + vs->topline, 0, _vm->_screenHeight - 1);
+		// Keep the (virtual) mouse over the actor so the verb cycle applies to it
+		// and the eventual click lands on it.
+		_vm->_mouse.x = mouseX;
+		_vm->_mouse.y = mouseY;
+		_vm->_virtualMouse.x = objX;
+		_vm->_virtualMouse.y = objY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = objX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
+
+		int curVerb = (kSnmCursorVerbVar < _vm->_numVariables && _vm->_scummVars)
+		              ? (int)_vm->_scummVars[kSnmCursorVerbVar] : -1;
+		if (curVerb == kSnmMouthCursor || _sseSnmTalkClicks >= 8) {
+			// Mouth selected (or give up cycling): left-click to talk.
+			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+			_sseButtonClearFrame = _frameCounter + 2;
+			_sseSnmTalkActor = 0;
+			_sseDoneAtFrame = 0; // re-settle so the conversation can open
+		} else {
+			// Right-click to advance the verb cursor, then wait for the cursor
+			// manager script to process it before checking again.
+			_vm->_rightBtnPressed |= 0x03; // msClicked | msDown
+			_sseButtonClearFrame = _frameCounter + 2;
+			_sseSnmTalkClicks++;
+			_sseSnmTalkNextFrame = _frameCounter + 3;
+		}
+	}
+
 	bool done = isActionDone();
 	if (done) {
 		if (_sseDoneAtFrame == 0) {
@@ -3526,6 +3655,8 @@ bool ScummMcpBridge::isActionDone() const {
 	if (_frameCounter - _sseStartFrame < 3) return false;
 	if (_ssePendingSecondClick || !_ssePendingNotes.empty()) return false;
 	if (_ssePendingV7Choice != 0) return false;
+	// Still cycling the Sam & Max verb cursor toward the mouth / opening talk.
+	if (_sseSnmTalkActor != 0) return false;
 	Actor *ego = getEgoActor();
 	// Ego movement check with timeout only for V0 (Maniac Mansion):
 	// V0 doesn't lock _userPut, so we need a timeout to prevent indefinite waits.
@@ -4159,6 +4290,14 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 			verbId = id;
 			return true;
 		}
+	}
+
+	// Sam & Max: talk_to has no verb id — it is the "mouth" cursor reached by
+	// cycling the right-click verb. Map it to a sentinel that toolAct dispatches
+	// via the verb-cycle-then-click state machine in pumpStream.
+	if (_vm->_game.id == GID_SAMNMAX && normalized == "talk_to") {
+		verbId = kSnmTalkSentinel;
+		return true;
 	}
 
 	// Sam & Max debug helper: accept "v_N"/"verb_N" to dispatch arbitrary

@@ -84,6 +84,11 @@ private:
 		int objNumber = 0;
 	};
 
+	// Sam & Max (V6): conversation topic icons are a row of floating objects in
+	// the bottom verb strip, not blast objects. Refresh the dialog-choice list
+	// (filtering the blank panel slots) from those objects.
+	void collectSamnMaxDialogChoices(Common::Array<V7Choice> &out);
+
 	ScummEngine *_vm;
 	bool _enabled;
 	bool _skipToolEnabled;
@@ -149,6 +154,13 @@ private:
 	// V7: pending dialog choice digit (1-9); fed to the dialog script when
 	// the game is ready to accept input. 0 means no choice is pending.
 	int _ssePendingV7Choice = 0;
+	// Sam & Max talk_to: object id of the actor we are opening a conversation
+	// with. While non-zero, pumpStream cycles the right-click verb cursor to the
+	// "mouth" (talk) icon and then left-clicks the actor. 0 means not talking.
+	int _sseSnmTalkActor = 0;
+	// Frame gate + right-click counter for the talk verb-cycle above.
+	uint32 _sseSnmTalkNextFrame = 0;
+	int _sseSnmTalkClicks = 0;
 	// Auto-release frame for stand-alone mouse_click (debug tool): the engine
 	// expects a button-down followed by a button-up; without the release V7
 	// scripts treat the click as a drag and skip the action handler.
