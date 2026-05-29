@@ -336,7 +336,7 @@ def launch_scummvm(
     # env["SDL_VIDEODRIVER"] = "dummy"
     env["SDL_AUDIODRIVER"] = "dummy"
 
-    if game_id in ("atlantis", "samnmax"):
+    if game_id in ("atlantis",):
         # No save slot — these games start from scratch and handle their own intro.
         args = [
             scummvm_binary,
@@ -403,7 +403,7 @@ GAME_PATHS = {
     "atlantis": os.environ.get("ATLANTIS_DEMO_PATH", "/home/pi/games/Indy4Demo"),
     "samnmax": os.environ.get(
         "SAMNMAX_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/samnmax-dos-cd-demo-en",
+        "/Users/xhardy/Personal/llm/scummvm/games/samnmax-dos-demo-en",
     ),
     "dig-demo": os.environ.get(
         "DIG_DEMO_PATH",

@@ -284,6 +284,9 @@ void ScummMcpBridge::pump() {
 		_lastV7TalkActor = 0;
 	}
 
+	if (_vm && _vm->_game.id == GID_SAMNMAX)
+		onV7BlastTextSnapshot();
+
 	// Release the simulated mouse button a couple frames after a debug
 	// mouse_click so the engine sees a complete press/release cycle.
 	if (_debugButtonReleaseFrame != 0 && _frameCounter >= _debugButtonReleaseFrame) {
@@ -301,6 +304,8 @@ void ScummMcpBridge::pump() {
 	    !_v7DialogChoices.empty()) {
 		_v7DialogChoices.clear();
 	}
+	if (_vm && _vm->_game.id == GID_SAMNMAX && !hasPendingQuestion() && !_v7DialogChoices.empty())
+		_v7DialogChoices.clear();
 
 	_server->pump();
 }
@@ -423,7 +428,43 @@ void ScummMcpBridge::onDialogPrompt(const Common::String &text) {
 }
 
 void ScummMcpBridge::onV7BlastTextSnapshot() {
-	if (!_vm || _vm->_game.version != 7) return;
+	if (!_vm || (_vm->_game.version != 7 && _vm->_game.id != GID_SAMNMAX)) return;
+	if (_vm->_game.id == GID_SAMNMAX) {
+		ScummEngine_v6 *v6 = (ScummEngine_v6 *)_vm;
+		Common::Array<V7Choice> fresh;
+		int n = v6->_blastObjectQueuePos;
+		if (n > (int)ARRAYSIZE(v6->_blastObjectQueue))
+			n = ARRAYSIZE(v6->_blastObjectQueue);
+		for (int i = 0; i < n; ++i) {
+			const ScummEngine_v6::BlastObject &eo = v6->_blastObjectQueue[i];
+			if (eo.rect.top < 120)
+				continue;
+			bool nested = false;
+			for (int j = 0; j < n; ++j) {
+				if (j == i) continue;
+				const Common::Rect &o = v6->_blastObjectQueue[j].rect;
+				if (o.left <= eo.rect.left && o.right >= eo.rect.right &&
+				    o.top <= eo.rect.top && o.bottom >= eo.rect.bottom &&
+				    (o.width() > eo.rect.width() || o.height() > eo.rect.height())) {
+					nested = true;
+					break;
+				}
+			}
+			if (!nested)
+				continue;
+			V7Choice c;
+			c.objNumber = eo.number;
+			Common::String nm = safeUtf8(getObjName(this, eo.number));
+			c.text = nm.empty() ? Common::String::format("icon_%d", eo.number)
+			                    : normalizeActionName(nm);
+			c.x = (eo.rect.left + eo.rect.right) / 2;
+			c.y = (eo.rect.top + eo.rect.bottom) / 2;
+			fresh.push_back(c);
+		}
+		if (!fresh.empty())
+			_v7DialogChoices = fresh;
+		return;
+	}
 	ScummEngine_v7 *v7 = (ScummEngine_v7 *)_vm;
 	// Capture each frame regardless of script state. Dialog-mode gating is
 	// applied in toolState/toolAnswer; cleanup happens in pump() once the
@@ -1302,7 +1343,23 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		bool v7DialogPending = (_vm->_game.version == 7 && _baseVerbScript != 0 &&
 		                        _vm->VAR_VERB_SCRIPT != 0xFF &&
 		                        (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) != _baseVerbScript);
-		if (v7DialogPending) {
+		if (_vm->_game.id == GID_SAMNMAX && !_v7DialogChoices.empty()) {
+			Common::Array<V7Choice> sorted = _v7DialogChoices;
+			for (uint i = 0; i + 1 < sorted.size(); ++i) {
+				for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
+					bool swap = (sorted[j].y > sorted[j + 1].y) ||
+					            (sorted[j].y == sorted[j + 1].y && sorted[j].x > sorted[j + 1].x);
+					if (swap) { V7Choice tmp = sorted[j]; sorted[j] = sorted[j + 1]; sorted[j + 1] = tmp; }
+				}
+			}
+			for (uint i = 0; i < sorted.size(); ++i) {
+				Common::JSONObject choice;
+				choice.setVal("id",    mcpJsonInt((int)i + 1));
+				choice.setVal("label", mcpJsonString(sorted[i].text));
+				choiceList.push_back(new Common::JSONValue(choice));
+				++choiceCount;
+			}
+		} else if (v7DialogPending) {
 			// V7 (Dig/FT) dialog choices are drawn directly via the blast-text
 			// queue (no verb slots are populated). The bridge snapshots the
 			// queue in onV7BlastTextSnapshot(); sort the captured lines by Y so
@@ -1512,6 +1569,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// For Indy4, actors are handled by the sentence script, not verb entrypoints.
 	// Skip the entrypoint check for actors and proceed to doSentence.
 	bool isIndy4Actor = _vm->_game.id == GID_INDY4 && targetA != 0 && _vm->objIsActor(targetA);
+	bool isSamnMaxActor = _vm->_game.id == GID_SAMNMAX && targetA != 0 && _vm->objIsActor(targetA);
 
 	// Indy4 single-target actor sentences (e.g. talk_to sophia) dispatched via
 	// doSentence() do not reliably fire the talk action — the sentence script
@@ -1520,7 +1578,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// the actor) goes through the same input scripts the engine uses for real
 	// clicks and reliably opens the dialog. Restrict to single-target sentences;
 	// 2-target verbs like 'give X to Y' still use doSentence.
-	bool isIndy4ActorClick = isIndy4Actor && targetB == 0;
+	bool isIndy4ActorClick = (isIndy4Actor || isSamnMaxActor) && targetB == 0;
 
 	// CMI (V8): dispatch via doSentence() directly.
 	bool isCMIClick = false;
@@ -1542,7 +1600,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	                        (_vm->_game.id == GID_DIG ||
 	                         (_vm->_game.id == GID_FT && verbId == -1));
 
-	if (targetA != 0 && !isIndy4Actor && !isLoomClick && !isCMIClick && !isV7NaturalClick) {
+	if (targetA != 0 && !isIndy4Actor && !isSamnMaxActor && !isLoomClick && !isCMIClick && !isV7NaturalClick) {
 		int ep = _vm->getVerbEntrypoint(targetA, verbId);
 		debug(1, "mcp: act entrypoint for obj %d verb %d = %d", targetA, verbId, ep);
 
@@ -1913,6 +1971,49 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	if (choiceIdx < 1) {
 		errorOut = "answer: id must be >= 1";
 		return false;
+	}
+
+	if (_vm->_game.id == GID_SAMNMAX && !_v7DialogChoices.empty()) {
+		Common::Array<V7Choice> sorted = _v7DialogChoices;
+		for (uint i = 0; i + 1 < sorted.size(); ++i) {
+			for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
+				bool swap = (sorted[j].y > sorted[j + 1].y) ||
+				            (sorted[j].y == sorted[j + 1].y && sorted[j].x > sorted[j + 1].x);
+				if (swap) { V7Choice tmp = sorted[j]; sorted[j] = sorted[j + 1]; sorted[j + 1] = tmp; }
+			}
+		}
+		if (choiceIdx > (int)sorted.size()) {
+			errorOut = Common::String::format("answer: choice %d not available (only %u shown)",
+			                                  choiceIdx, sorted.size());
+			return false;
+		}
+
+		snapshotPreAction();
+		_streaming = true;
+		_sseAnswerStream = true;
+		_sseStartFrame = _frameCounter;
+		_sseDoneAtFrame = 0;
+		_sseStuckAtFrame = 0;
+		_sseLastEventFrame = 0;
+		_sseEgoMoved = false;
+		_sseMessages.clear();
+		_ssePendingSecondClick = false;
+		_ssePendingNotes.clear();
+		_sseTargetObject = 0;
+		_sseButtonClearFrame = _frameCounter + 2;
+		const V7Choice &ch = sorted[(uint)choiceIdx - 1];
+		_vm->_mouse.x = ch.x;
+		_vm->_mouse.y = ch.y;
+		_vm->_virtualMouse.x = ch.x;
+		_vm->_virtualMouse.y = ch.y;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = ch.x;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = ch.y;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = ch.x;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = ch.y;
+		_vm->_leftBtnPressed |= 0x03;
+		_v7DialogChoices.clear();
+		_server->startStreaming();
+		return true;
 	}
 
 	// V7 (Dig/FT): dialog choices are not in verb slots. The dialog input script
@@ -3332,7 +3433,23 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 	if (hasPendingQuestion()) {
 		int choiceCount = 0;
 		Common::JSONArray choiceList;
-		if (_vm->_game.version >= 6) {
+		if (_vm->_game.id == GID_SAMNMAX && !_v7DialogChoices.empty()) {
+			Common::Array<V7Choice> sorted = _v7DialogChoices;
+			for (uint i = 0; i + 1 < sorted.size(); ++i) {
+				for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
+					bool swap = (sorted[j].y > sorted[j + 1].y) ||
+					            (sorted[j].y == sorted[j + 1].y && sorted[j].x > sorted[j + 1].x);
+					if (swap) { V7Choice tmp = sorted[j]; sorted[j] = sorted[j + 1]; sorted[j + 1] = tmp; }
+				}
+			}
+			for (uint i = 0; i < sorted.size(); ++i) {
+				Common::JSONObject choice;
+				choice.setVal("id",    mcpJsonInt((int)i + 1));
+				choice.setVal("label", mcpJsonString(sorted[i].text));
+				choiceList.push_back(new Common::JSONValue(choice));
+				++choiceCount;
+			}
+		} else if (_vm->_game.version >= 6) {
 			// V6+/V8 dialog choices are represented as non-action verb slots.
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 				const VerbSlot &vs = _vm->_verbs[slot];
@@ -3470,6 +3587,9 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 			return true;
 		}
 	}
+
+	if (_vm->_game.id == GID_SAMNMAX && !_v7DialogChoices.empty())
+		return true;
 
 	// V6+ (Sam & Max and later): dialog uses icon verb slots. The game saves the
 	// five standard action icon verbs (saveid != 0) and inserts new topic icon slots.
@@ -3637,8 +3757,6 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 	// The Dig: single-cursor verbs map to the generic 'use' action (verb ID 7).
 	if (s == "interact") return "use";
 	if (s == "use_item") return "use";
-	// Sam & Max: expose companion inventory item as plain 'max' for MCP targets.
-	if (s == "max_the_object") return "max";
 	return s;
 }
 
@@ -3858,7 +3976,9 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		e.kind = NamedEntity::kActor;
 		e.numId = a->_number;
 		e.visible = a->_visible;
-		e.baseName = name.empty() ? Common::String::format("actor-%d", a->_number)
+		if (name.empty() && _vm->_game.id == GID_SAMNMAX && a->_number == 3)
+			name = "Max";
+		e.baseName = name.empty() ? normalizeActionName(Common::String::format("actor-%d", a->_number))
 		                          : normalizeActionName(safeUtf8(name));
 		if (!name.empty()) {
 			bool hasCtrl = false;
@@ -4032,6 +4152,18 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 	// real per-verb entrypoints, unlike The Dig). Debug helper: "v_N"/"verb_N"
 	// dispatches an arbitrary verb id for empirical mapping.
 	if (_vm->_game.id == GID_FT && _debugToolsEnabled &&
+	    (normalized.hasPrefix("v_") || normalized.hasPrefix("verb_"))) {
+		const char *p = normalized.c_str() + (normalized.hasPrefix("v_") ? 2 : 5);
+		int id = atoi(p);
+		if (id > 0) {
+			verbId = id;
+			return true;
+		}
+	}
+
+	// Sam & Max debug helper: accept "v_N"/"verb_N" to dispatch arbitrary
+	// verb IDs while mapping the icon interface.
+	if (_vm->_game.id == GID_SAMNMAX && _debugToolsEnabled &&
 	    (normalized.hasPrefix("v_") || normalized.hasPrefix("verb_"))) {
 		const char *p = normalized.c_str() + (normalized.hasPrefix("v_") ? 2 : 5);
 		int id = atoi(p);
