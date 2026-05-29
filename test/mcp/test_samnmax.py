@@ -201,3 +201,39 @@ def test_07_samnmax_dialog_goodbye_closes(samnmax_client: McpClient) -> None:
             break
         sleep(0.5)
     assert samnmax_client.state().get("question") is None, "conversation did not close"
+
+
+def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -> None:
+    """A topic revealed mid-conversation must be selectable, not a dead click.
+
+    Once Sam & Max are talking, a fifth office topic (the Max-head icon, object
+    1067) appears packed into the next free slot on the left of the strip. The
+    engine keeps reporting that icon's dormant home X — parked behind the
+    rightmost blank box — so the bridge used to aim answer(5) at the blank on top
+    of it and the click silently did nothing. The choice must now appear after
+    the first selection and selecting it must produce its spoken exchange.
+    """
+    question = _open_max_conversation(samnmax_client)
+    if question is None:
+        pytest.skip("conversation did not open in this build")
+    try:
+        # The fresh menu shows the four base topics.
+        assert len(question["choices"]) == 4, f"expected 4 base topics, got: {question['choices']}"
+
+        # The first selection reveals the fifth topic icon.
+        result = samnmax_client.answer(2)
+        _assert_no_garbage(result.get("messages", []))
+        follow_up = result.get("question") or samnmax_client.state().get("question")
+        assert follow_up is not None, "conversation closed unexpectedly"
+        labels = [c.get("label") for c in follow_up["choices"]]
+        assert len(labels) == 5, f"the fifth topic should appear after a selection, got: {labels}"
+        assert len(set(labels)) == 5, f"duplicate choice in: {labels}"
+
+        # Selecting the fifth topic must reach the real script, not click a blank.
+        result = samnmax_client.answer(5)
+        texts = [m.get("text", "") for m in result.get("messages", [])]
+        _assert_no_garbage(result.get("messages", []))
+        assert texts, "selecting the fifth topic produced no spoken line (click missed)"
+        assert "coffee achiever" in " ".join(texts).lower(), f"got: {texts}"
+    finally:
+        _close_conversation(samnmax_client)

@@ -511,18 +511,38 @@ void ScummMcpBridge::collectSamnMaxDialogChoices(Common::Array<V7Choice> &out) {
 	}
 	bool haveBlank = (blankCount >= 2);
 
-	// Real topics: row slots that are not the blank box, left-to-right.
+	// Real topics: row slots that are not the blank box, ordered left-to-right by
+	// the engine's reported X.
 	for (uint i = 0; i + 1 < row.size(); ++i)
 		for (uint j = 0; j + 1 < row.size() - i; ++j)
 			if (row[j].x > row[j + 1].x) { Slot t = row[j]; row[j] = row[j + 1]; row[j + 1] = t; }
+	Common::Array<Slot> topics;
 	for (uint i = 0; i < row.size(); ++i) {
 		if (haveBlank && row[i].sum == blankSum)
 			continue;
+		topics.push_back(row[i]);
+	}
+	if (topics.empty())
+		return;
+
+	// The game draws the active topic icons packed contiguously from the left of
+	// the strip and fills the remaining slots with blank boxes. A topic added mid
+	// conversation (e.g. the office "fifth" icon, object 1067) keeps its dormant
+	// home X — parked behind the rightmost blank box — even though it is actually
+	// drawn in the next free left slot. Trusting getObjX there would aim a click
+	// at the blank on top of it and miss. So derive each topic's real screen
+	// position from its left-to-right rank against the strip's slot pitch instead
+	// of the (possibly stale) reported X. The leftmost topic and the slot width
+	// are stable, so already-correct icons keep their coordinates.
+	const int originX    = topics[0].x;            // leftmost topic's screen X
+	const int halfWidth  = topics[0].cx - topics[0].x;
+	const int slotWidth  = halfWidth > 0 ? halfWidth * 2 : 40;
+	for (uint i = 0; i < topics.size(); ++i) {
 		V7Choice c;
-		c.objNumber = row[i].obj;
-		c.text = Common::String::format("icon_%d", row[i].obj);
-		c.x = row[i].cx;
-		c.y = row[i].cy;
+		c.objNumber = topics[i].obj;
+		c.text = Common::String::format("icon_%d", topics[i].obj);
+		c.x = originX + (int)i * slotWidth + halfWidth;
+		c.y = topics[i].cy;
 		out.push_back(c);
 	}
 }
