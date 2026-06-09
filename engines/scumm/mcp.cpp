@@ -73,6 +73,12 @@ static bool isSentenceLikeDialogLabel(const Common::String &label) {
 // to the mouth and then clicking the actor — resolveVerb maps it to a sentinel.
 static const int kSnmCursorVerbVar = 177;
 static const int kSnmMouthCursor   = 877;
+// The "use/operate" context cursor (the hand reaching for a control). Reached by
+// cycling the right-click verb, exactly like the mouth (877). Some objects expose
+// no per-object verb-7 script for it — the action lives in the scene-click input
+// script instead (e.g. boarding the street DeSoto, which plays the drive-away
+// cutscene). For those, 'use' is dispatched by cycling to this cursor + clicking.
+static const int kSnmUseCursor     = 878;
 static const int kSnmTalkSentinel  = -200;
 
 struct V6VerbEntry { int id; const char *name; const char *label; };
@@ -1757,6 +1763,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_ssePendingV7UseClick = false;
 	_sseSnmTalkActor = 0;
 	_sseSnmTalkClicks = 0;
+	_sseSnmCursorTarget = 0;
 	// Capture the current input script so we can detect when the game switches
 	// to a dialog-mode script (V7: VAR_VERB_SCRIPT changes to a different value).
 	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
@@ -1773,6 +1780,21 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// cursor to the "mouth" icon over the actor, then left-clicks to open
 		// the conversation (whose topic icons are then exposed as choices).
 		_sseSnmTalkActor = targetA;
+		_sseSnmCursorTarget = kSnmMouthCursor;
+		_sseSnmTalkClicks = 0;
+		_sseSnmTalkNextFrame = _frameCounter + 1;
+	} else if (_vm->_game.id == GID_SAMNMAX && verbId == 7 && targetA != 0 &&
+	           targetB == 0 && !_vm->objIsActor(targetA) &&
+	           _vm->getVerbEntrypoint(targetA, 7) == 0) {
+		// Sam & Max 'use' on an object that carries no verb-7 script (e.g. the
+		// beat-up DeSoto on the street). Boarding the car / its drive-away cutscene
+		// is fired by the scene-click input script when clicked with the
+		// "use/operate" context cursor — doSentence(7, ...) finds no entrypoint and
+		// does nothing. Drive the interface like talk_to does: pumpStream cycles the
+		// cursor to the use icon (878) over the object, then left-clicks it. Objects
+		// that DO script verb 7 (doors, etc.) keep the doSentence path below.
+		_sseSnmTalkActor = targetA;
+		_sseSnmCursorTarget = kSnmUseCursor;
 		_sseSnmTalkClicks = 0;
 		_sseSnmTalkNextFrame = _frameCounter + 1;
 	} else if (isIndy4ActorClick) {
@@ -2578,6 +2600,16 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	vmouse.setVal("y", mcpJsonInt(_vm->_virtualMouse.y));
 	out.setVal("virtual_mouse", new Common::JSONValue(vmouse));
 
+	// Camera scroll: screen_x = world_x - camera.xstart (the conversion the
+	// scene-click pipeline uses). Exposed so MCP callers can map object world
+	// coords to on-screen click positions in horizontally scrolling rooms.
+	Common::JSONObject camera;
+	camera.setVal("xstart",   mcpJsonInt(_vm->_virtscr[kMainVirtScreen].xstart));
+	camera.setVal("topline",  mcpJsonInt(_vm->_virtscr[kMainVirtScreen].topline));
+	camera.setVal("cam_x",    mcpJsonInt(_vm->camera._cur.x));
+	camera.setVal("cam_y",    mcpJsonInt(_vm->camera._cur.y));
+	out.setVal("camera", new Common::JSONValue(camera));
+
 	out.setVal("left_btn_pressed",  mcpJsonInt(_vm->_leftBtnPressed));
 	out.setVal("right_btn_pressed", mcpJsonInt(_vm->_rightBtnPressed));
 	out.setVal("mouse_keyboard_stat", mcpJsonInt(_vm->_mouseAndKeyboardStat));
@@ -2655,6 +2687,12 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 		ro.setVal("id",          mcpJsonInt(od.obj_nr));
 		ro.setVal("x",           mcpJsonInt(_vm->getObjX(od.obj_nr)));
 		ro.setVal("y",           mcpJsonInt(_vm->getObjY(od.obj_nr)));
+		ro.setVal("x_pos",       mcpJsonInt(od.x_pos));
+		ro.setVal("y_pos",       mcpJsonInt(od.y_pos));
+		ro.setVal("w",           mcpJsonInt(od.width));
+		ro.setVal("h",           mcpJsonInt(od.height));
+		ro.setVal("walk_x",      mcpJsonInt(od.walk_x));
+		ro.setVal("walk_y",      mcpJsonInt(od.walk_y));
 		ro.setVal("state",       mcpJsonInt(od.state));
 		ro.setVal("untouchable", mcpJsonBool(_vm->getClass(od.obj_nr, kObjectClassUntouchable)));
 		Common::String name = getObjName(this, od.obj_nr);
@@ -3283,15 +3321,16 @@ void ScummMcpBridge::pumpStream() {
 		_sseDoneAtFrame = 0;
 	}
 
-	// Sam & Max talk_to: cycle the context cursor to the "mouth" verb over the
-	// target actor (right-clicks), then left-click to open the conversation.
+	// Sam & Max context-cursor click: cycle the verb cursor to _sseSnmCursorTarget
+	// over the target (right-clicks), then left-click. Drives talk_to (mouth, 877)
+	// and 'use' on no-verb-7 objects like the DeSoto (use/operate, 878).
 	if (_sseSnmTalkActor != 0 && _vm->_userPut > 0 && _frameCounter >= _sseSnmTalkNextFrame) {
 		int objX = _vm->getObjX(_sseSnmTalkActor);
 		int objY = _vm->getObjY(_sseSnmTalkActor);
 		VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
 		int mouseX = CLIP<int>(objX - vs->xstart, 0, _vm->_screenWidth - 1);
 		int mouseY = CLIP<int>(objY + vs->topline, 0, _vm->_screenHeight - 1);
-		// Keep the (virtual) mouse over the actor so the verb cycle applies to it
+		// Keep the (virtual) mouse over the target so the verb cycle applies to it
 		// and the eventual click lands on it.
 		_vm->_mouse.x = mouseX;
 		_vm->_mouse.y = mouseY;
@@ -3304,12 +3343,12 @@ void ScummMcpBridge::pumpStream() {
 
 		int curVerb = (kSnmCursorVerbVar < _vm->_numVariables && _vm->_scummVars)
 		              ? (int)_vm->_scummVars[kSnmCursorVerbVar] : -1;
-		if (curVerb == kSnmMouthCursor || _sseSnmTalkClicks >= 8) {
-			// Mouth selected (or give up cycling): left-click to talk.
+		if (curVerb == _sseSnmCursorTarget || _sseSnmTalkClicks >= 8) {
+			// Target cursor selected (or give up cycling): left-click to act.
 			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
 			_sseButtonClearFrame = _frameCounter + 2;
 			_sseSnmTalkActor = 0;
-			_sseDoneAtFrame = 0; // re-settle so the conversation can open
+			_sseDoneAtFrame = 0; // re-settle so the resulting action can play out
 		} else {
 			// Right-click to advance the verb cursor, then wait for the cursor
 			// manager script to process it before checking again.
@@ -4095,6 +4134,16 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 				if ((unsigned char)e.baseName[ci] < 0x20) { hasCtrl = true; break; }
 			if (hasCtrl) continue;
 		}
+		// Sam & Max: drop dormant placeholder objects that have an empty bounding
+		// box (zero width or height) and are not navigable pathways. findObject()
+		// requires width+x_pos > x (and likewise for height), so a 0-sized box has
+		// no on-screen hit area — the player can never click it. The street scene's
+		// 'carnival_tickets' (id 95) sits at 0,0 with w=h=0 until the script later
+		// places it; without this guard it surfaces as a phantom, pickable target.
+		// Scoped to Sam & Max to preserve other games' object lists verbatim.
+		if (_vm->_game.id == GID_SAMNMAX && !e.isPathway &&
+		    (od.width == 0 || od.height == 0))
+			continue;
 		raw.push_back(e);
 	}
 
@@ -4318,6 +4367,28 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 	if (_vm->_game.id == GID_SAMNMAX && normalized == "talk_to") {
 		verbId = kSnmTalkSentinel;
 		return true;
+	}
+
+	// Sam & Max icon-verb ids differ from the common V6 layout used by Day of the
+	// Tentacle / Monkey 2 (where verb 4 == pick_up and verb 5 == look_at). In Sam
+	// & Max the eye (look at) is verb 4 and the hand (pick up) is verb 5 — the
+	// reverse — verified empirically: doSentence(4, roach_farm) speaks the look
+	// description ("It's Max's roach farm.") while doSentence(5, ...) gives the
+	// pick-up refusal ("I can't pick that up."). Map these explicitly before the
+	// generic V6 canonical lookup below, which would otherwise match {4:pick_up,
+	// 5:look_at} first and swap the two actions. 'use' (verb 7, e.g. the office
+	// door's ep7 exit handler) and 'walk_to' (verb 13) keep the common ids.
+	if (_vm->_game.id == GID_SAMNMAX) {
+		static const struct { const char *name; int id; } kSnmVerbs[] = {
+			{"look_at", 4}, {"pick_up", 5}, {"use", 7}, {"walk_to", 13}, {nullptr, 0}
+		};
+		for (int i = 0; kSnmVerbs[i].name; ++i) {
+			if (normalized == kSnmVerbs[i].name) {
+				verbId = kSnmVerbs[i].id;
+				debug(1, "mcp: resolveVerb S&M '%s' -> verbid=%d", normalized.c_str(), verbId);
+				return true;
+			}
+		}
 	}
 
 	// Sam & Max debug helper: accept "v_N"/"verb_N" to dispatch arbitrary

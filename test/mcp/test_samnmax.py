@@ -237,3 +237,120 @@ def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -
         assert "coffee achiever" in " ".join(texts).lower(), f"got: {texts}"
     finally:
         _close_conversation(samnmax_client)
+
+
+# ---------------------------------------------------------------------------
+# Street scene (room 9): icon-verb mapping, phantom objects, vehicle cutscene
+# ---------------------------------------------------------------------------
+
+STREET_ROOM = 9
+
+
+def _room_id(state: dict):
+    return (state.get("room") or {}).get("id")
+
+
+def _wait_room(client: McpClient, target: int, tries: int = 30) -> bool:
+    for _ in range(tries):
+        if _room_id(client.state()) == target:
+            return True
+        sleep(SETTLE_SECS)
+    return False
+
+
+def _act_texts(result: dict) -> str:
+    return " ".join(m.get("text", "") for m in (result or {}).get("messages", []))
+
+
+def _goto_street(client: McpClient) -> bool:
+    """Walk Sam & Max office(7) -> hallway(8) -> street(9).
+
+    The office door (id 62) and the downstairs exit (id 82) both carry a verb-7
+    ('use') handler. The downstairs only transitions once Sam is stood by it, so
+    we nudge him toward the bottom-left exit before using it. Returns True if the
+    street is reached.
+
+    The samnmax fixture is session-scoped, so a prior street test may already have
+    walked us here — short-circuit in that case instead of trying to navigate back
+    from a non-office room.
+    """
+    if _room_id(client.state()) == STREET_ROOM:
+        return True
+    _office_state(client)
+    try:
+        _act_retry(client, "use", 62)
+    except (RuntimeError, AssertionError):
+        pass
+    if not _wait_room(client, 8):
+        return False
+    sleep(1.0)
+    for _ in range(4):
+        try:
+            client.walk(50, 180)
+        except RuntimeError:
+            pass
+        sleep(1.5)
+        try:
+            client.act("use", 82)
+        except RuntimeError:
+            pass
+        if _wait_room(client, STREET_ROOM, tries=12):
+            return True
+    return _room_id(client.state()) == STREET_ROOM
+
+
+def test_09_samnmax_look_and_pick_up_not_reversed(samnmax_client: McpClient) -> None:
+    """'look at' must examine and 'pick up' must (try to) take — not the reverse.
+
+    Sam & Max's icon verbs invert the common V6 layout: the eye (look) is verb 4
+    and the hand (pick up) is verb 5, the opposite of Day of the Tentacle's
+    {4:pick_up, 5:look_at}. The bridge used to resolve the names to the V6 ids and
+    swapped the two actions. Verified on Max's roach farm in the office, which
+    needs no navigation.
+    """
+    _office_state(samnmax_client)
+    look_result = _act_retry(samnmax_client, "look_at", "roach_farm")
+    _assert_no_garbage(look_result.get("messages", []))
+    look = _act_texts(look_result)
+    assert "roach farm" in look.lower(), f"look_at should examine, got: {look!r}"
+    assert "pick" not in look.lower(), f"look_at ran the pick-up action: {look!r}"
+
+    pick = _act_texts(_act_retry(samnmax_client, "pick_up", "roach_farm"))
+    assert "pick" in pick.lower(), f"pick_up should try to take it, got: {pick!r}"
+    assert "roach farm" not in pick.lower(), f"pick_up ran the look action: {pick!r}"
+
+
+def test_10_samnmax_no_phantom_carnival_ticket(samnmax_client: McpClient) -> None:
+    """The dormant 'carnival_tickets' object (id 95) must not be a selectable target.
+
+    On the street it sits at 0,0 with a zero-size bounding box until the script
+    later places it, so the player can never click it. It used to leak into the
+    object list as a phantom, pickable target.
+    """
+    if not _goto_street(samnmax_client):
+        pytest.skip("could not reach the street scene (room 9)")
+    names = [o.get("name") for o in samnmax_client.state().get("objects", [])]
+    assert "carnival_tickets" not in names, f"phantom ticket still listed: {names}"
+    # The real, placed scenery is still there.
+    assert "beat_up_desoto" in names, f"the DeSoto should be listed: {names}"
+
+
+def test_11_samnmax_use_desoto_triggers_cutscene(samnmax_client: McpClient) -> None:
+    """Using the DeSoto must board the car and play the drive-away cutscene.
+
+    The car carries no verb-7 script, so doSentence('use') did nothing. Boarding
+    is fired by the scene-click input script when clicked with the use/operate
+    context cursor; the bridge now cycles the cursor there and clicks, leaving the
+    street (room 9) for the driving cutscene.
+    """
+    if not _goto_street(samnmax_client):
+        pytest.skip("could not reach the street scene (room 9)")
+    assert _room_id(samnmax_client.state()) == STREET_ROOM
+    _act_retry(samnmax_client, "use", "beat_up_desoto")
+    left_street = False
+    for _ in range(30):
+        if _room_id(samnmax_client.state()) != STREET_ROOM:
+            left_street = True
+            break
+        sleep(SETTLE_SECS)
+    assert left_street, "using the DeSoto did not trigger the drive-away cutscene"

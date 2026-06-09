@@ -154,11 +154,15 @@ private:
 	// V7: pending dialog choice digit (1-9); fed to the dialog script when
 	// the game is ready to accept input. 0 means no choice is pending.
 	int _ssePendingV7Choice = 0;
-	// Sam & Max talk_to: object id of the actor we are opening a conversation
-	// with. While non-zero, pumpStream cycles the right-click verb cursor to the
-	// "mouth" (talk) icon and then left-clicks the actor. 0 means not talking.
+	// Sam & Max context-cursor click: object/actor id we are acting on by driving
+	// the in-game verb cursor. While non-zero, pumpStream right-clicks to cycle the
+	// context cursor to _sseSnmCursorTarget over the target, then left-clicks it.
+	// Used for talk_to (cursor -> mouth) and for 'use' on objects with no verb-7
+	// script such as the DeSoto (cursor -> use/operate). 0 means inactive.
 	int _sseSnmTalkActor = 0;
-	// Frame gate + right-click counter for the talk verb-cycle above.
+	// The context-cursor icon id to cycle to before clicking (mouth 877 / use 878).
+	int _sseSnmCursorTarget = 0;
+	// Frame gate + right-click counter for the verb-cycle above.
 	uint32 _sseSnmTalkNextFrame = 0;
 	int _sseSnmTalkClicks = 0;
 	// Auto-release frame for stand-alone mouse_click (debug tool): the engine
