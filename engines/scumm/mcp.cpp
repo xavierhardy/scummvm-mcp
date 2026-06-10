@@ -2784,6 +2784,8 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 		ro.setVal("walk_x",      mcpJsonInt(od.walk_x));
 		ro.setVal("walk_y",      mcpJsonInt(od.walk_y));
 		ro.setVal("state",       mcpJsonInt(od.state));
+		ro.setVal("parent",      mcpJsonInt(od.parent));
+		ro.setVal("parentstate", mcpJsonInt(od.parentstate));
 		ro.setVal("untouchable", mcpJsonBool(_vm->getClass(od.obj_nr, kObjectClassUntouchable)));
 		Common::String name = getObjName(this, od.obj_nr);
 		ro.setVal("name", mcpJsonString(name.empty() ? Common::String::format("obj-%d", od.obj_nr) : normalizeActionName(name)));
@@ -4362,20 +4364,33 @@ bool ScummMcpBridge::isObjectSelectable(const ObjectData &od) const {
 	if (_vm->getClass(od.obj_nr, kObjectClassUntouchable))
 		return false;
 
-	// Per-game additional checks that mirror the version-specific branches in findObject().
-	switch (_vm->_game.id) {
-	case GID_MANIAC:
-		// V0: only foreground objects carry the untouchable state flag.
-		// Background (BG) and actor-type objects use only the class check above.
-		if (OBJECT_V0_TYPE(od.obj_nr) == kObjectV0TypeFG && (od.state & kObjectStateUntouchable))
+	// V0 foreground objects and all V1/V2 objects also honor the untouchable
+	// state flag (mirrors the version branch in findObject(); V3+ has no
+	// state-flag veto).
+	if ((_vm->_game.version == 0 && OBJECT_V0_TYPE(od.obj_nr) == kObjectV0TypeFG) ||
+	    (_vm->_game.version > 0 && _vm->_game.version <= 2)) {
+		if (od.state & kObjectStateUntouchable)
 			return false;
-		break;
-	case GID_MONKEY_EGA:
-	case GID_INDY4:
-		// V5: the class-level check above is sufficient; no state-flag veto.
-		break;
-	default:
-		break;
+	}
+
+	// Hidden-object gate: findObject() walks the parent chain and only lets a
+	// click land while every ancestor's (state & mask) equals the child's
+	// parentstate. E.g. in Indy3's Henry's house the old book is parented to
+	// the chest with parentstate=open and the chest itself to the table cloth,
+	// so neither is reachable until its parent reaches the revealing state.
+	// `parent` is a local-object *index*, not an object number.
+	if (_vm->_objs) {
+		const int mask = (_vm->_game.version <= 2) ? kObjectStateIntrinsic : 0xF;
+		int b = _vm->getObjectIndex(od.obj_nr);
+		// Hop counter guards against a malformed cyclic parent chain.
+		for (int hops = 0; b > 0 && hops < _vm->_numLocalObjects; ++hops) {
+			byte a = _vm->_objs[b].parentstate;
+			b = _vm->_objs[b].parent;
+			if (b == 0)
+				break;
+			if (b >= _vm->_numLocalObjects || (_vm->_objs[b].state & mask) != a)
+				return false;
+		}
 	}
 	return true;
 }

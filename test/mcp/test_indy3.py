@@ -222,3 +222,47 @@ def test_12_indy3_travel_to_henrys_house(indy3_travel_client: McpClient) -> None
     assert object_names & {"typewriter", "desk", "bookcase", "refrigerator"}, (
         f"new room doesn't look like Henry's House: {sorted(object_names)}"
     )
+
+
+def test_13_indy3_hidden_objects_not_selectable(
+    indy3_travel_client: McpClient,
+) -> None:
+    """Objects concealed by a parent object are neither listed nor targetable.
+
+    In Henry's house the sticky tape hides behind the bookcase, the chest
+    under the table cloth, and the old book inside the (locked) chest. The
+    engine's findObject() gates clicks on the parent object's state; the MCP
+    bridge must mirror that. Runs after test_12 left us in Henry's house.
+    """
+    state = _state_or_skip(indy3_travel_client)
+    if state.get("room", {}).get("id") == 24:
+        pytest.skip("still in the clipper — travel to Henry's house didn't happen")
+
+    names = {o["name"] for o in state.get("objects", [])}
+    hidden = {"old_book", "sticky_tape", "chest"}
+    assert hidden.isdisjoint(names), f"hidden objects leaked into state: {hidden & names}"
+
+    # The room may still be settling after the travel cutscene; retry while
+    # the engine reports input locked, then assert the hidden target fails.
+    last = ""
+    for _ in range(20):
+        try:
+            indy3_travel_client.act("look", "old_book")
+            raise AssertionError("acting on hidden 'old_book' unexpectedly succeeded")
+        except RuntimeError as e:
+            last = str(e)
+            if "not accepting input" in last:
+                sleep(1.0)
+                continue
+            break
+    assert "unknown target1" in last, f"unexpected error: {last}"
+
+    # Reveal chain: move the plant off the cloth, pull the cloth — the chest
+    # becomes selectable. The chest is locked, so the book inside stays hidden.
+    indy3_travel_client.act("pick up", "plant")
+    sleep(1)
+    indy3_travel_client.act("pull", "table_cloth")
+    sleep(1)
+    names = {o["name"] for o in indy3_travel_client.state().get("objects", [])}
+    assert "chest" in names, f"chest not revealed after pulling the cloth: {sorted(names)}"
+    assert "old_book" not in names, "book inside the locked chest must stay hidden"
