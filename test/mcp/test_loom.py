@@ -56,52 +56,60 @@ def test_03_loom_objects_in_room(loom_client: McpClient) -> None:
     assert objects, f"Expected room objects, got empty list (room={state.get('room')})"
 
 
-def test_04_loom_interact_object(loom_client: McpClient) -> None:
-    """'interact' on a room object completes without error and changes state.
+def test_04_loom_egg_listen(loom_client: McpClient) -> None:
+    """Walk away and click the egg: Bobbin listens to its 4-note draft.
 
-    The Loom V3 single-cursor model maps every click to the engine's 'use'
-    verb. We try named room objects (by id, since many have placeholder names)
-    until one produces an observable state change (movement, message, or
-    inventory delta).
+    `act("interact", "egg")` walks Bobbin over and triggers the egg's
+    auto-song; the watcher emits per-note MCP notifications. The Opening
+    draft is always e-c-e-d. This must run before anything else interacts
+    with the room — clicking the egg or the loom first disturbs the listen
+    flow (which is why the old object-loop test made this one flaky).
     """
     if not wait_for_interactive(loom_client):
-        pytest.skip("Game stuck in cutscene")
+        pytest.skip("Save did not reach interactive state")
 
     state = get_state_with_retry(loom_client)
-    initial_inventory = set(state.get("inventory", []))
-    initial_pos = state.get("position", {})
+    egg_id = _find_id(state, "egg")
+    assert egg_id is not None, f"egg not in room: {state.get('objects')}"
 
-    candidates: list[int] = [
-        obj["id"] for obj in state.get("objects", []) if not obj.get("pathway")
-    ]
-    if not candidates:
-        pytest.skip("No interactable objects in room")
+    # Move Bobbin away so the click triggers the walk-over + listen flow.
+    loom_client.walk(40, 130)
+    sleep(2)
 
-    for obj_id in candidates:
-        try:
-            result = loom_client.act("interact", obj_id)
-        except RuntimeError as e:
-            if "not accepting input" in str(e):
-                continue
-            raise
-        sleep(1.5)
-        try:
-            new_state = get_state_with_retry(loom_client)
-        except Exception:
-            continue
-        new_inv = set(new_state.get("inventory", []))
-        new_pos = new_state.get("position", {})
-        moved = new_pos.get("x") != initial_pos.get("x") or new_pos.get(
-            "y"
-        ) != initial_pos.get("y")
-        inv_changed = bool(new_inv - initial_inventory)
-        if moved or inv_changed or result.get("messages"):
-            return  # success: at least one object responded
-
-    pytest.skip(f"No interactable object produced output (tried ids: {candidates})")
+    notes, messages, _ = loom_client.call_capturing(
+        "act", {"verb": "interact", "target1": egg_id}
+    )
+    assert notes == ["e", "c", "e", "d"], f"expected the Opening draft, got {notes}"
+    texts = [m.get("text") for m in messages]
+    assert "It's trying to open!" in texts, f"expected Bobbin's listen line, got {texts}"
 
 
-def test_05_loom_play_notes_c_d_e(loom_client: McpClient) -> None:
+def test_05_loom_egg_replay_hatches(loom_client: McpClient) -> None:
+    """Replaying the Opening draft on the distaff hatches the egg.
+
+    `play_note(notes=["e","c","e","d"])` plays the whole draft in one tool
+    call. The watcher re-emits each note, then the egg cracks open and the
+    full Hetchel-cygnet cutscene plays out (~45 s of dialogue — this test is
+    slow because the game is, not the bridge). Afterwards the egg object is
+    consumed and gone from the room.
+    """
+    notes = ["e", "c", "e", "d"]
+    replay_notes, messages, result = loom_client.call_capturing(
+        "play_note", {"notes": notes}
+    )
+    assert result is not None, "replay stream errored before the cutscene finished"
+    assert replay_notes == notes, f"watcher re-emitted {replay_notes} for {notes}"
+
+    texts = [m.get("text") for m in messages]
+    assert "To follow the swans!" in texts, (
+        f"expected the hatching cutscene dialogue, got: {texts}"
+    )
+
+    state = get_state_with_retry(loom_client)
+    assert _find_id(state, "egg") is None, "egg should be consumed after hatching"
+
+
+def test_06_loom_play_notes_c_d_e(loom_client: McpClient) -> None:
     """play_note c/d/e (the first 3 notes unlocked by the distaff) all succeed."""
     if not wait_for_interactive(loom_client):
         pytest.skip("Game in cutscene")
@@ -117,7 +125,7 @@ def test_05_loom_play_notes_c_d_e(loom_client: McpClient) -> None:
         sleep(0.5)
 
 
-def test_06_loom_play_unknown_note(loom_client: McpClient) -> None:
+def test_07_loom_play_unknown_note(loom_client: McpClient) -> None:
     """play_note('C') (high-C, likely not yet unlocked) is still accepted by MCP."""
     if not wait_for_interactive(loom_client):
         pytest.skip("Game in cutscene")
@@ -131,53 +139,32 @@ def test_06_loom_play_unknown_note(loom_client: McpClient) -> None:
     assert isinstance(result, dict), f"play_note('C') returned: {result!r}"
 
 
+def test_08_loom_interact_object(loom_client: McpClient) -> None:
+    """'interact' on the loom completes and produces an observable change.
+
+    The Loom V3 single-cursor model maps every click to the engine's 'use'
+    verb. The loom is the one deterministic target in the room: Bobbin walks
+    over and it sings its own draft. (The old version of this test looped
+    over every object in the room — ~50 s of blind clicking that disturbed
+    the egg-listen flow; it now runs after the egg tests, on one target.)
+    """
+    if not wait_for_interactive(loom_client):
+        pytest.skip("Game stuck in cutscene")
+
+    state = get_state_with_retry(loom_client)
+    loom_id = _find_id(state, "loom")
+    assert loom_id is not None, f"loom not in room: {state.get('objects')}"
+    initial_pos = state.get("position", {})
+
+    result = loom_client.act("interact", loom_id)
+    moved = result.get("position", initial_pos) != initial_pos
+    assert moved or result.get("messages"), (
+        f"interacting with the loom produced no observable change: {result}"
+    )
+
+
 def _find_id(state: dict, name: str) -> int | None:
     for obj in state.get("objects", []):
         if obj["name"] == name:
             return obj["id"]
     return None
-
-
-def test_07_loom_egg_listen_and_replay(loom_client: McpClient) -> None:
-    """Full Loom puzzle loop: walk away, listen to the egg, replay its draft.
-
-    Verifies both:
-      * `act("interact", "egg")` triggers the egg's auto-song and the watcher
-        emits per-note MCP notifications (the Opening draft is 4 notes).
-      * Replaying the captured notes via `play_note(notes=[...])` is accepted
-        by the engine in a single tool call (no LLM-side timing required).
-    """
-    if not wait_for_interactive(loom_client):
-        pytest.skip("Save did not reach interactive state")
-
-    state = get_state_with_retry(loom_client)
-    egg_id = _find_id(state, "egg")
-    if egg_id is None:
-        pytest.skip("egg not in current room")
-
-    # Step 1: move Bobbin away so the next click triggers a fresh listen flow.
-    loom_client.walk(40, 130)
-    sleep(2)
-
-    # Step 2: interact with the egg → it walks Bobbin and sings its draft.
-    notes, messages, _ = loom_client.call_capturing(
-        "act", {"verb": "interact", "target1": egg_id}
-    )
-
-    # The Opening draft for the egg is 4 notes long. Allow a small tolerance —
-    # in some game states the song may be skipped or shortened — but we always
-    # expect at least 3 distinct note notifications when the listen path fires.
-    if len(notes) < 3:
-        pytest.skip(f"egg did not sing this run (notes={notes}, msgs={len(messages)})")
-    valid_notes = set("cdefgabC")
-    assert all(n in valid_notes for n in notes), (
-        f"unexpected note glyph in egg song: {notes}"
-    )
-
-    # Step 3: replay those notes via play_note(notes=[...]).
-    replay_notes, _, _ = loom_client.call_capturing("play_note", {"notes": notes})
-
-    # The watcher should re-emit the same notes when the player plays them.
-    assert len(replay_notes) >= len(notes) - 1, (
-        f"replay only emitted {replay_notes} for input {notes}"
-    )
