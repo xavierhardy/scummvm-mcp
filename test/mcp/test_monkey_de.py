@@ -204,13 +204,20 @@ def test_08_de_navigate_to_scumm_bar_dock(monkey_de_client: McpClient) -> None:
     monkey_de_client.act("öffne", 304)  # back door onto the dock
     monkey_de_client.act("geh zu", 304)  # same room — it scrolls to the dock
 
-    object_ids = {o["id"] for o in monkey_de_client.state()["objects"]}
-    assert 306 in object_ids, f"red herring not in view, objects: {object_ids}"
+    objects = {o["id"]: o["name"] for o in monkey_de_client.state()["objects"]}
+    assert 306 in objects, f"red herring not in view, objects: {objects}"
+    # The game pads the name with trailing '@' bytes ("roter Hering@@@@@...");
+    # the MCP server must emit it padding-free.
+    assert objects[306] == "roter_hering", f"name not padding-free: {objects[306]!r}"
 
 
 def test_09_de_seagull_blocks_red_herring(monkey_de_client: McpClient) -> None:
-    """Grabbing the herring without bouncing the seagull away must fail."""
-    result = monkey_de_client.act("nimm", 306)
+    """Grabbing the herring without bouncing the seagull away must fail.
+
+    Targets the herring by its padding-free name — the matcher must resolve
+    "roter_hering" against the game's '@'-padded label.
+    """
+    result = monkey_de_client.act("nimm", "roter_hering")
     assert "roter_hering" not in monkey_de_client.state()["inventory"]
     assert result.get("messages"), (
         f"expected Guybrush to comment on the seagull, got {result}"
@@ -232,7 +239,7 @@ def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> No
     for _ in range(3):
         client.act("geh zu", 307)
         sleep(1.5)  # let the plank-bounce script finish before the next step
-    client.act("nimm", 306)
+    client.act("nimm", "roter_hering")
     assert "roter_hering" in client.state()["inventory"], (
         "red herring should be in inventory after 3 plank bounces + quick grab"
     )

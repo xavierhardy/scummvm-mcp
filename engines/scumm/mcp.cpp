@@ -4247,15 +4247,33 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 // Name resolution
 // ---------------------------------------------------------------------------
 
+// SCUMM pads object names to a fixed width with trailing '@' bytes (the
+// charset renderer draws '@' as nothing), e.g. the EGA demo's
+// "roter Hering@@@@@...". Strip the padding (and any spaces it uncovers) so
+// MCP clients never see it.
+static Common::String mcpStripNamePadding(const Common::String &s) {
+	Common::String out(s);
+	while (!out.empty() &&
+	       (out[out.size() - 1] == '@' || out[out.size() - 1] == ' '))
+		out.deleteLastChar();
+	return out;
+}
+
 Common::String ScummMcpBridge::safeUtf8(const Common::String &raw) const {
 	if (raw.empty()) return raw;
 	// Normalize whitespace after the code-page decode: several game code pages
 	// (e.g. CP-850's 0xFF) decode filler bytes to U+00A0, which would otherwise
 	// leak into emitted text and break label round-trips with MCP clients.
-	if (!_vm) return mcpNormalizeSpaces(mcpSanitizeString(raw));
-	Common::CodePage cp = _vm->getDialogCodePage();
-	if (cp == Common::kUtf8) return mcpNormalizeSpaces(mcpSanitizeString(raw));
-	return mcpNormalizeSpaces(Common::U32String(raw, cp).encode(Common::kUtf8));
+	// Trailing '@' name padding is stripped for the same reason.
+	Common::String utf8;
+	if (!_vm)
+		utf8 = mcpSanitizeString(raw);
+	else {
+		Common::CodePage cp = _vm->getDialogCodePage();
+		utf8 = (cp == Common::kUtf8) ? mcpSanitizeString(raw)
+		                             : Common::U32String(raw, cp).encode(Common::kUtf8);
+	}
+	return mcpStripNamePadding(mcpNormalizeSpaces(utf8));
 }
 
 // Lowercase a string covering both ASCII and the UTF-8 Latin-1 Supplement
@@ -4287,10 +4305,11 @@ static Common::String mcpUtf8ToLower(const Common::String &s) {
 }
 
 Common::String ScummMcpBridge::normalizeActionName(const Common::String &action) {
-	// Clients may echo back labels containing non-breaking or repeated spaces;
-	// fold them before the space -> underscore replacement below so the result
-	// matches names built from server-normalized text.
-	Common::String s(mcpNormalizeSpaces(action));
+	// Clients may echo back labels containing non-breaking or repeated spaces,
+	// or the trailing '@' name padding from older server versions; fold both
+	// before the space -> underscore replacement below so the result matches
+	// names built from server-normalized text.
+	Common::String s(mcpStripNamePadding(mcpNormalizeSpaces(action)));
 	s.trim();
 	// V8 (Curse of Monkey Island) object names are formatted as
 	// "/<room>.<id>/<name>" — strip the leading metadata so the MCP client sees
