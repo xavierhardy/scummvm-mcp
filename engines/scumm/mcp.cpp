@@ -3758,6 +3758,16 @@ void ScummMcpBridge::pumpStream() {
 		uint32 settleFrames = (_vm->_game.version == 0) ? 3 : 10;
 		if (_vm->_game.version != 0 && _sseEgoMoved && !questionReady)
 			settleFrames = 20;
+		// Monkey Island 1: keep the inter-action gap minimal so clients can
+		// chain timing-sensitive actions themselves — e.g. the red-herring
+		// dock puzzle ("walk on plank" x3, then "pick up herring" before the
+		// seagull lands again). Pacing between the bounces is the client's
+		// job: each bounce runs a short plank object script, and dispatching
+		// the next walk too early interrupts it, so a client should leave a
+		// brief pause between plank steps and then grab the fish immediately.
+		if (_vm->_game.id == GID_MONKEY_EGA || _vm->_game.id == GID_MONKEY_VGA ||
+		    _vm->_game.id == GID_MONKEY)
+			settleFrames = 5;
 		// The Dig (V7): dialog choices may appear after a brief script delay
 		// even when ego hasn't moved (hero was already near the actor).
 		// Use a longer settle window so we don't close before the question appears.

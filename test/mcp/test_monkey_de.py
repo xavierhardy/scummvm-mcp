@@ -17,6 +17,8 @@ encoding-critical steps — the door labelled "tür", the verb "schließe",
 and the dialog answer with the eszett-bearing troll line — round-trip ß and ü.
 """
 
+from time import sleep
+
 from assertions import assert_inventory_does_not_contain, assert_inventory_contains
 from utils import McpClient
 
@@ -178,3 +180,59 @@ def test_07_de_close_door(monkey_de_client: McpClient) -> None:
     assert result["objects_changed"] == [
         {"name": "tür", "old_state": 1, "new_state": 0}
     ]
+
+
+# ---------------------------------------------------------------------------
+# Red herring timing puzzle (dock behind the SCUMM bar)
+# ---------------------------------------------------------------------------
+
+
+def test_08_de_navigate_to_scumm_bar_dock(monkey_de_client: McpClient) -> None:
+    """Walk from the troll clearing through the bar and kitchen onto the back
+    dock, where the seagull guards the red herring (object 306)."""
+    state = monkey_de_client.state()
+    assert state["room"]["id"] == 55
+
+    monkey_de_client.act("öffne", "tür")  # test_07 closed it again
+    result = monkey_de_client.act("geh zu", "tür")
+    assert result.get("room_changed") == 52, f"expected the SCUMM bar, got {result}"
+
+    monkey_de_client.act("öffne", 354)  # far door behind the bar
+    result = monkey_de_client.act("geh zu", 354)
+    assert result.get("room_changed") == 51, f"expected the kitchen, got {result}"
+
+    monkey_de_client.act("öffne", 304)  # back door onto the dock
+    monkey_de_client.act("geh zu", 304)  # same room — it scrolls to the dock
+
+    object_ids = {o["id"] for o in monkey_de_client.state()["objects"]}
+    assert 306 in object_ids, f"red herring not in view, objects: {object_ids}"
+
+
+def test_09_de_seagull_blocks_red_herring(monkey_de_client: McpClient) -> None:
+    """Grabbing the herring without bouncing the seagull away must fail."""
+    result = monkey_de_client.act("nimm", 306)
+    assert "roter_hering" not in monkey_de_client.state()["inventory"]
+    assert result.get("messages"), (
+        f"expected Guybrush to comment on the seagull, got {result}"
+    )
+
+
+def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> None:
+    """Walk the loose plank 3 times, then immediately grab the red herring.
+
+    Each step on the loose plank (object 307 at the end of the dock)
+    catapults the seagull into the air for a short moment; three bounces buy
+    enough time to walk over and take the fish before it lands again. The
+    timing is the client's responsibility: the bridge keeps the Monkey
+    Island 1 inter-action settle minimal (5 frames), so each bounce needs a
+    short pause for its plank script to finish before the next step — and
+    the final grab must follow immediately, with no pause at all.
+    """
+    client = monkey_de_client
+    for _ in range(3):
+        client.act("geh zu", 307)
+        sleep(1.5)  # let the plank-bounce script finish before the next step
+    client.act("nimm", 306)
+    assert "roter_hering" in client.state()["inventory"], (
+        "red herring should be in inventory after 3 plank bounces + quick grab"
+    )
