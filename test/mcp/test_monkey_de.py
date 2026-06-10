@@ -81,7 +81,7 @@ def test_03_de_talk_to_troll(monkey_de_client: McpClient) -> None:
             {
                 "text": (
                     "Ist mir egal, wie du heißt oder was du willst, du "
-                    "schlubbriger Schlobber von schlabbrigem Schleim!\xa0 "
+                    "schlubbriger Schlobber von schlabbrigem Schleim! "
                     "Niemand kommt ohne den Zauberspruch hier durch."
                 ),
                 "actor": "troll",
@@ -112,7 +112,7 @@ def test_04_de_answer_troll_dialog(monkey_de_client: McpClient) -> None:
                 "text": (
                     "Heh, nicht diesen Zauberspruch, du vor Höflichkeit "
                     "stinkender Traum-Schwiegersohn, den anderen Zauberspruch!"
-                    "\xa0 --seufz--"
+                    " --seufz--"
                 ),
                 "actor": "troll",
             },

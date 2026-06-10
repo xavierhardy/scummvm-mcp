@@ -202,6 +202,11 @@ Common::JSONValue *mcpObjectSchema(Common::JSONObject &props,
 // Sanitize a string for safe JSON output (replaces invalid UTF-8).
 Common::String mcpSanitizeString(const Common::String &s);
 
+// Whitespace normalization for emitted/matched text: converts non-breaking
+// spaces (U+00A0, UTF-8 0xC2 0xA0) to plain spaces, collapses runs of spaces
+// to one, and strips leading/trailing spaces.
+Common::String mcpNormalizeSpaces(const Common::String &s);
+
 // Lowercased + trimmed copy.
 Common::String mcpLowerTrimmed(const Common::String &s);
 

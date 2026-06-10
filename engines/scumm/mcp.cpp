@@ -36,6 +36,7 @@ using Networking::mcpPropOneOf;
 using Networking::mcpObjectSchema;
 using Networking::mcpSanitizeString;
 using Networking::mcpLowerTrimmed;
+using Networking::mcpNormalizeSpaces;
 
 namespace {
 
@@ -174,7 +175,8 @@ Common::String cleanGameText(const Common::String &text) {
 	while (!out.empty() && out[out.size()-1] == '@') {
 		out = out.substr(0, out.size()-1);
 	}
-	return out;
+	// The control-character substitutions above can leave runs of spaces.
+	return mcpNormalizeSpaces(out);
 }
 
 } // anonymous namespace
@@ -3883,10 +3885,13 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 
 Common::String ScummMcpBridge::safeUtf8(const Common::String &raw) const {
 	if (raw.empty()) return raw;
-	if (!_vm) return mcpSanitizeString(raw);
+	// Normalize whitespace after the code-page decode: several game code pages
+	// (e.g. CP-850's 0xFF) decode filler bytes to U+00A0, which would otherwise
+	// leak into emitted text and break label round-trips with MCP clients.
+	if (!_vm) return mcpNormalizeSpaces(mcpSanitizeString(raw));
 	Common::CodePage cp = _vm->getDialogCodePage();
-	if (cp == Common::kUtf8) return mcpSanitizeString(raw);
-	return Common::U32String(raw, cp).encode(Common::kUtf8);
+	if (cp == Common::kUtf8) return mcpNormalizeSpaces(mcpSanitizeString(raw));
+	return mcpNormalizeSpaces(Common::U32String(raw, cp).encode(Common::kUtf8));
 }
 
 // Lowercase a string covering both ASCII and the UTF-8 Latin-1 Supplement
@@ -3918,7 +3923,10 @@ static Common::String mcpUtf8ToLower(const Common::String &s) {
 }
 
 Common::String ScummMcpBridge::normalizeActionName(const Common::String &action) {
-	Common::String s(action);
+	// Clients may echo back labels containing non-breaking or repeated spaces;
+	// fold them before the space -> underscore replacement below so the result
+	// matches names built from server-normalized text.
+	Common::String s(mcpNormalizeSpaces(action));
 	s.trim();
 	// V8 (Curse of Monkey Island) object names are formatted as
 	// "/<room>.<id>/<name>" — strip the leading metadata so the MCP client sees

@@ -176,6 +176,32 @@ Common::String mcpLowerTrimmed(const Common::String &s) {
 	return out;
 }
 
+Common::String mcpNormalizeSpaces(const Common::String &s) {
+	// Several game code pages decode filler/control bytes to a non-breaking
+	// space (U+00A0), and control-character stripping can leave runs of
+	// spaces. Normalize so clients see stable text they can send back for
+	// label matching: NBSP -> space, collapse space runs, trim the ends.
+	Common::String out;
+	bool pendingSpace = false;
+	for (uint i = 0; i < s.size(); ++i) {
+		unsigned char c = (unsigned char)s[i];
+		if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xA0) {
+			c = ' ';
+			++i;
+		}
+		if (c == ' ') {
+			pendingSpace = !out.empty();
+			continue;
+		}
+		if (pendingSpace) {
+			out += ' ';
+			pendingSpace = false;
+		}
+		out += (char)c;
+	}
+	return out;
+}
+
 Common::String mcpSanitizeString(const Common::String &s) {
 	Common::String out;
 	for (size_t i = 0; i < s.size(); ++i) {

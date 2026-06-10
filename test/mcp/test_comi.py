@@ -100,7 +100,7 @@ def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> No
         "choices": [
             {"id": 1, "label": "I'm Guybrush Threepwood, who are you?"},
             {"id": 2, "label": "You don't scare me, you mangy pirate!"},
-            {"id": 3, "label": "Hello.  Please don't kill me."},
+            {"id": 3, "label": "Hello. Please don't kill me."},
             {"id": 4, "label": "Aaargh!"},
             {"id": 5, "label": "I'm selling these fine leather jackets."},
             {"id": 6, "label": "Aren't you a little short for a pirate!"},
