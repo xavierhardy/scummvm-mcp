@@ -1,19 +1,14 @@
 """
 Integration test for Maniac Mansion C64 demo.
 Walkthrough: door mat -> key -> use key -> front door,
-then kid switching via the switch_character tool, and
-phone dialing via the dial tool (save slot 2).
+then kid switching via the switch_character tool.
+The phone/dial tests live in test_maniac_phone.py (save slot 2).
 """
-
-from time import sleep
 
 import pytest
 
 from assertions import assert_inventory_contains
 from utils import McpClient
-
-PHONE_ROOM = 5
-DIAL_PAD_ROOM = 43
 
 
 def test_01_maniac_initial_state(maniac_client: McpClient) -> None:
@@ -88,38 +83,3 @@ def test_09_maniac_switch_character_rejects_unknown_name(
     """Switching to a non-switchable name fails with the available kids listed."""
     with pytest.raises(RuntimeError, match="unknown character"):
         maniac_client.switch_character("purple tentacle")
-
-
-def test_10_maniac_dial_requires_dial_pad(maniac_phone_client: McpClient) -> None:
-    """dial() is rejected while the dial pad is not on screen."""
-    state = maniac_phone_client.state()
-    assert state["room"]["id"] == PHONE_ROOM
-    assert any(o["name"] == "phone" for o in state["objects"])
-    with pytest.raises(RuntimeError, match="no dial pad"):
-        maniac_phone_client.dial("1234")
-
-
-def test_11_maniac_use_phone_then_dial(maniac_phone_client: McpClient) -> None:
-    """Use the phone, wait for the dial pad, then dial a 4-digit number.
-
-    Each keypad press echoes its digit as a message — which also validates the
-    button-grid mapping — and after the 4th digit the call resolves and the
-    game returns to the phone room.
-    """
-    maniac_phone_client.act("use", "phone")
-    for _ in range(20):
-        if maniac_phone_client.state()["room"]["id"] == DIAL_PAD_ROOM:
-            break
-        sleep(0.5)
-    else:
-        raise AssertionError("dial pad room never appeared after using the phone")
-
-    result = maniac_phone_client.dial("1234")
-    assert [m["text"] for m in result["messages"]] == ["1", "2", "3", "4"]
-    assert result.get("room_changed") == PHONE_ROOM
-
-
-def test_12_maniac_dial_rejects_invalid_keys(maniac_phone_client: McpClient) -> None:
-    """Non-keypad characters are rejected up front."""
-    with pytest.raises(RuntimeError, match="invalid keypad key"):
-        maniac_phone_client.dial("12a4")

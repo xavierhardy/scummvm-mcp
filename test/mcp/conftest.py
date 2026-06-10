@@ -276,7 +276,9 @@ def indy3_travel_client() -> McpClient:
 @pytest.fixture(scope="session")
 def loom_client() -> McpClient:
     """Launch Passport to Adventure (Loom segment) demo and return MCP client."""
-    mcp_port = 23462
+    # Unique port: 23462 belongs to ft_client_pathways, and fixtures now run
+    # concurrently under pytest-xdist (--dist=loadfile, one file per worker).
+    mcp_port = 23476
 
     require_game_path("pass")
     scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
@@ -358,7 +360,9 @@ def dig_wreck_client() -> McpClient:
     object in the scene and Brink/Maggie present — the setup for the pickup-
     deposit regression test (picking up the wire must not leave it stuck on
     the cursor)."""
-    mcp_port = 23474
+    # Unique port: 23474 belongs to maniac_phone_client, and fixtures now run
+    # concurrently under pytest-xdist (--dist=loadfile, one file per worker).
+    mcp_port = 23475
 
     require_game_path("dig-demo")
     scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
