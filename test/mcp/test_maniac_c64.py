@@ -1,7 +1,10 @@
 """
 Integration test for Maniac Mansion C64 demo.
-Walkthrough: door mat -> key -> use key -> front door.
+Walkthrough: door mat -> key -> use key -> front door,
+then kid switching via the switch_character tool.
 """
+
+import pytest
 
 from assertions import assert_inventory_contains
 from utils import McpClient
@@ -48,3 +51,34 @@ def test_06_maniac_walk_through_front_door(maniac_client: McpClient) -> None:
     """Walk to front door (should enter new room)."""
     result = maniac_client.act("walk_to", "front_door")
     assert result.get("room_changed")
+
+
+def test_07_maniac_state_lists_characters(maniac_client: McpClient) -> None:
+    """state() exposes the switchable kids and the currently controlled one."""
+    state = maniac_client.state()
+    characters = state.get("available_characters")
+    assert characters, f"Expected switchable characters in state, got {state}"
+    assert len(characters) >= 2
+    assert state.get("controlling") in characters
+
+
+def test_08_maniac_switch_character_round_trip(maniac_client: McpClient) -> None:
+    """Switch to another kid and back, verifying state tracks the change."""
+    state = maniac_client.state()
+    characters = state["available_characters"]
+    original = state["controlling"]
+    other = next(c for c in characters if c != original)
+
+    maniac_client.switch_character(other)
+    assert maniac_client.state()["controlling"] == other
+
+    maniac_client.switch_character(original)
+    assert maniac_client.state()["controlling"] == original
+
+
+def test_09_maniac_switch_character_rejects_unknown_name(
+    maniac_client: McpClient,
+) -> None:
+    """Switching to a non-switchable name fails with the available kids listed."""
+    with pytest.raises(RuntimeError, match="unknown character"):
+        maniac_client.switch_character("purple tentacle")

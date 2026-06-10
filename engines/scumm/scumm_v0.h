@@ -30,6 +30,8 @@ namespace Scumm {
  * Engine for Apple II and Commodore 64 versions of Maniac Mansion
  */
 class ScummEngine_v0 : public ScummEngine_v2 {
+	friend class ScummMcpBridge;
+
 protected:
 	enum CurrentMode {
 		kModeCutscene = 0,   // cutscene active

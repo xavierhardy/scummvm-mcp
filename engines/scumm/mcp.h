@@ -202,6 +202,7 @@ private:
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolShootCannon(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut);
 
 	// Debug tools (gated by mcp_debug ini option). Engine-version-agnostic.
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut);
@@ -233,6 +234,17 @@ private:
 	void buildEntityMap(Common::Array<NamedEntity> &entities) const;
 	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
 	bool resolveVerb(const Common::String &action, int &verbId) const;
+
+	// Maniac Mansion: the playable kids. Slot is the F1-F3 index V0's
+	// switchActor() takes; the actor id comes from VAR(97 + slot). The V1/V2
+	// ports switch kids in-game via the "New Kid" verb, but the same ego/kid
+	// vars drive the switch, so the tool replicates it for them directly.
+	struct ManiacKid {
+		int slot;
+		int actorId;
+		Common::String name;
+	};
+	void collectManiacKids(Common::Array<ManiacKid> &out) const;
 
 	// Convert raw text in the game's native dialog code page (e.g. CP-850, CP-1252)
 	// to UTF-8 so non-ASCII labels round-trip correctly through MCP JSON.

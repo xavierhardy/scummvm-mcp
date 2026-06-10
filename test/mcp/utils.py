@@ -204,6 +204,24 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="Walk")
 
+    def switch_character(self, name: str) -> dict[str, Any]:
+        """Switch the controlled kid in Maniac Mansion (streaming call).
+
+        Valid names are listed in state()['available_characters']; the active
+        one is state()['controlling'].
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "switch_character", "arguments": {"name": name}},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
+            return self._decode_stream_response(resp=resp, tool="SwitchCharacter")
+
     def play_note(self, note) -> dict[str, Any]:
         """Play one or more notes on the Loom distaff (streaming call).
 

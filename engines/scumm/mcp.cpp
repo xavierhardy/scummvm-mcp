@@ -683,6 +683,11 @@ void ScummMcpBridge::registerTools() {
 		outputProps.setVal("verbs",     makeStringArray());
 		outputProps.setVal("inventory", makeStringArray());
 
+		if (_vm->_game.id == GID_MANIAC) {
+			outputProps.setVal("controlling",          mcpProp("string", "Name of the currently controlled kid"));
+			outputProps.setVal("available_characters", makeStringArray());
+		}
+
 		Common::JSONObject objectItemProps;
 		objectItemProps.setVal("id",              mcpProp("integer", "Object ID"));
 		objectItemProps.setVal("name",            mcpProp("string",  "Object name"));
@@ -882,6 +887,30 @@ void ScummMcpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
+	// --- switch_character (Maniac Mansion only) ---
+	// V0 (C64/Apple II) maps F1-F3 to switchActor(slot)/VAR(97+slot); the
+	// V1/V2 ports use the in-game "New Kid" verb but share the same ego/kid
+	// vars, so the tool drives the switch directly for them.
+	if (_vm->_game.id == GID_MANIAC) {
+		Common::JSONObject props;
+		props.setVal("name", mcpProp("string",
+		    "Name of the kid to control, as listed in state.available_characters (e.g. 'dave')."));
+		const char *req[] = {"name"};
+		Networking::McpServer::ToolSpec spec;
+		spec.name = "switch_character";
+		spec.description =
+		    "Switch the player-controlled kid (the F1-F3 keys in Maniac Mansion). "
+		    "state lists the available names in 'available_characters' and the "
+		    "current one in 'controlling'. Only allowed during normal gameplay (not "
+		    "in a cutscene and not while kid switching is disabled). Blocks until "
+		    "the switch settles, then returns state changes — room_changed/position "
+		    "reflect the newly controlled kid.";
+		spec.inputSchema  = mcpObjectSchema(props, req, 1);
+		spec.outputSchema = makeChangesSchema();
+		spec.streaming    = true;
+		_server->registerTool(spec);
+	}
+
 	// --- debug tools (gated by mcp_debug ini option) ---
 	if (_debugToolsEnabled) {
 		// debug — return raw engine state for diagnostics
@@ -1004,6 +1033,10 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 		if (!toolShootCannon(args, errorOut)) return nullptr;
 		return nullptr;
 	}
+	if (name == "switch_character") {
+		if (!toolSwitchCharacter(args, errorOut)) return nullptr;
+		return nullptr;
+	}
 	if (name == "debug")        return toolDebug(args, errorOut);
 	if (name == "keystroke")    {
 		if (!toolKeystroke(args, errorOut)) return nullptr;
@@ -1049,6 +1082,23 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		pos.setVal("x", mcpJsonInt(ego->getRealPos().x));
 		pos.setVal("y", mcpJsonInt(ego->getRealPos().y));
 		out.setVal("position", new Common::JSONValue(pos));
+	}
+
+	// Maniac Mansion: expose the switchable kids and the current one so
+	// clients can drive the switch_character tool by name.
+	if (_vm->_game.id == GID_MANIAC) {
+		Common::Array<ManiacKid> kids;
+		collectManiacKids(kids);
+		if (!kids.empty()) {
+			int egoNum = (_vm->VAR_EGO != 0xFF) ? (int)_vm->VAR(_vm->VAR_EGO) : -1;
+			Common::JSONArray charArr;
+			for (uint i = 0; i < kids.size(); ++i) {
+				charArr.push_back(mcpJsonString(kids[i].name));
+				if (kids[i].actorId == egoNum)
+					out.setVal("controlling", mcpJsonString(kids[i].name));
+			}
+			out.setVal("available_characters", new Common::JSONValue(charArr));
+		}
 	}
 
 	// Check for pending dialog question before building the verb bar.
@@ -2867,6 +2917,105 @@ bool ScummMcpBridge::toolShootCannon(const Common::JSONValue &args, Common::Stri
 	_sseInitialVerbScript = 0;
 	_sseVerbScriptChanged = false;
 	_sseTargetObject = 0;
+	_server->startStreaming();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Tool: switch_character (Maniac Mansion)
+// ---------------------------------------------------------------------------
+
+void ScummMcpBridge::collectManiacKids(Common::Array<ManiacKid> &out) const {
+	out.clear();
+	if (!_vm || _vm->_game.id != GID_MANIAC) return;
+	// V0's F1-F3 handler maps slot N to the actor stored in VAR(97+N) (see
+	// ScummEngine_v0::switchActor); the V1/V2 ports keep the same kid vars.
+	// Slots holding no valid actor are skipped, so on a variant where these
+	// vars are unused the list simply comes out empty.
+	for (int slot = 0; slot < 3; ++slot) {
+		int actorId = (int)_vm->VAR(97 + slot);
+		if (actorId <= 0 || !_vm->isValidActor(actorId)) continue;
+		ManiacKid kid;
+		kid.slot = slot;
+		kid.actorId = actorId;
+		Common::String name = getObjName(this, _vm->actorToObj(actorId));
+		kid.name = name.empty() ? Common::String::format("actor-%d", actorId)
+		                        : normalizeActionName(safeUtf8(name));
+		out.push_back(kid);
+	}
+}
+
+bool ScummMcpBridge::toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut) {
+	if (_streaming) {
+		errorOut = "switch_character: another action is already in progress";
+		return false;
+	}
+	if (_vm->_game.id != GID_MANIAC) {
+		errorOut = "switch_character: only available in Maniac Mansion";
+		return false;
+	}
+	if (_vm->_userPut <= 0) {
+		errorOut = "switch_character: game is not accepting input right now";
+		return false;
+	}
+	// V0: mirror switchActor()'s own gate so the client gets an error instead
+	// of a silent no-op when switching is disallowed (cutscene, keypad, lab
+	// door). V1/V2 have no equivalent mode byte; _userPut covers them above.
+	if (_vm->_game.version == 0) {
+		ScummEngine_v0 *v0 = static_cast<ScummEngine_v0 *>(_vm);
+		if (v0->_currentMode != ScummEngine_v0::kModeNormal) {
+			errorOut = "switch_character: switching is not allowed right now (cutscene or kid switching disabled)";
+			return false;
+		}
+	}
+	if (!args.isObject()) {
+		errorOut = "switch_character: arguments must be an object with a 'name' field";
+		return false;
+	}
+	const Common::JSONObject &a = args.asObject();
+	if (!a.contains("name") || !a["name"]->isString()) {
+		errorOut = "switch_character: 'name' (string) is required";
+		return false;
+	}
+
+	Common::Array<ManiacKid> kids;
+	collectManiacKids(kids);
+	Common::String wanted = normalizeActionName(a["name"]->asString());
+	const ManiacKid *match = nullptr;
+	Common::String available;
+	for (uint i = 0; i < kids.size(); ++i) {
+		if (!available.empty()) available += ", ";
+		available += kids[i].name;
+		if (kids[i].name == wanted) match = &kids[i];
+	}
+	if (!match) {
+		errorOut = "switch_character: unknown character '" + a["name"]->asString() +
+		           "'. Available: " + (available.empty() ? "(none)" : available);
+		return false;
+	}
+
+	snapshotPreAction();
+	_streaming = true;
+	_sseAnswerStream = false;
+	_sseStartFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
+	_sseEgoMoved = false;
+	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
+	_sseTargetObject = 0;
+	_sseButtonClearFrame = 0;
+	if (_vm->_game.version == 0) {
+		static_cast<ScummEngine_v0 *>(_vm)->switchActor(match->slot);
+	} else {
+		// V1/V2: no engine-side helper exists (the original ports switch via
+		// the "New Kid" verb script), so replicate V0's switchActor() body.
+		_vm->resetSentence();
+		_vm->VAR(_vm->VAR_EGO) = match->actorId;
+		_vm->actorFollowCamera(match->actorId);
+	}
 	_server->startStreaming();
 	return true;
 }
