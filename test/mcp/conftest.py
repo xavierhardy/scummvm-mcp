@@ -93,6 +93,32 @@ def maniac_client() -> McpClient:
 
 
 @pytest.fixture(scope="session")
+def maniac_phone_client() -> McpClient:
+    """Launch Maniac Mansion C64 demo from save slot 2 (next to the phone)."""
+    mcp_port = 23474
+
+    require_game_path("maniac-c64")
+    scummvm_binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
+    proc = launch_scummvm(
+        "maniac-c64",
+        GAME_PATHS["maniac-c64"],
+        port=mcp_port,
+        scummvm_binary=scummvm_binary,
+        save_slot=2,
+    )
+    client = wait_for_mcp(MCP_HOST, mcp_port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    yield client
+    client.close()
+    proc.kill()
+    proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+    # Close log file handles
+    if hasattr(proc, "_stdout_file"):
+        proc._stdout_file.close()
+    if hasattr(proc, "_stderr_file"):
+        proc._stderr_file.close()
+
+
+@pytest.fixture(scope="session")
 def atlantis_client() -> McpClient:
     """Launch Indiana Jones Fate of Atlantis demo and return MCP client."""
     mcp_port = 23458

@@ -911,6 +911,27 @@ void ScummMcpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
+	// --- dial (Maniac Mansion phone keypad) ---
+	if (_vm->_game.id == GID_MANIAC) {
+		Common::JSONObject props;
+		props.setVal("number", mcpProp("string",
+		    "The number to dial, as a string of keypad keys: digits 0-9 plus "
+		    "'*' and '#' (e.g. '1234')."));
+		const char *req[] = {"number"};
+		Networking::McpServer::ToolSpec spec;
+		spec.name = "dial";
+		spec.description =
+		    "Dial a number on the phone dial pad in Maniac Mansion. Only valid "
+		    "while the dial pad is on screen (use the phone first via "
+		    "act(verb='use', target1='phone')). Presses the keypad buttons one "
+		    "at a time, blocks until the sequence (and any resulting call) "
+		    "settles, then returns state changes.";
+		spec.inputSchema  = mcpObjectSchema(props, req, 1);
+		spec.outputSchema = makeChangesSchema();
+		spec.streaming    = true;
+		_server->registerTool(spec);
+	}
+
 	// --- debug tools (gated by mcp_debug ini option) ---
 	if (_debugToolsEnabled) {
 		// debug — return raw engine state for diagnostics
@@ -1035,6 +1056,10 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 	}
 	if (name == "switch_character") {
 		if (!toolSwitchCharacter(args, errorOut)) return nullptr;
+		return nullptr;
+	}
+	if (name == "dial") {
+		if (!toolDial(args, errorOut)) return nullptr;
 		return nullptr;
 	}
 	if (name == "debug")        return toolDebug(args, errorOut);
@@ -1782,11 +1807,22 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		}
 		// In V0, certain transitive verbs require a second object (direct object).
 		// Executing them without one causes a crash in the sentence handler.
+		// For 'use' the preposition comes from the object's OBCD header (see
+		// getVerbPrepId): objects like the phone take "use <obj>" with no
+		// second object, so only reject when the object actually demands one.
 		if (_vm->_game.version == 0 && targetB == 0 &&
 		    (verbId == kVerbUse || verbId == kVerbGive || verbId == kVerbUnlock || verbId == kVerbFix)) {
-			debug(1, "mcp: skipping verb %d on object %d (requires second object)", verbId, targetA);
-			errorOut = "transitive verb requires second object";
-			return false;
+			bool needsSecond = true;
+			if (verbId == kVerbUse) {
+				const byte *obcd = _vm->getOBCDFromObject(targetA, true);
+				if (obcd && (*(obcd + 11) >> 5) == kVerbPrepNone)
+					needsSecond = false;
+			}
+			if (needsSecond) {
+				debug(1, "mcp: skipping verb %d on object %d (requires second object)", verbId, targetA);
+				errorOut = "transitive verb requires second object";
+				return false;
+			}
 		}
 	}
 
@@ -2635,6 +2671,8 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	out.setVal("game_id",       mcpJsonInt((int)_vm->_game.id));
 	out.setVal("game_version",  mcpJsonInt(_vm->_game.version));
 	out.setVal("current_room",  mcpJsonInt(_vm->_currentRoom));
+	if (_vm->_game.version == 0)
+		out.setVal("current_mode", mcpJsonInt(static_cast<ScummEngine_v0 *>(_vm)->_currentMode));
 	out.setVal("user_put",      mcpJsonInt(_vm->_userPut));
 	out.setVal("num_variables", mcpJsonInt(_vm->_numVariables));
 	out.setVal("num_global_objects", mcpJsonInt(_vm->_numGlobalObjects));
@@ -3020,6 +3058,153 @@ bool ScummMcpBridge::toolSwitchCharacter(const Common::JSONValue &args, Common::
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Tool: dial (Maniac Mansion phone keypad)
+// ---------------------------------------------------------------------------
+
+bool ScummMcpBridge::toolDial(const Common::JSONValue &args, Common::String &errorOut) {
+	if (_streaming) {
+		errorOut = "dial: another action is already in progress";
+		return false;
+	}
+	if (_vm->_game.id != GID_MANIAC) {
+		errorOut = "dial: only available in Maniac Mansion";
+		return false;
+	}
+	if (_vm->_userPut <= 0) {
+		errorOut = "dial: game is not accepting input right now";
+		return false;
+	}
+	if (!args.isObject() || !args.asObject().contains("number") ||
+	    !args.asObject()["number"]->isString()) {
+		errorOut = "dial: 'number' (string of keypad keys, e.g. '1234') is required";
+		return false;
+	}
+	Common::String number = args.asObject()["number"]->asString();
+	number.trim();
+	if (number.empty() || number.size() > 16) {
+		errorOut = "dial: 'number' must contain 1-16 keypad keys";
+		return false;
+	}
+	for (uint i = 0; i < number.size(); ++i) {
+		char c = number[i];
+		if (!(c >= '0' && c <= '9') && c != '*' && c != '#') {
+			errorOut = Common::String::format("dial: invalid keypad key '%c' (use 0-9, * or #)", c);
+			return false;
+		}
+	}
+	// V0 tracks the dial pad (and other selection screens) via _currentMode.
+	// V1/V2 have no mode byte; for them the button-map scan below is the gate.
+	if (_vm->_game.version == 0 &&
+	    static_cast<ScummEngine_v0 *>(_vm)->_currentMode != ScummEngine_v0::kModeKeypad) {
+		errorOut = "dial: no dial pad on screen — use the phone first (act verb='use' target1='phone')";
+		return false;
+	}
+
+	// Build the key -> button-object map for the current room.
+	// Strategy 1: buttons named after their key ("1".."9", "0", "*", "#").
+	// Strategy 2: the C64 demo's buttons are unnamed — but the pad is exactly
+	// 12 equal-sized button objects in the standard 3x4 phone grid, so sort
+	// them row-major and assign the layout by position. (Object 427 carries
+	// the name "6" in the demo and lands on '6' this way, confirming the
+	// mapping.)
+	static const char kDialPadLayout[] = "123456789*0#";
+	struct DialButton { int obj; int x; int y; };
+	Common::Array<DialButton> grid;
+	int gridObjForKey[12] = {};
+	int nameObjForKey[12] = {};
+	auto layoutIndex = [](char c) -> int {
+		for (int k = 0; k < 12; ++k)
+			if (kDialPadLayout[k] == c) return k;
+		return -1;
+	};
+	{
+		// Dominant button size among the room objects.
+		int bestW = 0, bestH = 0, bestCount = 0;
+		for (int i = 1; _vm->_objs && i < _vm->_numLocalObjects; ++i) {
+			const ObjectData &od = _vm->_objs[i];
+			if (!od.obj_nr || od.width <= 0 || od.height <= 0) continue;
+			int cnt = 0;
+			for (int j = 1; j < _vm->_numLocalObjects; ++j) {
+				const ObjectData &o2 = _vm->_objs[j];
+				if (o2.obj_nr && o2.width == od.width && o2.height == od.height) ++cnt;
+			}
+			if (cnt > bestCount) { bestCount = cnt; bestW = od.width; bestH = od.height; }
+		}
+		for (int i = 1; _vm->_objs && i < _vm->_numLocalObjects; ++i) {
+			const ObjectData &od = _vm->_objs[i];
+			if (!od.obj_nr) continue;
+			// Named buttons map directly regardless of geometry.
+			Common::String nm = getObjName(this, od.obj_nr);
+			nm.trim();
+			if (nm.size() == 1) {
+				int k = layoutIndex(nm[0]);
+				if (k >= 0 && !nameObjForKey[k]) nameObjForKey[k] = od.obj_nr;
+			}
+			if (od.width == bestW && od.height == bestH) {
+				DialButton b;
+				b.obj = od.obj_nr;
+				b.x = od.x_pos;
+				b.y = od.y_pos;
+				grid.push_back(b);
+			}
+		}
+		if (grid.size() == 12) {
+			// Row-major sort (top-to-bottom, left-to-right).
+			for (uint i = 0; i + 1 < grid.size(); ++i)
+				for (uint j = 0; j + 1 < grid.size() - i; ++j)
+					if (grid[j].y > grid[j + 1].y ||
+					    (grid[j].y == grid[j + 1].y && grid[j].x > grid[j + 1].x)) {
+						DialButton t = grid[j]; grid[j] = grid[j + 1]; grid[j + 1] = t;
+					}
+			for (int k = 0; k < 12; ++k)
+				gridObjForKey[k] = grid[(uint)k].obj;
+		}
+	}
+
+	Common::Array<int> presses;
+	for (uint i = 0; i < number.size(); ++i) {
+		int k = layoutIndex(number[i]);
+		int obj = nameObjForKey[k] ? nameObjForKey[k] : gridObjForKey[k];
+		if (!obj) {
+			errorOut = Common::String::format(
+			    "dial: could not locate the '%c' button — is the dial pad on screen?", number[i]);
+			return false;
+		}
+		presses.push_back(obj);
+	}
+
+	// The keypad buttons respond to the push verb: V0's input handler forces
+	// _activeVerb = kVerbPush while in keypad mode; for V1/V2 resolve the verb
+	// from the verb bar like act() does.
+	int pushVerb = kVerbPush;
+	if (_vm->_game.version != 0 && !resolveVerb("push", pushVerb)) {
+		errorOut = "dial: could not resolve the 'push' verb";
+		return false;
+	}
+
+	snapshotPreAction();
+	_streaming = true;
+	_sseAnswerStream = false;
+	_sseStartFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
+	_sseEgoMoved = false;
+	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
+	_sseTargetObject = 0;
+	_sseButtonClearFrame = 0;
+	// Queue after snapshotPreAction (which clears the dial queue); pumpStream
+	// feeds one press per spacing window starting next frame.
+	_ssePendingDialObjs = presses;
+	_sseDialVerbId = pushVerb;
+	_sseLastDialFedFrame = 0;
+	_server->startStreaming();
+	return true;
+}
+
 bool ScummMcpBridge::toolKeystroke(const Common::JSONValue &args, Common::String &errorOut) {
 	if (!args.isObject()) {
 		errorOut = "keystroke: arguments must be an object with a 'key' field";
@@ -3216,6 +3401,21 @@ void ScummMcpBridge::pumpStream() {
 		// distaff note keys (lowercase letters c/d/e/f/g/a/b plus capital C),
 		// the keycode value equals the ASCII byte.
 		_vm->runInputScript(kKeyClickArea, (int)kc, 1);
+	}
+
+	// Maniac Mansion dial pad: press the queued keypad buttons one at a time.
+	// Wait for the previous press's sentence to dispatch (the keypad scripts
+	// run without walking) and leave a few frames between presses so each
+	// button script finishes before the next begins.
+	const uint32 kDialSpacingFrames = 12;
+	if (!_ssePendingDialObjs.empty() && _vm->_sentenceNum == 0 &&
+	    (_sseLastDialFedFrame == 0
+	     || _frameCounter - _sseLastDialFedFrame >= kDialSpacingFrames)) {
+		int obj = _ssePendingDialObjs[0];
+		_ssePendingDialObjs.remove_at(0);
+		_sseLastDialFedFrame = _frameCounter;
+		_sseLastEventFrame = _frameCounter;
+		_vm->doSentence(_sseDialVerbId, obj, 0);
 	}
 
 	// Track whether ego moved at any point during this stream.
@@ -3621,6 +3821,8 @@ void ScummMcpBridge::pumpStream() {
 
 void ScummMcpBridge::snapshotPreAction() {
 	_sseDigDeselectDone = false;
+	_ssePendingDialObjs.clear();
+	_sseLastDialFedFrame = 0;
 	_ssePreRoom = _vm->_currentRoom;
 	_ssePreInventory.clear();
 	_ssePreInventoryNames.clear();
@@ -3864,6 +4066,7 @@ Actor *ScummMcpBridge::getEgoActor() const {
 bool ScummMcpBridge::isActionDone() const {
 	if (_frameCounter - _sseStartFrame < 3) return false;
 	if (_ssePendingSecondClick || !_ssePendingNotes.empty()) return false;
+	if (!_ssePendingDialObjs.empty()) return false;
 	if (_ssePendingV7Choice != 0) return false;
 	// Still cycling the Sam & Max verb cursor toward the mouth / opening talk.
 	if (_sseSnmTalkActor != 0) return false;

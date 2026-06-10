@@ -129,6 +129,11 @@ private:
 	bool _ssePendingSecondClick;
 	int _sseClickMouseX, _sseClickMouseY;
 	Common::Array<Common::KeyCode> _ssePendingNotes;
+	// Maniac Mansion dial pad: queued button object ids to press one at a
+	// time, the verb id used to press them, and the frame of the last press.
+	Common::Array<int> _ssePendingDialObjs;
+	int _sseDialVerbId = 0;
+	uint32 _sseLastDialFedFrame = 0;
 	// Last value seen in the Loom note variable (var 259). Used in pumpStream
 	// to detect 0 -> note transitions and emit them as MCP notifications.
 	int32 _ssePrevNoteValue;
@@ -203,6 +208,7 @@ private:
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolShootCannon(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolDial(const Common::JSONValue &args, Common::String &errorOut);
 
 	// Debug tools (gated by mcp_debug ini option). Engine-version-agnostic.
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut);

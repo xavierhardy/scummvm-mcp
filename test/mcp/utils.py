@@ -222,6 +222,25 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="SwitchCharacter")
 
+    def dial(self, number: str) -> dict[str, Any]:
+        """Dial a number on the Maniac Mansion phone dial pad (streaming call).
+
+        Only valid while the dial pad is on screen — use the phone first via
+        act('use', 'phone') and wait for the dial pad room. Keys are digits
+        0-9 plus '*' and '#'.
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "dial", "arguments": {"number": number}},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
+            return self._decode_stream_response(resp=resp, tool="Dial")
+
     def play_note(self, note) -> dict[str, Any]:
         """Play one or more notes on the Loom distaff (streaming call).
 
