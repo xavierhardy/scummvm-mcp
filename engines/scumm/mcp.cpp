@@ -179,6 +179,42 @@ Common::String cleanGameText(const Common::String &text) {
 	return mcpNormalizeSpaces(out);
 }
 
+// Conversation topic icons carry no text — Sam & Max draws them as picture
+// objects in the verb strip and The Dig as blast objects in the dialog
+// panel. Map the known icon object numbers to their on-screen meaning so
+// MCP clients see "question"/"exclamation"/... instead of an opaque
+// icon_<num>. Unknown icons keep the icon_<num> fallback.
+static const char *dialogIconLabel(int gameId, int objNum) {
+	struct IconEntry { int obj; const char *label; };
+	// Sam & Max: ?, !, golden duck (tease), waving hand (goodbye), Max head.
+	static const IconEntry kSamnmaxIcons[] = {
+		{997,  "question"},
+		{998,  "exclamation"},
+		{1001, "tease"},
+		{999,  "bye"},
+		{1067, "max"},
+		{0, nullptr}
+	};
+	// The Dig: ?, !, stop hand (goodbye).
+	static const IconEntry kDigIcons[] = {
+		{158, "question"},
+		{159, "exclamation"},
+		{160, "bye"},
+		{0, nullptr}
+	};
+	const IconEntry *table = nullptr;
+	if (gameId == GID_SAMNMAX)
+		table = kSamnmaxIcons;
+	else if (gameId == GID_DIG)
+		table = kDigIcons;
+	if (!table)
+		return nullptr;
+	for (int i = 0; table[i].label; ++i)
+		if (table[i].obj == objNum)
+			return table[i].label;
+	return nullptr;
+}
+
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -548,7 +584,9 @@ void ScummMcpBridge::collectSamnMaxDialogChoices(Common::Array<V7Choice> &out) {
 	for (uint i = 0; i < topics.size(); ++i) {
 		V7Choice c;
 		c.objNumber = topics[i].obj;
-		c.text = Common::String::format("icon_%d", topics[i].obj);
+		const char *iconLabel = dialogIconLabel(GID_SAMNMAX, topics[i].obj);
+		c.text = iconLabel ? Common::String(iconLabel)
+		                   : Common::String::format("icon_%d", topics[i].obj);
 		c.x = originX + (int)i * slotWidth + halfWidth;
 		c.y = topics[i].cy;
 		out.push_back(c);
@@ -625,8 +663,12 @@ void ScummMcpBridge::onV7BlastTextSnapshot() {
 				V7Choice c;
 				c.objNumber = eo.number;
 				Common::String nm = safeUtf8(getObjName(this, eo.number));
-				c.text = nm.empty() ? Common::String::format("icon_%d", eo.number)
-				                    : normalizeActionName(nm);
+				const char *iconLabel = nm.empty() ? dialogIconLabel(GID_DIG, eo.number) : nullptr;
+				if (iconLabel)
+					c.text = iconLabel;
+				else
+					c.text = nm.empty() ? Common::String::format("icon_%d", eo.number)
+					                    : normalizeActionName(nm);
 				// Store the icon centre in ROOM coordinates. The dialog input
 				// script hit-tests VAR_VIRT_MOUSE (room space) against the icon
 				// positions, so the click dispatch needs room — not screen —

@@ -34,12 +34,16 @@ def _open_brink_dialog(client: McpClient) -> list:
 
 
 def _close_dialog(client: McpClient) -> None:
-    """Leave any open conversation by selecting its last icon ('Thanks')."""
+    """Leave any open conversation via its 'bye' icon (the stop hand)."""
     for _ in range(10):
         q = client.state().get("question")
         if not q:
             return
-        client.answer(len(q["choices"]))
+        idx = next(
+            (c["id"] for c in q["choices"] if c["label"] == "bye"),
+            len(q["choices"]),
+        )
+        client.answer(idx)
     assert not client.state().get("question"), "dialog did not close"
 
 
@@ -98,6 +102,12 @@ def test_05_dig_interact_actor(dig_client: McpClient) -> None:
     choices = dig_client.state().get("question", {}).get("choices")
     assert choices, f"Expected dialog choices after talking to Brink, got: {choices}"
     assert len(choices) >= 2, f"Expected multiple topic icons, got: {choices}"
+    # The icon objects map to semantic labels (?, !, stop hand) instead of
+    # opaque icon_<num> placeholders.
+    labels = [c.get("label") for c in choices]
+    assert labels == ["question", "exclamation", "bye"], (
+        f"expected semantic icon labels, got: {labels}"
+    )
     # Dismiss so subsequent session-scoped tests start in the normal verb script.
     _close_dialog(dig_client)
 

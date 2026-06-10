@@ -83,13 +83,16 @@ def _open_max_conversation(client: McpClient) -> dict:
 
 
 def _close_conversation(client: McpClient) -> None:
-    """Leave any open conversation via the 'goodbye' topic (the 4th icon)."""
+    """Leave any open conversation via the 'bye' topic (the waving-hand icon)."""
     for _ in range(10):
         q = client.state().get("question")
         if not q:
             return
         choices = q["choices"]
-        idx = 4 if len(choices) >= 4 else len(choices)
+        idx = next(
+            (c["id"] for c in choices if c["label"] == "bye"),
+            4 if len(choices) >= 4 else len(choices),
+        )
         try:
             client.answer(idx)
         except RuntimeError:
@@ -151,8 +154,12 @@ def test_05_samnmax_talk_to_max_opens_dialog(samnmax_client: McpClient) -> None:
         assert question is not None, "talking to Max should open an icon dialog"
         choices = question.get("choices", [])
         assert len(choices) >= 4, f"expected the office topic icons, got: {choices}"
-        for choice in choices:
-            assert choice.get("label"), f"empty label for choice: {choice}"
+        # The icon objects map to semantic labels (?, !, golden duck, waving
+        # hand) instead of opaque icon_<num> placeholders.
+        labels = [c.get("label") for c in choices]
+        assert labels == ["question", "exclamation", "tease", "bye"], (
+            f"expected semantic icon labels, got: {labels}"
+        )
     finally:
         _close_conversation(samnmax_client)
 
@@ -228,9 +235,12 @@ def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -
         labels = [c.get("label") for c in follow_up["choices"]]
         assert len(labels) == 5, f"the fifth topic should appear after a selection, got: {labels}"
         assert len(set(labels)) == 5, f"duplicate choice in: {labels}"
+        # The revealed icon is the Max head (object 1067) — labelled "max".
+        assert "max" in labels, f"expected the 'max' topic icon, got: {labels}"
 
-        # Selecting the fifth topic must reach the real script, not click a blank.
-        result = samnmax_client.answer(5)
+        # Selecting the Max topic must reach the real script, not click a blank.
+        max_id = next(c["id"] for c in follow_up["choices"] if c["label"] == "max")
+        result = samnmax_client.answer(max_id)
         texts = [m.get("text", "") for m in result.get("messages", [])]
         _assert_no_garbage(result.get("messages", []))
         assert texts, "selecting the fifth topic produced no spoken line (click missed)"
