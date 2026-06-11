@@ -170,6 +170,11 @@ private:
 	// Frame gate + right-click counter for the verb-cycle above.
 	uint32 _sseSnmTalkNextFrame = 0;
 	int _sseSnmTalkClicks = 0;
+	// True once the virtual mouse has been pinned over the target for at
+	// least one frame. The engine's hover detection must see the cursor over
+	// the actor before a click counts as a click ON it, so the machinery
+	// never left-clicks on the same pump frame that warped the mouse.
+	bool _sseSnmHovered = false;
 	// Auto-release frame for stand-alone mouse_click (debug tool): the engine
 	// expects a button-down followed by a button-up; without the release V7
 	// scripts treat the click as a drag and skip the action handler.

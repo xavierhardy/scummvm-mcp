@@ -80,7 +80,22 @@ static const int kSnmMouthCursor   = 877;
 // script instead (e.g. boarding the street DeSoto, which plays the drive-away
 // cutscene). For those, 'use' is dispatched by cycling to this cursor + clicking.
 static const int kSnmUseCursor     = 878;
+// The pickup-hand cursor; clicking an actor with it (e.g. Max) takes them
+// in hand: the cursor then becomes the held character (889 for Max), which
+// is NOT part of the right-click rotation — cycling away drops them again.
+static const int kSnmPickupCursor  = 890;
 static const int kSnmTalkSentinel  = -200;
+// Sentinel for "click with whatever is currently held": matches any cursor
+// outside the standard rotation (875,876,877,878,890), e.g. Max-in-hand 889.
+static const int kSnmItemCursorSentinel = -201;
+// Verify phase after a pickup click: wait a few frames, then check that the
+// cursor turned into a held-item cursor; if not (the actor wandered out from
+// under the click), aim and click again.
+static const int kSnmVerifyHeldSentinel = -202;
+
+static bool snmIsStandardCursor(int v) {
+	return v == 875 || v == 876 || v == 877 || v == 878 || v == kSnmPickupCursor;
+}
 
 struct V6VerbEntry { int id; const char *name; const char *label; };
 static const V6VerbEntry kV6CanonicalVerbs[] = {
@@ -1911,6 +1926,7 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// the conversation (whose topic icons are then exposed as choices).
 		_sseSnmTalkActor = targetA;
 		_sseSnmCursorTarget = kSnmMouthCursor;
+		_sseSnmHovered = false;
 		_sseSnmTalkClicks = 0;
 		_sseSnmTalkNextFrame = _frameCounter + 1;
 	} else if (_vm->_game.id == GID_SAMNMAX && verbId == 7 && targetA != 0 &&
@@ -1925,6 +1941,42 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// that DO script verb 7 (doors, etc.) keep the doSentence path below.
 		_sseSnmTalkActor = targetA;
 		_sseSnmCursorTarget = kSnmUseCursor;
+		_sseSnmHovered = false;
+		_sseSnmTalkClicks = 0;
+		_sseSnmTalkNextFrame = _frameCounter + 1;
+	} else if (_vm->_game.id == GID_SAMNMAX && verbId == 5 && targetA != 0 &&
+	           targetB == 0 && _vm->objIsActor(targetA)) {
+		// Sam & Max 'pick_up' on an actor (e.g. Max himself): there is no
+		// pickup entrypoint to dispatch — clicking the actor with the hand
+		// cursor is the mechanic, and it leaves the actor held as the mouse
+		// cursor (Max-in-hand, 889). The machinery tracks the actor's live
+		// position, which matters because Max wanders around the scene.
+		_sseSnmTalkActor = targetA;
+		_sseSnmCursorTarget = kSnmPickupCursor;
+		_sseSnmHovered = false;
+		_sseSnmTalkClicks = 0;
+		_sseSnmTalkNextFrame = _frameCounter + 1;
+	} else if (_vm->_game.id == GID_SAMNMAX && verbId == 7 && targetA != 0 &&
+	           targetB != 0 && _vm->whereIsObject(targetA) == WIO_INVENTORY) {
+		// Sam & Max 'use <held item/character> on Y' (e.g. use Max on the
+		// cat on the street, after pick_up max): the held item is its own
+		// cursor outside the standard rotation, so click the target with it.
+		// doSentence cannot drive this: the interaction lives in the
+		// scene-click input script, not in a verb entrypoint. Cycling can
+		// never reach an item cursor (a right-click drops the held item), so
+		// the item must already be in hand.
+		{
+			int cur = (kSnmCursorVerbVar < _vm->_numVariables && _vm->_scummVars)
+			          ? (int)_vm->_scummVars[kSnmCursorVerbVar] : -1;
+			if (cur <= 0 || snmIsStandardCursor(cur)) {
+				errorOut = "use: nothing is held — pick the item up first (e.g. act pick_up max)";
+				_streaming = false;
+				return false;
+			}
+		}
+		_sseSnmTalkActor = targetB;
+		_sseSnmCursorTarget = kSnmItemCursorSentinel;
+		_sseSnmHovered = false;
 		_sseSnmTalkClicks = 0;
 		_sseSnmTalkNextFrame = _frameCounter + 1;
 	} else if (isIndy4ActorClick) {
@@ -3722,6 +3774,11 @@ void ScummMcpBridge::pumpStream() {
 	if (_sseSnmTalkActor != 0 && _vm->_userPut > 0 && _frameCounter >= _sseSnmTalkNextFrame) {
 		int objX = _vm->getObjX(_sseSnmTalkActor);
 		int objY = _vm->getObjY(_sseSnmTalkActor);
+		// Actors report their foot point; aim a little higher so the click
+		// lands on the body. Clicking the exact foot pixel misses small
+		// actors (the street kitten) and wandering ones (Max).
+		if (_vm->objIsActor(_sseSnmTalkActor))
+			objY -= 8;
 		VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
 		int mouseX = CLIP<int>(objX - vs->xstart, 0, _vm->_screenWidth - 1);
 		int mouseY = CLIP<int>(objY + vs->topline, 0, _vm->_screenHeight - 1);
@@ -3736,21 +3793,68 @@ void ScummMcpBridge::pumpStream() {
 		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
 		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
 
-		int curVerb = (kSnmCursorVerbVar < _vm->_numVariables && _vm->_scummVars)
-		              ? (int)_vm->_scummVars[kSnmCursorVerbVar] : -1;
-		if (curVerb == _sseSnmCursorTarget || _sseSnmTalkClicks >= 8) {
-			// Target cursor selected (or give up cycling): left-click to act.
-			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
-			_sseButtonClearFrame = _frameCounter + 2;
-			_sseSnmTalkActor = 0;
-			_sseDoneAtFrame = 0; // re-settle so the resulting action can play out
+		if (!_sseSnmHovered) {
+			// Give the engine a frame of hover with the mouse pinned over the
+			// target before any click: clicking on the same frame the mouse
+			// was warped misses, because the object-under-cursor state has
+			// not been refreshed yet.
+			_sseSnmHovered = true;
+			_sseSnmTalkNextFrame = _frameCounter + 2;
 		} else {
-			// Right-click to advance the verb cursor, then wait for the cursor
-			// manager script to process it before checking again.
-			_vm->_rightBtnPressed |= 0x03; // msClicked | msDown
-			_sseButtonClearFrame = _frameCounter + 2;
-			_sseSnmTalkClicks++;
-			_sseSnmTalkNextFrame = _frameCounter + 3;
+			int curVerb = (kSnmCursorVerbVar < _vm->_numVariables && _vm->_scummVars)
+			              ? (int)_vm->_scummVars[kSnmCursorVerbVar] : -1;
+			bool cursorMatched = (curVerb == _sseSnmCursorTarget);
+			// Item-cursor sentinel: stop on any cursor outside the standard
+			// rotation (that is the held character/item, e.g. Max-in-hand 889).
+			if (_sseSnmCursorTarget == kSnmItemCursorSentinel)
+				cursorMatched = (curVerb > 0 && !snmIsStandardCursor(curVerb));
+			if (_sseSnmCursorTarget == kSnmVerifyHeldSentinel) {
+				// Post-pickup verification: the hand click only takes the
+				// actor when it actually landed on them; wandering actors
+				// (Max) move out from under the cursor. Re-click until the
+				// cursor turns into the held-item cursor, within reason.
+				if (curVerb > 0 && !snmIsStandardCursor(curVerb)) {
+					debug(1, "mcp: snm pickup verified, held cursor=%d", curVerb);
+					_sseSnmTalkActor = 0;
+					_sseDoneAtFrame = 0;
+				} else if (_sseSnmTalkClicks >= 6) {
+					debug(1, "mcp: snm pickup gave up after %d clicks (cursor=%d)",
+					      _sseSnmTalkClicks, curVerb);
+					_sseSnmTalkActor = 0;
+					_sseDoneAtFrame = 0;
+				} else {
+					debug(1, "mcp: snm pickup re-click %d on %d at (%d,%d) cursor=%d",
+					      _sseSnmTalkClicks, _sseSnmTalkActor, objX, objY, curVerb);
+					_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+					_sseButtonClearFrame = _frameCounter + 2;
+					_sseSnmTalkClicks++;
+					_sseSnmTalkNextFrame = _frameCounter + 12;
+				}
+			} else if (cursorMatched && _sseSnmCursorTarget == kSnmPickupCursor) {
+				// Hand cursor reached: click the actor, then verify the grab.
+				debug(1, "mcp: snm pickup click on %d at (%d,%d)",
+				      _sseSnmTalkActor, objX, objY);
+				_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+				_sseButtonClearFrame = _frameCounter + 2;
+				_sseSnmCursorTarget = kSnmVerifyHeldSentinel;
+				_sseSnmTalkClicks = 0;
+				_sseSnmTalkNextFrame = _frameCounter + 12;
+			} else if (cursorMatched || _sseSnmTalkClicks >= 8) {
+				// Target cursor selected (or give up cycling): left-click to act.
+				debug(1, "mcp: snm click target=%d cursor=%d matched=%d at (%d,%d)",
+				      _sseSnmTalkActor, curVerb, cursorMatched, objX, objY);
+				_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+				_sseButtonClearFrame = _frameCounter + 2;
+				_sseSnmTalkActor = 0;
+				_sseDoneAtFrame = 0; // re-settle so the resulting action can play out
+			} else {
+				// Right-click to advance the verb cursor, then wait for the cursor
+				// manager script to process it before checking again.
+				_vm->_rightBtnPressed |= 0x03; // msClicked | msDown
+				_sseButtonClearFrame = _frameCounter + 2;
+				_sseSnmTalkClicks++;
+				_sseSnmTalkNextFrame = _frameCounter + 3;
+			}
 		}
 	}
 
