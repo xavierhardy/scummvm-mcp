@@ -40,6 +40,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 static void handle_animation_listen() {
 	int listen_reset_frame;
 
@@ -634,6 +636,20 @@ void room_111_preload() {
 
 	section_1_walker();
 	section_1_interface();
+}
+
+
+void room_111_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->delete_axe,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->listen_frame,
+		local->listen_action,
+		local->it_is_closed);
 }
 
 } // namespace Rooms

@@ -114,6 +114,12 @@ void FreescapeEngine::initKeymaps(Common::Keymap *engineKeyMap, Common::Keymap *
 	act->addDefaultInputMapping("i");
 	act->addDefaultInputMapping("JOY_GUIDE");
 	engineKeyMap->addAction(act);
+
+	// I18N: Toggles the red/blue stereoscopic 3D effect (anaglyph glasses).
+	act = new Common::Action("STEREO3D", _("Toggle red/blue 3D"));
+	act->setCustomEngineActionEvent(kActionToggleStereoscopic);
+	act->addDefaultInputMapping("3");
+	engineKeyMap->addAction(act);
 }
 
 Math::AABB createPlayerAABB(Math::Vector3d const position, int playerHeight, float reductionHeight = 0.0f) {
@@ -321,7 +327,8 @@ void FreescapeEngine::shoot() {
 
 	Math::Vector3d direction = directionToVector(_pitch + angleOffsetY, _yaw - angleOffsetX, false);
 	Math::Ray ray(_position, direction);
-	Object *shot = _currentArea->checkCollisionRay(ray, 8192);
+	// Original shooting picks from rendered faces, so fully transparent geometry does not catch shots.
+	Object *shot = _currentArea->checkCollisionRay(ray, 8192, true);
 	if (shot) {
 		GeometricObject *gobj = (GeometricObject *)shot;
 		debugC(1, kFreescapeDebugMove, "Shot object %d with flags %x", gobj->getObjectID(), gobj->getObjectFlags());

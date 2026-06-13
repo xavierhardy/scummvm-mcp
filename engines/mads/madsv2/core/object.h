@@ -116,6 +116,8 @@ extern void object_set_quality(int object_id, int quality_id, long quality_value
  */
 extern int object_examine(int number, long message, int speech);
 
+extern void init_object();
+
 } // namespace MADSV2
 } // namespace MADS
 

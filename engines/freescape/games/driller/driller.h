@@ -22,6 +22,7 @@
 #include "audio/audiostream.h"
 #include "audio/mixer.h"
 
+#include "engines/freescape/music.h"
 #include "engines/freescape/games/driller/c64.music.h"
 #include "engines/freescape/games/driller/c64.sfx.h"
 
@@ -45,7 +46,7 @@ public:
 
 	bool _useAutomaticDrilling;
 
-	DrillerSIDPlayer *_playerSid;
+	MusicPlayer *_playerMusic;
 	DrillerC64SFXPlayer *_playerC64Sfx;
 	bool _c64UseSFX;
 
@@ -81,8 +82,8 @@ private:
 	int _finalAreaWinConditionIndex;
 	int _amigaAtariEndGameStep;
 	bool drillDeployed(Area *area);
-	GeometricObject *_drillBase;
 	Math::Vector3d drillPosition();
+	float compassYaw() const;
 	void addDrill(const Math::Vector3d position, bool gasFound);
 	bool checkDrill(const Math::Vector3d position);
 	void removeDrill(Area *area);

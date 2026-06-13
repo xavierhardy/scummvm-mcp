@@ -40,6 +40,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 static void get_lever_coordinate_and_type(int *x, int *y, int *type, int lever_number, int *noun) {
 	/* x will return the x location for the stamping of skull */
 	/* y will return the y location for the stamping of skull */
@@ -431,6 +433,13 @@ void room_410_preload() {
 
 	section_4_walker();
 	section_4_interface();
+}
+
+
+void room_410_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
 }
 
 } // namespace Rooms

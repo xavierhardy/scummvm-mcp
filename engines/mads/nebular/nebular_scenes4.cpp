@@ -22,7 +22,7 @@
 #include "common/scummsys.h"
 #include "math/utils.h"
 #include "mads/nebular/nebular.h"
-#include "mads/core/scene.h"
+#include "mads/nebular/core/scene.h"
 #include "mads/nebular/nebular_scenes.h"
 #include "mads/nebular/nebular_scenes4.h"
 

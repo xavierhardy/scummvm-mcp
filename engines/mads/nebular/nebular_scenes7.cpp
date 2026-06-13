@@ -21,7 +21,7 @@
 
 #include "common/scummsys.h"
 #include "mads/nebular/nebular.h"
-#include "mads/core/scene.h"
+#include "mads/nebular/core/scene.h"
 #include "mads/nebular/nebular_scenes.h"
 #include "mads/nebular/nebular_scenes7.h"
 

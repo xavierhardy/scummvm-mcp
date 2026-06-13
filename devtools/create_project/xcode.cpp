@@ -1141,6 +1141,14 @@ XcodeProvider::ValueList& XcodeProvider::getResourceFiles(const BuildSetup &setu
 			files.push_back("engines/freescape/shaders/freescape_cubemap.fragment");
 			files.push_back("engines/freescape/shaders/freescape_cubemap.vertex");
 		}
+		if (CONTAINS_DEFINE(setup.defines, "ENABLE_COLONY")) {
+			files.push_back("engines/colony/shaders/colony_solid.fragment");
+			files.push_back("engines/colony/shaders/colony_solid.vertex");
+			files.push_back("engines/colony/shaders/colony_solid_3d.fragment");
+			files.push_back("engines/colony/shaders/colony_solid_3d.vertex");
+			files.push_back("engines/colony/shaders/colony_bitmap.fragment");
+			files.push_back("engines/colony/shaders/colony_bitmap.vertex");
+		}
 		if (CONTAINS_DEFINE(setup.defines, "USE_FLUIDSYNTH")) {
 			files.push_back("dists/soundfonts/Roland_SC-55.sf2");
 			files.push_back("dists/soundfonts/COPYRIGHT.Roland_SC-55");

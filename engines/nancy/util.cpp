@@ -18,6 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "engines/nancy/enginedata.h"
 #include "engines/nancy/nancy.h"
 #include "engines/nancy/util.h"
 #include "common/system.h"
@@ -247,6 +248,79 @@ void readFilenameArray(Common::Serializer &stream, Common::Array<Common::Path> &
 	}
 }
 
+void readUIButton(Common::SeekableReadStream &stream, UIButtonRecord &dst) {
+	// Read common fields for both buttons and sliders
+	readFilename(stream, dst.primaryImageName);
+	readFilename(stream, dst.secondaryImageName);
+	dst.id = stream.readUint32LE();
+	for (int i = 0; i < 4; ++i) {
+		readRect(stream, dst.sourceRects[i]);
+	}
+	readRect(stream, dst.srcBackgroundRestore);
+	readRect(stream, dst.destRect);
+	dst.destUsesGameFrameOffset = stream.readUint32LE();
+
+	dst.hoverEnableFlag = stream.readUint32LE();
+	dst.hoverCursorFlag = stream.readUint32LE();
+	dst.secondaryStateField = stream.readUint32LE();
+	dst.initialState = stream.readUint32LE();
+	dst.reservedField = stream.readUint32LE();
+
+	dst.clickSound.readNormal(stream);
+}
+
+void readUIButtonSlot(Common::SeekableReadStream &stream, UIButtonSlot &dst) {
+	dst.enabled = stream.readUint32LE();
+	dst.id = stream.readUint32LE();
+	readUIButton(stream, dst.button);
+}
+
+void readUISlider(Common::SeekableReadStream &stream, UISliderRecord &dst) {
+	// Read common fields for both buttons and sliders
+	readFilename(stream, dst.primaryImageName);
+	readFilename(stream, dst.secondaryImageName);
+	dst.id = stream.readUint32LE();
+	for (int i = 0; i < 4; ++i) {
+		readRect(stream, dst.sourceRects[i]);
+	}
+	readRect(stream, dst.srcBackgroundRestore);
+	readRect(stream, dst.destRect);
+	dst.destUsesGameFrameOffset = stream.readUint32LE();
+
+	dst.unknownA = stream.readUint32LE();
+	dst.isDraggable = stream.readUint32LE();
+	dst.unknownC = stream.readUint32LE();
+	dst.orientation = stream.readUint32LE();
+	dst.positionHint = stream.readUint32LE();
+	dst.secondaryStateField = stream.readUint32LE();
+	dst.initialState = stream.readUint32LE();
+}
+
+// Reads the base header that precedes every Nancy 10 popup-UI
+// chunk (UIIV, UICO, UICL, UINB).
+void readUIPopupHeader(Common::SeekableReadStream &stream, UIPopupHeader &dst) {
+	readFilename(stream, dst.imageName);
+	dst.unknownHeaderField = stream.readUint32LE();
+	dst.linkbackScene = stream.readSint16LE();
+	readRect(stream, dst.normalSrcRect);
+	readRect(stream, dst.maximizedSrcRect);
+	readRect(stream, dst.normalDestRect);
+	readRect(stream, dst.maximizedDestRect);
+	dst.overlayInGameFrame = stream.readUint32LE();
+
+	stream.skip(4);
+
+	for (int i = 0; i < 4; ++i) {
+		dst.sounds[i].readNormal(stream);
+	}
+
+	dst.secondaryButtonEnabled = stream.readUint32LE();
+	readUIButton(stream, dst.secondaryButton);
+
+	dst.sliderEnabled = stream.readUint32LE();
+	readUISlider(stream, dst.slider);
+}
+
 // A text line will often be broken up into chunks separated by nulls, use
 // this function to put it back together as a Common::String
 void assembleTextLine(char *rawCaption, Common::String &output, uint size) {
@@ -268,6 +342,31 @@ void assembleTextLine(char *rawCaption, Common::String &output, uint size) {
 	while (pos = output.find(">>"), pos != Common::String::npos) {
 		output.replace(pos, 2, ">");
 	}
+}
+
+Common::String getTextFromCaseInsensitiveKey(Common::HashMap<Common::String, Common::String> texts, Common::String &key) {
+	if (texts.contains(key)) {
+		return texts[key];
+	} else {
+		// Nancy10+ searched keyed texts in a key insensitive way, but
+		// the possible permutations involve mainly the last character
+		// being upper or lower case, so just try that before giving up.
+		if (key[key.size() - 1] == toupper(key[key.size() - 1]))
+			key[key.size() - 1] = tolower(key[key.size() - 1]);
+		else
+			key[key.size() - 1] = toupper(key[key.size() - 1]);
+
+		if (texts.contains(key))
+			return texts[key];
+
+		key.toUppercase();
+
+		if (texts.contains(key))
+			return texts[key];
+	}
+
+	warning("Key not found: %s", key.c_str());
+	return "";
 }
 
 bool DeferredLoader::load(uint32 endTime) {

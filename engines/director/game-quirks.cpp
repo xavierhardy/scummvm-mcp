@@ -153,6 +153,7 @@ struct SaveFilePath {
 	const char *path;
 } const saveFilePaths[] = {
 	{ "darkeye", Common::kPlatformWindows, "SAVEDDKY/" },
+	{ "missionplanetx", Common::kPlatformWindows, "" },
 	{"simpsonsstudio", Common::kPlatformWindows, "SIMPSONS/SUPPORT/TOONDATA/"},
 	{"simpsonsstudio", Common::kPlatformMacintosh, "SIMPSONS/SUPPORT/TOONDATA/"},
 	{ nullptr, Common::kPlatformUnknown, nullptr },
@@ -310,6 +311,10 @@ const struct Quirk {
 	// in the projector as a resource. New edition expects Xtra, old edition is D4 and won't be affected.
 	{ "puppetmotel", Common::kPlatformWindows, &quirkForceFileIOXtra },
 	{ "puppetmotel", Common::kPlatformMacintosh, &quirkForceFileIOXtra },
+
+	// Pink Gear Collection uses the Xtra version, but loads it manually with openXLib.
+	{ "pinkgear", Common::kPlatformWindows, &quirkForceFileIOXtra },
+	{ "pinkgear", Common::kPlatformMacintosh, &quirkForceFileIOXtra },
 
 	// Stay Tooned is D5, but expects the XObject version to be used.
 	{ "staytooned", Common::kPlatformWindows, &quirkForceFileIOXObj },

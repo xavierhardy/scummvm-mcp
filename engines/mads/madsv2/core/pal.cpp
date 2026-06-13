@@ -19,6 +19,8 @@
  *
  */
 
+#include "common/debug.h"
+#include "mads/madsv2/engine.h"
 #include "mads/madsv2/core/pal.h"
 #include "mads/madsv2/core/mcga.h"
 #include "mads/madsv2/core/color.h"
@@ -137,7 +139,6 @@ void pal_unlock() {
 }
 
 int pal_deallocate(int use_flag) {
-	int return_code = PAL_ERR_BADFLAG;
 	int count;
 	dword mask;
 
@@ -155,14 +156,10 @@ int pal_deallocate(int use_flag) {
 		}
 	}
 
-	if (!flag_used[use_flag]) {
-		return_code = PAL_ERR_FLAGNOTUSED;
+	if (!flag_used[use_flag])
 		goto done;
-	}
+
 	flag_used[use_flag] = false;
-
-	return_code = false;
-
 	pal_exec(pal_manager_update, 4);
 
 done:
@@ -306,7 +303,6 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 	int search_start;
 	int search_stop;
 	dword mask;
-	dword reserved_mask;
 	dword cycle_mask;
 	dword bonus;
 	ShadowList incoming_shadow;
@@ -378,12 +374,6 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 	}
 	sort_insertion_8(new_list->num_colors, reordering_index, reordering_hash);
 
-	if (pal_flags & PAL_MAP_RESERVED) {
-		reserved_mask = 0xffffffff;
-	} else {
-		reserved_mask = 0xfffffffe;
-	}
-
 	// Now, for each color in our color list, find an appropriate mapping or
 	// create a new one from available color space.
 	for (search_color = 0; search_color < new_list->num_colors; search_color++) {
@@ -436,7 +426,8 @@ int pal_allocate(ColorListPtr new_list, ShadowListPtr shadow_list, int pal_flags
 		// existing mapping.  The only reasons not to are  A) if we have
 		// found a (shadowing) match; and  B) if we are defining an initial
 		// background and therefore should not have any matches.
-		conduct_search = !found && !defining_background && cycle_mask != 0;
+		conduct_search = !found && !defining_background &&
+			(cycle_mask != 0 || g_engine->getGameID() == GType_Dragonsphere);
 
 		if (conduct_search) {
 			// Now, decide whether we need an exact match or are willing to just
@@ -555,7 +546,7 @@ int pal_get_colors() {
 	return(out);
 }
 
-void pal_interface(Palette fixpal) {
+void pal_interface(Palette &fixpal) {
 	int intensity, red, green, blue;
 	int base, newCol;
 	int color;
@@ -580,7 +571,7 @@ void pal_interface(Palette fixpal) {
 
 
 
-void pal_white(Palette fixpal) {
+void pal_white(Palette &fixpal) {
 	int count;
 	byte num[4] = { 0, 21, 42, 63 };
 
@@ -592,7 +583,7 @@ void pal_white(Palette fixpal) {
 }
 
 
-void pal_grey(Palette fixpal, int base_color, int num_colors,
+void pal_grey(Palette &fixpal, int base_color, int num_colors,
 	int low_grey, int high_grey) {
 	int count;
 	int dif;
@@ -684,6 +675,100 @@ void pal_change_color(int color, int r, int g, int b) {
 	master_palette[color].g = (byte)g;
 	master_palette[color].b = (byte)b;
 	mcga_setpal_range((Palette *)master_palette, color, 1);
+}
+
+void init_pal() {
+	memset(&master_palette, 0, sizeof(Palette));
+	master_shadow = NULL;
+	memset(color_status, 0, sizeof(color_status));
+	memset(flag_used, 0, sizeof(flag_used));
+	palette_locked = false;
+	palette_ever_initialized = false;
+	palette_reserved_bottom = 0;
+	palette_reserved_top = 0;
+	palette_low_search_limit = 0;
+	palette_high_search_limit = 0;
+	pal_manager_update = NULL;
+	pal_manager_active = false;
+	pal_manager_colors = 0;
+}
+
+int pal_alloc_color(int slot, int allow_shared, int *out_index, const RGBcolor *color) {
+	int slot_num;
+
+	if (slot < 0) {
+		slot_num = -10;
+		int i = 0;
+		int *p = flag_used;
+		while (p < flag_used + PAL_MAXFLAGS) {
+			if (*p == 0) {
+				slot_num = i;
+				break;
+			}
+			i++;
+			p++;
+		}
+		if (slot_num < 0) {
+			error_report(-5, 2, 3, 1, 0);
+			return slot_num;
+		}
+	} else {
+		slot_num = slot;
+	}
+
+	long mask = 1L << slot_num;
+
+	byte *pal_ptr = &master_palette[0].r;
+	dword *status = color_status;
+	int color_index = 0;
+	bool found = false;
+
+	// First pass: look for an existing palette entry with a matching color
+	while (status < (color_status + 256)) {
+		if (!((*status & 1) && !allow_shared) && !(*status & 2)) {
+			if (memcmp(color, pal_ptr, 3) == 0) {
+				*status |= mask;
+				if (out_index)
+					*out_index = color_index;
+				found = true;
+			}
+		}
+		pal_ptr += 3;
+		status++;
+		color_index++;
+		if (found)
+			break;
+	}
+
+	if (!found) {
+		// Second pass: allocate a free palette entry and install the color
+		color_index = 0;
+		pal_ptr = &master_palette[0].r;
+		status = color_status;
+		bool allocated = false;
+
+		while (status < (color_status + 256)) {
+			if (*status == 0) {
+				memcpy(pal_ptr, color, 3);
+				*status |= mask;
+				if (out_index)
+					*out_index = color_index;
+				allocated = true;
+			}
+			pal_ptr += 3;
+			status++;
+			color_index++;
+			if (allocated)
+				break;
+		}
+
+		if (!allocated) {
+			error_report(-6, 2, 3, 1, 0);
+			slot_num = -11;
+		}
+	}
+
+	return slot_num;
 }
 
 } // namespace MADSV2

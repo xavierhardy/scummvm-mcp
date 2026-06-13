@@ -53,7 +53,7 @@ public:
 	virtual ScriptValue callMethod(BuiltInMethod methodId, Common::Array<ScriptValue> &args) override;
 	virtual void draw(DisplayContext &displayContext) override;
 	virtual uint16 findActorToAcceptKeyboardEvents(uint16 charCode, uint16 eventMask, MouseActorState &state) override;
-	virtual void keyboardEvent(const Common::Event &event) override;
+	virtual void keyboardEvent(const KeyboardEvent &event) override;
 
 private:
 	static const uint CURSOR_CHAR_ID = 0x104;

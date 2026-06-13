@@ -50,6 +50,8 @@ extern void cursor_set_mode(int my_type);
 extern void cursor_toggle_insert();
 extern void cursor_set_follow(int follow);
 
+extern void init_cursor();
+
 } // namespace MADSV2
 } // namespace MADS
 

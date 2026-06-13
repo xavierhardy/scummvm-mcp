@@ -41,6 +41,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_103_adjust_rails(int variant) {
 	switch (variant) {
 	case 0:
@@ -1757,6 +1759,41 @@ void room_103_preload(void) {
 	vocab_make_active(words_Jacques);
 	vocab_make_active(words_gentleman);
 	vocab_make_active(words_climb);
+}
+
+
+void room_103_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->prompt_1,
+		local->prompt_2,
+		local->prompt_3,
+		local->prompt_4,
+		local->prompt_5,
+		local->floor_r_1,
+		local->floor_r_2,
+		local->floor_l_1,
+		local->floor_l_2,
+		local->man,
+		local->jacques_frame,
+		local->jacques_action,
+		local->jacques_talk_count,
+		local->just_did_option,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->anim_2_running,
+		local->anim_3_running,
+		local->anim_4_running,
+		local->anim_5_running,
+		local->anim_6_running,
+		local->top_of_stand,
+		local->converse_counter,
+		local->frame_guard,
+		local->stairs_frame,
+		local->climb_thru,
+		local->sit_on_it);
 }
 
 } // namespace Rooms

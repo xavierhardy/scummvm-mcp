@@ -251,6 +251,12 @@ void TextCastMember::setForeColor(uint32 fgCol) {
 void TextCastMember::setForeColor(uint32 fgCol, int start, int end) {
 	Graphics::MacText *target = getWidget();
 	if (target) {
+		if (target->_wm->_pixelformat.isCLUT8()) {
+			byte r, g, b;
+			target->_wm->getPaletteEntry(fgCol, r, g, b);
+			fgCol = target->_wm->findBestColor(r, g, b);
+		}
+
 		return target->setTextColor(fgCol, start, end);
 	}
 	_modified = true;
@@ -287,7 +293,7 @@ void TextCastMember::importStxt(const Stxt *stxt) {
 }
 
 bool textWindowCallback(Graphics::WindowClick click, Common::Event &event, void *ptr) {
-	return g_director->getCurrentMovie()->processEvent(event);
+	return g_director->getCurrentMovie()->processSysEvent(event);
 }
 
 Graphics::MacWidget *TextCastMember::createWindowOrWidget(Common::Rect &bbox, Common::Rect dims, Graphics::MacFont *macFont) {
@@ -1040,7 +1046,8 @@ uint32 TextCastMember::writeSTXTResource(Common::SeekableWriteStream *writeStrea
 				// Ignoring height and ascent for now from FontStyle
 				uint16 temp;
 				style.formatStartOffset = pIndex;
-				const Common::u32char_type_t *s = _ftext.substr(it, 22).c_str();
+				Common::U32String data = _ftext.substr(it, 22);
+				const Common::u32char_type_t *s = data.c_str();
 
 				s = Graphics::readHex(&style.fontId, s, 4);
 				s = Graphics::readHex(&temp, s, 2);
@@ -1078,7 +1085,8 @@ uint32 TextCastMember::writeSTXTResource(Common::SeekableWriteStream *writeStrea
 	writeStream->writeString(rawText);
 	writeStream->seek(currentPos);
 
-	if (debugChannelSet(7, kDebugSaving)) {
+	// FIXME: can't dereference SeekableWriteStream
+	/*if (debugChannelSet(7, kDebugSaving)) {
 		byte *dumpData = nullptr;
 		dumpData = (byte *)calloc(stxtSize, sizeof(byte));
 		Common::MemoryWriteStream *dumpStream = new Common::SeekableMemoryWriteStream(dumpData, stxtSize);
@@ -1091,7 +1099,7 @@ uint32 TextCastMember::writeSTXTResource(Common::SeekableWriteStream *writeStrea
 		dumpFile("TextData", _castId, MKTAG('S', 'T', 'X', 'T'), dumpData, getSTXTResourceSize() + 8);
 		free(dumpData);
 		delete dumpStream;
-	}
+	}*/
 
 	return stxtSize + 8;
 }

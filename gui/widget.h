@@ -162,6 +162,8 @@ public:
 
 	uint32 getType() const { return _type; }
 
+	// Check if the widget or its children contain a visible scrollbar
+	virtual bool hasVisibleScrollBar() const;
 	void setFlags(int flags);
 	void clearFlags(int flags);
 	int getFlags() const		{ return _flags; }
@@ -570,6 +572,7 @@ public:
 protected:
 	// Widget API
 	void reflowLayout() override;
+	Common::Rect getClipRect() const override;
 	void drawWidget() override {}
 	bool containsWidget(Widget *widget) const override;
 	Widget *findWidget(int x, int y) override;

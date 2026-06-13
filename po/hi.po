@@ -7,9 +7,9 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ScummVM 2.3.0git\n"
 "Report-Msgid-Bugs-To: scummvm-devel@lists.scummvm.org\n"
-"POT-Creation-Date: 2026-04-23 00:52+0000\n"
-"PO-Revision-Date: 2024-07-11 17:47+0000\n"
-"Last-Translator: Krish <ganatrakrish2882005@gmail.com>\n"
+"POT-Creation-Date: 2026-06-11 22:10+0000\n"
+"PO-Revision-Date: 2026-05-12 22:22+0000\n"
+"Last-Translator: KARTIK SAXENA <kartiksaxena2005@gmail.com>\n"
 "Language-Team: Hindi <https://translations.scummvm.org/projects/scummvm/"
 "scummvm/hi/>\n"
 "Language: hi\n"
@@ -17,19 +17,18 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n > 1;\n"
-"X-Generator: Weblate 4.4\n"
+"X-Generator: Weblate 5.15.1\n"
 "X-Language-name: Hindi\n"
 
 #: audio/mac_plugin.cpp:30
 msgid "Apple Macintosh Audio"
-msgstr ""
+msgstr "एप्पल मैकिन्टोश ऑडियो"
 
 #. I18N: built with <compiler>
 #: gui/about.cpp:119
-#, fuzzy, c-format
-#| msgid "(built on %s with %s)"
+#, c-format
 msgid "(built with %s)"
-msgstr "(%s को बनाया गया %s )"
+msgstr "(%s के साथ बनाया गया)"
 
 #. I18N: built on <build date> with <compiler>
 #: gui/about.cpp:122
@@ -84,11 +83,11 @@ msgstr "बंद करें"
 #. I18N: Opens the help screen.
 #: gui/browser.cpp:64 gui/launcher.cpp:277 gui/launcher.cpp:959
 #: backends/platform/sdl/macosx/appmenu_osx.mm:319
-#: engines/access/metaengine.cpp:356 engines/bladerunner/metaengine.cpp:321
+#: engines/access/metaengine.cpp:360 engines/bladerunner/metaengine.cpp:321
 #: engines/ngi/metaengine.cpp:162 engines/supernova/metaengine.cpp:238
 #: engines/tucker/metaengine.cpp:215 engines/zvision/metaengine.cpp:246
 msgid "Help"
-msgstr ""
+msgstr "सहायता"
 
 #: gui/browser.cpp:77 backends/dialogs/macosx/macosx-dialogs.mm:108
 msgid "Show hidden files"
@@ -124,7 +123,7 @@ msgstr "ऊपर जाएँ"
 #: gui/saveload-dialog.cpp:456 gui/saveload-dialog.cpp:540
 #: gui/saveload-dialog.cpp:839 gui/saveload-dialog.cpp:1243
 #: gui/shaderbrowser-dialog.cpp:80 gui/themebrowser.cpp:54
-#: gui/unknown-game-dialog.cpp:53 base/main.cpp:604
+#: gui/unknown-game-dialog.cpp:53 base/main.cpp:608
 #: dists/android.strings.xml.cpp:46 engines/engine.cpp:800
 #: engines/engine.cpp:825 backends/dialogs/gtk/gtk-dialogs.cpp:65
 #: backends/events/default/default-events.cpp:193
@@ -327,25 +326,27 @@ msgstr "आगे बढ़ें"
 msgid "Another Storage is working right now. Do you want to interrupt it?"
 msgstr "एक अन्य स्टोरेज अभी काम कर रहा है। क्या आप इसे रोकना चाहते हैं?"
 
+#. I18N: Y key for Yes
 #: gui/cloudconnectionwizard.cpp:530 gui/downloaddialog.cpp:118
 #: gui/downloaddialog.cpp:152 gui/filebrowser-dialog.cpp:135
 #: gui/fluidsynth-dialog.cpp:210 gui/launcher.cpp:428 gui/launcher.cpp:457
 #: gui/launcher.cpp:534 gui/launcher.cpp:1938 gui/options.cpp:3485
-#: gui/options.cpp:3859 base/main.cpp:604
+#: gui/options.cpp:3859 base/main.cpp:608
 #: backends/events/default/default-events.cpp:193 engines/buried/buried.cpp:598
 #: engines/chamber/metaengine.cpp:91 engines/director/events.cpp:122
 #: engines/director/lingo/xlibs/j/jitdraw3.cpp:139
 #: engines/efh/metaengine.cpp:362 engines/grim/grim.cpp:366
 #: engines/hypno/metaengine.cpp:192 engines/kyra/gui/saveload_eob.cpp:611
 #: engines/kyra/gui/saveload_eob.cpp:644 engines/lab/metaengine.cpp:197
-#: engines/parallaction/metaengine.cpp:169
-#: engines/sci/graphics/controls32.cpp:937 engines/scumm/scumm.cpp:4365
+#: engines/mm/mm1/metaengine.cpp:54 engines/parallaction/metaengine.cpp:169
+#: engines/sci/graphics/controls32.cpp:937 engines/scumm/scumm.cpp:4478
 #: engines/sherlock/metaengine.cpp:638 engines/sherlock/metaengine.cpp:1244
 #: engines/sludge/event.cpp:144 engines/toon/toon.cpp:1550
-#: engines/zvision/zvision.cpp:326
+#: engines/zvision/zvision.cpp:328
 msgid "Yes"
 msgstr "हाँ"
 
+#. I18N: N key for No
 #: gui/cloudconnectionwizard.cpp:530 gui/downloaddialog.cpp:118
 #: gui/downloaddialog.cpp:153 gui/filebrowser-dialog.cpp:135
 #: gui/fluidsynth-dialog.cpp:210 gui/launcher.cpp:428 gui/launcher.cpp:457
@@ -356,11 +357,11 @@ msgstr "हाँ"
 #: engines/efh/metaengine.cpp:368 engines/grim/grim.cpp:366
 #: engines/hypno/metaengine.cpp:198 engines/kyra/gui/saveload_eob.cpp:611
 #: engines/kyra/gui/saveload_eob.cpp:644 engines/lab/metaengine.cpp:204
-#: engines/parallaction/metaengine.cpp:175
-#: engines/sci/graphics/controls32.cpp:937 engines/scumm/scumm.cpp:4365
+#: engines/mm/mm1/metaengine.cpp:52 engines/parallaction/metaengine.cpp:175
+#: engines/sci/graphics/controls32.cpp:937 engines/scumm/scumm.cpp:4478
 #: engines/sherlock/metaengine.cpp:643 engines/sherlock/metaengine.cpp:1250
 #: engines/sludge/event.cpp:144 engines/toon/toon.cpp:1550
-#: engines/zvision/zvision.cpp:327
+#: engines/zvision/zvision.cpp:329
 msgid "No"
 msgstr "नहीं"
 
@@ -378,13 +379,14 @@ msgstr "JSON कोड की सामग्री अवैध है।"
 #: gui/fluidsynth-dialog.cpp:154 gui/massadd.cpp:90 gui/message.cpp:156
 #: gui/message.cpp:160 gui/message.cpp:231 gui/message.cpp:270
 #: gui/message.cpp:274 gui/options.cpp:2418 gui/predictivedialog.cpp:69
-#: gui/saveload-dialog.cpp:1244 base/main.cpp:671 base/main.cpp:696
-#: dists/android.strings.xml.cpp:33 backends/platform/wii/options.cpp:46
-#: engines/buried/buried.cpp:622 engines/buried/saveload.cpp:83
+#: gui/saveload-dialog.cpp:1244 base/main.cpp:675 base/main.cpp:700
+#: dists/android.strings.xml.cpp:33 engines/engine.cpp:846
+#: backends/platform/wii/options.cpp:46 engines/buried/buried.cpp:622
+#: engines/buried/saveload.cpp:83
 #: engines/director/lingo/xlibs/j/jitdraw3.cpp:123
 #: engines/drascula/saveload.cpp:51 engines/grim/inputdialog.cpp:83
 #: engines/parallaction/saveload.cpp:270 engines/sci/engine/kgraphics.cpp:76
-#: engines/sci/graphics/controls32.cpp:934 engines/scumm/scumm.cpp:4377
+#: engines/sci/graphics/controls32.cpp:934 engines/scumm/scumm.cpp:4490
 #: engines/sword1/control.cpp:2816
 msgid "OK"
 msgstr "ठीक है"
@@ -396,7 +398,7 @@ msgstr "गलत JSON।"
 #. I18N: error message displayed on 'Manual Mode: Failure' step of 'Cloud Connection Wizard', describing that storage connection process was interrupted
 #: gui/cloudconnectionwizard.cpp:593
 msgid "Interrupted."
-msgstr ""
+msgstr "बाधित।"
 
 #: gui/cloudconnectionwizard.cpp:666
 msgid ""
@@ -504,10 +506,8 @@ msgid "Download speed: %s %S/s"
 msgstr "डाउनलोड की गति: %s %S"
 
 #: gui/downloaddlcsdialog.cpp:41
-#, fuzzy
-#| msgid "Download game files"
 msgid "Currently Downloading Games"
-msgstr "गेम फाइल डाउनलोड करे"
+msgstr "वर्तमान में डाउनलोड हो रहे गेम"
 
 #: gui/downloaddlcsdialog.cpp:55
 msgid "Pending Downloads"
@@ -587,7 +587,7 @@ msgstr "GFX"
 
 #: gui/editgamedialog.cpp:164 gui/options.cpp:2075 gui/options.cpp:2254
 #: backends/graphics/atari/atari-graphics.cpp:1056
-#: backends/graphics/sdl/sdl-graphics.cpp:488
+#: backends/graphics/sdl/sdl-graphics.cpp:487
 msgid "Graphics"
 msgstr "ग्राफ़िक्स"
 
@@ -716,7 +716,7 @@ msgstr "अन्य पाथ :"
 
 #: gui/editgamedialog.cpp:306 gui/options.cpp:2530 gui/options.cpp:2558
 #: gui/options.cpp:2567 gui/options.cpp:2848
-#: backends/platform/libretro/src/libretro-options-widget.cpp:271
+#: backends/platform/libretro/src/libretro-options-widget.cpp:277
 msgctxt "path"
 msgid "None"
 msgstr "कोई नहीं"
@@ -758,6 +758,8 @@ msgid ""
 "Short game identifier used for referring to saved games and running the game "
 "from the command line"
 msgstr ""
+"सेव किए गए गेम को संदर्भित करने और कमांड लाइन से गेम चलाने के लिए उपयोग किया जाने वाला "
+"संक्षिप्त गेम आइडेंटिफ़ायर"
 
 #: gui/editgamedialog.cpp:349
 msgctxt "lowres"
@@ -871,7 +873,7 @@ msgstr "ईमेल क्लाइंट प्रारंभ करें"
 
 #: gui/integrity-dialog.cpp:152
 msgid "This game includes add-ons, pick the part you want to be checked:"
-msgstr ""
+msgstr "इस गेम में ऐड-ऑन शामिल हैं, वह हिस्सा चुनें जिसकी आप जांच करना चाहते हैं:"
 
 #: gui/integrity-dialog.cpp:258
 msgid "Calculation complete"
@@ -939,7 +941,7 @@ msgstr "कक्ष:"
 
 #: gui/fluidsynth-dialog.cpp:79
 msgid "Damp:"
-msgstr ""
+msgstr "डैम्प:"
 
 #: gui/fluidsynth-dialog.cpp:86
 msgid "Width:"
@@ -951,12 +953,12 @@ msgstr "स्तर:"
 
 #: gui/fluidsynth-dialog.cpp:100
 msgid "Chorus"
-msgstr ""
+msgstr "कोरस"
 
 #. I18N: N stands for number here
 #: gui/fluidsynth-dialog.cpp:105
 msgid "N:"
-msgstr ""
+msgstr "संख्या:"
 
 #: gui/fluidsynth-dialog.cpp:119
 msgid "Speed:"
@@ -972,10 +974,10 @@ msgstr "प्रकार:"
 
 #: gui/fluidsynth-dialog.cpp:136
 msgid "Sine"
-msgstr ""
+msgstr "साइन"
 
 #. I18N: Hardware key on controller
-#: gui/fluidsynth-dialog.cpp:137 backends/platform/sdl/ps3/ps3.cpp:47
+#: gui/fluidsynth-dialog.cpp:137 backends/platform/sdl/ps3/ps3.cpp:48
 #: backends/platform/sdl/psp2/psp2.cpp:49 engines/dragons/metaengine.cpp:188
 msgid "Triangle"
 msgstr "त्रिभुज"
@@ -1040,7 +1042,7 @@ msgstr ""
 #: engines/dragons/metaengine.cpp:158 engines/freescape/movement.cpp:35
 #: engines/got/metaengine.cpp:70 engines/griffon/metaengine.cpp:121
 #: engines/grim/grim.cpp:481 engines/grim/grim.cpp:563 engines/icb/icb.cpp:68
-#: engines/icb/icb.cpp:152 engines/scumm/metaengine.cpp:1040
+#: engines/icb/icb.cpp:152 engines/scumm/metaengine.cpp:1124
 #: engines/supernova/metaengine.cpp:273 engines/twine/metaengine.cpp:430
 #: engines/twine/metaengine.cpp:497 engines/twp/metaengine.cpp:154
 #: engines/ultima/ultima0/metaengine.cpp:45
@@ -1061,7 +1063,7 @@ msgstr "ऊपर"
 #: engines/dragons/metaengine.cpp:164 engines/freescape/movement.cpp:44
 #: engines/got/metaengine.cpp:71 engines/griffon/metaengine.cpp:127
 #: engines/grim/grim.cpp:486 engines/grim/grim.cpp:568 engines/icb/icb.cpp:73
-#: engines/icb/icb.cpp:157 engines/scumm/metaengine.cpp:1007
+#: engines/icb/icb.cpp:157 engines/scumm/metaengine.cpp:1091
 #: engines/supernova/metaengine.cpp:279 engines/twine/metaengine.cpp:437
 #: engines/twine/metaengine.cpp:505 engines/twp/metaengine.cpp:155
 #: engines/ultima/ultima0/metaengine.cpp:46
@@ -1082,7 +1084,7 @@ msgstr "नीचे"
 #: engines/dragons/metaengine.cpp:170 engines/glk/dialogs.cpp:371
 #: engines/got/metaengine.cpp:72 engines/griffon/metaengine.cpp:133
 #: engines/grim/grim.cpp:491 engines/grim/grim.cpp:573 engines/icb/icb.cpp:78
-#: engines/icb/icb.cpp:162 engines/scumm/metaengine.cpp:1020
+#: engines/icb/icb.cpp:162 engines/scumm/metaengine.cpp:1104
 #: engines/twine/metaengine.cpp:452 engines/twine/metaengine.cpp:520
 #: engines/twp/metaengine.cpp:152 engines/ultima/ultima4/metaengine.cpp:46
 #: engines/ultima/ultima4/metaengine.cpp:141
@@ -1102,7 +1104,7 @@ msgstr "बाएँ"
 #: engines/dragons/metaengine.cpp:176 engines/glk/dialogs.cpp:373
 #: engines/got/metaengine.cpp:73 engines/griffon/metaengine.cpp:139
 #: engines/grim/grim.cpp:496 engines/grim/grim.cpp:578 engines/icb/icb.cpp:83
-#: engines/icb/icb.cpp:167 engines/scumm/metaengine.cpp:1027
+#: engines/icb/icb.cpp:167 engines/scumm/metaengine.cpp:1111
 #: engines/twine/metaengine.cpp:444 engines/twine/metaengine.cpp:513
 #: engines/twp/metaengine.cpp:153 engines/ultima/ultima4/metaengine.cpp:47
 #: engines/ultima/ultima4/metaengine.cpp:142
@@ -1551,7 +1553,7 @@ msgid "ScummVM could not find any game in the specified directory!"
 msgstr "ScummVM इस डायरेक्टरी में कोई गेम नहीं ढूंढ पाया!"
 
 #. I18N: Unknown game variant
-#: gui/launcher.cpp:742 engines/engine.cpp:1227
+#: gui/launcher.cpp:742 engines/engine.cpp:1244
 msgid "Unknown variant"
 msgstr "अज्ञात संस्करण"
 
@@ -1878,7 +1880,7 @@ msgstr "शेडर डाउनलोड करें"
 msgid "Check on the scummvm.org website for updates of shader packs"
 msgstr "scummvm.org वेबसाइट पर शेडर पैक के अपडेट की जांच करें"
 
-#: gui/options.cpp:1700 backends/graphics/sdl/sdl-graphics.cpp:479
+#: gui/options.cpp:1700 backends/graphics/sdl/sdl-graphics.cpp:478
 msgid "Fullscreen mode"
 msgstr "पूर्ण स्क्रीन मोड"
 
@@ -2007,8 +2009,10 @@ msgid "MIDI gain:"
 msgstr ""
 
 #: gui/options.cpp:1866
-msgid "MT-32 Device:"
-msgstr ""
+#, fuzzy
+#| msgid "Music device:"
+msgid "MT-32 device:"
+msgstr "संगीत उपकरण:"
 
 #: gui/options.cpp:1866
 msgid "Specifies default sound device for Roland MT-32/LAPC1/CM32l/CM64 output"
@@ -2588,7 +2592,7 @@ msgstr ""
 "नया गेम जोड़ें (A)..."
 
 #: gui/options.cpp:2966 engines/engine.cpp:647
-#: engines/access/metaengine.cpp:294 engines/drascula/metaengine.cpp:255
+#: engines/access/metaengine.cpp:298 engines/drascula/metaengine.cpp:255
 #: engines/queen/metaengine.cpp:269 engines/sherlock/metaengine.cpp:410
 #: engines/ultima/nuvie/metaengine.cpp:71
 msgid "Move"
@@ -2763,7 +2767,7 @@ msgstr ""
 msgid "Playback"
 msgstr ""
 
-#: gui/recorderdialog.cpp:76 gui/widgets/grid.cpp:338
+#: gui/recorderdialog.cpp:76 gui/widgets/grid.cpp:341
 msgid "Edit"
 msgstr ""
 
@@ -2964,24 +2968,24 @@ msgid ""
 "in the Options dialog."
 msgstr ""
 
-#: gui/widget.cpp:467 gui/widget.cpp:469 gui/widget.cpp:474 gui/widget.cpp:476
+#: gui/widget.cpp:475 gui/widget.cpp:477 gui/widget.cpp:482 gui/widget.cpp:484
 msgid "Clear value"
 msgstr ""
 
-#: gui/widgets/grid.cpp:332
+#: gui/widgets/grid.cpp:335
 msgid "Play"
 msgstr ""
 
-#: gui/widgets/grid.cpp:335
+#: gui/widgets/grid.cpp:338
 msgid "Saves"
 msgstr "सेव"
 
-#: base/main.cpp:604
+#: base/main.cpp:608
 msgid "Bad config file format. overwrite?"
 msgstr ""
 
 #. I18N: <Add a new folder> must match the translation done in backends/fs/android/android-saf-fs.h
-#: base/main.cpp:653
+#: base/main.cpp:657
 msgid ""
 "In this new version of ScummVM for Android, significant changes were made to "
 "the file access system to allow support for modern versions of the Android "
@@ -3005,12 +3009,12 @@ msgid ""
 msgstr ""
 
 #. I18N: A button caption to dismiss a message and read it later
-#: base/main.cpp:673 base/main.cpp:698
+#: base/main.cpp:677 base/main.cpp:702
 msgid "Read Later"
 msgstr ""
 
 #. I18N: <Add a new folder> must match the translation done in backends/fs/android/android-saf-fs.h
-#: base/main.cpp:680
+#: base/main.cpp:684
 msgid ""
 "In this new version of ScummVM for Android, significant changes were made to "
 "the file access system to allow support for modern versions of the Android "
@@ -3031,7 +3035,7 @@ msgid ""
 "Repeat steps 1 and 6 for each game."
 msgstr ""
 
-#: base/main.cpp:844 base/main.cpp:893
+#: base/main.cpp:866 base/main.cpp:915
 msgid "Error running game:"
 msgstr ""
 
@@ -3275,7 +3279,7 @@ msgstr ""
 #: engines/mohawk/riven_stacks/aspit.cpp:454
 #: engines/neverhood/metaengine.cpp:200 engines/saga/metaengine.cpp:449
 #: engines/scumm/help.cpp:84 engines/scumm/help.cpp:86
-#: engines/scumm/scumm.cpp:4377 engines/sludge/keymapper_tables.h:95
+#: engines/scumm/scumm.cpp:4490 engines/sludge/keymapper_tables.h:95
 #: engines/sludge/keymapper_tables.h:144 engines/sludge/keymapper_tables.h:223
 #: engines/sludge/keymapper_tables.h:343 engines/sludge/keymapper_tables.h:355
 #: engines/sludge/keymapper_tables.h:416 engines/sludge/keymapper_tables.h:429
@@ -3341,7 +3345,7 @@ msgid "Alt"
 msgstr ""
 
 #: dists/android.strings.xml.cpp:48
-#: backends/platform/libretro/src/libretro-options-widget.cpp:249
+#: backends/platform/libretro/src/libretro-options-widget.cpp:255
 msgid "Done"
 msgstr ""
 
@@ -3498,7 +3502,7 @@ msgid ""
 msgstr ""
 
 #: engines/dialogs.cpp:201 engines/ags/ags.cpp:359
-#: engines/glk/magnetic/magnetic.cpp:197 engines/scumm/saveload.cpp:167
+#: engines/glk/magnetic/magnetic.cpp:197 engines/scumm/saveload.cpp:197
 #, fuzzy
 #| msgid "This game does not support loading games from the launcher."
 msgid "This game does not support saving from the menu. Use in-game interface"
@@ -3516,7 +3520,7 @@ msgid ""
 msgstr ""
 
 #: engines/dialogs.cpp:242 engines/ags/ags.cpp:344
-#: engines/glk/magnetic/magnetic.cpp:187 engines/scumm/saveload.cpp:99
+#: engines/glk/magnetic/magnetic.cpp:187 engines/scumm/saveload.cpp:116
 #, fuzzy
 #| msgid "This game does not support loading games from the launcher."
 msgid "This game does not support loading from the menu. Use in-game interface"
@@ -3666,7 +3670,14 @@ msgid ""
 "and any saved game you make might not work in future versions of ScummVM."
 msgstr ""
 
-#: engines/engine.cpp:844
+#: engines/engine.cpp:845
+msgid ""
+"WARNING: The game you are about to start is newly supported and is in "
+"testing mode.\n"
+"If you encounter any bugs or oddities, please report them to our bugtracker."
+msgstr ""
+
+#: engines/engine.cpp:861
 #, c-format
 msgid ""
 "The game \"%s\" you are trying to add is an add-on for \"%s\" that cannot be "
@@ -3674,32 +3685,32 @@ msgid ""
 "the base game, and start the base game itself."
 msgstr ""
 
-#: engines/engine.cpp:861
+#: engines/engine.cpp:878
 msgid "This game is not supported."
 msgstr ""
 
-#: engines/engine.cpp:861
+#: engines/engine.cpp:878
 msgid ""
 "This game is not supported for the following reason:\n"
 "\n"
 msgstr ""
 
-#: engines/engine.cpp:1007
+#: engines/engine.cpp:1024
 msgid "Loading game is currently unavailable"
 msgstr ""
 
-#: engines/engine.cpp:1036
+#: engines/engine.cpp:1053
 msgid "Saving game is currently unavailable"
 msgstr ""
 
-#: engines/engine.cpp:1205
+#: engines/engine.cpp:1222
 #, c-format
 msgid ""
 "The directory '%s' looks like an add-on for the game '%s', but ScummVM could "
 "not find any matching add-on in it."
 msgstr ""
 
-#: engines/engine.cpp:1233
+#: engines/engine.cpp:1250
 #, c-format
 msgid "Directory '%s' matches several add-ons, please pick one."
 msgstr ""
@@ -3723,6 +3734,7 @@ msgid "Game not implemented"
 msgstr ""
 
 #: engines/metaengine.cpp:75 engines/saga/metaengine.cpp:267
+#: engines/scumm/metaengine.cpp:1074
 #, fuzzy
 #| msgid "Game Options"
 msgid "Default game keymappings"
@@ -3738,7 +3750,7 @@ msgstr "गेम विकल्प(O)..."
 #: engines/hugo/metaengine.cpp:134 engines/illusions/metaengine.cpp:94
 #: engines/kyra/engine/eobcommon.cpp:369 engines/kyra/engine/lol.cpp:505
 #: engines/lure/metaengine.cpp:177 engines/made/metaengine.cpp:137
-#: engines/mads/metaengine.cpp:300 engines/mm/metaengine.cpp:186
+#: engines/mads/metaengine.cpp:322 engines/mm/metaengine.cpp:186
 #: engines/mtropolis/metaengine.cpp:161 engines/nancy/input.cpp:181
 #: engines/parallaction/metaengine.cpp:138 engines/saga/metaengine.cpp:278
 #: engines/sludge/keymapper_tables.h:561 engines/sludge/keymapper_tables.h:580
@@ -3775,7 +3787,7 @@ msgstr "दाहिना क्लिक"
 #: engines/hopkins/metaengine.cpp:217 engines/hugo/metaengine.cpp:141
 #: engines/illusions/metaengine.cpp:101 engines/kyra/engine/eobcommon.cpp:370
 #: engines/kyra/engine/lol.cpp:506 engines/lure/metaengine.cpp:183
-#: engines/made/metaengine.cpp:144 engines/mads/metaengine.cpp:306
+#: engines/made/metaengine.cpp:144 engines/mads/metaengine.cpp:328
 #: engines/mm/metaengine.cpp:192 engines/mtropolis/metaengine.cpp:167
 #: engines/nancy/input.cpp:188 engines/parallaction/metaengine.cpp:144
 #: engines/saga/metaengine.cpp:289 engines/sludge/keymapper_tables.h:567
@@ -3818,7 +3830,7 @@ msgstr "गेम मेनू"
 
 #. I18N: Skipping cutscene plaback
 #. I18N: Skipping cutscene playback
-#: engines/metaengine.cpp:112 engines/access/metaengine.cpp:221
+#: engines/metaengine.cpp:112 engines/access/metaengine.cpp:225
 #: engines/composer/metaengine.cpp:126 engines/drascula/metaengine.cpp:224
 #: engines/efh/metaengine.cpp:379 engines/freescape/movement.cpp:93
 #: engines/grim/grim.cpp:533 engines/grim/grim.cpp:633
@@ -4101,7 +4113,7 @@ msgid "Choose a new folder"
 msgstr ""
 
 #: backends/graphics/atari/atari-graphics.cpp:1060
-#: backends/graphics/sdl/sdl-graphics.cpp:515 engines/scumm/help.cpp:103
+#: backends/graphics/sdl/sdl-graphics.cpp:514 engines/scumm/help.cpp:103
 msgid "Toggle aspect ratio correction"
 msgstr ""
 
@@ -4129,37 +4141,37 @@ msgstr ""
 msgid "Fit to window (4:3)"
 msgstr ""
 
-#: backends/graphics/openglsdl/openglsdl-graphics.cpp:975
+#: backends/graphics/openglsdl/openglsdl-graphics.cpp:966
 #, c-format
 msgid "Resolution: %dx%d"
 msgstr ""
 
-#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1019
+#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1010
 #: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2869
 msgid "Active graphics filter:"
 msgstr ""
 
-#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1040
+#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1031
 #: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2903
 msgid "Enabled aspect ratio correction"
 msgstr ""
 
-#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1042
+#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1033
 #: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2909
 msgid "Disabled aspect ratio correction"
 msgstr ""
 
-#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1055
+#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1046
 #: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2925
 msgid "Filtering enabled"
 msgstr ""
 
-#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1057
+#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1048
 #: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2927
 msgid "Filtering disabled"
 msgstr ""
 
-#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1083
+#: backends/graphics/openglsdl/openglsdl-graphics.cpp:1074
 #: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2954
 msgid "Stretch mode"
 msgstr ""
@@ -4173,34 +4185,34 @@ msgstr ""
 msgid "SDL Surface (forced 8bpp mode)"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:421
+#: backends/graphics/sdl/sdl-graphics.cpp:420
 #, c-format
 msgid "Saved screenshot '%s'"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:436
+#: backends/graphics/sdl/sdl-graphics.cpp:435
 msgid "Could not save screenshot"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:481
+#: backends/graphics/sdl/sdl-graphics.cpp:480
 msgid "Windowed mode"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:492 engines/colony/metaengine.cpp:168
+#: backends/graphics/sdl/sdl-graphics.cpp:491 engines/colony/metaengine.cpp:173
 #: engines/scumm/help.cpp:88
 msgid "Toggle fullscreen"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:499 engines/scumm/help.cpp:100
+#: backends/graphics/sdl/sdl-graphics.cpp:498 engines/scumm/help.cpp:100
 #: engines/wintermute/keymapper_tables.h:960
 msgid "Toggle mouse capture"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:504
+#: backends/graphics/sdl/sdl-graphics.cpp:503
 msgid "Toggle resizable window"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:509 engines/stark/metaengine.cpp:240
+#: backends/graphics/sdl/sdl-graphics.cpp:508 engines/stark/metaengine.cpp:240
 #: engines/wintermute/keymapper_tables.h:646
 #: engines/wintermute/keymapper_tables.h:695
 #: engines/wintermute/keymapper_tables.h:1098
@@ -4213,27 +4225,27 @@ msgstr ""
 msgid "Save screenshot"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:522
+#: backends/graphics/sdl/sdl-graphics.cpp:521
 msgid "Toggle linear filtered scaling"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:529
+#: backends/graphics/sdl/sdl-graphics.cpp:528
 msgid "Cycle through stretch modes"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:535
+#: backends/graphics/sdl/sdl-graphics.cpp:534
 msgid "Increase the scale factor"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:541
+#: backends/graphics/sdl/sdl-graphics.cpp:540
 msgid "Decrease the scale factor"
 msgstr ""
 
-#: backends/graphics/sdl/sdl-graphics.cpp:548
+#: backends/graphics/sdl/sdl-graphics.cpp:547
 msgid "Switch to the next scaler"
 msgstr "अगले स्कलेर में स्विच करें"
 
-#: backends/graphics/sdl/sdl-graphics.cpp:553
+#: backends/graphics/sdl/sdl-graphics.cpp:552
 msgid "Switch to the previous scaler"
 msgstr ""
 
@@ -4327,7 +4339,7 @@ msgstr ""
 #: backends/platform/sdl/miyoo/miyoo.cpp:74
 #: backends/platform/sdl/miyoo/miyoo.cpp:101
 #: backends/platform/sdl/opendingux/opendingux.cpp:64
-#: backends/platform/sdl/ps3/ps3.cpp:57 backends/platform/sdl/psp2/psp2.cpp:56
+#: backends/platform/sdl/ps3/ps3.cpp:58 backends/platform/sdl/psp2/psp2.cpp:56
 #: backends/platform/sdl/switch/switch.cpp:48
 #, fuzzy
 #| msgid "D-pad Right"
@@ -4340,7 +4352,7 @@ msgstr "दाहिनी डी-पैड"
 #: backends/platform/sdl/miyoo/miyoo.cpp:75
 #: backends/platform/sdl/miyoo/miyoo.cpp:102
 #: backends/platform/sdl/opendingux/opendingux.cpp:65
-#: backends/platform/sdl/ps3/ps3.cpp:58 backends/platform/sdl/psp2/psp2.cpp:57
+#: backends/platform/sdl/ps3/ps3.cpp:59 backends/platform/sdl/psp2/psp2.cpp:57
 #: backends/platform/sdl/switch/switch.cpp:49
 #, fuzzy
 #| msgid "Move down"
@@ -4353,7 +4365,7 @@ msgstr "नीचे को चलें"
 #: backends/platform/sdl/miyoo/miyoo.cpp:76
 #: backends/platform/sdl/miyoo/miyoo.cpp:103
 #: backends/platform/sdl/opendingux/opendingux.cpp:66
-#: backends/platform/sdl/ps3/ps3.cpp:59 backends/platform/sdl/psp2/psp2.cpp:58
+#: backends/platform/sdl/ps3/ps3.cpp:60 backends/platform/sdl/psp2/psp2.cpp:58
 #: backends/platform/sdl/switch/switch.cpp:50
 #, fuzzy
 #| msgid "D-pad Center"
@@ -4366,7 +4378,7 @@ msgstr "डी-पैड मध्य"
 #: backends/platform/sdl/miyoo/miyoo.cpp:77
 #: backends/platform/sdl/miyoo/miyoo.cpp:104
 #: backends/platform/sdl/opendingux/opendingux.cpp:67
-#: backends/platform/sdl/ps3/ps3.cpp:60 backends/platform/sdl/psp2/psp2.cpp:59
+#: backends/platform/sdl/ps3/ps3.cpp:61 backends/platform/sdl/psp2/psp2.cpp:59
 #: backends/platform/sdl/switch/switch.cpp:51
 #, fuzzy
 #| msgid "D-pad Right"
@@ -4391,7 +4403,7 @@ msgstr "दाहिनी स्टिक"
 
 #: backends/keymapper/hardware-input.cpp:277
 #: backends/platform/sdl/opendingux/opendingux.cpp:78
-#: backends/platform/sdl/ps3/ps3.cpp:67 backends/platform/sdl/psp2/psp2.cpp:64
+#: backends/platform/sdl/ps3/ps3.cpp:68 backends/platform/sdl/psp2/psp2.cpp:64
 #: backends/platform/sdl/switch/switch.cpp:58
 #, fuzzy
 #| msgid "Right Click"
@@ -4400,7 +4412,7 @@ msgstr "दाहिना क्लिक"
 
 #: backends/keymapper/hardware-input.cpp:278
 #: backends/platform/sdl/opendingux/opendingux.cpp:79
-#: backends/platform/sdl/ps3/ps3.cpp:68 backends/platform/sdl/psp2/psp2.cpp:65
+#: backends/platform/sdl/ps3/ps3.cpp:69 backends/platform/sdl/psp2/psp2.cpp:65
 #: backends/platform/sdl/switch/switch.cpp:59
 #, fuzzy
 #| msgid "Right Click"
@@ -4408,7 +4420,7 @@ msgid "Left stick Y"
 msgstr "दाहिना क्लिक"
 
 #: backends/keymapper/hardware-input.cpp:279
-#: backends/platform/sdl/ps3/ps3.cpp:69 backends/platform/sdl/psp2/psp2.cpp:66
+#: backends/platform/sdl/ps3/ps3.cpp:70 backends/platform/sdl/psp2/psp2.cpp:66
 #: backends/platform/sdl/switch/switch.cpp:60
 #, fuzzy
 #| msgid "Right Stick"
@@ -4416,7 +4428,7 @@ msgid "Right stick X"
 msgstr "दाहिनी स्टिक"
 
 #: backends/keymapper/hardware-input.cpp:280
-#: backends/platform/sdl/ps3/ps3.cpp:70 backends/platform/sdl/psp2/psp2.cpp:67
+#: backends/platform/sdl/ps3/ps3.cpp:71 backends/platform/sdl/psp2/psp2.cpp:67
 #: backends/platform/sdl/switch/switch.cpp:61
 #, fuzzy
 #| msgid "Right Stick"
@@ -4701,10 +4713,10 @@ msgstr ""
 #: backends/platform/sdl/miyoo/miyoo.cpp:67
 #: backends/platform/sdl/miyoo/miyoo.cpp:94
 #: backends/platform/sdl/opendingux/opendingux.cpp:57
-#: backends/platform/sdl/ps3/ps3.cpp:49 backends/platform/sdl/psp2/psp2.cpp:51
+#: backends/platform/sdl/ps3/ps3.cpp:50 backends/platform/sdl/psp2/psp2.cpp:51
 #: engines/bagel/metaengine.cpp:64 engines/efh/metaengine.cpp:397
 #: engines/got/metaengine.cpp:76 engines/hypno/metaengine.cpp:363
-#: engines/mm/mm1/metaengine.cpp:50 engines/mm/mm1/metaengine.cpp:93
+#: engines/mm/mm1/metaengine.cpp:50 engines/mm/mm1/metaengine.cpp:97
 #: engines/sherlock/metaengine.cpp:660 engines/sherlock/metaengine.cpp:672
 #: engines/sherlock/metaengine.cpp:1014 engines/supernova/metaengine.cpp:303
 #: engines/titanic/metaengine.cpp:233 engines/ultima/ultima0/metaengine.cpp:47
@@ -4718,7 +4730,7 @@ msgstr ""
 #: backends/platform/sdl/miyoo/miyoo.cpp:69
 #: backends/platform/sdl/miyoo/miyoo.cpp:96
 #: backends/platform/sdl/opendingux/opendingux.cpp:59
-#: backends/platform/sdl/ps3/ps3.cpp:52 backends/platform/sdl/psp2/psp2.cpp:53
+#: backends/platform/sdl/ps3/ps3.cpp:53 backends/platform/sdl/psp2/psp2.cpp:53
 #: engines/sludge/keymapper_tables.h:349
 msgid "Start"
 msgstr "शुरू करे(S)"
@@ -5416,29 +5428,29 @@ msgstr ""
 msgid "Status: "
 msgstr ""
 
-#: backends/platform/libretro/src/libretro-options-widget.cpp:151
+#: backends/platform/libretro/src/libretro-options-widget.cpp:153
 msgid "Failed, can't access playlist file"
 msgstr ""
 
-#: backends/platform/libretro/src/libretro-options-widget.cpp:251
+#: backends/platform/libretro/src/libretro-options-widget.cpp:257
 msgid "cleaning failed"
 msgstr ""
 
-#: backends/platform/libretro/src/libretro-options-widget.cpp:253
+#: backends/platform/libretro/src/libretro-options-widget.cpp:259
 msgid "Failed, can't create hook files"
 msgstr ""
 
-#: backends/platform/libretro/src/libretro-options-widget.cpp:263
+#: backends/platform/libretro/src/libretro-options-widget.cpp:269
 #, fuzzy
 #| msgid "Select additional game directory"
 msgid "Select Playlist directory"
 msgstr "उस फोल्डर को चुने जिसमे गेम डाटा है"
 
-#: backends/platform/libretro/src/libretro-os-utils.cpp:233
+#: backends/platform/libretro/src/libretro-os-utils.cpp:235
 msgid "Libretro playlist"
 msgstr ""
 
-#: backends/platform/libretro/src/libretro-os-utils.cpp:236
+#: backends/platform/libretro/src/libretro-os-utils.cpp:238
 msgid ""
 "## Libretro playlists for ScummVM core\n"
 "Playlists used in Libretro frontends (e.g. Retroarch) are plain text lists "
@@ -5609,69 +5621,69 @@ msgstr ""
 #. I18N: Hardware key
 #: backends/platform/sdl/miyoo/miyoo.cpp:79
 #: backends/platform/sdl/miyoo/miyoo.cpp:106
-#: backends/platform/sdl/ps3/ps3.cpp:65
+#: backends/platform/sdl/ps3/ps3.cpp:66
 msgid "L2"
 msgstr ""
 
 #. I18N: Hardware key
 #: backends/platform/sdl/miyoo/miyoo.cpp:81
 #: backends/platform/sdl/miyoo/miyoo.cpp:108
-#: backends/platform/sdl/ps3/ps3.cpp:66
+#: backends/platform/sdl/ps3/ps3.cpp:67
 msgid "R2"
 msgstr ""
 
 #. I18N: Hardware key
 #: backends/platform/sdl/miyoo/miyoo.cpp:83
 #: backends/platform/sdl/miyoo/miyoo.cpp:114
-#: engines/alcachofa/metaengine.cpp:110 engines/colony/metaengine.cpp:179
-#: engines/grim/grim.cpp:545 engines/grim/grim.cpp:645
-#: engines/hdb/metaengine.cpp:264 engines/made/metaengine.cpp:186
-#: engines/phoenixvr/metaengine.cpp:101 engines/toltecs/metaengine.cpp:252
+#: engines/alcachofa/metaengine.cpp:110 engines/grim/grim.cpp:545
+#: engines/grim/grim.cpp:645 engines/hdb/metaengine.cpp:264
+#: engines/made/metaengine.cpp:186 engines/phoenixvr/metaengine.cpp:110
+#: engines/scumm/metaengine.cpp:1232 engines/toltecs/metaengine.cpp:252
 msgid "Menu"
 msgstr ""
 
 #. I18N: Hardware key
 #: backends/platform/sdl/miyoo/miyoo.cpp:110
 #: backends/platform/sdl/opendingux/opendingux.cpp:73
-#: backends/platform/sdl/ps3/ps3.cpp:53
+#: backends/platform/sdl/ps3/ps3.cpp:54
 #: backends/platform/sdl/switch/switch.cpp:44
 msgid "L3"
 msgstr ""
 
 #. I18N: Hardware key
 #: backends/platform/sdl/miyoo/miyoo.cpp:112
-#: backends/platform/sdl/ps3/ps3.cpp:54
+#: backends/platform/sdl/ps3/ps3.cpp:55
 #: backends/platform/sdl/switch/switch.cpp:45
 msgid "R3"
 msgstr ""
 
 #. I18N: Hardware key on controller
-#: backends/platform/sdl/ps3/ps3.cpp:41 backends/platform/sdl/psp2/psp2.cpp:43
+#: backends/platform/sdl/ps3/ps3.cpp:42 backends/platform/sdl/psp2/psp2.cpp:43
 #: engines/dragons/metaengine.cpp:200
 msgid "Cross"
 msgstr ""
 
 #. I18N: Hardware key on controller
-#: backends/platform/sdl/ps3/ps3.cpp:43 backends/platform/sdl/psp2/psp2.cpp:45
+#: backends/platform/sdl/ps3/ps3.cpp:44 backends/platform/sdl/psp2/psp2.cpp:45
 #: engines/dragons/metaengine.cpp:194
 msgid "Circle"
 msgstr ""
 
 #. I18N: Hardware key on controller
-#: backends/platform/sdl/ps3/ps3.cpp:45 backends/platform/sdl/psp2/psp2.cpp:47
+#: backends/platform/sdl/ps3/ps3.cpp:46 backends/platform/sdl/psp2/psp2.cpp:47
 #: engines/dragons/metaengine.cpp:182
 msgid "Square"
 msgstr ""
 
-#: backends/platform/sdl/ps3/ps3.cpp:50
+#: backends/platform/sdl/ps3/ps3.cpp:51
 msgid "PS"
 msgstr ""
 
-#: backends/platform/sdl/ps3/ps3.cpp:55
+#: backends/platform/sdl/ps3/ps3.cpp:56
 msgid "L1"
 msgstr ""
 
-#: backends/platform/sdl/ps3/ps3.cpp:56
+#: backends/platform/sdl/ps3/ps3.cpp:57
 msgid "R1"
 msgstr ""
 
@@ -5817,7 +5829,7 @@ msgstr ""
 msgid "Check for Updates..."
 msgstr ""
 
-#: engines/access/metaengine.cpp:211 engines/alcachofa/metaengine.cpp:94
+#: engines/access/metaengine.cpp:215 engines/alcachofa/metaengine.cpp:94
 #: engines/bbvs/metaengine.cpp:92 engines/buried/metaengine.cpp:133
 #: engines/chamber/metaengine.cpp:59 engines/cine/metaengine.cpp:270
 #: engines/cruise/metaengine.cpp:168 engines/dm/metaengine.cpp:124
@@ -5826,7 +5838,7 @@ msgstr ""
 #: engines/hugo/metaengine.cpp:129 engines/hypno/metaengine.cpp:128
 #: engines/illusions/metaengine.cpp:89 engines/lab/metaengine.cpp:149
 #: engines/lure/metaengine.cpp:168 engines/made/metaengine.cpp:132
-#: engines/mads/metaengine.cpp:294 engines/neverhood/metaengine.cpp:185
+#: engines/mads/metaengine.cpp:316 engines/neverhood/metaengine.cpp:185
 #: engines/ngi/metaengine.cpp:115 engines/petka/metaengine.cpp:113
 #: engines/prince/metaengine.cpp:227 engines/private/metaengine.cpp:127
 #: engines/queen/metaengine.cpp:146 engines/sherlock/metaengine.cpp:313
@@ -5843,20 +5855,20 @@ msgstr ""
 msgid "Default keymappings"
 msgstr "गेम विकल्प(O)..."
 
-#: engines/access/metaengine.cpp:215
+#: engines/access/metaengine.cpp:219
 #, fuzzy
 #| msgid "Go to end of line"
 msgid "Move / Interact / Skip"
 msgstr "पंक्ति के अंत में जाएँ"
 
-#: engines/access/metaengine.cpp:227 engines/sherlock/metaengine.cpp:483
+#: engines/access/metaengine.cpp:231 engines/sherlock/metaengine.cpp:483
 #, fuzzy
 #| msgid "Skip autosave"
 msgid "Skip movie"
 msgstr "ऑटोसेव स्किप करें"
 
 #. I18N: Move Actor to upwards direction
-#: engines/access/metaengine.cpp:233 engines/asylum/metaengine.cpp:171
+#: engines/access/metaengine.cpp:237 engines/asylum/metaengine.cpp:171
 #: engines/asylum/metaengine.cpp:198 engines/cine/metaengine.cpp:377
 #: engines/efh/metaengine.cpp:286 engines/hdb/metaengine.cpp:213
 #: engines/hypno/metaengine.cpp:302 engines/hypno/metaengine.cpp:356
@@ -5866,7 +5878,7 @@ msgid "Move up"
 msgstr "ऊपर को चलें"
 
 #. I18N: Move Actor to downwards direction
-#: engines/access/metaengine.cpp:240 engines/asylum/metaengine.cpp:177
+#: engines/access/metaengine.cpp:244 engines/asylum/metaengine.cpp:177
 #: engines/asylum/metaengine.cpp:205 engines/cine/metaengine.cpp:384
 #: engines/efh/metaengine.cpp:293 engines/hdb/metaengine.cpp:219
 #: engines/hypno/metaengine.cpp:290 engines/hypno/metaengine.cpp:342
@@ -5877,7 +5889,7 @@ msgstr "नीचे को चलें"
 
 #. I18N: Move Actor to left direction
 #. I18N: Move actor left during fight
-#: engines/access/metaengine.cpp:247 engines/asylum/metaengine.cpp:183
+#: engines/access/metaengine.cpp:251 engines/asylum/metaengine.cpp:183
 #: engines/asylum/metaengine.cpp:212 engines/cine/metaengine.cpp:391
 #: engines/efh/metaengine.cpp:300 engines/hdb/metaengine.cpp:225
 #: engines/hypno/metaengine.cpp:284 engines/hypno/metaengine.cpp:335
@@ -5890,7 +5902,7 @@ msgstr ""
 
 #. I18N: Move Actor to right direction
 #. I18N: Move actor right during fight
-#: engines/access/metaengine.cpp:254 engines/asylum/metaengine.cpp:189
+#: engines/access/metaengine.cpp:258 engines/asylum/metaengine.cpp:189
 #: engines/asylum/metaengine.cpp:219 engines/cine/metaengine.cpp:398
 #: engines/efh/metaengine.cpp:307 engines/hdb/metaengine.cpp:231
 #: engines/hypno/metaengine.cpp:296 engines/hypno/metaengine.cpp:349
@@ -5903,7 +5915,7 @@ msgid "Move right"
 msgstr "दायें मुड़िए"
 
 #. I18N: Move Actor to top-left direction
-#: engines/access/metaengine.cpp:261 engines/cine/metaengine.cpp:405
+#: engines/access/metaengine.cpp:265 engines/cine/metaengine.cpp:405
 #: engines/efh/metaengine.cpp:314
 #, fuzzy
 #| msgid "Move Left"
@@ -5911,14 +5923,14 @@ msgid "Move up-left"
 msgstr "बाएं चलें"
 
 #. I18N: Move Actor to top-right direction
-#: engines/access/metaengine.cpp:266 engines/cine/metaengine.cpp:411
+#: engines/access/metaengine.cpp:270 engines/cine/metaengine.cpp:411
 #: engines/efh/metaengine.cpp:320
 #, fuzzy
 msgid "Move up-right"
 msgstr "दायें मुड़िए"
 
 #. I18N: Move Actor to bottom-left direction
-#: engines/access/metaengine.cpp:271 engines/cine/metaengine.cpp:417
+#: engines/access/metaengine.cpp:275 engines/cine/metaengine.cpp:417
 #: engines/efh/metaengine.cpp:326
 #, fuzzy
 #| msgid "Move down"
@@ -5926,14 +5938,14 @@ msgid "Move down-left"
 msgstr "नीचे को चलें"
 
 #. I18N: Move Actor to bottom-right direction
-#: engines/access/metaengine.cpp:276 engines/cine/metaengine.cpp:423
+#: engines/access/metaengine.cpp:280 engines/cine/metaengine.cpp:423
 #: engines/efh/metaengine.cpp:332
 #, fuzzy
 msgid "Move down-right"
 msgstr "दायें मुड़िए"
 
 #. I18N: (Game name: The Lost Files of Sherlock Holmes: The Case of the Rose Tattoo) This action is used to look at an object or npc in the game
-#: engines/access/metaengine.cpp:281 engines/bbvs/metaengine.cpp:124
+#: engines/access/metaengine.cpp:285 engines/bbvs/metaengine.cpp:124
 #: engines/dgds/metaengine.cpp:83 engines/drascula/metaengine.cpp:230
 #: engines/petka/metaengine.cpp:130 engines/scumm/help.cpp:167
 #: engines/scumm/help.cpp:231 engines/sherlock/metaengine.cpp:405
@@ -5944,7 +5956,7 @@ msgstr "दायें मुड़िए"
 msgid "Look"
 msgstr "देखो"
 
-#: engines/access/metaengine.cpp:289 engines/drascula/metaengine.cpp:240
+#: engines/access/metaengine.cpp:293 engines/drascula/metaengine.cpp:240
 #: engines/queen/metaengine.cpp:259 engines/saga/metaengine.cpp:369
 #: engines/scumm/help.cpp:125 engines/scumm/help.cpp:140
 #: engines/scumm/help.cpp:165 engines/scumm/help.cpp:193
@@ -5954,16 +5966,16 @@ msgstr "देखो"
 msgid "Open"
 msgstr ""
 
-#: engines/access/metaengine.cpp:299 engines/scumm/help.cpp:128
+#: engines/access/metaengine.cpp:303 engines/scumm/help.cpp:128
 #: engines/ultima/nuvie/metaengine.cpp:70
 msgid "Get"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/access/metaengine.cpp:304 engines/access/metaengine.cpp:325
+#: engines/access/metaengine.cpp:308 engines/access/metaengine.cpp:329
 #: engines/bbvs/metaengine.cpp:136 engines/cine/metaengine.cpp:342
 #: engines/efh/metaengine.cpp:462 engines/hdb/metaengine.cpp:237
-#: engines/lab/metaengine.cpp:323 engines/mm/mm1/metaengine.cpp:82
+#: engines/lab/metaengine.cpp:323 engines/mm/mm1/metaengine.cpp:86
 #: engines/petka/metaengine.cpp:151 engines/queen/metaengine.cpp:294
 #: engines/saga/metaengine.cpp:379 engines/scumm/help.cpp:129
 #: engines/scumm/help.cpp:153 engines/scumm/help.cpp:171
@@ -5980,11 +5992,11 @@ msgstr ""
 msgid "Use"
 msgstr ""
 
-#: engines/access/metaengine.cpp:309
+#: engines/access/metaengine.cpp:313
 msgid "Goto"
 msgstr ""
 
-#: engines/access/metaengine.cpp:314 engines/access/metaengine.cpp:345
+#: engines/access/metaengine.cpp:318 engines/access/metaengine.cpp:349
 #: engines/bbvs/metaengine.cpp:130 engines/drascula/metaengine.cpp:250
 #: engines/efh/metaengine.cpp:506 engines/petka/metaengine.cpp:158
 #: engines/scumm/help.cpp:174 engines/scumm/help.cpp:226
@@ -5995,18 +6007,18 @@ msgstr ""
 msgid "Talk"
 msgstr ""
 
-#: engines/access/metaengine.cpp:319 engines/scumm/help.cpp:175
+#: engines/access/metaengine.cpp:323 engines/scumm/help.cpp:175
 msgid "Travel"
 msgstr ""
 
-#: engines/access/metaengine.cpp:330 engines/cine/metaengine.cpp:332
+#: engines/access/metaengine.cpp:334 engines/cine/metaengine.cpp:332
 #: engines/petka/metaengine.cpp:144 engines/saga/metaengine.cpp:394
 #: engines/supernova/metaengine.cpp:331
 msgid "Take"
 msgstr ""
 
 #. I18N: Action in In Cold Blood
-#: engines/access/metaengine.cpp:335 engines/alcachofa/metaengine.cpp:116
+#: engines/access/metaengine.cpp:339 engines/alcachofa/metaengine.cpp:116
 #: engines/cine/metaengine.cpp:337 engines/crab/input/input.cpp:251
 #: engines/cruise/metaengine.cpp:192 engines/draci/metaengine.cpp:237
 #: engines/dragons/metaengine.cpp:147 engines/drascula/metaengine.cpp:218
@@ -6014,7 +6026,7 @@ msgstr ""
 #: engines/grim/grim.cpp:621 engines/hdb/metaengine.cpp:251
 #: engines/hpl1/metaengine.cpp:94 engines/icb/icb.cpp:101
 #: engines/icb/icb.cpp:179 engines/petka/metaengine.cpp:173
-#: engines/phoenixvr/metaengine.cpp:73 engines/scumm/help.cpp:228
+#: engines/phoenixvr/metaengine.cpp:82 engines/scumm/help.cpp:228
 #: engines/scumm/help.cpp:237 engines/scumm/help.cpp:244
 #: engines/scumm/help.cpp:252 engines/sherlock/metaengine.cpp:435
 #: engines/sludge/keymapper_tables.h:58 engines/sludge/keymapper_tables.h:119
@@ -6026,24 +6038,24 @@ msgstr ""
 msgid "Inventory"
 msgstr ""
 
-#: engines/access/metaengine.cpp:340 engines/ultima/ultima4/metaengine.cpp:51
+#: engines/access/metaengine.cpp:344 engines/ultima/ultima4/metaengine.cpp:51
 msgid "Climb"
 msgstr ""
 
-#: engines/access/metaengine.cpp:350 engines/bbvs/metaengine.cpp:142
-#: engines/freescape/games/castle/castle.cpp:503
+#: engines/access/metaengine.cpp:354 engines/bbvs/metaengine.cpp:142
+#: engines/freescape/games/castle/castle.cpp:511
 #: engines/petka/metaengine.cpp:137 engines/scumm/help.cpp:225
 #: engines/tsage/metaengine.cpp:201
 msgid "Walk"
 msgstr ""
 
-#: engines/access/metaengine.cpp:361
+#: engines/access/metaengine.cpp:365
 #, fuzzy
 #| msgid "Go to end of line"
 msgid "Open save/load menu"
 msgstr "पंक्ति के अंत में जाएँ"
 
-#: engines/access/resources.cpp:43 engines/drascula/drascula.cpp:993
+#: engines/access/resources.cpp:46 engines/drascula/drascula.cpp:993
 #: engines/hugo/hugo.cpp:461 engines/lure/lure.cpp:57
 #: engines/mortevielle/mortevielle.cpp:300 engines/sky/compact.cpp:129
 #: engines/supernova/supernova.cpp:467 engines/teenagent/resources.cpp:312
@@ -6053,7 +6065,7 @@ msgstr "पंक्ति के अंत में जाएँ"
 msgid "Unable to locate the '%s' engine data file."
 msgstr ""
 
-#: engines/access/resources.cpp:51 engines/drascula/drascula.cpp:1009
+#: engines/access/resources.cpp:54 engines/drascula/drascula.cpp:1009
 #: engines/hugo/hugo.cpp:473 engines/lure/lure.cpp:66
 #: engines/mortevielle/mortevielle.cpp:308 engines/supernova/supernova.cpp:472
 #: engines/teenagent/resources.cpp:329 engines/tony/tony.cpp:200
@@ -6062,7 +6074,7 @@ msgstr ""
 msgid "The '%s' engine data file is corrupt."
 msgstr ""
 
-#: engines/access/resources.cpp:60 engines/drascula/drascula.cpp:1020
+#: engines/access/resources.cpp:63 engines/drascula/drascula.cpp:1020
 #: engines/hugo/hugo.cpp:483 engines/lure/lure.cpp:69
 #: engines/mortevielle/mortevielle.cpp:318 engines/tony/tony.cpp:211
 #: engines/toon/toon.cpp:5449
@@ -6153,8 +6165,9 @@ msgstr ""
 #: engines/crab/metaengine.cpp:34 engines/darkseed/dialogs.cpp:95
 #: engines/drascula/metaengine.cpp:42 engines/dreamweb/metaengine.cpp:48
 #: engines/got/metaengine.cpp:35 engines/groovie/metaengine.cpp:53
-#: engines/m4/metaengine.cpp:37 engines/nancy/metaengine.cpp:104
-#: engines/neverhood/dialogs.cpp:47 engines/phoenixvr/metaengine.cpp:38
+#: engines/m4/metaengine.cpp:37 engines/mads/metaengine.cpp:116
+#: engines/nancy/metaengine.cpp:104 engines/neverhood/dialogs.cpp:47
+#: engines/pelrock/metaengine.cpp:35 engines/phoenixvr/metaengine.cpp:47
 #: engines/sci/detection_options.h:105 engines/sherlock/metaengine.cpp:47
 #: engines/toltecs/metaengine.cpp:44 engines/trecision/metaengine.cpp:41
 #: engines/ultima/metaengine.cpp:56 engines/waynesworld/metaengine.cpp:37
@@ -6167,8 +6180,9 @@ msgstr ""
 #: engines/crab/metaengine.cpp:35 engines/darkseed/dialogs.cpp:96
 #: engines/drascula/metaengine.cpp:43 engines/dreamweb/metaengine.cpp:49
 #: engines/got/metaengine.cpp:36 engines/groovie/metaengine.cpp:54
-#: engines/m4/metaengine.cpp:38 engines/nancy/metaengine.cpp:105
-#: engines/neverhood/dialogs.cpp:48 engines/phoenixvr/metaengine.cpp:39
+#: engines/m4/metaengine.cpp:38 engines/mads/metaengine.cpp:117
+#: engines/nancy/metaengine.cpp:105 engines/neverhood/dialogs.cpp:48
+#: engines/pelrock/metaengine.cpp:36 engines/phoenixvr/metaengine.cpp:48
 #: engines/sci/detection_options.h:106 engines/sherlock/metaengine.cpp:48
 #: engines/toltecs/metaengine.cpp:45 engines/trecision/metaengine.cpp:42
 #: engines/ultima/metaengine.cpp:57 engines/waynesworld/metaengine.cpp:38
@@ -6235,7 +6249,7 @@ msgstr ""
 
 #: engines/agi/metaengine.cpp:195 engines/agos/dialogs.cpp:38
 #: engines/dreamweb/metaengine.cpp:36 engines/gob/metaengine.cpp:45
-#: engines/lure/metaengine.cpp:41 engines/mads/metaengine.cpp:54
+#: engines/lure/metaengine.cpp:41 engines/mads/metaengine.cpp:56
 #: engines/mm/metaengine.cpp:46 engines/saga/metaengine.cpp:52
 #: engines/scumm/dialogs.cpp:1233 engines/scumm/metaengine.cpp:821
 #: engines/tot/metaengine.cpp:37
@@ -6244,7 +6258,7 @@ msgstr ""
 
 #: engines/agi/metaengine.cpp:196 engines/agos/dialogs.cpp:39
 #: engines/dreamweb/metaengine.cpp:37 engines/gob/metaengine.cpp:46
-#: engines/lure/metaengine.cpp:42 engines/mads/metaengine.cpp:55
+#: engines/lure/metaengine.cpp:42 engines/mads/metaengine.cpp:57
 #: engines/mm/metaengine.cpp:47 engines/saga/metaengine.cpp:53
 #: engines/scumm/dialogs.cpp:1234 engines/scumm/metaengine.cpp:822
 msgid "Enable any copy protection that would otherwise be bypassed by default."
@@ -6371,7 +6385,7 @@ msgstr ""
 #: engines/hypno/metaengine.cpp:267 engines/hypno/metaengine.cpp:311
 #: engines/illusions/metaengine.cpp:90 engines/lab/metaengine.cpp:152
 #: engines/lure/metaengine.cpp:169 engines/made/metaengine.cpp:133
-#: engines/mads/metaengine.cpp:295 engines/neverhood/metaengine.cpp:186
+#: engines/mads/metaengine.cpp:317 engines/neverhood/metaengine.cpp:186
 #: engines/queen/metaengine.cpp:147 engines/saga/metaengine.cpp:268
 #: engines/sludge/keymapper_tables.h:33 engines/stark/metaengine.cpp:185
 #: engines/sword1/metaengine.cpp:267 engines/tinsel/metaengine.cpp:241
@@ -6434,7 +6448,7 @@ msgstr ""
 
 #: engines/agos/metaengine.cpp:228 engines/dm/metaengine.cpp:186
 #: engines/kyra/engine/eobcommon.cpp:375 engines/kyra/engine/lol.cpp:517
-#: engines/lab/metaengine.cpp:257 engines/mm/mm1/metaengine.cpp:98
+#: engines/lab/metaengine.cpp:257 engines/mm/mm1/metaengine.cpp:102
 #: engines/mohawk/riven.cpp:901 engines/pegasus/pegasus.cpp:2740
 #: engines/twine/metaengine.cpp:353 engines/ultima/ultima0/metaengine.cpp:80
 #: engines/ultima/ultima8/metaengine.cpp:48
@@ -6448,7 +6462,7 @@ msgstr "बांए मुड़िए"
 
 #: engines/agos/metaengine.cpp:234 engines/dm/metaengine.cpp:206
 #: engines/kyra/engine/eobcommon.cpp:376 engines/kyra/engine/lol.cpp:518
-#: engines/lab/metaengine.cpp:271 engines/mm/mm1/metaengine.cpp:99
+#: engines/lab/metaengine.cpp:271 engines/mm/mm1/metaengine.cpp:103
 #: engines/mohawk/riven.cpp:907 engines/pegasus/pegasus.cpp:2747
 #: engines/twine/metaengine.cpp:346 engines/ultima/ultima0/metaengine.cpp:81
 #: engines/ultima/ultima8/metaengine.cpp:49
@@ -6558,7 +6572,7 @@ msgstr ""
 msgid "Quick load or save game isn't supported in this location"
 msgstr ""
 
-#: engines/agos/saveload.cpp:160 engines/scumm/scumm.cpp:3319
+#: engines/agos/saveload.cpp:160 engines/scumm/scumm.cpp:3429
 #, c-format
 msgid ""
 "Failed to load saved game from file:\n"
@@ -6566,7 +6580,7 @@ msgid ""
 "%s"
 msgstr ""
 
-#: engines/agos/saveload.cpp:195 engines/scumm/scumm.cpp:3306
+#: engines/agos/saveload.cpp:195 engines/scumm/scumm.cpp:3416
 #, c-format
 msgid ""
 "Failed to save game to file:\n"
@@ -6574,7 +6588,7 @@ msgid ""
 "%s"
 msgstr ""
 
-#: engines/agos/saveload.cpp:203 engines/scumm/scumm.cpp:3339
+#: engines/agos/saveload.cpp:203 engines/scumm/scumm.cpp:3449
 #, c-format
 msgid ""
 "Successfully saved game in file:\n"
@@ -6690,7 +6704,7 @@ msgid "Whether textures should be linearly filtered"
 msgstr ""
 
 #: engines/alcachofa/metaengine.cpp:98 engines/cine/metaengine.cpp:347
-#: engines/freescape/games/castle/castle.cpp:520
+#: engines/freescape/games/castle/castle.cpp:528
 #, fuzzy
 #| msgid "Active"
 msgid "Activate"
@@ -6724,7 +6738,7 @@ msgid "Show version"
 msgstr "version दिखाये"
 
 #: engines/asylum/metaengine.cpp:120 engines/crab/input/input.cpp:271
-#: engines/phoenixvr/metaengine.cpp:96 engines/queen/metaengine.cpp:253
+#: engines/phoenixvr/metaengine.cpp:105 engines/queen/metaengine.cpp:253
 #: engines/sludge/keymapper_tables.h:308 engines/sludge/keymapper_tables.h:404
 #: engines/sludge/keymapper_tables.h:471 engines/sludge/keymapper_tables.h:502
 #: engines/ultima/nuvie/metaengine.cpp:92
@@ -6733,7 +6747,7 @@ msgid "Quick load"
 msgstr ""
 
 #: engines/asylum/metaengine.cpp:125 engines/crab/input/input.cpp:266
-#: engines/phoenixvr/metaengine.cpp:91 engines/queen/metaengine.cpp:247
+#: engines/phoenixvr/metaengine.cpp:100 engines/queen/metaengine.cpp:247
 #: engines/sludge/keymapper_tables.h:64 engines/sludge/keymapper_tables.h:303
 #: engines/sludge/keymapper_tables.h:410 engines/sludge/keymapper_tables.h:465
 #: engines/sludge/keymapper_tables.h:496 engines/ultima/nuvie/metaengine.cpp:91
@@ -6851,7 +6865,7 @@ msgstr ""
 #: engines/bbvs/metaengine.cpp:111 engines/cruise/metaengine.cpp:223
 #: engines/freescape/movement.cpp:107 engines/got/metaengine.cpp:78
 #: engines/hugo/metaengine.cpp:197 engines/lure/metaengine.cpp:209
-#: engines/mads/metaengine.cpp:312 engines/mm/mm1/metaengine.cpp:42
+#: engines/mads/metaengine.cpp:334 engines/mm/mm1/metaengine.cpp:42
 #: engines/mm/mm1/metaengine.cpp:48 engines/saga/metaengine.cpp:328
 #: engines/tinsel/metaengine.cpp:258 engines/tsage/metaengine.cpp:190
 #: engines/tucker/metaengine.cpp:221 engines/twine/metaengine.cpp:388
@@ -6902,29 +6916,29 @@ msgstr "गेम विकल्प(O)..."
 msgid "Open inventory"
 msgstr ""
 
-#: engines/bladerunner/bladerunner.cpp:395
+#: engines/bladerunner/bladerunner.cpp:396
 msgid "Failed to initialize resources"
 msgstr ""
 
-#: engines/bladerunner/bladerunner.cpp:1166
+#: engines/bladerunner/bladerunner.cpp:1167
 msgid "A required game resource was not found"
 msgstr ""
 
-#: engines/bladerunner/bladerunner.cpp:2753
+#: engines/bladerunner/bladerunner.cpp:2754
 msgid ""
 "WARNING: This game was saved in Restored Cut Content mode, but you are "
 "playing in Original Content mode. The mode will be adjusted to Restored Cut "
 "Content for this session until you completely Quit the game."
 msgstr ""
 
-#: engines/bladerunner/bladerunner.cpp:2755
+#: engines/bladerunner/bladerunner.cpp:2756
 msgid ""
 "WARNING: This game was saved in Original Content mode, but you are playing "
 "in Restored Cut Content mode. The mode will be adjusted to Original Content "
 "mode for this session until you completely Quit the game."
 msgstr ""
 
-#: engines/bladerunner/bladerunner.cpp:2757
+#: engines/bladerunner/bladerunner.cpp:2758
 msgid "Continue"
 msgstr ""
 
@@ -7044,8 +7058,8 @@ msgstr "मैन्युअल मोड"
 #. I18N: This keymap allows skipping video cutscenes
 #: engines/bladerunner/metaengine.cpp:229 engines/buried/metaengine.cpp:160
 #: engines/darkseed/metaengine.cpp:65 engines/hypno/metaengine.cpp:152
-#: engines/phoenixvr/metaengine.cpp:85 engines/scumm/help.cpp:79
-#: engines/scumm/metaengine.cpp:1066 engines/supernova/metaengine.cpp:309
+#: engines/phoenixvr/metaengine.cpp:94 engines/scumm/help.cpp:79
+#: engines/scumm/metaengine.cpp:1150 engines/supernova/metaengine.cpp:309
 #: engines/toltecs/metaengine.cpp:246 engines/twp/metaengine.cpp:162
 #: engines/zvision/metaengine.cpp:304
 msgid "Skip cutscene"
@@ -7149,13 +7163,13 @@ msgstr ""
 #: engines/cge/metaengine.cpp:221 engines/cge2/metaengine.cpp:235
 #: engines/dgds/metaengine.cpp:75 engines/dm/metaengine.cpp:174
 #: engines/drascula/metaengine.cpp:285 engines/efh/metaengine.cpp:272
-#: engines/freescape/games/castle/castle.cpp:465
+#: engines/freescape/games/castle/castle.cpp:473
 #: engines/freescape/games/dark/dark.cpp:226
-#: engines/freescape/games/driller/driller.cpp:125
-#: engines/freescape/games/eclipse/eclipse.cpp:351
+#: engines/freescape/games/driller/driller.cpp:119
+#: engines/freescape/games/eclipse/eclipse.cpp:330
 #: engines/hopkins/metaengine.cpp:236 engines/hugo/metaengine.cpp:165
 #: engines/lure/metaengine.cpp:191 engines/made/metaengine.cpp:192
-#: engines/mads/metaengine.cpp:325 engines/mohawk/myst.cpp:583
+#: engines/mads/metaengine.cpp:347 engines/mohawk/myst.cpp:583
 #: engines/mohawk/riven.cpp:864 engines/pegasus/pegasus.cpp:2825
 #: engines/petka/metaengine.cpp:198 engines/prince/metaengine.cpp:243
 #: engines/saga/metaengine.cpp:442 engines/sherlock/metaengine.cpp:462
@@ -7177,10 +7191,10 @@ msgstr ""
 #: engines/cge/metaengine.cpp:227 engines/cge2/metaengine.cpp:241
 #: engines/dgds/metaengine.cpp:74 engines/drascula/metaengine.cpp:260
 #: engines/efh/metaengine.cpp:279 engines/efh/metaengine.cpp:613
-#: engines/freescape/games/castle/castle.cpp:470
+#: engines/freescape/games/castle/castle.cpp:478
 #: engines/freescape/games/dark/dark.cpp:231
-#: engines/freescape/games/driller/driller.cpp:130
-#: engines/freescape/games/eclipse/eclipse.cpp:356
+#: engines/freescape/games/driller/driller.cpp:124
+#: engines/freescape/games/eclipse/eclipse.cpp:335
 #: engines/hopkins/metaengine.cpp:242 engines/made/metaengine.cpp:198
 #: engines/mohawk/myst_stacks/menu.cpp:283
 #: engines/mohawk/riven_stacks/aspit.cpp:349 engines/pegasus/pegasus.cpp:2831
@@ -7227,11 +7241,11 @@ msgstr ""
 #: engines/bladerunner/metaengine.cpp:375 engines/cruise/metaengine.cpp:229
 #: engines/darkseed/metaengine.cpp:60 engines/dragons/metaengine.cpp:223
 #: engines/efh/metaengine.cpp:373 engines/efh/metaengine.cpp:619
-#: engines/freescape/games/castle/castle.cpp:478
+#: engines/freescape/games/castle/castle.cpp:486
 #: engines/freescape/games/dark/dark.cpp:236
-#: engines/freescape/games/driller/driller.cpp:135
-#: engines/freescape/games/eclipse/eclipse.cpp:361
-#: engines/mads/metaengine.cpp:381 engines/phoenixvr/metaengine.cpp:80
+#: engines/freescape/games/driller/driller.cpp:129
+#: engines/freescape/games/eclipse/eclipse.cpp:340
+#: engines/mads/metaengine.cpp:403 engines/phoenixvr/metaengine.cpp:89
 #: engines/saga/metaengine.cpp:437 engines/sherlock/metaengine.cpp:359
 #: engines/sherlock/metaengine.cpp:618 engines/sherlock/metaengine.cpp:852
 #: engines/stark/metaengine.cpp:280 engines/sword1/metaengine.cpp:295
@@ -7242,13 +7256,13 @@ msgstr ""
 msgid "Quit game"
 msgstr "गेम quit करें"
 
-#: engines/bolt/metaengine.cpp:34
+#: engines/bolt/metaengine.cpp:37
 #, fuzzy
 #| msgid "Change game options"
 msgid "Extended game resolution"
 msgstr "गेम के विकल्प चुनें"
 
-#: engines/bolt/metaengine.cpp:35
+#: engines/bolt/metaengine.cpp:38
 msgid ""
 "This option allows the game to play at a slightly extended resolution. This "
 "is what the Mac and CDi versions are supposed to play like."
@@ -7522,7 +7536,7 @@ msgstr "Objects और Options के लिए text to speech इनेबल �
 
 #: engines/cge2/metaengine.cpp:60 engines/draci/metaengine.cpp:45
 #: engines/dreamweb/metaengine.cpp:74 engines/griffon/metaengine.cpp:41
-#: engines/lure/metaengine.cpp:54 engines/mads/metaengine.cpp:128
+#: engines/lure/metaengine.cpp:54 engines/mads/metaengine.cpp:142
 #: engines/parallaction/metaengine.cpp:53 engines/prince/metaengine.cpp:41
 #: engines/sci/detection_options.h:222 engines/sherlock/metaengine.cpp:121
 #: engines/supernova/metaengine.cpp:54 engines/teenagent/metaengine.cpp:50
@@ -7675,7 +7689,7 @@ msgstr "आगे बढ़ो"
 
 #: engines/colony/metaengine.cpp:113 engines/dm/metaengine.cpp:216
 #: engines/freescape/movement.cpp:53 engines/hpl1/metaengine.cpp:78
-#: engines/mm/mm1/metaengine.cpp:100
+#: engines/mm/mm1/metaengine.cpp:104
 #, fuzzy
 #| msgid "Strafe Left"
 msgid "Strafe left"
@@ -7683,27 +7697,27 @@ msgstr "बाएं Strafe करें"
 
 #: engines/colony/metaengine.cpp:120 engines/dm/metaengine.cpp:236
 #: engines/freescape/movement.cpp:61 engines/hpl1/metaengine.cpp:79
-#: engines/mm/mm1/metaengine.cpp:101
+#: engines/mm/mm1/metaengine.cpp:105
 #, fuzzy
 #| msgid "Strafe Right"
 msgid "Strafe right"
 msgstr "दाहिने strafe करें"
 
 #: engines/colony/metaengine.cpp:127
-#: engines/freescape/games/castle/castle.cpp:488
+#: engines/freescape/games/castle/castle.cpp:496
 #: engines/freescape/games/dark/dark.cpp:252
-#: engines/freescape/games/driller/driller.cpp:149
-#: engines/freescape/games/eclipse/eclipse.cpp:374
+#: engines/freescape/games/driller/driller.cpp:143
+#: engines/freescape/games/eclipse/eclipse.cpp:353
 #, fuzzy
 #| msgid "Strafe Left"
 msgid "Rotate left"
 msgstr "बाएं Strafe करें"
 
 #: engines/colony/metaengine.cpp:132
-#: engines/freescape/games/castle/castle.cpp:493
+#: engines/freescape/games/castle/castle.cpp:501
 #: engines/freescape/games/dark/dark.cpp:257
-#: engines/freescape/games/driller/driller.cpp:154
-#: engines/freescape/games/eclipse/eclipse.cpp:379
+#: engines/freescape/games/driller/driller.cpp:148
+#: engines/freescape/games/eclipse/eclipse.cpp:358
 #, fuzzy
 #| msgid "Strafe Right"
 msgid "Rotate right"
@@ -7716,39 +7730,44 @@ msgid "Look behind"
 msgstr "नीचे देखें"
 
 #: engines/colony/metaengine.cpp:152
+#: engines/freescape/games/castle/castle.cpp:523
+#: engines/freescape/games/eclipse/eclipse.cpp:396
+#, fuzzy
+#| msgid "Move Forward"
+msgid "Face forward"
+msgstr "आगे बढ़ो"
+
+#: engines/colony/metaengine.cpp:157
 #, fuzzy
 #| msgid "Manual mode"
 msgid "Toggle mouselook"
 msgstr "मैन्युअल मोड"
 
-#: engines/colony/metaengine.cpp:158
+#: engines/colony/metaengine.cpp:163
 #, fuzzy
 #| msgid "Manual mode"
 msgid "Toggle dashboard"
 msgstr "मैन्युअल मोड"
 
-#: engines/colony/metaengine.cpp:163
+#: engines/colony/metaengine.cpp:168
 #, fuzzy
 msgid "Toggle wireframe"
 msgstr "दायें मुड़िए"
 
-#: engines/colony/metaengine.cpp:173 engines/hypno/metaengine.cpp:146
-#: engines/lab/metaengine.cpp:209 engines/ngi/metaengine.cpp:168
-#: engines/sherlock/metaengine.cpp:872 engines/teenagent/metaengine.cpp:232
-#: engines/toon/metaengine.cpp:98 engines/voyeur/metaengine.cpp:235
+#: engines/colony/metaengine.cpp:178
 #, fuzzy
-msgid "Skip intro"
+msgid "Menu / Skip intro"
 msgstr "छिपी हुई files दिखाये"
 
-#: engines/colony/metaengine.cpp:185 engines/ultima/ultima8/metaengine.cpp:89
+#: engines/colony/metaengine.cpp:184 engines/ultima/ultima8/metaengine.cpp:89
 msgid "Fire weapon"
 msgstr ""
 
-#: engines/colony/savegame.cpp:290
+#: engines/colony/savegame.cpp:291
 msgid "Saving is only available in first-person view."
 msgstr ""
 
-#: engines/colony/savegame.cpp:299
+#: engines/colony/savegame.cpp:300
 msgid "Loading is only available in first-person view."
 msgstr ""
 
@@ -7761,7 +7780,7 @@ msgstr "राइट क्लिक इंटरैक्ट"
 #. I18N: Combat command in Might & Magic 1
 #: engines/crab/input/input.cpp:125 engines/efh/metaengine.cpp:487
 #: engines/efh/metaengine.cpp:512 engines/griffon/metaengine.cpp:145
-#: engines/mm/mm1/metaengine.cpp:66 engines/scumm/metaengine.cpp:1053
+#: engines/mm/mm1/metaengine.cpp:70 engines/scumm/metaengine.cpp:1137
 #: engines/ultima/ultima0/metaengine.cpp:82
 #: engines/ultima/ultima4/metaengine.cpp:48
 #: engines/ultima/nuvie/metaengine.cpp:74
@@ -7769,7 +7788,7 @@ msgid "Attack"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/crab/input/input.cpp:130 engines/mm/mm1/metaengine.cpp:68
+#: engines/crab/input/input.cpp:130 engines/mm/mm1/metaengine.cpp:72
 msgid "Block"
 msgstr ""
 
@@ -7919,7 +7938,7 @@ msgstr ""
 
 #. I18N: Perform action on object where cursor points
 #: engines/darkseed/metaengine.cpp:42 engines/dragons/metaengine.cpp:135
-#: engines/phoenixvr/metaengine.cpp:66 engines/tinsel/metaengine.cpp:294
+#: engines/phoenixvr/metaengine.cpp:75 engines/tinsel/metaengine.cpp:294
 #: engines/twp/metaengine.cpp:150
 msgid "Action"
 msgstr ""
@@ -8458,7 +8477,7 @@ msgstr ""
 
 #. I18N: Run is a movement type
 #. I18N: Action in In Cold Blood
-#: engines/efh/metaengine.cpp:530 engines/freescape/games/castle/castle.cpp:498
+#: engines/efh/metaengine.cpp:530 engines/freescape/games/castle/castle.cpp:506
 #: engines/grim/grim.cpp:501 engines/grim/grim.cpp:596
 #: engines/hpl1/metaengine.cpp:82 engines/icb/icb.cpp:131
 #: engines/icb/icb.cpp:197 engines/ultima/ultima8/metaengine.cpp:56
@@ -8684,7 +8703,7 @@ msgid "Enable background music ported from the C64 version"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/freescape/movement.cpp:69 engines/mm/mm1/metaengine.cpp:80
+#: engines/freescape/movement.cpp:69 engines/mm/mm1/metaengine.cpp:84
 msgid "Shoot"
 msgstr ""
 
@@ -8719,45 +8738,43 @@ msgstr "मैन्युअल मोड"
 msgid "Info menu"
 msgstr "गेम मेनू"
 
-#: engines/freescape/games/castle/castle.cpp:455
+#. I18N: Toggles the red/blue stereoscopic 3D effect (anaglyph glasses).
+#: engines/freescape/movement.cpp:119
+msgid "Toggle red/blue 3D"
+msgstr ""
+
+#: engines/freescape/games/castle/castle.cpp:463
 #, fuzzy
 #| msgid "Select shader"
 msgid "Select prince"
 msgstr "Shader चुनें"
 
-#: engines/freescape/games/castle/castle.cpp:460
+#: engines/freescape/games/castle/castle.cpp:468
 #, fuzzy
 #| msgid "Select shader"
 msgid "Select princess"
 msgstr "Shader चुनें"
 
-#: engines/freescape/games/castle/castle.cpp:483
+#: engines/freescape/games/castle/castle.cpp:491
 #: engines/freescape/games/dark/dark.cpp:246
-#: engines/freescape/games/driller/driller.cpp:143
-#: engines/freescape/games/eclipse/eclipse.cpp:369
+#: engines/freescape/games/driller/driller.cpp:137
+#: engines/freescape/games/eclipse/eclipse.cpp:348
 #: engines/hugo/metaengine.cpp:154
 #, fuzzy
 #| msgid "Manual mode"
 msgid "Toggle sound"
 msgstr "मैन्युअल मोड"
 
-#: engines/freescape/games/castle/castle.cpp:509
+#: engines/freescape/games/castle/castle.cpp:517
 msgid "Crawl"
 msgstr ""
 
-#: engines/freescape/games/castle/castle.cpp:515
-#: engines/freescape/games/eclipse/eclipse.cpp:417
-#, fuzzy
-#| msgid "Move Forward"
-msgid "Face forward"
-msgstr "आगे बढ़ो"
-
-#: engines/freescape/games/castle/castle.cpp:526
+#: engines/freescape/games/castle/castle.cpp:534
 msgid "Run (hold)"
 msgstr ""
 
 #: engines/freescape/games/dark/dark.cpp:262
-#: engines/freescape/games/driller/driller.cpp:188
+#: engines/freescape/games/driller/driller.cpp:182
 #: engines/ultima/ultima8/metaengine.cpp:97
 #, fuzzy
 #| msgid "Turn Left"
@@ -8765,7 +8782,7 @@ msgid "Roll left"
 msgstr "बांए मुड़िए"
 
 #: engines/freescape/games/dark/dark.cpp:267
-#: engines/freescape/games/driller/driller.cpp:193
+#: engines/freescape/games/driller/driller.cpp:187
 #: engines/ultima/ultima8/metaengine.cpp:98
 #, fuzzy
 msgid "Roll right"
@@ -8773,18 +8790,18 @@ msgstr "दायें मुड़िए"
 
 #. I18N: Illustrates the angle at which you turn left or right.
 #: engines/freescape/games/dark/dark.cpp:273
-#: engines/freescape/games/driller/driller.cpp:160
+#: engines/freescape/games/driller/driller.cpp:154
 msgid "Increase turn angle"
 msgstr ""
 
 #: engines/freescape/games/dark/dark.cpp:278
-#: engines/freescape/games/driller/driller.cpp:165
+#: engines/freescape/games/driller/driller.cpp:159
 msgid "Decrease turn angle"
 msgstr ""
 
 #. I18N: STEP SIZE: Measures the size of one movement in the direction you are facing (1-250 standard distance units (SDUs))
 #: engines/freescape/games/dark/dark.cpp:284
-#: engines/freescape/games/driller/driller.cpp:171
+#: engines/freescape/games/driller/driller.cpp:165
 #, fuzzy
 #| msgid "Manual mode"
 msgid "Increase step size"
@@ -8792,19 +8809,19 @@ msgstr "मैन्युअल मोड"
 
 #. I18N: STEP SIZE: Measures the size of one movement in the direction you are facing (1-250 standard distance units (SDUs))
 #: engines/freescape/games/dark/dark.cpp:290
-#: engines/freescape/games/driller/driller.cpp:177
+#: engines/freescape/games/driller/driller.cpp:171
 #, fuzzy
 #| msgid "Manual mode"
 msgid "Decrease step size"
 msgstr "मैन्युअल मोड"
 
 #: engines/freescape/games/dark/dark.cpp:295
-#: engines/freescape/games/driller/driller.cpp:182
+#: engines/freescape/games/driller/driller.cpp:176
 msgid "Rise / Fly up"
 msgstr ""
 
 #: engines/freescape/games/dark/dark.cpp:301
-#: engines/freescape/games/driller/driller.cpp:198
+#: engines/freescape/games/driller/driller.cpp:192
 #, fuzzy
 #| msgid "Move down"
 msgid "Lower / Fly down"
@@ -8817,47 +8834,47 @@ msgid "Enable / Disable jetpack"
 msgstr "गिरना डिसएबल करें"
 
 #. I18N: drilling rig is an in game item
-#: engines/freescape/games/driller/driller.cpp:205
+#: engines/freescape/games/driller/driller.cpp:199
 msgid "Deploy drilling rig"
 msgstr ""
 
 #. I18N: drilling rig is an in game item
-#: engines/freescape/games/driller/driller.cpp:212
+#: engines/freescape/games/driller/driller.cpp:206
 msgid "Collect drilling rig"
 msgstr ""
 
 #. I18N: Illustrates the angle at which you turn left or right.
-#: engines/freescape/games/eclipse/eclipse.cpp:385
+#: engines/freescape/games/eclipse/eclipse.cpp:364
 #, fuzzy
 #| msgid "Manual mode"
 msgid "Change angle"
 msgstr "मैन्युअल मोड"
 
 #. I18N: STEP SIZE: Measures the size of one movement in the direction you are facing (1-250 standard distance units (SDUs))
-#: engines/freescape/games/eclipse/eclipse.cpp:391
+#: engines/freescape/games/eclipse/eclipse.cpp:370
 #, fuzzy
 #| msgid "Manual mode"
 msgid "Change step size"
 msgstr "मैन्युअल मोड"
 
-#: engines/freescape/games/eclipse/eclipse.cpp:397
+#: engines/freescape/games/eclipse/eclipse.cpp:376
 msgid "Sprint (hold)"
 msgstr ""
 
-#: engines/freescape/games/eclipse/eclipse.cpp:405
+#: engines/freescape/games/eclipse/eclipse.cpp:384
 #, fuzzy
 msgid "Toggle height"
 msgstr "दायें मुड़िए"
 
 #. I18N: Action of hero party in Might & Magic 1
-#: engines/freescape/games/eclipse/eclipse.cpp:411
-#: engines/kyra/engine/lol.cpp:519 engines/mm/mm1/metaengine.cpp:110
+#: engines/freescape/games/eclipse/eclipse.cpp:390
+#: engines/kyra/engine/lol.cpp:519 engines/mm/mm1/metaengine.cpp:114
 #: engines/ultima/nuvie/metaengine.cpp:195
 #: engines/ultima/nuvie/metaengine.cpp:200
 msgid "Rest"
 msgstr ""
 
-#: engines/freescape/games/eclipse/eclipse.cpp:422
+#: engines/freescape/games/eclipse/eclipse.cpp:401
 #, fuzzy
 msgid "Toggle flashlight"
 msgstr "दायें मुड़िए"
@@ -9405,7 +9422,7 @@ msgstr ""
 msgid "Could not start Quest game"
 msgstr ""
 
-#: engines/glk/scott/scott.cpp:681
+#: engines/glk/scott/scott.cpp:684
 msgid "Saved.\n"
 msgstr ""
 
@@ -9783,7 +9800,7 @@ msgid "Repeat last line"
 msgstr ""
 
 #: engines/hugo/metaengine.cpp:172 engines/lure/metaengine.cpp:197
-#: engines/mads/metaengine.cpp:331 engines/tsage/metaengine.cpp:247
+#: engines/mads/metaengine.cpp:353 engines/tsage/metaengine.cpp:247
 #, fuzzy
 #| msgid "Enable restored content"
 msgid "Restore game"
@@ -9888,7 +9905,8 @@ msgstr "Infinite ammo चीट् इनेबल करें"
 msgid "Player ammo will never decrease."
 msgstr ""
 
-#: engines/hypno/metaengine.cpp:70
+#: engines/hypno/metaengine.cpp:70 engines/scumm/metaengine.cpp:891
+#: engines/scumm/metaengine.cpp:918
 msgid "Unlock all levels"
 msgstr ""
 
@@ -9918,6 +9936,14 @@ msgstr ""
 #: engines/hypno/metaengine.cpp:140
 msgid "Secondary shoot"
 msgstr ""
+
+#: engines/hypno/metaengine.cpp:146 engines/lab/metaengine.cpp:209
+#: engines/ngi/metaengine.cpp:168 engines/sherlock/metaengine.cpp:872
+#: engines/teenagent/metaengine.cpp:232 engines/toon/metaengine.cpp:98
+#: engines/voyeur/metaengine.cpp:235
+#, fuzzy
+msgid "Skip intro"
+msgstr "छिपी हुई files दिखाये"
 
 #: engines/hypno/metaengine.cpp:167
 #, fuzzy
@@ -9993,7 +10019,7 @@ msgstr "गेम विकल्प(O)..."
 msgid "Direction keymappings"
 msgstr "गेम विकल्प(O)..."
 
-#: engines/hypno/metaengine.cpp:316 engines/mads/metaengine.cpp:369
+#: engines/hypno/metaengine.cpp:316 engines/mads/metaengine.cpp:391
 #: engines/tsage/metaengine.cpp:259
 #, fuzzy
 msgid "Show credits"
@@ -10201,7 +10227,7 @@ msgstr "सारा पे स्विच करें"
 msgid "Camp"
 msgstr ""
 
-#: engines/kyra/engine/eobcommon.cpp:380 engines/mm/mm1/metaengine.cpp:103
+#: engines/kyra/engine/eobcommon.cpp:380 engines/mm/mm1/metaengine.cpp:107
 #, fuzzy
 #| msgid "Fast replay"
 msgid "Cast spell"
@@ -10244,7 +10270,7 @@ msgid "Attack 3"
 msgstr ""
 
 #: engines/kyra/engine/lol.cpp:512 engines/lab/metaengine.cpp:278
-#: engines/mm/mm1/metaengine.cpp:104 engines/mohawk/myst.cpp:606
+#: engines/mm/mm1/metaengine.cpp:108 engines/mohawk/myst.cpp:606
 #: engines/wintermute/keymapper_tables.h:1526
 #: engines/wintermute/keymapper_tables.h:1673
 #: engines/wintermute/keymapper_tables.h:1722
@@ -10507,7 +10533,7 @@ msgstr ""
 msgid "This puzzle is not available in the trial version of the game"
 msgstr ""
 
-#: engines/lure/metaengine.cpp:53 engines/mads/metaengine.cpp:127
+#: engines/lure/metaengine.cpp:53 engines/mads/metaengine.cpp:141
 #: engines/sherlock/metaengine.cpp:120 engines/twine/metaengine.cpp:144
 msgid "TTS Narrator"
 msgstr ""
@@ -10633,73 +10659,73 @@ msgstr "दायें मुड़िए"
 msgid "Repeat last message"
 msgstr ""
 
-#: engines/mads/metaengine.cpp:66
+#: engines/mads/metaengine.cpp:68
 msgid "Easy mouse interface"
 msgstr ""
 
-#: engines/mads/metaengine.cpp:67
+#: engines/mads/metaengine.cpp:69
 msgid "Shows object names when hovering the mouse over them"
 msgstr ""
 
-#: engines/mads/metaengine.cpp:78 engines/mads/metaengine.cpp:79
+#: engines/mads/metaengine.cpp:80 engines/mads/metaengine.cpp:81
 msgid "Animated inventory items"
 msgstr ""
 
-#: engines/mads/metaengine.cpp:90 engines/mads/metaengine.cpp:91
+#: engines/mads/metaengine.cpp:92 engines/mads/metaengine.cpp:93
 msgid "Animated game interface"
 msgstr ""
 
-#: engines/mads/metaengine.cpp:102 engines/mads/metaengine.cpp:103
+#: engines/mads/metaengine.cpp:104 engines/mads/metaengine.cpp:105
 msgid "Naughty game mode"
 msgstr ""
 
-#: engines/mads/metaengine.cpp:296
+#: engines/mads/metaengine.cpp:318
 #, fuzzy
 #| msgid "Game Options"
 msgid "Start menu keymappings"
 msgstr "गेम विकल्प(O)..."
 
-#: engines/mads/metaengine.cpp:319
+#: engines/mads/metaengine.cpp:341
 #, fuzzy
 #| msgid "Game menu"
 msgid "Open game menu"
 msgstr "गेम मेनू"
 
-#: engines/mads/metaengine.cpp:337
+#: engines/mads/metaengine.cpp:359
 #, fuzzy
 #| msgid "Scroll Up"
 msgid "Scroll bar up"
 msgstr "ऊपर स्क्रॉल करें"
 
-#: engines/mads/metaengine.cpp:343
+#: engines/mads/metaengine.cpp:365
 #, fuzzy
 msgid "Scroll bar down"
 msgstr "नीचे देखो"
 
-#: engines/mads/metaengine.cpp:351
+#: engines/mads/metaengine.cpp:373
 #, fuzzy
 #| msgid "Saved games"
 msgid "Start game"
 msgstr "सेव गेम्स"
 
-#: engines/mads/metaengine.cpp:357
+#: engines/mads/metaengine.cpp:379
 #, fuzzy
 #| msgid "Enable restored content"
 msgid "Resume game"
 msgstr "Restored content इनेबल करें"
 
-#: engines/mads/metaengine.cpp:363
+#: engines/mads/metaengine.cpp:385
 #, fuzzy
 msgid "Show intro"
 msgstr "छिपी हुई files दिखाये"
 
-#: engines/mads/metaengine.cpp:375
+#: engines/mads/metaengine.cpp:397
 #, fuzzy
 #| msgid "Speech Options"
 msgid "Show quotes"
 msgstr "बोली के विकल्प(O)..."
 
-#: engines/mads/metaengine.cpp:388
+#: engines/mads/metaengine.cpp:410
 #, fuzzy
 #| msgid "Saved games"
 msgid "Restart animation"
@@ -10735,124 +10761,124 @@ msgstr ""
 msgid "Might and Magic"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:55
+#: engines/mm/mm1/metaengine.cpp:59
 msgid "View party member 1"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:56
+#: engines/mm/mm1/metaengine.cpp:60
 msgid "View party member 2"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:57
+#: engines/mm/mm1/metaengine.cpp:61
 msgid "View party member 3"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:58
+#: engines/mm/mm1/metaengine.cpp:62
 msgid "View party member 4"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:59
+#: engines/mm/mm1/metaengine.cpp:63
 msgid "View party member 5"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:60
+#: engines/mm/mm1/metaengine.cpp:64
 msgid "View party member 6"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:70 engines/ultima/ultima4/metaengine.cpp:50
+#: engines/mm/mm1/metaengine.cpp:74 engines/ultima/ultima4/metaengine.cpp:50
 #: engines/ultima/nuvie/metaengine.cpp:194
 msgid "Cast"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:72
+#: engines/mm/mm1/metaengine.cpp:76
 msgid "Exchange"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:74
+#: engines/mm/mm1/metaengine.cpp:78
 msgid "Fight"
 msgstr "फाइट"
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:76 engines/mm/mm1/metaengine.cpp:117
+#: engines/mm/mm1/metaengine.cpp:80 engines/mm/mm1/metaengine.cpp:121
 msgid "Quick reference"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:78
+#: engines/mm/mm1/metaengine.cpp:82
 msgid "Retreat"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:85
+#: engines/mm/mm1/metaengine.cpp:89
 msgid "Delay"
 msgstr ""
 
 #. I18N: Combat command in Might & Magic 1
 #. I18N: Action of hero party in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:87 engines/mm/mm1/metaengine.cpp:108
+#: engines/mm/mm1/metaengine.cpp:91 engines/mm/mm1/metaengine.cpp:112
 msgid "Protect"
 msgstr ""
 
 #. I18N: Party arrangement command in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:95
+#: engines/mm/mm1/metaengine.cpp:99
 msgid "Forwards"
 msgstr "आगे"
 
 #. I18N: Party arrangement command in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:97
+#: engines/mm/mm1/metaengine.cpp:101
 msgid "Backwards"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:105
+#: engines/mm/mm1/metaengine.cpp:109
 #, fuzzy
 msgid "Toggle minimap"
 msgstr "दायें मुड़िए"
 
-#: engines/mm/mm1/metaengine.cpp:106
+#: engines/mm/mm1/metaengine.cpp:110
 msgid "Reorder party"
 msgstr ""
 
 #. I18N: Action of hero party in Might & Magic 1
 #. I18N: (Game: The Lost Files of Sherlock Holmes: The Case of the Serrated Scalpel) The game has a journal, this action is used to search the journal
-#: engines/mm/mm1/metaengine.cpp:112 engines/sherlock/metaengine.cpp:514
+#: engines/mm/mm1/metaengine.cpp:116 engines/sherlock/metaengine.cpp:514
 #: engines/sherlock/metaengine.cpp:961 engines/ultima/ultima4/metaengine.cpp:71
 msgid "Search"
 msgstr "खोजें"
 
 #. I18N: Action of hero party in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:114
+#: engines/mm/mm1/metaengine.cpp:118
 msgid "Bash"
 msgstr ""
 
 #. I18N: Action of hero party in Might & Magic 1
-#: engines/mm/mm1/metaengine.cpp:116 engines/scumm/help.cpp:147
+#: engines/mm/mm1/metaengine.cpp:120 engines/scumm/help.cpp:147
 msgid "Unlock"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:123 engines/ultima/ultima4/metaengine.cpp:112
+#: engines/mm/mm1/metaengine.cpp:127 engines/ultima/ultima4/metaengine.cpp:112
 msgid "Goto location"
 msgstr "लोकेशन पर जाएँ"
 
-#: engines/mm/mm1/metaengine.cpp:148
+#: engines/mm/mm1/metaengine.cpp:152
 msgid "Might and Magic 1 - Menus"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:149
+#: engines/mm/mm1/metaengine.cpp:153
 msgid "Might and Magic 1 - Minimal Keys"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:150
+#: engines/mm/mm1/metaengine.cpp:154
 msgid "Might and Magic 1 - Main"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:151
+#: engines/mm/mm1/metaengine.cpp:155
 msgid "Might and Magic 1 - Party"
 msgstr ""
 
-#: engines/mm/mm1/metaengine.cpp:152
+#: engines/mm/mm1/metaengine.cpp:156
 msgid "Might and Magic 1 - Combat"
 msgstr ""
 
@@ -11222,7 +11248,7 @@ msgstr ""
 msgid "PS2 version is not yet supported"
 msgstr ""
 
-#: engines/myst3/myst3.cpp:412
+#: engines/myst3/myst3.cpp:413
 #, c-format
 msgid ""
 "This version of Myst III has not been updated with the latest official "
@@ -11232,7 +11258,7 @@ msgid ""
 "%s"
 msgstr ""
 
-#: engines/myst3/myst3.cpp:1659 engines/pegasus/pegasus.cpp:749
+#: engines/myst3/myst3.cpp:1663 engines/pegasus/pegasus.cpp:749
 msgid "Invalid file name for saving"
 msgstr ""
 
@@ -11529,6 +11555,37 @@ msgstr "मैन्युअल मोड"
 msgid "Toggle Chatty AI"
 msgstr ""
 
+#: engines/pelrock/metaengine.cpp:46
+msgid "Alternate timing"
+msgstr ""
+
+#: engines/pelrock/metaengine.cpp:47
+msgid ""
+"Use ScummVM's alternate animation timing instead of the original game's "
+"slower walking and talking speed"
+msgstr ""
+
+#: engines/pelrock/metaengine.cpp:57
+#, fuzzy
+msgid "Play intro"
+msgstr "छिपी हुई files दिखाये"
+
+#: engines/pelrock/metaengine.cpp:58
+msgid ""
+"Play the game's intro sequence. Plays automatically the first time the game "
+"is launched."
+msgstr ""
+
+#: engines/pelrock/metaengine.cpp:68
+#, fuzzy
+#| msgid "Disable sensors"
+msgid "Disable screensaver"
+msgstr "सेंसर डिसएबल करें"
+
+#: engines/pelrock/metaengine.cpp:69
+msgid "Disable original screensaver slider mini-game every 60 seconds."
+msgstr ""
+
 #: engines/petka/metaengine.cpp:117
 #, fuzzy
 #| msgid "Go to end of line"
@@ -11558,7 +11615,7 @@ msgstr "छिपी हुई files दिखाये"
 msgid "Close current interface"
 msgstr "बोली के विकल्प(O)..."
 
-#: engines/phoenixvr/metaengine.cpp:107
+#: engines/phoenixvr/metaengine.cpp:116
 #: engines/wintermute/keymapper_tables.h:239
 #: engines/wintermute/keymapper_tables.h:262
 #: engines/wintermute/keymapper_tables.h:313
@@ -12080,11 +12137,11 @@ msgid "Game does not contain menu resources"
 msgstr ""
 
 #. I18N: 'Robot' is a video format name (as in 'MP4 video')
-#: engines/sci/detection_tables.h:4834
+#: engines/sci/detection_tables.h:4871
 msgid "This demo uses an unimplemented version of Robot videos"
 msgstr ""
 
-#: engines/sci/detection_tables.h:4889
+#: engines/sci/detection_tables.h:4926
 msgid "Incomplete game detected. You have to copy data from all the CDs."
 msgstr ""
 
@@ -12229,7 +12286,7 @@ msgid "Your Name:"
 msgstr "आपका नाम:"
 
 #. I18N: Button, start hosting online multiplayer game
-#: engines/scumm/dialog-createsession.cpp:49 engines/scumm/scumm.cpp:4383
+#: engines/scumm/dialog-createsession.cpp:49 engines/scumm/scumm.cpp:4496
 msgid "Host"
 msgstr ""
 
@@ -12239,7 +12296,7 @@ msgid "Querying games..."
 msgstr ""
 
 #. I18N: Join online multiplayer game
-#: engines/scumm/dialog-sessionselector.cpp:64 engines/scumm/scumm.cpp:4383
+#: engines/scumm/dialog-sessionselector.cpp:64 engines/scumm/scumm.cpp:4496
 msgid "Join"
 msgstr ""
 
@@ -13146,40 +13203,153 @@ msgstr "माउस इनेबल करें"
 msgid "Enable ambience sounds."
 msgstr "माउस इनेबल करें"
 
-#: engines/scumm/metaengine.cpp:1001
+#: engines/scumm/metaengine.cpp:882
+msgid "High resolution mode"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:883
+msgid "Run the game in 640x400 high resolution mode instead of 320x200"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:892 engines/scumm/metaengine.cpp:919
+msgid "All levels will be available without requiring passwords"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:900 engines/scumm/metaengine.cpp:927
+msgid "No damage"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:901 engines/scumm/metaengine.cpp:928
+#, fuzzy
+#| msgid "Disable falling"
+msgid "Disable player damage"
+msgstr "गिरना डिसएबल करें"
+
+#: engines/scumm/metaengine.cpp:909
+#, fuzzy
+#| msgid "Graphics mode:"
+msgid "Yoda mode"
+msgstr "ग्राफ़िक्स मोड:"
+
+#: engines/scumm/metaengine.cpp:910
+msgid "Enable original Yoda mode shortcuts, including movie mode and auto play"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:1085
 #, fuzzy
 #| msgid "Down Left"
 msgid "Down left"
 msgstr "बांए मुड़िए"
 
-#: engines/scumm/metaengine.cpp:1014
+#: engines/scumm/metaengine.cpp:1098
 #, fuzzy
 #| msgid "Down Right"
 msgid "Down right"
 msgstr "दायें मुड़िए"
 
-#: engines/scumm/metaengine.cpp:1034
+#: engines/scumm/metaengine.cpp:1118
 #, fuzzy
 #| msgid "Move Left"
 msgid "Up left"
 msgstr "बाएं चलें"
 
-#: engines/scumm/metaengine.cpp:1047
+#: engines/scumm/metaengine.cpp:1131
 #, fuzzy
 #| msgid "Up Right"
 msgid "Up right"
 msgstr "दाएँ"
 
-#: engines/scumm/metaengine.cpp:1059
+#: engines/scumm/metaengine.cpp:1143
 msgid "Switch weapon"
 msgstr ""
 
 #. I18N: Lets one skip the bike/car fight sequences in Full Throttle
-#: engines/scumm/metaengine.cpp:1073
+#: engines/scumm/metaengine.cpp:1157
 msgid "Win the bike fight cheat"
 msgstr ""
 
-#: engines/scumm/saveload.cpp:1960
+#: engines/scumm/metaengine.cpp:1166
+msgid "Rebel Assault controls"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:1168 engines/scumm/metaengine.cpp:1245
+msgid "Aim up / menu up"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:1173 engines/scumm/metaengine.cpp:1250
+msgid "Aim down / menu down"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:1178 engines/scumm/metaengine.cpp:1255
+msgid "Aim left / menu left"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:1183 engines/scumm/metaengine.cpp:1260
+msgid "Aim right / menu right"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:1188 engines/scumm/metaengine.cpp:1265
+msgid "Stick up"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:1195 engines/scumm/metaengine.cpp:1272
+#, fuzzy
+msgid "Stick down"
+msgstr "नीचे देखो"
+
+#: engines/scumm/metaengine.cpp:1202 engines/scumm/metaengine.cpp:1279
+#, fuzzy
+#| msgid "Slide Right"
+msgid "Stick left"
+msgstr "दाहिने स्लाइड करे"
+
+#: engines/scumm/metaengine.cpp:1209 engines/scumm/metaengine.cpp:1286
+#, fuzzy
+#| msgid "Slide Right"
+msgid "Stick right"
+msgstr "दाहिने स्लाइड करे"
+
+#: engines/scumm/metaengine.cpp:1216 engines/scumm/metaengine.cpp:1293
+#, fuzzy
+#| msgid "Move Left"
+msgid "Fire / select"
+msgstr "बाएं चलें"
+
+#: engines/scumm/metaengine.cpp:1222
+#, fuzzy
+#| msgid "Skip autosave"
+msgid "Walk / menu back"
+msgstr "ऑटोसेव स्किप करें"
+
+#: engines/scumm/metaengine.cpp:1227
+#, fuzzy
+#| msgid "Skip autosave"
+msgid "Skip / menu back"
+msgstr "ऑटोसेव स्किप करें"
+
+#: engines/scumm/metaengine.cpp:1243
+msgid "Rebel Assault II controls"
+msgstr ""
+
+#: engines/scumm/metaengine.cpp:1298
+#, fuzzy
+#| msgid "Move Forward"
+msgid "Cover / back"
+msgstr "आगे बढ़ो"
+
+#: engines/scumm/metaengine.cpp:1304
+#, fuzzy
+#| msgid "Show hidden files"
+msgid "Skip / back"
+msgstr "छिपी हुई फाइलें दिखायें"
+
+#: engines/scumm/metaengine.cpp:1311
+#, fuzzy
+#| msgid "Skip autosave"
+msgid "Skip / menu"
+msgstr "ऑटोसेव स्किप करें"
+
+#: engines/scumm/saveload.cpp:1990
 #, c-format
 msgid ""
 "Warning: incompatible sound settings detected between the current "
@@ -13193,7 +13363,7 @@ msgid ""
 "this save file."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:316
+#: engines/scumm/scumm.cpp:320
 msgid ""
 "You have enabled 'aspect ratio correction'. However, FM-TOWNS' natural "
 "resolution is 320x240, which doesn't allow aspect ratio correction.\n"
@@ -13201,43 +13371,43 @@ msgid ""
 "320x200, under 'engine' tab."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1356
+#: engines/scumm/scumm.cpp:1365
 #, c-format
 msgid "This game requires the '%s' Macintosh executable for its fonts."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1365
+#: engines/scumm/scumm.cpp:1374
 #, c-format
 msgid ""
 "This game requires the '%s' Macintosh executable for its music and fonts."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1369
+#: engines/scumm/scumm.cpp:1378
 #, c-format
 msgid ""
 "Could not find the '%s' Macintosh executable to read resources from. %s will "
 "be disabled."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1370
+#: engines/scumm/scumm.cpp:1379
 msgid "The Mac GUI"
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1370
+#: engines/scumm/scumm.cpp:1379
 msgid "The music and the Mac GUI"
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1399
+#: engines/scumm/scumm.cpp:1408
 #, c-format
 msgid "Could not open Macintosh resource file %s"
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1402
+#: engines/scumm/scumm.cpp:1411
 #, c-format
 msgid "Could not find resource fork in Macintosh resource file %s"
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1409
+#: engines/scumm/scumm.cpp:1418
 #, c-format
 msgid ""
 "'%s' appears to be the wrong Dig executable. It may be the launcher one "
@@ -13246,7 +13416,7 @@ msgid ""
 "its sub-folders should be what you need."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1570
+#: engines/scumm/scumm.cpp:1584
 msgid ""
 "It appears your ScummVM version was not built with TrueType Fonts support.\n"
 "\n"
@@ -13254,34 +13424,34 @@ msgid ""
 "some of the graphics on screen will be missing."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:1836
+#: engines/scumm/scumm.cpp:1918
 msgid ""
 "Audio files compressed with ScummVM Tools were detected; *.BUN/*.SOU\n"
 "compression is not supported anymore for this game, audio will be disabled.\n"
 "Please copy the game from the original media without compression."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:2326
+#: engines/scumm/scumm.cpp:2408
 #, c-format
 msgid ""
 "Native MIDI support requires the Roland Upgrade from LucasArts,\n"
 "but %s is missing. Using AdLib instead."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:2341
+#: engines/scumm/scumm.cpp:2423
 msgid ""
 "This particular version of Monkey Island 1 is known to miss some\n"
 "required resources for MT-32. Using AdLib instead."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:4259
+#: engines/scumm/scumm.cpp:4372
 msgid ""
 "Usually, Maniac Mansion would start now. But for that to work, the game "
 "files for Maniac Mansion have to be in the 'Maniac' directory inside the "
 "Tentacle game directory, and the game has to be added to ScummVM."
 msgstr ""
 
-#: engines/scumm/scumm.cpp:4383
+#: engines/scumm/scumm.cpp:4496
 msgid "Would you like to host or join a network play session?"
 msgstr ""
 
@@ -16974,7 +17144,7 @@ msgstr ""
 msgid "Preferences"
 msgstr ""
 
-#: engines/zvision/zvision.cpp:306
+#: engines/zvision/zvision.cpp:308
 #, fuzzy
 #| msgid ""
 #| "Before playing this game, you'll need to copy the required fonts into "
@@ -17002,13 +17172,28 @@ msgstr ""
 "LiberationMono, LiberationSans और LiberationSerif, या GNU FreeFont से "
 "FreeMono, FreeSans और FreeSerif."
 
-#: engines/zvision/zvision.cpp:321
+#: engines/zvision/zvision.cpp:323
 msgid ""
 "MIDI playback is not available, or else improperly configured. Zork Nemesis "
 "contains several music puzzles which require MIDI audio in order to be "
 "solved.  These puzzles may alternatively be solved using subtitles, if "
 "supported. Continue launching game?"
 msgstr ""
+
+#, fuzzy
+#~| msgid "Move Forward"
+#~ msgid "Menu back"
+#~ msgstr "आगे बढ़ो"
+
+#, fuzzy
+#~| msgid "Backspace"
+#~ msgid "Back / skip"
+#~ msgstr "बैकस्पेस"
+
+#, fuzzy
+#~| msgid "No"
+#~ msgid "N"
+#~ msgstr "नहीं"
 
 #~ msgid "Load game:"
 #~ msgstr "गेम लोड करें:"

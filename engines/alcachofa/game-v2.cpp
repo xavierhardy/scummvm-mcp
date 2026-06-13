@@ -102,7 +102,12 @@ static constexpr const ScriptKernelTask kScriptKernelTaskMap[] = {
 	ScriptKernelTask::PlayMusic,
 	ScriptKernelTask::StopMusic,
 	ScriptKernelTask::WaitForMusicToEnd,
-	ScriptKernelTask::SayTextV2
+	ScriptKernelTask::SayTextV2, // *might* be used in secta, unused in corvino
+	ScriptKernelTask::AnimateCharacter, // from here on only corvino
+	ScriptKernelTask::AnimateTalking,
+	ScriptKernelTask::ClearInventory,
+	ScriptKernelTask::WaitForMouseClick,
+	ScriptKernelTask::ResetCharacter
 };
 
 class GameWithVersion2 : public Game {
@@ -131,6 +136,10 @@ public:
 		return Point(g_system->getWidth() / 2, g_system->getHeight() - 200);
 	}
 
+	Point getObjectNameOffset() override {
+		return Point(0, -50);
+	}
+
 	const char *getMenuRoom() override {
 		return "MENUPRINCIPAL";
 	}
@@ -151,10 +160,6 @@ public:
 		Script &script = g_engine->script();
 		script.variable("EstanAmbos") = g_engine->world().mortadelo().room() == g_engine->world().filemon().room();
 		script.variable("textoson") = g_engine->config().subtitles() ? 1 : 0;
-	}
-
-	Path getVideoPath(int32 videoId) override {
-		return Path(String::format("Bin/DATA%02d.BIN", videoId));
 	}
 
 	String getSoundPath(const char *filename) override {
@@ -206,6 +211,27 @@ public:
 	bool doesRoomHaveBackground(const Room *room) override {
 		return !room->name().equalsIgnoreCase("Global");
 	}
+
+	String reencodePath(const String &path) override {
+		if (!_hasMessedUpEncoding)
+			return Game::reencodePath(path);
+
+		// Some of the Steam releases have wrong characters due to a messed up UTF8 conversion
+		U32String u32String = path.decode(Common::CodePage::kISO8859_1);
+		for (uint i = 0; i < u32String.size(); i++) {
+			const auto ch = u32String[i];
+			if (ch == 0xC1) // Á -> ╡
+				u32String[i] = 0x2561;
+			else if (ch == 0xD3) // Ó -> α
+				u32String[i] = 0x03B1;
+			else if (ch == 0xCD) // Í -> ╓
+				u32String[i] = 0x2553;
+		}
+		return u32String.encode();
+	}
+
+protected:
+	bool _hasMessedUpEncoding = false;
 };
 
 class GameWithVersion2_0 : public GameWithVersion2 {
@@ -218,6 +244,10 @@ public:
 		script.fixNestedMenuPop(20898); // Filemon talking to MANOLO in FILE_PIRAMIDE
 	}
 
+	Path getVideoPath(int32 videoId) override {
+		return Path(String::format("Bin/DATA%02d.BIN", videoId));
+	}
+
 	char getTextFileKey() override {
 		return static_cast<char>(0xA3);
 	}
@@ -228,6 +258,12 @@ public:
 			return Game::unknownCamLerpTarget(action, name);
 		return nullptr;
 	}
+
+	bool shouldMusicLoop() override {
+		// The credits cutscene is slightly longer than the
+		// so we just disable looping and keep the last couple seconds quiet
+		return !g_engine->player().currentRoom()->name().equalsIgnoreCase("CREDITOS");
+	}
 };
 
 static constexpr const char *kMapFilesSecta[] = {
@@ -236,18 +272,21 @@ static constexpr const char *kMapFilesSecta[] = {
 	"Mapas/global.emc",
 	nullptr
 };
+static const char *const *const kMapFilesCorvino = kMapFilesSecta;
 
 static constexpr const char *kMapFilesMoscu[] = {
 	"Mapas/mapa1.emc",
 	"Mapas/global.emc",
 	nullptr
 };
+static const char *const *const kMapFilesBalones = kMapFilesMoscu;
 
 static constexpr const char *kMapFilesEscarabajo[] = {
 	"Mapas/mapa2.emc",
 	"Mapas/global.emc",
 	nullptr
 };
+static const char *const *const kMapFilesMamelucos = kMapFilesEscarabajo;
 
 class GameSecta : public GameWithVersion2_0 {
 public:
@@ -274,9 +313,9 @@ public:
 	}
 
 	String getMusicPath(int32 trackId) override {
-		const Room *room = g_engine->player().currentRoom();
+		const Room *room = g_engine->player().lastGameRoom();
 		const char *dirName = room != nullptr && room->mapIndex() == 1 ? "Music_Cleopatra" : "Music";
-		return String::format("%s/Track%02d", dirName, trackId);
+		return String::format("%s/Track%02d", dirName, trackId); // 1-based indexing
 	}
 
 private:
@@ -294,7 +333,7 @@ public:
 	}
 
 	String getMusicPath(int32 trackId) override {
-		return String::format("track%d", trackId);
+		return String::format("track%d", trackId - 1); // 0-based indexing
 	}
 
 	bool isKnownBadVideo(int32 videoId) override {
@@ -317,33 +356,79 @@ public:
 	}
 
 	String getMusicPath(int32 trackId) override {
-		return String::format("track%d", trackId);
+		return String::format("track%d", trackId - 1); // 0-based indexing
 	}
 
 	bool isKnownBadVideo(int32 videoId) override {
 		return videoId == 0; // MPEG-4 codec is unsupported
 	}
+};
 
-	String reencodePath(const String &path) override {
-		if (!_hasMessedUpEncoding)
-			return Game::reencodePath(path);
-
-		// The Steam release has wrong characters due to some messed up UTF8 conversion
-		U32String u32String = path.decode(Common::CodePage::kISO8859_1);
-		for (uint i = 0; i < u32String.size(); i++) {
-			const auto ch = u32String[i];
-			if (ch == 0xC1) // Á -> ╡
-				u32String[i] = 0x2561;
-			else if (ch == 0xD3) // Ó -> α
-				u32String[i] = 0x03B1;
-			else if (ch == 0xCD) // Í -> ╓
-				u32String[i] = 0x2553;
-		}
-		return u32String.encode();
+class GameWithVersion2_1 : public GameWithVersion2 {
+public:
+	Path getVideoPath(int32 videoId) override {
+		return Path(String::format("Data/DATA%02d.BIN", videoId));
 	}
 
-private:
-	bool _hasMessedUpEncoding = false;
+	char getTextFileKey() override {
+		return static_cast<char>(0x60);
+	}
+
+	String getMusicPath(int32 trackId) override {
+		return String::format("Sonidos/T%d", trackId);
+	}
+
+	void missingAnimation(const Common::String &fileName) override {
+		if (fileName == "VARITA.ANI") // this one seems bad, it is the inventory icon for I_RAMAS
+			return;
+		return GameWithVersion2::missingAnimation(fileName);
+	}
+};
+
+class GameCorvino : public GameWithVersion2_1 {
+public:
+	void onLoadedGameFiles() override {
+		g_engine->script().variable("EsJuegoCompleto") = 0;
+	}
+
+	const char *const *getMapFiles() override {
+		return kMapFilesCorvino;
+	}
+
+	bool isKnownBadVideo(int32 videoId) override {
+		// These use DV codec in the steam release
+		return videoId < 2;
+	}
+};
+
+class GameBalones : public GameWithVersion2_1 {
+public:
+	GameBalones() {
+		_hasMessedUpEncoding = !SearchMan.hasFile(Path(reencode("Animaciones/aut\xD3grafo.ani")));
+	}
+
+	void onLoadedGameFiles() override {
+		g_engine->script().variable("EsJuegoCompleto") = 1;
+	}
+
+	const char *const *getMapFiles() override {
+		return kMapFilesBalones;
+	}
+};
+
+class GameMamelucos : public GameWithVersion2_1 {
+public:
+	GameMamelucos() {
+		_hasMessedUpEncoding = !SearchMan.hasFile(Path(reencode("Animaciones/EST\xC1TICOS FILEM\xD3N.ANI")));
+	}
+
+	void onLoadedGameFiles() override {
+		g_engine->script().variable("EsJuegoCompleto") = 2;
+	}
+
+	const char *const *getMapFiles() override {
+		return kMapFilesMamelucos;
+	}
 };
 
 Game *Game::createForSecta() {
@@ -356,6 +441,18 @@ Game *Game::createForMoscu() {
 
 Game *Game::createForEscarabajo() {
 	return new GameEscarabajo();
+}
+
+Game *Game::createForCorvino() {
+	return new GameCorvino();
+}
+
+Game *Game::createForBalones() {
+	return new GameBalones();
+}
+
+Game *Game::createForMamelucos() {
+	return new GameMamelucos();
 }
 
 }

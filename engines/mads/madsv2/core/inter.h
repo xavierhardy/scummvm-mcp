@@ -63,7 +63,7 @@ namespace MADSV2 {
 
 #define INTER_COMMANDS          (inter_columns * 2)
 
-#define INVEN_MAX_OBJECTS       20      /* Can only carry ... objects */
+#define INVEN_MAX_OBJECTS       32            /* Can only carry ... objects */
 
 #define INTER_BUILDING_SENTENCES      0       /* Normal sentence building mode */
 #define INTER_CONVERSATION            1       /* Special conversation mode     */
@@ -333,6 +333,8 @@ extern void inter_reset_dialog(void);
 extern int inter_add_dialog(char *string, int result);
 
 extern int inter_load_background(const char *name, Buffer *target);
+
+extern void init_inter();
 
 } // namespace MADSV2
 } // namespace MADS

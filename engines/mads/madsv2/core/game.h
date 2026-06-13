@@ -22,6 +22,7 @@
 #ifndef MADS_CORE_GAME_H
 #define MADS_CORE_GAME_H
 
+#include "common/serializer.h"
 #include "mads/madsv2/core/general.h"
 #include "mads/madsv2/core/global.h"
 #include "mads/madsv2/core/player.h"
@@ -137,10 +138,10 @@ enum {
 #define GAME_MAX_SAVE_WIDTH   255     /* Max pixel width of save name*/
 #define GAME_MAX_SAVES_ON_SCREEN 7    /* Max saves on screen at once */
 
-#define GAME_SAVE_SLOT_MEMORY   (GAME_MAX_SAVE_SLOTS * (GAME_MAX_SAVE_LENGTH + 1))
-#define GAME_DIALOG_HEAP        (4096 + sizeof(PopupItem) * GAME_MENU_MAX_ITEMS)
+#define GAME_SAVE_SLOT_MEMORY   (long)(GAME_MAX_SAVE_SLOTS * (GAME_MAX_SAVE_LENGTH + 1))
+#define GAME_DIALOG_HEAP        (long)(4096 + sizeof(PopupItem) * GAME_MENU_MAX_ITEMS)
 #define GAME_FUDGE_FACTOR       256
-#define GAME_MENU_HEAP          (GAME_SAVE_SLOT_MEMORY + GAME_DIALOG_HEAP + GAME_FUDGE_FACTOR)
+#define GAME_MENU_HEAP          (long)(GAME_SAVE_SLOT_MEMORY + GAME_DIALOG_HEAP + GAME_FUDGE_FACTOR)
 
 
 #define GAME_MENU_SCROLL_FIRST  20    /* Scrolling delays            */
@@ -158,6 +159,7 @@ enum {
 
 extern byte game_restore_flag;         /* Flag if restoring game */
 extern byte game_autosaved;            /* Flag if autosaved      */
+extern int savegame_slot;
 
 extern byte game_mouse_cursor_fix;     /* Mouse cursor fix       */
 
@@ -275,6 +277,8 @@ extern void flag_parse(const char **myscan);
 
 extern void show_logo();
 extern void show_version();
+
+extern void init_game();
 
 } // namespace MADSV2
 } // namespace MADS

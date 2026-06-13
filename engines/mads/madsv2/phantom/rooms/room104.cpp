@@ -42,6 +42,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 static void get_rid_of_inventory() {
 	if (player_has(large_note)) {
 		inter_move_object(large_note, NOWHERE);
@@ -1133,6 +1135,36 @@ void room_104_preload() {
 	}
 
 	vocab_make_active(words_Monsieur_Richard);
+}
+
+
+void room_104_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->anim_0_running,
+		local->anim_1_running,
+		local->anim_2_running,
+		local->get_ready_she_leave,
+		local->get_ready_he_leave,
+		local->wants_to_talk,
+		local->wants_to_get_up,
+		local->sitting_up,
+		local->rich_action,
+		local->rich_frame,
+		local->raoul_action,
+		local->raoul_frame,
+		local->daae_walk_action,
+		local->daae_walk_frame,
+		local->couple_action,
+		local->couple_frame,
+		local->rich_talk_count,
+		local->couple_he_talk_count,
+		local->couple_she_talk_count,
+		local->couple_look_rich_count,
+		local->wants_to_stand_up,
+		local->last_player_step);
 }
 
 } // namespace Rooms

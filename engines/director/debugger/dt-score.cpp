@@ -150,6 +150,9 @@ static void buildContinuationData(Window *window) {
 	Score *score = window->getCurrentMovie()->getScore();
 	uint numFrames = score->_scoreCache.size();
 
+	if (numFrames == 0)
+		return;
+
 	uint numChannels = score->_scoreCache[0]->_sprites.size();
 	_state->_continuationData.resize(numChannels);
 
@@ -391,7 +394,9 @@ static void drawSpriteInspector(Score *score, Cast *cast, uint numFrames) {
 		CastMember *castMember = nullptr;
 		bool shape = false;
 
-		if (_state->_selectedScoreCast.frame != -1 && !_state->_selectedScoreCast.isMainChannel)
+		if (_state->_selectedScoreCast.frame != -1 && !_state->_selectedScoreCast.isMainChannel
+				&& _state->_selectedScoreCast.frame < (int)score->_scoreCache.size()
+				&& _state->_selectedScoreCast.channel < (int)score->_scoreCache[_state->_selectedScoreCast.frame]->_sprites.size())
 			sprite = score->_scoreCache[_state->_selectedScoreCast.frame]->_sprites[_state->_selectedScoreCast.channel];
 
 		if (sprite) {
@@ -975,6 +980,8 @@ static void drawMainChannelGrid(ImDrawList *dl, ImVec2 startPos, Score *score) {
 				case kChScript: // open script in script editor
 					if (mc.actionId.member) {
 						ScriptContext *ctx = getScriptContext(mc.actionId);
+						if (!ctx)
+							break;
 						for (auto &handler : ctx->_functionHandlers) {
 							ImGuiScript script = toImGuiScript(kScoreScript, mc.actionId, handler._key);
 							script.byteOffsets = ctx->_functionByteOffsets[script.handlerId];
@@ -1138,6 +1145,11 @@ void showScore() {
 
 		buildContinuationData(selectedWindow);
 
+		if (!selectedWindow->getCurrentMovie()) {
+			ImGui::Text("No movie loaded");
+			ImGui::End();
+			return;
+		}
 		Score *score = selectedWindow->getCurrentMovie()->getScore();
 		uint numFrames = score->_scoreCache.size();
 		Cast *cast = selectedWindow->getCurrentMovie()->getCast();
@@ -1191,6 +1203,11 @@ void showChannels() {
 	if (ImGui::Begin("Channels", &_state->_w.channels)) {
 		Window *selectedWindow = windowListCombo(&_state->_scoreWindow);
 
+		if (!selectedWindow->getCurrentMovie()) {
+			ImGui::Text("No movie loaded");
+			ImGui::End();
+			return;
+		}
 		Score *score = selectedWindow->getCurrentMovie()->getScore();
 		const Frame &frame = *score->_currentFrame;
 
@@ -1295,6 +1312,7 @@ void showChannels() {
 					ImGui::PopID();
 				}
 
+				// Channel number
 				ImGui::TableNextColumn();
 
 				bool isSelected = (_state->_selectedChannel == i + 1);
@@ -1310,6 +1328,7 @@ void showChannels() {
 					_state->_windowToRedraw = selectedWindow;
 				}
 
+				// Cast ID
 				ImGui::TableNextColumn();
 
 				if (sprite._castId.member) {
@@ -1318,37 +1337,62 @@ void showChannels() {
 
 					Common::Point position = channel.getPosition();
 					ImGui::Text("%s", sprite._castId.asString().c_str());
+
+					// visibility
 					ImGui::TableNextColumn();
 					colN = "##vis" + chNum;
 					if (ImGui::Checkbox(colN.c_str(), &channel._visible)) {
 						_state->_windowToRedraw = selectedWindow;
 					}
+
+					// inkData
 					ImGui::TableNextColumn();
 					ImGui::Text("0x%02x", sprite._inkData);
+
+					// ink
 					ImGui::TableNextColumn();
 					ImGui::Text("%d (%s)", sprite._ink, inkType2str(sprite._ink));
+
+					// trails
 					ImGui::TableNextColumn();
 					colN = "##trails" + chNum;
 					ImGui::Checkbox(colN.c_str(), &sprite._trails);
+
+					// stretch
 					ImGui::TableNextColumn();
 					colN = "##stretch" + chNum;
 					ImGui::Checkbox(colN.c_str(), &sprite._stretch);
+
+					// line
 					ImGui::TableNextColumn();
 					ImGui::Text("%d", sprite._thickness);
+
+					// dims
 					ImGui::TableNextColumn();
 					ImGui::Text("%dx%d@%d,%d", channel.getWidth(), channel.getHeight(), position.x, position.y);
+
+					// type
 					ImGui::TableNextColumn();
-					ImGui::Text("%d (%s)", sprite._spriteType, spriteType2str(sprite._spriteType));
+					if (sprite._spriteType == kCastMemberSprite && sprite._cast)
+						ImGui::Text("%d (%s)", sprite._spriteType, castType2str(sprite._cast->_type));
+					else
+						ImGui::Text("%d (%s)", sprite._spriteType, spriteType2str(sprite._spriteType));
+
+					// fq
 					ImGui::TableNextColumn();
 					ImGui::PushID(i + 1);
 					ImGui::Text("%3d", sprite._foreColor); ImGui::SameLine();
 					ImGui::ColorButton("foreColor", convertColor(sprite._foreColor));
 					ImGui::PopID();
+
+					// bq
 					ImGui::TableNextColumn();
 					ImGui::PushID(i + 1);
 					ImGui::Text("%3d", sprite._backColor); ImGui::SameLine();
 					ImGui::ColorButton("backColor", convertColor(sprite._backColor));
 					ImGui::PopID();
+
+					// script
 					ImGui::TableNextColumn();
 
 					if (score->_version >= kFileVer600) {
@@ -1383,39 +1427,57 @@ void showChannels() {
 						if (sprite._spriteListIdx) {
 							Common::MemoryReadStreamEndian *stream = score->getSpriteDetailsStream(sprite._spriteListIdx + 2);
 							Common::String name;
-							if (stream)
+							if (stream) {
 								name = stream->readPascalString();
+								delete stream;
+							}
 							ImGui::Text("%s", name.c_str());
 						} else {
 							ImGui::Text(" ");
 						}
 					}
 
+					// colorcode
 					ImGui::TableNextColumn();
 					ImGui::Text("0x%x", sprite._colorcode);
+
+					// blend amount
 					ImGui::TableNextColumn();
 					ImGui::Text("0x%x", sprite._blendAmount);
+
+					// unk3
 					ImGui::TableNextColumn();
 					ImGui::Text("0x%x", sprite._unk3);
+
+					// constraint
 					ImGui::TableNextColumn();
 					ImGui::Text("%d", channel._constraint);
+
+					// puppet
 					ImGui::TableNextColumn();
 					colN = "##puppet" + chNum;
 					ImGui::Checkbox(colN.c_str(), &sprite._puppet);
+
+					// moveable
 					ImGui::TableNextColumn();
 					colN = "##moveable" + chNum;
 					ImGui::Checkbox(colN.c_str(), &sprite._moveable);
+
+					// movieRate
 					ImGui::TableNextColumn();
 					if (channel._movieRate)
 						ImGui::Text("%f", channel._movieRate);
 					else
 						ImGui::Text("0");
+
+					// movieTime
 					ImGui::TableNextColumn();
 					if (channel._movieRate)
 						ImGui::Text("%d (%f)", channel._movieTime, (float)(channel._movieTime/60.0f));
 					else
 						ImGui::Text("0");
 				} else {
+					// invalid castID
 					ImGui::Text("000");
 				}
 			}

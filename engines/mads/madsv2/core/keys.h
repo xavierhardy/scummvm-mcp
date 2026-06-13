@@ -271,6 +271,8 @@ extern int keys_check_install();
 extern void keys_enable();
 extern void keys_disable();
 
+extern void init_keys();
+
 } // namespace MADSV2
 } // namespace MADS
 

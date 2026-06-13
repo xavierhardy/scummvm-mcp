@@ -98,8 +98,8 @@ public:
 
 	void loadCastLibMapping(Common::SeekableReadStreamEndian &stream);
 	bool loadArchive();
-	void setArchive(Archive *archive);
-	Archive *getArchive() const { return _movieArchive; };
+	void setArchive(Common::SharedPtr<Archive> archive);
+	Common::SharedPtr<Archive> getArchive() const { return _movieArchive; };
 	Common::String getMacName() const { return _macName; }
 	Window *getWindow() const { return _window; }
 	DirectorEngine *getVM() const { return _vm; }
@@ -112,7 +112,7 @@ public:
 
 	void clearSharedCast();
 	void loadSharedCastsFrom(Common::Path &filename);
-	Archive *loadExternalCastFrom(Common::Path &filename);
+	Common::SharedPtr<Archive> loadExternalCastFrom(Common::Path &filename);
 	bool loadCastLibFrom(uint16 libId, Common::Path &filename);
 
 	CastMember *getCastMember(CastMemberID memberID);
@@ -127,6 +127,7 @@ public:
 	CastMemberInfo *getCastMemberInfo(CastMemberID memberID);
 	bool isValidCastMember(CastMemberID memberID, CastType type);
 	const Stxt *getStxt(CastMemberID memberID);
+	int getMaxCastID();
 
 
 	LingoArchive *getMainLingoArch();
@@ -135,7 +136,7 @@ public:
 	Symbol getHandler(const Common::String &name, uint16 castLibHint = 0);
 
 	// lingo/lingo-events.cpp
-	bool processEvent(Common::Event &event);
+	bool processSysEvent(Common::Event &event);
 	void broadcastEvent(LEvent event);
 
 	// lingo/lingo-events.cpp
@@ -143,6 +144,9 @@ public:
 	void resolveScriptEvent(LingoEvent &event);
 	void processEvent(LEvent event, int targetId = 0);
 	void queueInputEvent(LEvent event, int targetId = 0, Common::Point pos = Common::Point(-1, -1));
+	bool processInputEvent(LEvent event, int targetId = 0, Common::Point pos = Common::Point(-1, -1));
+
+	Common::String formatMovieInfo();
 
 private:
 	void loadFileInfo(Common::SeekableReadStreamEndian &stream);
@@ -151,7 +155,7 @@ private:
 	void queueSpriteEvent(Common::Queue<LingoEvent> &queue, LEvent event, int eventId, int spriteId);
 
 public:
-	Archive *_movieArchive;
+	Common::SharedPtr<Archive> _movieArchive;
 	uint16 _version;
 	Common::Platform _platform;
 	Common::Rect _movieRect;

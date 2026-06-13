@@ -128,9 +128,11 @@ ZVision::~ZVision() {
 	delete _scriptManager;
 	delete _renderManager;	// should be deleted after the script manager
 	delete _subtitleManager;
+	delete _textRenderer;
 	delete _rnd;
 	delete _midiManager;
 	delete _volumeManager;
+	delete _menu;
 	getTimerManager()->removeTimerProc(&fpsTimerCallback);
 }
 

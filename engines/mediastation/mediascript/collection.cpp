@@ -184,9 +184,9 @@ void Collection::send(const Common::Array<ScriptValue> &args) {
 	Common::Array<ScriptValue> sendArgs;
 	for (const ScriptValue &item : *this) {
 		uint actorId = item.asActorId();
-		Actor *targetActor = g_engine->getActorById(actorId);
+		Actor *targetActor = g_engine->getImtGod()->getActorById(actorId);
 		if (targetActor != nullptr) {
-			debugC(7, kDebugScript, "%s: %s: %d", __func__, builtInMethodToStr(methodToSend), actorId);
+			debugC(7, kDebugScript, "%s: %s: %s", __func__, builtInMethodToStr(methodToSend), targetActor->debugName());
 			targetActor->callMethod(methodToSend, argsToSend);
 		}
 	}

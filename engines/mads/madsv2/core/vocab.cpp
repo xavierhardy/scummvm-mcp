@@ -95,7 +95,6 @@ int vocab_load(int allocation_flag) {
 	int mylen;
 	int more_words;
 	int vocab_space;
-	int vocab_exist;
 	int vocab_address;
 
 	result = 0;
@@ -121,15 +120,11 @@ int vocab_load(int allocation_flag) {
 					delete handle;
 
 					if (more_words >= 0) {
-
 						vocab_words += more_words;
-						vocab_exist = true;
 
 					} else {
 						result = VC_ERR_READMAINFILE;
 					}
-				} else {
-					vocab_exist = false;
 				}
 			} else {
 				result = VC_ERR_READHARDFILE;
@@ -670,6 +665,16 @@ char *vocab_string(int vocab_id) {
 	}
 
 	return p;  // got_it
+}
+
+void init_vocab() {
+	vocab = NULL;
+	vocab_words = 0;
+	vocab_allocation = 0;
+	vocab_first_soft = 0;
+	vocab_longest = 0;
+	vocab_text = NULL;
+	vocab_size = 0;
 }
 
 } // namespace MADSV2

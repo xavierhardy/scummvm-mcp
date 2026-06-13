@@ -19,13 +19,14 @@
  *
  */
 
-#ifndef MADS_DEBUGGER_H
-#define MADS_DEBUGGER_H
+#ifndef MADS_NEBULAR_DEBUGGER_H
+#define MADS_NEBULAR_DEBUGGER_H
 
 #include "common/scummsys.h"
 #include "gui/debugger.h"
 
 namespace MADS {
+namespace Nebular {
 
 class RexNebularEngine;
 
@@ -56,9 +57,11 @@ public:
 	bool _showMousePos;
 public:
 	Debugger(RexNebularEngine *vm);
-	~Debugger() override {}
+	~Debugger() override {
+	}
 };
 
+} // namespace Nebular
 } // namespace MADS
 
-#endif	/* MADS_DEBUGGER_H */
+#endif

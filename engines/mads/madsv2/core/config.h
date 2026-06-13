@@ -96,7 +96,7 @@ struct ConfigFile {
 	int show_speech_boxes;        /* Show text during speech       */
 
 	int sound_card_irq;
-	int misc2;
+	bool original_save_load;
 	int misc3;
 	int misc4;
 	int misc5;
@@ -109,8 +109,8 @@ extern ConfigFile config_file;
 
 extern void read_config_file();
 extern void write_config_file();
-extern void global_load_config_parameters();
-extern void global_unload_config_parameters();
+//extern void global_load_config_parameters();
+//extern void global_unload_config_parameters();
 
 } // namespace MADSV2
 } // namespace MADS

@@ -123,7 +123,8 @@ DMEngine::DMEngine(OSystem *syst, const DMADGameDescription *desc) :
 			_thingExplFireBall(0xFF80), _thingExplSlime(0xFF81), _thingExplLightningBolt(0xFF82),
 			_thingExplHarmNonMaterial(0xFF83), _thingExplOpenDoor(0xFF84), _thingExplPoisonBolt(0xFF86),
 			_thingExplPoisonCloud(0xFF87), _thingExplSmoke(0xFFA8), _thingExplFluxcage(0xFFB2),
-			_thingExplRebirthStep1(0xFFE4), _thingExplRebirthStep2(0xFFE5), _thingParty(0xFFFF)
+			_thingExplRebirthStep1(0xFFE4), _thingExplRebirthStep2(0xFFE5), _thingParty(0xFFFF),
+			_dirIntoStepCountEast(), _dirIntoStepCountNorth()
 	{
 	// register random source
 	_rnd = new Common::RandomSource("dm");
@@ -757,9 +758,9 @@ void DMEngine::drawEntrance() {
 	_dungeonMan->_currMapHeight = 5;
 	_dungeonMan->_currMapData = microDungeonCurrentMapData;
 
-	Map map; // uninitialized, won't be used
+	static Map map; // uninitialized, won't be used
 	_dungeonMan->_currMap = &map;
-	Square microDungeonSquares[25];
+	static Square microDungeonSquares[25];
 	for (uint16 i = 0; i < 25; ++i)
 		microDungeonSquares[i] = Square(kDMElementTypeWall, 0);
 
@@ -1001,7 +1002,7 @@ void DMEngine::fuseSequence() {
 		for (int16 idx = 0; idx < maxCount; idx++) {
 			char decodedString[200];
 			_dungeonMan->decodeText(decodedString, sizeof(decodedString),
-					textStringThings[idx], (TextType)(kDMTextTypeMessage | kDMMaskDecodeEvenIfInvisible));
+					textStringThings[idx], (int16)(kDMTextTypeMessage | kDMMaskDecodeEvenIfInvisible));
 			if (decodedString[1] == textFirstChar) {
 				_textMan->clearAllRows();
 				decodedString[1] = '\n'; /* New line */

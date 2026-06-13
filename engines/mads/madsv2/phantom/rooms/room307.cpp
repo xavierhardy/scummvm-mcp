@@ -37,6 +37,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_307_init() {
 	ss[fx_green_frame] = kernel_load_series(kernel_name('p', 0), false);
 	ss[fx_door] = kernel_load_series(kernel_name('x', 0), false);
@@ -312,6 +314,13 @@ void room_307_preload() {
 
 	section_3_walker();
 	section_3_interface();
+}
+
+
+void room_307_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
 }
 
 } // namespace Rooms

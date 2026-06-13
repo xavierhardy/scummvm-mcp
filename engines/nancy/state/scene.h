@@ -36,6 +36,10 @@
 #include "engines/nancy/ui/viewport.h"
 #include "engines/nancy/ui/textbox.h"
 #include "engines/nancy/ui/inventorybox.h"
+#include "engines/nancy/ui/inventorypopup.h"
+#include "engines/nancy/ui/notebookpopup.h"
+#include "engines/nancy/ui/cellphonepopup.h"
+#include "engines/nancy/ui/conversationpopup.h"
 
 namespace Common {
 class SeekableReadStream;
@@ -60,6 +64,7 @@ class SpecialEffect;
 
 namespace UI {
 class Button;
+class Taskbar;
 class ViewportOrnaments;
 class TextboxOrnaments;
 class InventoryBoxOrnaments;
@@ -70,11 +75,6 @@ namespace State {
 
 // The game state that handles all of the gameplay
 class Scene : public State, public Common::Singleton<Scene> {
-	friend class Nancy::Action::ActionRecord;
-	friend class Nancy::Action::ActionManager;
-	friend class Nancy::NancyConsole;
-	friend class Nancy::NancyEngine;
-
 public:
 	struct SceneSummary {
 		// SSUM and TSUM
@@ -120,6 +120,9 @@ public:
 	void changeScene(const SceneChangeDescription &sceneDescription);
 	void pushScene(int16 itemID = -1);
 	void popScene(bool inventory = false);
+	uint16 getSceneCounts(int16 hours) const {
+		return _flags.sceneCounts.contains(hours) ? _flags.sceneCounts[hours] : 0;
+	}
 
 	void setPlayerTime(Time time, byte relative);
 	Time getPlayerTime() const { return _timers.playerTime; }
@@ -146,6 +149,9 @@ public:
 	void setLogicCondition(int16 label, byte flag);
 	bool getLogicCondition(int16 label, byte flag) const;
 	void clearLogicConditions();
+	Time getLogicConditionTimestamp(int16 label) const {
+		return _flags.logicConditions[label].timestamp;	
+	}
 
 	void setDifficulty(uint difficulty) { _difficulty = difficulty; }
 	uint16 getDifficulty() const { return _difficulty; }
@@ -169,7 +175,12 @@ public:
 	UI::Viewport &getViewport() { return _viewport; }
 	UI::Textbox &getTextbox() { return _textbox; }
 	UI::InventoryBox &getInventoryBox() { return _inventoryBox; }
+	UI::InventoryPopup &getInventoryPopup() { return _inventoryPopup; }
+	UI::NotebookPopup &getNotebookPopup() { return _notebookPopup; }
+	UI::CellPhonePopup &getCellPhonePopup() { return _cellPhonePopup; }
+	UI::ConversationPopup &getConversationPopup() { return _conversationPopup; }
 	UI::Clock *getClock();
+	UI::Taskbar *getTaskbar() { return _taskbar; }
 
 	Action::ActionManager &getActionManager() { return _actionManager; }
 
@@ -194,6 +205,30 @@ public:
 	// Get the persistent data for a given puzzle type
 	PuzzleData *getPuzzleData(const uint32 tag);
 
+	enum State {
+		kInit,
+		kLoad,
+		kStartSound,
+		kRun
+	};
+
+	State getState() const { return _state; }
+	void setState(State state) { _state = state; }
+
+	struct Timers {
+		Time pushedPlayTime;
+		Time lastTotalTime;
+		Time sceneTime;
+		Time timerTime;
+		bool timerIsActive = false;
+		Time playerTime;           // In-game time of day, adds a minute every 5 seconds
+		Time playerTimeNextMinute; // Stores the next tick count until we add a minute to playerTime
+	};
+
+	Timers _timers;
+
+	RenderObject _hotspotDebug;
+
 private:
 	void init();
 	void load(bool fromSaveFile = false);
@@ -205,13 +240,6 @@ private:
 	void clearSceneData();
 	void clearPuzzleData();
 
-	enum State {
-		kInit,
-		kLoad,
-		kStartSound,
-		kRun
-	};
-
 	struct SceneState {
 		SceneSummary summary;
 		SceneChangeDescription currentScene;
@@ -221,16 +249,6 @@ private:
 		SceneChangeDescription pushedInvScene;
 		int16 pushedInvItemID = -1;
 		bool isInvScenePushed = false;
-	};
-
-	struct Timers {
-		Time pushedPlayTime;
-		Time lastTotalTime;
-		Time sceneTime;
-		Time timerTime;
-		bool timerIsActive = false;
-		Time playerTime; // In-game time of day, adds a minute every 5 seconds
-		Time playerTimeNextMinute; // Stores the next tick count until we add a minute to playerTime
 	};
 
 	struct PlayFlags {
@@ -260,9 +278,14 @@ private:
 	UI::Viewport _viewport;
 	UI::Textbox _textbox;
 	UI::InventoryBox _inventoryBox;
+	UI::InventoryPopup _inventoryPopup;
+	UI::NotebookPopup _notebookPopup;
+	UI::CellPhonePopup _cellPhonePopup;
+	UI::ConversationPopup _conversationPopup;
 
 	UI::Button *_menuButton;
 	UI::Button *_helpButton;
+	UI::Taskbar *_taskbar;
 	Time _buttonPressActivationTime;
 
 	UI::ViewportOrnaments *_viewportOrnaments;
@@ -275,7 +298,6 @@ private:
 	// General data
 	SceneState _sceneState;
 	PlayFlags _flags;
-	Timers _timers;
 	uint16 _difficulty;
 	Common::Array<uint16> _hintsRemaining;
 	int16 _lastHintCharacter;
@@ -294,8 +316,6 @@ private:
 
 	// Contains a screenshot of the Scene state from the last time it was exited
 	Graphics::ManagedSurface _lastScreenshot;
-
-	RenderObject _hotspotDebug;
 
 	bool _destroyOnExit;
 	bool _isRunningAd;

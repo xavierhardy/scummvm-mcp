@@ -177,6 +177,10 @@ int VideoPlayer::openVideo(bool primary, const Common::String &file, Properties 
 		if (!(video->decoder = openVideo(file, properties)))
 			return -1;
 
+		if (!(properties.flags & kFlagNoVideo) && !video->decoder->hasVideo()
+				&& (_vm->getGameType() == kGameTypeAdibou2 || _vm->getGameType() == kGameTypeAdi4)) // TODO: May be needed by other games
+			_vm->_draw->blitInvalidated();
+
 		if (video->decoder->hasVideo() && !(properties.flags & kFlagNoVideo) &&
 		    (video->decoder->isPaletted() != !_vm->isTrueColor())) {
 			if (properties.switchColorMode) {
@@ -490,8 +494,7 @@ bool VideoPlayer::play(int slot, Properties &properties) {
 
 		bool playFrameResult = playFrame(slot, properties);
 		if ((_vm->getGameType() == kGameTypeAdibou2 || _vm->getGameType() == kGameTypeAdi4) &&
-				!playFrameResult &&
-				slot < kLiveVideoSlotCount) {
+				!playFrameResult) {
 			_vm->_util->processInput();
 			_vm->_video->retrace();
 			_vm->_util->delay(5);

@@ -293,7 +293,7 @@ int matte_add_message(FontPtr font, char *text, int x, int y, int message_color,
 			message_list[message_handle].font = font;
 			message_list[message_handle].text = text;
 			message_list[message_handle].xs = font_string_width(font, text, auto_spacing);
-			message_list[message_handle].ys = font->max_y_size;
+			message_list[message_handle].ys = font ? font->max_y_size : 0;
 			message_list[message_handle].main_color = message_color;
 			message_list[message_handle].spacing = (char)auto_spacing;
 			message_list[message_handle].status = 1;
@@ -368,16 +368,21 @@ static void make_matte(ImagePtr image, MattePtr matte) {
 		matte->x = image->x - picture_map.pan_x;
 		matte->y = image->y - picture_map.pan_y;
 
-		sprite = &series_list[image->series_id]->index[(image->sprite_id & SPRITE_MASK) - 1];
-
-		if (image->scale == IMAGE_UNSCALED) {
-			xs = sprite->xs;
-			ys = sprite->ys;
+		if (!series_list[image->series_id]) {
+			// WORKAROUND: Handle invalid sprites
+			xs = ys = 0;
 		} else {
-			xs = (50 + (sprite->xs * image->scale)) / 100;
-			ys = (50 + (sprite->ys * image->scale)) / 100;
-			matte->x -= (xs >> 1);
-			matte->y -= (ys - 1);
+			sprite = &series_list[image->series_id]->index[(image->sprite_id & SPRITE_MASK) - 1];
+
+			if (image->scale == IMAGE_UNSCALED) {
+				xs = sprite->xs;
+				ys = sprite->ys;
+			} else {
+				xs = (50 + (sprite->xs * image->scale)) / 100;
+				ys = (50 + (sprite->ys * image->scale)) / 100;
+				matte->x -= (xs >> 1);
+				matte->y -= (ys - 1);
+			}
 		}
 	}
 
@@ -613,10 +618,8 @@ static void matte_special_effect(int special_effect, int full_screen) {
 			if (mem_get_avail() < 3600) special_effect = MATTE_FX_FAST_AND_FANCY;
 		}
 
-		if (special_effect == MATTE_FX_FAST_AND_FANCY) {
-			if (viewing_at_y || (mem_get_avail() < sizeof(Palette))) {
-				special_effect = MATTE_FX_FAST_THRU_BLACK;
-			}
+		if (special_effect == MATTE_FX_FAST_AND_FANCY && viewing_at_y) {
+			special_effect = MATTE_FX_FAST_THRU_BLACK;
 		}
 	}
 
@@ -630,8 +633,8 @@ static void matte_special_effect(int special_effect, int full_screen) {
 
 		if (special_effect == MATTE_FX_FADE_THRU_BLACK) {
 			mcga_getpal(&special_pal);
-			matte_quick_to_black(&special_pal[0].r, 1);
-			// magic_fade_to_grey (special_pal, NULL, 0, 256, 0, 1, 1, 16);
+			//matte_quick_to_black(&special_pal[0].r, 1);
+			magic_fade_to_grey(special_pal, NULL, 0, 256, 0, 1, 1, 16);
 			buffer_fill(scr_live, 0);
 		}
 
@@ -643,7 +646,7 @@ static void matte_special_effect(int special_effect, int full_screen) {
 			work_screen->x, work_screen->y);
 
 		matte_quick_from_black(&special_pal[0].r, 1);
-		// magic_fade_from_grey (special_pal, master_palette, 0, 256, 0, 1, 1, 16);
+		//magic_fade_from_grey(special_pal, master_palette, 0, 256, 0, 1, 1, 16);
 		break;
 
 	case MATTE_FX_CORNER_LOWER_LEFT:
@@ -905,9 +908,13 @@ void matte_frame(int special_effect, int full_screen) {
 				y = image_list[id2].y - picture_map.pan_y - (sprite->ys - 1);
 			}
 			if ((image_list[id2].depth <= 1) && !matte_guard_depth_0) {
-				sprite_draw(series_list[image_list[id2].series_id],
-					image_list[id2].sprite_id,
-					&scr_work, x, y);
+				// WORKAROUND: Only allow sprites within limits, avoiding crash in Dragonsphere
+				// Hightower cutscene when attacking monster
+				SeriesPtr s = series_list[image_list[id2].series_id];
+				if (image_list[id2].sprite_id <= s->num_sprites)
+					sprite_draw(series_list[image_list[id2].series_id],
+						image_list[id2].sprite_id,
+						&scr_work, x, y);
 			} else {
 				sprite_draw_3d_big(series_list[image_list[id2].series_id],
 					image_list[id2].sprite_id,
@@ -1330,6 +1337,35 @@ void matte_inter_frame(int update_live, int clear_chaff) {
 		image++;
 	}
 	image_inter_marker = new_marker;
+}
+
+void init_matte() {
+	memset(series_list, 0, sizeof(series_list));
+	memset(series_name, 0, sizeof(series_name));
+	memset(series_user, 0, sizeof(series_user));
+	memset(image_list, 0, sizeof(image_list));
+	memset(matte_list, 0, sizeof(matte_list));
+	memset(depth_list_id, 0, sizeof(depth_list_id));
+	memset(depth_list, 0, sizeof(depth_list));
+	memset(message_list, 0, sizeof(message_list));
+	series_list_marker = 0;
+	picture_view_x = 0;
+	picture_view_y = 0;
+	viewing_at_x = 0;
+	viewing_at_y = 0;
+	matte_disable_screen_update = false;
+	attr_packed = false;
+	image_marker = 0;
+	matte_guard_depth_0 = false;
+	work_screen_ems_handle = -1;
+	memset(&picture_map, 0, sizeof(TileMapHeader));
+	memset(&depth_map, 0, sizeof(TileMapHeader));
+	memset(&picture_resource, 0, sizeof(TileResource));
+	memset(&depth_resource, 0, sizeof(TileResource));
+	memset(image_inter_list, 0, sizeof(image_inter_list));
+	memset(matte_inter_list, 0, sizeof(matte_inter_list));
+	inter_viewing_at_y = 0;
+	image_inter_marker = 0;
 }
 
 } // namespace MADSV2

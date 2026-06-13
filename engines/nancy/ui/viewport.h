@@ -38,7 +38,7 @@ struct NancyInput;
 
 namespace UI {
 
-class Viewport : public Nancy::RenderObject {
+class Viewport : public RenderObject {
 public:
 	Viewport() :
 		RenderObject(6),

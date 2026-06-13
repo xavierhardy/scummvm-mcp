@@ -22,6 +22,7 @@
 #ifndef MADS_CORE_ANIM_H
 #define MADS_CORE_ANIM_H
 
+#include "audio/audiostream.h"
 #include "common/stream.h"
 #include "mads/madsv2/core/general.h"
 #include "mads/madsv2/core/font.h"
@@ -267,8 +268,8 @@ struct FrameEditBuf {
 	word timing;
 	word view_x;
 	word view_y;
-	char yank_x;
-	char yank_y;
+	int8 yank_x;
+	int8 yank_y;
 };
 
 typedef struct FrameEditBuf FrameEdit;
@@ -277,7 +278,7 @@ typedef FrameEdit *FrameEditPtr;
 
 struct Frame {
 	byte sound;         /* what sound cue to play                             */
-	byte speech;        /* what speech record to activate                     */
+	int8 speech;        /* what speech record to activate                     */
 	word ticks;         /* how many ticks for this frame (before? after?)     */
 	word view_x;        /* where the pan set currently                        */
 	word view_y;
@@ -312,9 +313,9 @@ struct Speech {
 	char text[60];                /* Text to be displayed     */
 	byte misc[3];                 /* 3 extra bonus bytes      */
 	byte sound;                   /* Sound to be used         */
-	/* pl SpeechDirPtr speech;  */      /* Binary speech pointer    */
+	Audio::AudioStream *speech;	  /* Speech audio stream      */
 	int16 x, y;                   /* Text coordinates         */
-	int16 display_condition;      /* Condition for display    */
+	uint16 display_condition;     /* Condition for display    */
 	RGBcolor color[2];            /* Colors for text display  */
 	word flags;                   /* Segment flags            */
 	int16 speech_loops;           /* Loops if speech active   */
@@ -324,7 +325,7 @@ struct Speech {
 	int16 last_frame;             /* Last frame of segment    */
 	int16 first_image;            /* First image number       */
 
-	static constexpr int SIZE = 2 + 60 + 3 + 1 + 2 + 2 + 2 + 2 * RGBcolor::SIZE + 7 * 2;
+	static constexpr int SIZE = 2 + 60 + 3 + 1 + 4 + 2 + 2 + 2 + 2 * RGBcolor::SIZE + 7 * 2;
 	void load(Common::SeekableReadStream *src);
 };
 
@@ -448,8 +449,7 @@ AnimPtr anim_load(const char *file_name,
 	RoomPtr *room, CycleListPtr cycle_list,
 	int load_flags);
 
-int anim_get_sound_info(char *file_name,
-	char *sound_file_buffer,
+int anim_get_sound_info(const char *file_name, char *sound_file_buffer,
 	int *sound_load_flag);
 
 int anim_get_header_info(char *file_name,
@@ -457,6 +457,8 @@ int anim_get_header_info(char *file_name,
 
 
 int anim_himem_preload(char *name, int level);
+
+extern void init_anim();
 
 } // namespace MADSV2
 } // namespace MADS

@@ -52,7 +52,7 @@ static void copy_mangle(CopyProt *copy_prot) {
 
 	dog = (byte *)copy_prot;
 
-	for (count = 0; count < sizeof(CopyProt); count++) {
+	for (count = 0; count < (int)sizeof(CopyProt); count++) {
 		*dog ^= 0xff;
 		dog++;
 	}

@@ -126,6 +126,10 @@ int font_write(FontPtr font, Buffer *target, const char *out_string,
 	char height;
 	byte *target_ptr;
 
+	// Nothing needed for empty strings
+	if (strlen(out_string) == 0)
+		return x;
+
 	*(uint32 *)&colors[0] = *(uint32 *)&font_colors[0];
 
 	Common::strcpy_s(temp_buf, out_string);
@@ -245,6 +249,14 @@ int font_string_width(FontPtr font, const char *out_string, int auto_spacing) {
 	}
 
 	return (width);
+}
+
+void init_font() {
+	font_inter = NULL;
+	font_main = NULL;
+	font_conv = NULL;
+	font_menu = NULL;
+	font_misc = NULL;
 }
 
 } // namespace MADSV2

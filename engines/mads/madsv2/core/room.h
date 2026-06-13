@@ -279,6 +279,8 @@ extern int room_picture_load(int room_id, Buffer *picture, int load_flags);
 extern void room_resolve_base(char *base, char *file, int id, const char *base_path);
 extern int room_invert(void);
 
+extern void init_room();
+
 } // namespace MADSV2
 } // namespace MADS
 

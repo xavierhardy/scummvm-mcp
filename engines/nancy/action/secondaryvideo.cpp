@@ -105,6 +105,13 @@ void PlaySecondaryVideo::updateGraphics() {
 			if (_decoder.needsUpdate()) {
 				GraphicsManager::copyToManaged(*_decoder.decodeNextFrame(), _fullFrame, !_paletteFilename.empty(), _videoFormat == kSmallVideoFormat);
 				_needsRedraw = true;
+
+				for (const FlagAtFrame &f : _frameFlags) {
+					if (f.flagDesc.label != -1 &&
+							_decoder.getCurFrame() == f.frameID) {
+						NancySceneState.setEventFlag(f.flagDesc);
+					}
+				}
 			}
 
 			if (lastAnimationFrame > -1 &&
@@ -155,6 +162,9 @@ void PlaySecondaryVideo::handleInput(NancyInput &input) {
 }
 
 void PlaySecondaryVideo::readData(Common::SeekableReadStream &stream) {
+	uint16 numFrameEvents = 0;
+	uint16 numVideoDescs = 0;
+
 	Common::Serializer ser(&stream, nullptr);
 	ser.setVersion(g_nancy->getGameType());
 
@@ -176,22 +186,33 @@ void PlaySecondaryVideo::readData(Common::SeekableReadStream &stream) {
 	ser.syncAsUint16LE(_onHoverEndLastFrame);
 
 	_sceneChange.readData(stream, ser.getVersion() == kGameTypeVampire);
-	ser.skip(1, kGameTypeNancy1);
 
-	uint16 numVideoDescs = 0;
+	if (g_nancy->getGameType() <= kGameTypeNancy9) {
+		ser.skip(1, kGameTypeNancy1);
+	} else {
+		byte pushSceneByte = 0;
+		ser.syncAsByte(pushSceneByte);
+		_pushSceneOnTrigger = (pushSceneByte == 1);
+		ser.syncAsUint16LE(numFrameEvents);
+	}
+
 	ser.syncAsUint16LE(numVideoDescs);
+
+	_frameFlags.resize(numFrameEvents);
+	for (uint i = 0; i < numFrameEvents; ++i) {
+		ser.syncAsSint16LE(_frameFlags[i].frameID);
+		ser.syncAsSint16LE(_frameFlags[i].flagDesc.label);
+		ser.syncAsUint16LE(_frameFlags[i].flagDesc.flag);
+	}
+
 	_videoDescs.resize(numVideoDescs);
 	for (uint i = 0; i < numVideoDescs; ++i) {
 		_videoDescs[i].readData(stream);
 	}
 
+	// Nancy 10+ tail: 16 trailing bytes after the video descs. Purpose
+	// not yet identified.
 	if (g_nancy->getGameType() >= kGameTypeNancy10) {
-		// TODO: Hotspot data
-		uint32 num;
-		ser.syncAsUint32LE(num);
-		Common::Array<Common::Rect> rects;
-		readRectArray(stream, rects, 4);
-
 		stream.skip(16);
 	}
 }
@@ -220,6 +241,18 @@ void PlaySecondaryVideo::execute() {
 				_currentViewportFrame = -1;
 			}
 
+			// HACK: Checks for character availability in Nancy10. These are
+			// currently not handled correctly, so we hardcode them here at the moment.
+			// TODO: Find out why these are not handled correctly and implement a
+			// proper solution for them.
+			if (g_nancy->getGameType() == kGameTypeNancy10) {
+				uint16 sceneId = NancySceneState.getSceneInfo().sceneID;
+				if ((sceneId == 2307 && NancySceneState.getEventFlag(556, g_nancy->_false)) || // EV_ST_Available
+					(sceneId == 2605 && NancySceneState.getEventFlag(588, g_nancy->_false)) || // EV_TB_Available
+					(sceneId == 2915 && NancySceneState.getEventFlag(156, g_nancy->_false))) // EV_DG_Available
+					_currentViewportFrame = -1;
+			}
+
 			if (_currentViewportFrame != -1) {
 				if (!_isInFrame) {
 					_decoder.start();
@@ -242,7 +275,8 @@ void PlaySecondaryVideo::execute() {
 		break;
 	}
 	case kActionTrigger:
-		NancySceneState.pushScene();
+		if (g_nancy->getGameType() < kGameTypeNancy10 || _pushSceneOnTrigger)
+			NancySceneState.pushScene();
 		NancySceneState.changeScene(_sceneChange);
 		finishExecution();
 		break;

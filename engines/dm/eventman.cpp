@@ -530,7 +530,7 @@ void EventManager::buildpointerScreenArea(int16 mousePosX, int16 mousePosY) {
 			_mousePointerType = k4_pointerTypeAutoselect;
 		else {
 			championIdx++;
-			if (championIdx == _vm->_inventoryMan->_inventoryChampionOrdinal)
+			if (championIdx == (uint16)_vm->_inventoryMan->_inventoryChampionOrdinal)
 				_mousePointerType = k0_pointerTypeArrow;
 			else if (mousePosY <= 6)
 				_mousePointerType = k0_pointerTypeArrow;
@@ -656,7 +656,7 @@ Common::EventType EventManager::processInput(Common::Event *grabKey, Common::Eve
 		}
 		case Common::EVENT_LBUTTONUP:
 		case Common::EVENT_RBUTTONUP: {
-			MouseButton button = (event.type == Common::EVENT_LBUTTONDOWN) ? kDMMouseButtonLeft : kDMMouseButtonRight;
+			MouseButton button = (event.type == Common::EVENT_LBUTTONUP) ? kDMMouseButtonLeft : kDMMouseButtonRight;
 			_mouseButtonStatus &= ~button;
 			resetPressingEyeOrMouth();
 			break;
@@ -1496,7 +1496,7 @@ void EventManager::mouseProcessCommands125To128_clickOnChampionIcon(uint16 champ
 		uint16 championIconIndex = _vm->ordinalToIndex(_useChampionIconOrdinalAsMousePointerBitmap);
 		_useChampionIconOrdinalAsMousePointerBitmap = _vm->indexToOrdinal(kDMChampionNone);
 		int16 championCellIndex = _vm->_championMan->getIndexInCell(_vm->normalizeModulo4(championIconIndex + _vm->_dungeonMan->_partyDir));
-		if (championIconIndex == champIconIndex) {
+		if (championCellIndex >= 0 && championIconIndex == champIconIndex) {
 			setFlag(_vm->_championMan->_champions[championCellIndex]._attributes, kDMAttributeIcon);
 			_vm->_championMan->drawChampionState((ChampionIndex)championCellIndex);
 		} else {
@@ -1611,7 +1611,7 @@ void EventManager::commandProcessType111To115_ClickInActionArea(int16 posX, int1
 			if (mouseCommand == kDMCommandClickInActionAreaPass) {
 				commandHighlightBoxEnable(285, 319, 77, 83);
 				_vm->_menuMan->didClickTriggerAction(-1);
-			} else if ((mouseCommand - kDMCommandClickInActionAreaPass) <= _vm->_menuMan->_actionCount) {
+			} else if (mouseCommand > kDMCommandClickInActionAreaPass && (mouseCommand - kDMCommandClickInActionAreaPass) <= _vm->_menuMan->_actionCount) {
 				if (mouseCommand == kDMCommandClickInActionAreaAction0)
 					commandHighlightBoxEnable(234, 318, 86, 96);
 				else if (mouseCommand == kDMCommandClickInActionAreaAction1)
@@ -1675,6 +1675,22 @@ void EventManager::highlightBoxDisable() {
 	if (_highlightBoxEnabled == true) {
 		highlightScreenBox(_highlightScreenBox._rect.left, _highlightScreenBox._rect.right, _highlightScreenBox._rect.top, _highlightScreenBox._rect.bottom);
 		_highlightBoxEnabled = false;
+	}
+}
+
+void EventManager::highlightScreenBox(int16 x1, int16 x2, int16 y1, int16 y2) {
+	x1 = CLIP<int16>(x1, 0, _vm->_displayMan->_screenWidth - 1);
+	x2 = CLIP<int16>(x2, 0, _vm->_displayMan->_screenWidth - 1);
+	y1 = CLIP<int16>(y1, 0, _vm->_displayMan->_screenHeight - 1);
+	y2 = CLIP<int16>(y2, 0, _vm->_displayMan->_screenHeight - 1);
+
+	byte *screen = _vm->_displayMan->_bitmapScreen;
+	uint16 pitch = _vm->_displayMan->_screenWidth;
+
+	for (int16 y = y1; y <= y2; ++y) {
+		for (int16 x = x1; x <= x2; ++x) {
+			screen[y * pitch + x] ^= 0x0F;
+		}
 	}
 }
 

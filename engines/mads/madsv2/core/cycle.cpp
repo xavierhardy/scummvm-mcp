@@ -38,7 +38,7 @@ int cycling_threshold;
 int total_cycle_colors;
 
 long cycle_timing[COLOR_MAX_CYCLES];
-static RGBcolor temp_color;
+//static RGBcolor temp_color;
 
 void cycle_init(CycleListPtr new_cycle_list, int activate) {
 	int count;
@@ -101,7 +101,7 @@ void cycle_colors(void) {
 				tmp = base[num - 1];
 
 				// Shift all colors forward by one
-				memmove(&base[1], &base[0], (num - 1) * sizeof(Palette));
+				memmove(&base[1], &base[0], (num - 1) * sizeof(RGBcolor));
 
 				// Write saved last color into the first slot
 				base[0] = tmp;
@@ -123,6 +123,16 @@ void cycle_colors(void) {
 	}
 
 	cycling_delay = 0;
+}
+
+void init_cycle() {
+	memset(&cycling_palette, 0, sizeof(Palette));
+	memset(&cycle_list, 0, sizeof(CycleList));
+	cycling_active = false;
+	cycling_delay = 0;
+	cycling_threshold = 0;
+	total_cycle_colors = 0;
+	memset(cycle_timing, 0, sizeof(cycle_timing));
 }
 
 } // namespace MADSV2

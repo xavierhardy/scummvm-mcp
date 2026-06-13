@@ -51,7 +51,7 @@ struct TileResource {
 	uint32 chunk_size;              /* Tile size in bytes (x*y)         */
 	int16 color_handle;             /* Color handle for loaded resource */
 
-	byte *tile_data = nullptr;      /* Flat tile store allocated by tile_load (not serialised) */
+	byte *tile_data;      /* Flat tile store allocated by tile_load (not serialised) */
 
 	static constexpr int SIZE = 2 + 2 + 2 + 2 + 2 + 2 + 2 + 4 + 2;
 	void load(Common::SeekableReadStream *src);
@@ -98,7 +98,7 @@ struct TileMapHeader {
 extern ShadowList tile_shadow;
 extern int tile_load_error;
 
-
+extern int tile_setup();
 extern int tile_load(const char *base, int tile_type, TileResource *tile_resource,
 	TileMapHeader *map, Buffer *picture, ColorListPtr color_list,
 	CycleListPtr cycle_list, int ems_handle, int load_flags);

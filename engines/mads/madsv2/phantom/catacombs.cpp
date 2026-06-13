@@ -241,7 +241,7 @@ static void global_catacombs_new_room(int catacomb_node, int from) {
 
 void global_catacombs_init() {
 	global_catacombs_setup();
-	global[catacombs_next_room] = global[catacombs_room];
+	global[catacombs_room] = global[catacombs_next_room];
 }
 
 void global_enter_catacombs(int special) {

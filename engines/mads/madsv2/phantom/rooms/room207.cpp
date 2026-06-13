@@ -47,6 +47,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_207_daemon() {
 	if (local->anim_0_running && !local->prevent) {
 		if (kernel_anim[aa[0]].frame == 6) {
@@ -226,6 +228,16 @@ void room_207_preload() {
 
 	section_2_walker();
 	section_2_interface();
+}
+
+
+void room_207_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->prevent,
+		local->anim_0_running);
 }
 
 } // namespace Rooms

@@ -47,6 +47,7 @@ AccessEngine::AccessEngine(OSystem *syst, const AccessGameDescription *gameDesc)
 	_helpBox = nullptr;
 	_midi = nullptr;
 	_player = nullptr;
+	_curPlayer = nullptr;
 	_res = nullptr;
 	_room = nullptr;
 	_screen = nullptr;
@@ -56,7 +57,7 @@ AccessEngine::AccessEngine(OSystem *syst, const AccessGameDescription *gameDesc)
 	_video = nullptr;
 
 	_destIn = nullptr;
-	_current = nullptr;
+	_current = &_buffer2;
 	_mouseMode = 0;
 	_playerDataCount = 0;
 	_currentMan = 0;
@@ -73,15 +74,14 @@ AccessEngine::AccessEngine(OSystem *syst, const AccessGameDescription *gameDesc)
 	_scaleI = 0;
 	_scrollCol = _scrollRow = 0;
 	_scrollX = _scrollY = 0;
-	_imgUnscaled = false;
 	_canSaveLoad = false;
 	_establish = nullptr;
 
 	_conversation = 0;
 	_newTime = 0;
 	_newDate = 0;
-	Common::fill(&_objectsTable[0], &_objectsTable[100], (SpriteResource *)nullptr);
-	Common::fill(&_establishTable[0], &_establishTable[100], false);
+	Common::fill(&_objectsTable[0], &_objectsTable[128], (SpriteResource *)nullptr);
+	Common::fill(&_establishTable[0], &_establishTable[128], false);
 	Common::fill(&_flags[0], &_flags[256], 0);
 	_establishFlag = false;
 	_establishMode = 0;
@@ -96,6 +96,7 @@ AccessEngine::AccessEngine(OSystem *syst, const AccessGameDescription *gameDesc)
 	_vidX = _vidY = 0;
 	_cheatFl = false;
 	_restartFl = false;
+	_hotspotFl = false;
 	_printEnd = 0;
 	ARRAYCLEAR(_objectsTable);
 	_clearSummaryFlag = false;
@@ -103,8 +104,9 @@ AccessEngine::AccessEngine(OSystem *syst, const AccessGameDescription *gameDesc)
 	ARRAYCLEAR(_travel);
 	_startTravelItem = _startTravelBox = 0;
 	ARRAYCLEAR(_ask);
+	ARRAYCLEAR(_asked);
 	_startAboutItem = _startAboutBox = 0;
-	_byte26CB5 = 0;
+	_keepAskPosition = false;
 	_bcnt = 0;
 	_boxDataStart = 0;
 	_boxDataEnd = false;
@@ -113,9 +115,11 @@ AccessEngine::AccessEngine(OSystem *syst, const AccessGameDescription *gameDesc)
 	_numLines = 0;
 	_pictureTaken = 0;
 
-	_vidEnd = false;
+	_textFlag = true;
+	_exitBox = false;
 
 	_icons = nullptr;
+	_stilScaleOff = 0;
 
 	ARRAYCLEAR(_countTbl);
 }
@@ -146,7 +150,7 @@ AccessEngine::~AccessEngine() {
 }
 
 void AccessEngine::setVGA() {
-	initGraphics(320, 200);
+	initGraphics(getScreenWidth(), getScreenHeight());
 }
 
 void AccessEngine::initialize() {
@@ -184,12 +188,11 @@ void AccessEngine::initialize() {
 	_char = new CharManager(this);
 	_events = new EventsManager(this);
 	_files = new FileManager(this);
-	_inventory = new InventoryManager(this);
 	_player = Player::init(this);
 	_screen = new Screen(this);
 	_sound = new SoundManager(this, _mixer);
-	_midi = new MusicManager(this);
-	_video = new VideoPlayer(this);
+	_midi = new MusicManagerMIDI(this);
+	_curPlayer = _player;
 
 	syncSoundSettings();
 	setTotalPlayTime(0);
@@ -209,7 +212,8 @@ void AccessEngine::initialize() {
 
 const SpriteResource *AccessEngine::getIcons() {
 	if (!_icons) {
-		Resource *iconData = _files->loadFile("ICONS.LZ");
+		const char *fname = (getGameID() == kGameNoctropolis) ? "ICONS.AP" : "ICONS.LZ";
+		Resource *iconData = _files->loadRawFile(fname);
 		_icons = new SpriteResource(this, iconData);
 		delete iconData;
 	}
@@ -226,6 +230,9 @@ Common::Error AccessEngine::run() {
 
 	setVGA();
 	initialize();
+
+	initObjects();
+	setupGame();
 
 	playGame();
 
@@ -281,8 +288,14 @@ void AccessEngine::speakText(BaseSurface *s, const Common::String &msg) {
 				_sound->loadSoundTable(0, _narateFile + 99, _sndSubFile);
 				_sound->playSound(0);
 
-				while(_sound->isSFXPlaying() && !shouldQuit())
+				while(_sound->isSFXPlaying() && !shouldQuit()) {
 					_events->pollEvents();
+					if (_events->peekAction() == kActionSkip) {
+						Common::CustomEventType action;
+						_events->getAction(action);
+						_sound->stopSound();
+					}
+				}
 
 				_scripts->cmdFreeSound();
 
@@ -310,12 +323,17 @@ void AccessEngine::speakText(BaseSurface *s, const Common::String &msg) {
 
 	while (soundsLeft) {
 		_sound->freeSounds();
-		Resource *res = _sound->loadSound(_narateFile + 99, _sndSubFile);
-		_sound->_soundTable.push_back(SoundEntry(res, 1));
+		_sound->loadAndAddSound(_narateFile + 99, _sndSubFile);
 		_sound->playSound(0);
 
-		while(_sound->isSFXPlaying() && !shouldQuit())
+		while(_sound->isSFXPlaying() && !shouldQuit()) {
 			_events->pollEvents();
+			if (_events->peekAction() == kActionSkip) {
+				Common::CustomEventType action;
+				_events->getAction(action);
+				_sound->stopSound();
+			}
+		}
 
 		_scripts->cmdFreeSound();
 
@@ -362,6 +380,17 @@ void AccessEngine::printText(BaseSurface *s, const Common::String &msg) {
 	_events->waitKeyActionMouse();
 }
 
+void AccessEngine::addHotspotHighlights() {
+	// find the reddest color in the palette.
+	byte palbuf[Graphics::PALETTE_SIZE];
+	_screen->getPalette(palbuf);
+	Graphics::PaletteLookup lookup;
+	lookup.setPalette(palbuf, 256);
+	byte color = lookup.findBestColor(255, 0, 0);
+	for (const auto &block : _room->_plotter._blocks) {
+		_screen->BaseSurface::drawBox(block.left, block.top, block.right, block.bottom, color);
+	}
+}
 
 void AccessEngine::plotList() {
 	_player->calcPlayer();
@@ -372,20 +401,22 @@ void AccessEngine::plotList1() {
 	for (uint idx = 0; idx < _images.size(); ++idx) {
 		ImageEntry &ie = _images[idx];
 
-		_imgUnscaled = (ie._flags & IMGFLAG_UNSCALED) != 0;
+		bool imgUnscaled = (ie._flags & IMGFLAG_UNSCALED) != 0;
 		Common::Point pt = ie._position - _screen->_bufferStart;
 		const SpriteResource *sprites = ie._spritesPtr;
 		const SpriteFrame *frame = sprites->getFrame(ie._frameNumber);
 
 		Common::Rect bounds(pt.x, pt.y, pt.x + frame->w, pt.y + frame->h);
-		if (!_imgUnscaled) {
-			bounds.setWidth(_screen->_scaleTable1[frame->w]);
-			bounds.setHeight(_screen->_scaleTable1[frame->h]);
+		if (!imgUnscaled) {
+			int sizex = ie._sizeOverride.x ? ie._sizeOverride.x : _screen->_scaleTable1[frame->w];
+			int sizey = ie._sizeOverride.y ? ie._sizeOverride.y : _screen->_scaleTable1[frame->h];
+			bounds.setWidth(sizex);
+			bounds.setHeight(sizey);
 		}
 
 		// Make a copy - some of the drawing methods I've adapted need the full
 		// scaled dimensions on-screen, and handle clipping themselves
-		Common::Rect destBounds = bounds;
+		const Common::Rect destBounds = bounds;
 
 		if (_buffer2.clip(bounds)) {
 			ie._flags |= IMGFLAG_CROPPED;
@@ -397,9 +428,10 @@ void AccessEngine::plotList1() {
 
 			_newRects.push_back(bounds);
 
-			if (!_imgUnscaled) {
-				_buffer2._rightSkip /= _scale;
-				bounds.setWidth(bounds.width() / _scale);
+			if (!imgUnscaled) {
+				int scale = ie._scaleOverride ? ie._scaleOverride : _scale;
+				_buffer2._rightSkip /= scale;
+				bounds.setWidth(bounds.width() / scale);
 
 				if (ie._flags & IMGFLAG_BACKWARDS) {
 					_buffer2.sPlotB(frame, destBounds);
@@ -419,6 +451,24 @@ void AccessEngine::plotList1() {
 	}
 }
 
+void AccessEngine::clearPlotImagesIn(int16 x, int16 y, int16 w, int16 h) {
+	const Common::Rect toClear = Common::Rect(Common::Point(x, y), w, h);
+	for (uint idx = 0; idx < _images.size(); idx++) {
+		const SpriteFrame *frame = _images[idx]._spritesPtr->getFrame(_images[idx]._frameNumber);
+		Common::Point topLeft = _images[idx]._position;
+		Common::Rect imgRect(topLeft, frame->w, frame->h);
+		if (toClear.intersects(imgRect)) {
+			_images.remove_at(idx);
+			_screen->addDirtyRect(imgRect);
+			idx--;
+		}
+	}
+}
+
+void AccessEngine::clearPlotVidsIn(int16 x, int16 y, int16 w, int16 h) {
+	warning("TODO: Implement AccessEngine::clearPlotVidsIn");
+}
+
 void AccessEngine::copyBlocks() {
 	// Copy the block list from the previous frame
 	for (const auto &rect : _oldRects) {
@@ -434,6 +484,11 @@ void AccessEngine::copyRects() {
 		_screen->copyBlock(&_buffer2, rect);
 		_oldRects.push_back(rect);
 	}
+}
+
+void AccessEngine::drawOverlays() {
+	if (_hotspotFl)
+		addHotspotHighlights();
 }
 
 void AccessEngine::copyBF1BF2() {
@@ -476,8 +531,8 @@ Common::Error AccessEngine::saveGameStream(Common::WriteStream *stream, bool isA
 	return synchronize(s);
 }
 
-Common::Error AccessEngine::loadGameStream(Common::SeekableReadStream *stream) {	
-	Common::Serializer s(stream, nullptr);	
+Common::Error AccessEngine::loadGameStream(Common::SeekableReadStream *stream) {
+	Common::Serializer s(stream, nullptr);
 	Common::Error result = synchronize(s);
 
 	// Set extra post-load state
@@ -502,7 +557,7 @@ Common::Error AccessEngine::loadGameState(int slot) {
 		delete saveFile;
 		return Engine::loadGameState(slot);
 	}
-		
+
 	// Load most of the savegame data
 	synchronize(s);
 	delete saveFile;
@@ -580,14 +635,62 @@ bool AccessEngine::readSavegameHeader(Common::InSaveFile *in, AccessSavegameHead
 	// Read Totalframes
 	header._totalFrames = in->readUint32LE();
 
-	// Read the Total PlayTime (if available)
-	if (header._version > 1)
-		header._totalPlayTime = in->readUint32LE();	
-	
 	return true;
 }
 
 bool AccessEngine::shouldQuitOrRestart() {
 	return shouldQuit() || _restartFl;
 }
+
+static const AccessActionCode AMAZON_ACTION_CODES[] = {
+	{ kActionLook, 1 },
+	{ kActionUse, 2 },
+	{ kActionTake, 3 },
+	{ kActionInventory, 4 },
+	{ kActionClimb, 5 },
+	{ kActionTalk, 6 },
+	{ kActionWalk, 7 },
+	{ kActionHelp, 8 },
+	{ kActionSaveLoad, -2 },
+	{ kActionNone, -1 },
+};
+
+static const AccessActionCode MARTIAN_ACTION_CODES[] = {
+	{ kActionLook, 0 },
+	{ kActionOpen, 1 },
+	{ kActionMove, 2 },
+	{ kActionTake, 3 },
+	{ kActionUse, 4 },
+	{ kActionWalk, 5 },
+	{ kActionTalk, 6 },
+	{ kActionTravel, 7 },
+	{ kActionHelp, 8 },
+	{ kActionSaveLoad, -2 },
+	{ kActionNone, -1 },
+};
+
+static const AccessActionCode NOCTROPOLIS_ACTION_CODES[] = {
+	{ kActionLook,      0, },
+	{ kActionOpen,      1, },
+	{ kActionMove,      2, },
+	{ kActionTake,      3, },
+	{ kActionTalk,      4, },
+	{ kActionUse,       5, },
+	{ kActionWalk,      6, },
+	{ kActionInventory, 7, },
+	{ kActionTravel,    8, },
+	{ kActionOptions,   9, },
+	{ kActionSaveLoad,  10 },
+	{ kActionNone, -1 },
+};
+
+const AccessActionCode *AccessEngine::getActionCodes() {
+	switch (getGameID()) {
+	case kGameMartianMemorandum: return MARTIAN_ACTION_CODES;
+	case kGameAmazon: 			 return AMAZON_ACTION_CODES;
+	case kGameNoctropolis: 		 return NOCTROPOLIS_ACTION_CODES;
+	default: error("Unsupported game ID for action codes: %d", getGameID());
+	}
+}
+
 } // End of namespace Access

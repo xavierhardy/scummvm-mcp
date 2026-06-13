@@ -86,16 +86,18 @@ byte *sprite_ptr;
 byte *target_ptr;
 int target_wrap;
 int xs, ys;
-int skip_y, draw_y, max_y, stop_y;
+int skip_y, max_y, stop_y;
 int skip_x, draw_x, max_x, stop_x;
 int line_finished;
 int mirror;
-int draw_count;
 SpritePtr sprite;
+#ifdef dump_mode
+int draw_count;
+#endif
 
 /*
-/*    Local variables for "three_d" depth coding
-*/
+ *    Local variables for "three_d" depth coding
+ */
 
 #if three_d
 byte *attr_ptr;
@@ -160,6 +162,11 @@ if (id < 0) {
 
 sprite = &series->index[id - 1];
 sprite_ptr = sprite->data;
+
+// WORKAROUND: Ignore sprites with no data. This fixes a crash in the Phantom
+// intro chandelier cutscene (7th animation)
+if (!sprite_ptr)
+	return;
 
 /* Load up buffer pointer info */
 target_ptr = buf->data;
@@ -291,7 +298,7 @@ ys = sprite->ys;
 	}
 
 	skip_y = cx;
-	draw_y = bx;
+	//draw_y = bx;
 	stop_y = cx + bx;
 
 	if (bx <= 0)
@@ -525,9 +532,9 @@ ys = sprite->ys;
 
 #ifdef attribute
 								{
-									byte sprite_depth_bits = depth_code;
+									byte sprite_depth_bits = draw_depth;  /* write target depth, not current depth */
 									byte stored_depth = draw_depth;
-									if (stored_depth > bit_off)  /* reusing bit_off as shift here per asm */
+									if (stored_depth > shift)  /* original asm compared against shift (0 or 4), not bit_off (which can be -1) */
 										goto pixel_DUMP_no_attr;
 									full_attr_byte = (full_attr_byte & 0xf0) | sprite_depth_bits;
 									/* ror full_attr_byte, shift */
@@ -656,8 +663,9 @@ pixel_RLE:
 
 						/* pixel_RLE_run_yesdraw */
 						if (run_value != SS_SKIP) {
+#ifndef attribute
 							byte out_byte = run_value;
-
+#endif
 #if three_d
 							{
 								byte depth_code;
@@ -689,8 +697,8 @@ pixel_RLE:
 #ifdef attribute
 									{
 										byte full_ab = attr_byte;
-										byte sprite_d = attr_byte & 0x0f;
-										if (draw_depth > bit_off)  goto pixel_RLE_no_attr;
+										byte sprite_d = draw_depth;  /* write target depth, not current depth */
+										if (draw_depth > shift)  goto pixel_RLE_no_attr;  /* original asm compared against shift (0 or 4), not bit_off */
 										full_ab = (full_ab & 0xf0) | sprite_d;
 										full_ab = (byte)((full_ab >> shift) | (full_ab << (8 - shift)));
 										attr_row[byte_off] = full_ab;
@@ -740,7 +748,9 @@ pixel_RLE_no_attr:;
 #endif
 								*pixel_ptr = out_byte;
 #endif
+#ifdef on_black
 pixel_RLE_no_output:;
+#endif
 								out_byte = full_color; /* restore for thatching */
 								goto pixel_RLE_run_skip_n_pop;
 							}
@@ -756,11 +766,14 @@ pixel_RLE_no_output:;
 #endif
 							*pixel_ptr = out_byte;
 #endif
+#ifdef on_black
 pixel_RLE_no_output2:;
+#endif
 						}
-
+#if interface || three_d || translate
 pixel_RLE_run_skip_n_pop:;
-pixel_RLE_run_skip:
+#endif
+
 #if translate
 						thatch_flag ^= 1;
 #endif
@@ -768,9 +781,8 @@ pixel_RLE_run_skip:
 
 pixel_RLE_run_nodraw:
 						draw_x_pos++;
-
-pixel_RLE_run_next:
 #if bresenham
+pixel_RLE_run_next :
 						scan_x++;
 #endif
 
@@ -822,6 +834,8 @@ pixel_IRLE:
 						/* pixel_IRLE_run_yesdraw */
 						if (run_value != SS_SKIP) {
 							byte out_byte = run_value;
+							// Hopefully stop warnings about it being unused for some functions
+							(void)out_byte;
 
 #if three_d
 							{
@@ -854,8 +868,8 @@ pixel_IRLE:
 #ifdef attribute
 									{
 										byte full_ab = attr_byte;
-										byte sprite_d = attr_byte & 0x0f;
-										if (draw_depth > bit_off)  goto pixel_IRLE_run_no_attr;
+										byte sprite_d = draw_depth;  /* write target depth, not current depth */
+										if (draw_depth > shift)  goto pixel_IRLE_run_no_attr;  /* original asm compared against shift (0 or 4), not bit_off */
 										full_ab = (full_ab & 0xf0) | sprite_d;
 										full_ab = (byte)((full_ab >> shift) | (full_ab << (8 - shift)));
 										attr_row[byte_off] = full_ab;
@@ -904,7 +918,9 @@ pixel_IRLE_run_no_attr:;
 #endif
 								*pixel_ptr = out_byte;
 #endif
+#ifdef on_black
 pixel_IRLE_run_no_output:;
+#endif
 								out_byte = full_color;
 								goto pixel_IRLE_run_skip_n_pop;
 							}
@@ -919,11 +935,13 @@ pixel_IRLE_run_no_output:;
 #endif
 							*pixel_ptr = out_byte;
 #endif
+#ifdef on_black
 pixel_IRLE_run_no_output2:;
+#endif
 						}
-
+#if three_d || interface || translate
 pixel_IRLE_run_skip_n_pop:;
-pixel_IRLE_run_skip:
+#endif
 #if translate
 						thatch_flag ^= 1;
 #endif
@@ -931,8 +949,9 @@ pixel_IRLE_run_skip:
 
 pixel_IRLE_run_nodraw:
 						draw_x_pos++;
-
+#if bresenham
 pixel_IRLE_run_next:
+#endif
 #if bresenham
 						scan_x++;
 #endif
@@ -990,8 +1009,8 @@ pixel_IRLE_run_next:
 #ifdef attribute
 								{
 									byte full_ab = attr_byte;
-									byte sprite_d = attr_byte & 0x0f;
-									if (draw_depth > bit_off)  goto pixel_IRLE_image_no_attr;
+									byte sprite_d = draw_depth;  /* write target depth, not current depth */
+									if (draw_depth > shift)  goto pixel_IRLE_image_no_attr;  /* original asm compared against shift (0 or 4), not bit_off */
 									full_ab = (full_ab & 0xf0) | sprite_d;
 									full_ab = (byte)((full_ab >> shift) | (full_ab << (8 - shift)));
 									attr_row[byte_off] = full_ab;
@@ -1021,7 +1040,6 @@ pixel_IRLE_image_no_attr:;
 
 #if translate
 						{
-							byte full_color = out_byte;
 							if (out_byte >= 16) {
 								if (thatch_flag != 0) {
 									out_byte >>= 4;
@@ -1041,7 +1059,9 @@ pixel_IRLE_image_no_attr:;
 #endif
 							*pixel_ptr = out_byte;
 #endif
+#ifdef on_black
 pixel_IRLE_image_no_output:;
+#endif
 							goto pixel_IRLE_image_skip_n_pop;
 						}
 #endif
@@ -1056,11 +1076,14 @@ pixel_IRLE_image_no_output:;
 #endif
 						*pixel_ptr = out_byte;
 #endif
+#ifdef on_black
 pixel_IRLE_image_no_output2:;
+#endif
 					}
-
+#if three_d || interface || translate
 pixel_IRLE_image_skip_n_pop:;
-pixel_IRLE_image_skip:
+#endif
+
 #if translate
 					thatch_flag ^= 1;
 #endif
@@ -1068,8 +1091,10 @@ pixel_IRLE_image_skip:
 
 pixel_IRLE_image_nodraw:
 					draw_x_pos++;
-
+#if bresenham
 pixel_IRLE_image_next:
+#endif
+
 #if bresenham
 					scan_x++;
 #endif

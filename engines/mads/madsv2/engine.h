@@ -29,16 +29,20 @@
 #include "common/random.h"
 #include "graphics/screen.h"
 #include "mads/mads.h"
-#include "mads/core/sound.h"
+#include "mads/core/sound_manager.h"
 #include "mads/madsv2/core/speech.h"
 
 namespace MADS {
 namespace MADSV2 {
 
+typedef void (*TimerFunction)();
+
 class MADSV2Engine : public MADSEngine {
 private:
+	void initGlobals();
 	void syncGame(Common::Serializer &s);
-
+	bool isSpecialKey(Common::KeyCode key) const;
+	
 protected:
 	Graphics::Screen *_screen = nullptr;
 	Common::Stack<Common::KeyState> _keyEvents;
@@ -46,8 +50,11 @@ protected:
 	Common::Point _mousePos;
 	int _mouseButtons = 0;
 	Audio::SoundHandle _speechHandle;
+	TimerFunction _timerFunction = nullptr;
+	uint32 _nextTimerTime = 0;
 
 	void pollEvents();
+	void checkForTimerFunction();
 
 public:
 	MADS::SoundManager *_soundManager = nullptr;
@@ -92,6 +99,7 @@ public:
 	}
 	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave) override;
 	Common::Error loadGameStream(Common::SeekableReadStream *stream) override;
+	virtual void syncRoom(Common::Serializer &s) = 0;
 	SaveStateList listSaves() const;
 
 	virtual void global_init_code() = 0;
@@ -104,9 +112,18 @@ public:
 	virtual void global_room_init() = 0;
 	virtual void global_sound_driver() = 0;
 	virtual void global_verb_filter() {}
+	virtual void player_keep_walking();
 
 	void playSpeech(Audio::AudioStream *stream);
 	void stopSpeech();
+	bool isSpeechPlaying() const;
+
+	/**
+	 * Sets the timer function to call at 60Hz
+	 */
+	void setTimerFunction(TimerFunction fn) {
+		_timerFunction = fn;
+	}
 };
 
 extern MADSV2Engine *g_engine;

@@ -40,6 +40,8 @@ extern long cycle_timing[COLOR_MAX_CYCLES];     /* Timing for each cycle  */
 void cycle_init(CycleListPtr new_cycle_list, int activate);
 void cycle_colors(void);
 
+extern void init_cycle();
+
 } // namespace MADSV2
 } // namespace MADS
 

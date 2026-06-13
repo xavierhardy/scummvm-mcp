@@ -745,7 +745,8 @@ T0209005_AddEventAndReturn:
 			if ((AL0447_i_Behavior != kDMBehaviorAttack) && (AL0447_i_Behavior != kDMBehaviorFlee)) {
 				if (_vm->getDistance(dungeon._partyMapX, dungeon._partyMapY, eventMapX, eventMapY) <= 1)
 					goto T0209044_SetBehavior6_Attack;
-				if (((AL0447_i_Behavior == kDMBehaviorWander) || (AL0447_i_Behavior == kDMBehaviorUnknown3)) && (AL0447_i_Behavior != kDMBehaviorApproach)) /* BUG0_00 Useless code. Behavior cannot be 3 because this value is never used. Moreover, the second condition in the && is redundant (if the value is 0 or 3, it cannot be 7). The actual condition is: if (AL0447_i_Behavior == k0_behavior_WANDER) */
+				// if (((AL0447_i_Behavior == kDMBehaviorWander) || (AL0447_i_Behavior == kDMBehaviorUnknown3)) && (AL0447_i_Behavior != kDMBehaviorApproach)) /* BUG0_00 Useless code. Behavior cannot be 3 because this value is never used. Moreover, the second condition in the && is redundant (if the value is 0 or 3, it cannot be 7). The actual condition is: if (AL0447_i_Behavior == k0_behavior_WANDER) */
+				if ((AL0447_i_Behavior == kDMBehaviorWander) || (AL0447_i_Behavior == kDMBehaviorUnknown3))
 					goto T0209054_SetBehavior7_Approach;
 			}
 			activeGroup->_targetMapX = dungeon._partyMapX;
@@ -753,7 +754,8 @@ T0209005_AddEventAndReturn:
 		}
 		if (AL0447_i_Behavior == kDMBehaviorAttack) {
 			AL0446_i_CreatureAspectIndex = eventType - kDMEventTypeUpdateAspectCreature0; /* Value -1 for event 32, meaning aspect will be updated for all creatures in the group */
-			nextAspectUpdateTime = getCreatureAspectUpdateTime(activeGroup, AL0446_i_CreatureAspectIndex, getFlag(activeGroup->_aspect[AL0446_i_CreatureAspectIndex], kDMAspectMaskActiveGroupIsAttacking));
+			bool isAttacking = (AL0446_i_CreatureAspectIndex >= 0 && AL0446_i_CreatureAspectIndex < 4) ? getFlag(activeGroup->_aspect[AL0446_i_CreatureAspectIndex], kDMAspectMaskActiveGroupIsAttacking) : false;
+			nextAspectUpdateTime = getCreatureAspectUpdateTime(activeGroup, AL0446_i_CreatureAspectIndex, isAttacking);
 			goto T0209136;
 		}
 		if ((AL0450_i_DistanceXToParty > 3) || (AL0451_i_DistanceYToParty > 3)) {
@@ -1105,12 +1107,14 @@ bool GroupMan::isMovementPossible(CreatureInfo *creatureInfo, int16 mapX, int16 
 
 
 	dungeon.mapCoordsAfterRelMovement((Direction)dir, 1, 0, mapX, mapY);
+	if ((mapX < 0) || (mapX >= dungeon._currMapWidth) || (mapY < 0) || (mapY >= dungeon._currMapHeight)) {
+		_groupMovBlockedByWallStairsPitFakeWalFluxCageTeleporter = true;
+		return false;
+	}
 	uint16 curSquare = dungeon._currMapData[mapX][mapY];
 	int16 curSquareType = Square(curSquare).getType();
 	_groupMovBlockedByWallStairsPitFakeWalFluxCageTeleporter =
-		!(((mapX >= 0) && (mapX < dungeon._currMapWidth)) &&
-		 ((mapY >= 0) && (mapY < dungeon._currMapHeight)) &&
-		  (curSquareType != kDMElementTypeWall) &&
+		!((curSquareType != kDMElementTypeWall) &&
 		  (curSquareType != kDMElementTypeStairs) &&
 		 ((curSquareType != kDMElementTypePit) || (getFlag(curSquare, kDMSquareMaskPitImaginary) && allowMovementOverImaginaryPitsAndFakeWalls) || !getFlag(curSquare, kDMSquareMaskPitOpen) || getFlag(creatureInfo->_attributes, kDMCreatureMaskLevitation)) &&
 		 ((curSquareType != kDMElementTypeFakeWall) || getFlag(curSquare, kDMSquareMaskFakeWallOpen) || (getFlag(curSquare, kDMSquareMaskFakeWallImaginary) && allowMovementOverImaginaryPitsAndFakeWalls)));
@@ -1396,7 +1400,7 @@ void GroupMan::addGroupEvent(TimelineEvent *event, uint32 time) {
 	_vm->_timeline->addEventGetEventIndex(event);
 }
 
-int16 GroupMan::getSmelledPartyPrimaryDirOrdinal(CreatureInfo *creatureInfo, int16 mapY, int16 mapX) {
+int16 GroupMan::getSmelledPartyPrimaryDirOrdinal(CreatureInfo *creatureInfo, int16 mapX, int16 mapY) {
 	uint16 smellRange = creatureInfo->getSmellRange();
 	if (!smellRange)
 		return 0;
@@ -1404,14 +1408,14 @@ int16 GroupMan::getSmelledPartyPrimaryDirOrdinal(CreatureInfo *creatureInfo, int
 	ChampionMan &championMan = *_vm->_championMan;
 	DungeonMan &dungeon = *_vm->_dungeonMan;
 
-	if ((((smellRange + 1) >> 1) >= _currGroupDistanceToParty) && getDistanceBetweenUnblockedSquares(mapY, mapX, dungeon._partyMapX, dungeon._partyMapY, &GroupMan::isSmellPartyBlocked)) {
+	if ((((smellRange + 1) >> 1) >= _currGroupDistanceToParty) && getDistanceBetweenUnblockedSquares(mapX, mapY, dungeon._partyMapX, dungeon._partyMapY, &GroupMan::isSmellPartyBlocked)) {
 		_vm->_projexpl->_secondaryDirToOrFromParty = _currGroupSecondaryDirToParty;
 		return _vm->indexToOrdinal(_currGroupPrimaryDirToParty);
 	}
 
-	int16 scentOrdinal = championMan.getScentOrdinal(mapY, mapX);
+	int16 scentOrdinal = championMan.getScentOrdinal(mapX, mapY);
 	if (scentOrdinal && ((championMan._party._scentStrengths[_vm->ordinalToIndex(scentOrdinal)] + _vm->getRandomNumber(4)) > (30 - (smellRange << 1)))) { /* If there is a fresh enough party scent on the group square */
-		return _vm->indexToOrdinal(getDirsWhereDestIsVisibleFromSource(mapY, mapX, championMan._party._scents[scentOrdinal].getMapX(), championMan._party._scents[scentOrdinal].getMapY()));
+		return _vm->indexToOrdinal(getDirsWhereDestIsVisibleFromSource(mapX, mapY, championMan._party._scents[scentOrdinal].getMapX(), championMan._party._scents[scentOrdinal].getMapY()));
 	}
 	return 0;
 }
@@ -1978,7 +1982,6 @@ void GroupMan::fluxCageAction(int16 mapX, int16 mapY) {
 	newEvent._priority = 0;
 	newEvent._Cu._slot = unusedThing.toUint16();
 	newEvent._Bu._location._mapX = mapX;
-	newEvent._Bu._location._mapY = mapY;
 	newEvent._Bu._location._mapY = mapY;
 	_vm->_timeline->addEventGetEventIndex(&newEvent);
 	int16 fluxcageCount;

@@ -156,7 +156,7 @@ void Movie::resolveScriptEvent(LingoEvent &event) {
 					_currentHiliteChannelId = event.channelId;
 					g_director->_wm->_hilitingWidget = true;
 					g_director->getCurrentWindow()->setDirty(true);
-					g_director->getCurrentWindow()->addDirtyRect(_score->_channels[_currentHiliteChannelId]->getBbox());
+					_score->_channels[_currentHiliteChannelId]->setDirty();
 				}
 
 				CastMember *cast = getCastMember(_score->_channels[event.channelId]->_sprite->_castId);
@@ -187,7 +187,7 @@ void Movie::resolveScriptEvent(LingoEvent &event) {
 		} else if ((event.event == kEventMouseUp) || (event.event == kEventRightMouseUp)) {
 			if (_currentHiliteChannelId && _score->_channels[_currentHiliteChannelId]) {
 				g_director->getCurrentWindow()->setDirty(true);
-				g_director->getCurrentWindow()->addDirtyRect(_score->_channels[_currentHiliteChannelId]->getBbox());
+				_score->_channels[_currentHiliteChannelId]->setDirty();
 			}
 			g_director->_wm->_hilitingWidget = false;
 
@@ -500,7 +500,27 @@ void Movie::queueEvent(Common::Queue<LingoEvent> &queue, LEvent event, int targe
 		// In D2-3, specific objects handle each event, with no passing
 		switch(event) {
 		case kEventMouseUp:
+			if (_vm->getVersion() >= 300) {
+				uint16 spriteId = _score->getMouseSpriteIDFromPos(pos);
+				Sprite *sprite = _score->getSpriteById(spriteId);
+				if (sprite && sprite->_immediate)
+					break;
+			}
+			// fall through
 		case kEventMouseDown:
+			if (_vm->getVersion() >= 300) {
+				uint16 spriteId = _score->getMouseSpriteIDFromPos(pos);
+				Sprite *sprite = _score->getSpriteById(spriteId);
+				if (sprite && sprite->_immediate) {
+					queue.push(LingoEvent(kEventMouseDown, eventId, kSpriteHandler, false, pos));
+					queue.push(LingoEvent(kEventMouseDown, eventId, kCastHandler, false, pos));
+					_nextEventId++;
+					int mouseUpEventId = _nextEventId;
+					queue.push(LingoEvent(kEventMouseUp, mouseUpEventId, kSpriteHandler, false, pos));
+					queue.push(LingoEvent(kEventMouseUp, mouseUpEventId, kCastHandler, false, pos));
+					break;
+				}
+			}
 			queue.push(LingoEvent(event, eventId, kSpriteHandler, false, pos));
 			queue.push(LingoEvent(event, eventId, kCastHandler, false, pos));
 			break;
@@ -534,11 +554,28 @@ void Movie::queueEvent(Common::Queue<LingoEvent> &queue, LEvent event, int targe
 		 * Once one of these objects handles the event, any event handlers queued
 		 * for the same event will be ignored unless the pass command was called.
 		 */
+
+		uint16 spriteId = _score->getMouseSpriteIDFromPos(pos);
+		Sprite *sprite = _score->getSpriteById(spriteId);
+
 		switch (event) {
 		case kEventKeyUp:
 		case kEventKeyDown:
 		case kEventMouseUp:
+			if (sprite && sprite->_immediate) {
+				break;
+			}
+			// fall through
 		case kEventMouseDown:
+			if (sprite && sprite->_immediate) {
+				queue.push(LingoEvent(kEventMouseDown, eventId, kSpriteHandler, false, pos, spriteId));
+				queue.push(LingoEvent(kEventMouseDown, eventId, kCastHandler, false, pos, spriteId));
+				_nextEventId++;
+				int mouseUpEventId = _nextEventId;
+				queue.push(LingoEvent(kEventMouseUp, mouseUpEventId, kSpriteHandler, false, pos, spriteId));
+				queue.push(LingoEvent(kEventMouseUp, mouseUpEventId, kCastHandler, false, pos, spriteId));
+				break;
+			}
 		case kEventRightMouseUp:
 		case kEventRightMouseDown:
 		case kEventBeginSprite:
@@ -610,6 +647,22 @@ void Movie::queueEvent(Common::Queue<LingoEvent> &queue, LEvent event, int targe
 void Movie::queueInputEvent(LEvent event, int targetId, Common::Point pos) {
 	queueEvent(_inputEventQueue, event, targetId, pos);
 }
+
+
+bool Movie::processInputEvent(LEvent event, int targetId, Common::Point pos) {
+	if (!_lingo->_state->callstack.empty()) {
+		// We're in the middle of executing something else, queue input event for later
+		queueInputEvent(event, targetId, pos);
+		return true;
+	}
+	// Try and process event inline
+	Common::Queue<LingoEvent> queue;
+	queueEvent(queue, event, targetId, pos);
+	_vm->setCurrentWindow(this->getWindow());
+	_lingo->processEvents(queue, true);
+	return _lingo->_passEvent;
+}
+
 
 void Movie::processEvent(LEvent event, int targetId) {
 	Common::Queue<LingoEvent> queue;
@@ -699,7 +752,7 @@ void Lingo::processEvents(Common::Queue<LingoEvent> &queue, bool isInputEvent) {
 }
 
 bool Lingo::processEvent(LEvent event, ScriptType st, CastMemberID scriptId, int channelId, AbstractObject *obj) {
-	_currentChannelId = channelId;
+	_state->currentChannelId = channelId;
 
 	if (!_eventHandlerTypes.contains(event))
 		error("processEvent: Unknown event %d", event);

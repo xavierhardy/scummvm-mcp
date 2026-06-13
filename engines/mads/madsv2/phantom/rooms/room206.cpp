@@ -47,6 +47,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_206_daemon() {
 	switch (kernel.trigger) {
 	case ROOM_206_FROM_308:
@@ -552,6 +554,17 @@ void room_206_preload() {
 
 	section_2_walker();
 	section_2_interface();
+}
+
+
+void room_206_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->anim_0_running,
+		local->prevent,
+		local->prevent_2);
 }
 
 } // namespace Rooms

@@ -36,14 +36,18 @@
 #include "engines/nancy/action/puzzle/arcadepuzzle.h"
 #include "engines/nancy/action/puzzle/assemblypuzzle.h"
 #include "engines/nancy/action/puzzle/bballpuzzle.h"
+#include "engines/nancy/action/puzzle/beadpuzzle.h"
 #include "engines/nancy/action/puzzle/bulpuzzle.h"
 #include "engines/nancy/action/puzzle/bombpuzzle.h"
 #include "engines/nancy/action/puzzle/collisionpuzzle.h"
 #include "engines/nancy/action/puzzle/cubepuzzle.h"
 #include "engines/nancy/action/puzzle/cuttingpuzzle.h"
+#include "engines/nancy/action/puzzle/dotconnectpuzzle.h"
+#include "engines/nancy/action/puzzle/gridmappuzzle.h"
 #include "engines/nancy/action/puzzle/matchpuzzle.h"
 #include "engines/nancy/action/puzzle/hamradiopuzzle.h"
 #include "engines/nancy/action/puzzle/leverpuzzle.h"
+#include "engines/nancy/action/puzzle/magnetmazepuzzle.h"
 #include "engines/nancy/action/puzzle/mazechasepuzzle.h"
 #include "engines/nancy/action/puzzle/memorypuzzle.h"
 #include "engines/nancy/action/puzzle/mouselightpuzzle.h"
@@ -61,6 +65,7 @@
 #include "engines/nancy/action/puzzle/safedialpuzzle.h"
 #include "engines/nancy/action/puzzle/setplayerclock.h"
 #include "engines/nancy/action/puzzle/sliderpuzzle.h"
+#include "engines/nancy/action/puzzle/sortpuzzle.h"
 #include "engines/nancy/action/puzzle/soundequalizerpuzzle.h"
 #include "engines/nancy/action/puzzle/soundmatchpuzzle.h"
 #include "engines/nancy/action/puzzle/spigotpuzzle.h"
@@ -89,7 +94,7 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		if (g_nancy->getGameType() <= kGameTypeNancy9)
 			return new HotMultiframeSceneChange(CursorManager::kHotspot);
 		else
-			return new Hot1FrSceneChange(CursorManager::kNormal, true);
+			return new Hot1FrSceneChange(CursorManager::kNormal, true, true);
 	case 12:
 		if (g_nancy->getGameType() <= kGameTypeNancy9) {
 			return new SceneChange();
@@ -100,7 +105,7 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		if (g_nancy->getGameType() <= kGameTypeNancy9)
 			return new HotMultiframeMultiSceneChange();
 		else
-			return new Hot1FrSceneChange(CursorManager::kExit); // TODO: cursor
+			return new Hot1FrSceneChange(CursorManager::kHotspot);
 	case 14:
 		return new Hot1FrSceneChange(CursorManager::kExit);
 	case 15:
@@ -167,18 +172,26 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		else
 			return new HotMultiframeMultiSceneChange();	// Moved from 13 in Nancy 10
 	case 27:
-		if (g_nancy->getGameType() >= kGameTypeNancy10)
-			return new HotMultiframeMultiSceneCursorTypeSceneChange(); // Moved from 24 to 27 in Nancy10
+		return new HotMultiframeMultiSceneCursorTypeSceneChange(); // Moved from 24 to 27 in Nancy10
 	case 28:
-		if (g_nancy->getGameType() >= kGameTypeNancy10)
-			return new InteractiveVideo();	// Moved from 26 to 28 in Nancy10
+		return new InteractiveVideo();	// Moved from 26 to 28 in Nancy10
 	case 29:
 		// Nancy 10+
-		warning("ControlUIItems - not implemented yet");
+		return new ControlUIItems();
+	case 30:	// Nancy11
+		warning("StopPlayerScrolling");	// TODO
+		return nullptr;
+	case 31:	// Nancy11
+		warning("StartPlayerScrolling");	// TODO
 		return nullptr;
 	case 32:
 		// Nancy 10+
-		warning("UIPopupPrepScene - not implemented yet");
+		return new UIPopupPrepScene();
+	case 45:	// Nancy11
+		warning("PlayRandomMovie");	// TODO
+		return nullptr;
+	case 46:	// Nancy11
+		warning("PlayRandomMovieControl");	// TODO
 		return nullptr;
 	case 40:
 		if (g_nancy->getGameType() <= kGameTypeNancy1)
@@ -241,9 +254,15 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 66:
 		return new TableIndexPlaySound();
 	case 67:
-		return new TableIndexSetValueHS();
+		if (g_nancy->getGameType() >= kGameTypeNancy10)
+			return new Autotext();		// Moved from 61 in Nancy 10
+		else
+			return new TableIndexSetValueHS();
 	case 68:
 		return new TextScroll(false);
+	case 69:	// Nancy11
+		warning("TimerControl");	// TODO
+		return nullptr;
 	case 70:
 		return new TextScroll(true); // AutotextEntryList
 	case 71:
@@ -254,12 +273,10 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		return new ModifyListEntry(ModifyListEntry::kMark);
 	case 74:	// Added in Nancy 10
 	case 75:	// Changed in Nancy 10
-	case 81:	// Nancy 11+
 		if (g_nancy->getGameType() <= kGameTypeNancy9 && type == 75) {
 			return new TextBoxWrite();
 		} else {
-			warning("FrameTextBox - not implemented yet");
-			return nullptr;
+			return new FrameTextBox(static_cast<FrameTextBox::Variant>(type));
 		}
 	case 76:
 		return new TextboxClear();
@@ -269,6 +286,12 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		return new SetValueCombo();
 	case 79:
 		return new ValueTest();
+	case 81:	// Nancy11
+		//warning("AutotextTextBoxWrite");	// TODO
+		return nullptr;
+	case 96:	// Nancy11
+		warning("UnknownAR96");	// TODO
+		return nullptr;
 	case 97:
 		return new EventFlags(true);
 	case 98:
@@ -336,16 +359,23 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		return new PopInvViewPriorScene();
 	case 126:
 		return new GoInvViewScene();
+	case 128:
+		// Nancy 10+
+		return new CellPhonePopCellSceneFromStack();
+	case 129:
+		// Nancy 10+
+		return new SetCellPhoneBatteryAndSignal();
 	case 130:
 		// Nancy 10+
-		warning("ChangeCellPhoneInfo - not implemented yet");
-		return nullptr;
+		return new ChangeCellPhoneInfo();
 	case 131:
 		// Nancy 10+
-		warning("AddSearchLink - not implemented yet");
-		return nullptr;
+		return new AddSearchLink();
 	case 140:
 		return new SetVolume();
+	case 147:	// Nancy11
+		warning("FadeSoundToSilence");	// TODO
+		return nullptr;
 	case 148:
 		// MakeScreenFile - seems to save a cropped image of the screen in a bitmap file?
 		// TODO: Used in Nancy 9, sand castle puzzle
@@ -371,6 +401,9 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		return new StopSound();
 	case 155:
 		return new StopSound(); // StopAndUnloadSound, but we always unload
+	case 156:	// Nancy11
+		warning("Update3DSound");	// TODO
+		return nullptr;
 	case 157:
 		return new PlaySoundCC();
 	case 158:
@@ -461,20 +494,22 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		return new MemoryPuzzle();
 	// -- Nancy 10 and up --
 	case 239:
-		//return new SortPuzzle();
+		return new SortPuzzle();
 	case 241:
-		// return new DotConnectPuzzle();
+		return new DotConnectPuzzle();
 	case 242:
-		// return new MagnetMazePuzzle();
+		return new MagnetMazePuzzle();
 	case 243:
-		// return new BeadPuzzle();
+		return new BeadPuzzle();
 	case 244:
-		// return new GridMapPuzzle();
+		return new GridMapPuzzle();
 	// -- Nancy 11 and up --
-	case 245:
-		// return new TypingQuizPuzzle();
-	case 246:
-		// return new MatchPuzzle();
+	case 245:	// Nancy11
+		warning("TypingQuizPuzzle");	// TODO
+		return nullptr;
+	case 246:	// Nancy11
+		warning("MatchPuzzle246");	// TODO
+		return nullptr;
 	default:
 		warning("Unknown action record type %d", type);
 		return nullptr;

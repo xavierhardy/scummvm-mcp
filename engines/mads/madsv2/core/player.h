@@ -73,7 +73,7 @@ struct Player {
 	int walker_visible;           /* Flag if player's sprite is visible      */
 	int walker_previously_visible;/* Flag if player's sprite was visible     */
 	int series_base;              /* Lowest series list handle for walker    */
-	int available[8];             /* Flag if series are available or mirrored*/
+	int16 available[8];           /* Flag if series are available or mirrored*/
 	int facing;                   /* Player's current directional facing     */
 	int turn_to_facing;           /* Player is turning to this facing        */
 	int series;                   /* Player's current active series #        */
@@ -155,9 +155,7 @@ struct Player2 {
 extern Player  player;
 extern Player2 player2;
 
-extern byte player_facing_to_series[10];
-extern byte player_clockwise[10];
-extern byte player_counter_clockwise[10];
+extern const byte player_clockwise[10];
 
 
 /* player.h */
@@ -165,6 +163,7 @@ extern byte player_counter_clockwise[10];
 #define player_said_2(aa, bb)     (player_parse (words_##aa, words_##bb, 0) )
 #define player_said_3(aa, bb, cc) (player_parse (words_##aa, words_##bb, words_##cc, 0) )
 
+extern void init_player();
 
 /**
  * Loads up the next designated sprite for the active stop walker sequence.
@@ -333,6 +332,25 @@ extern void player_demand_location(int x, int y);
  */
 extern void player_first_walk(int from_x, int from_y, int from_facing,
 	int to_x, int to_y, int to_facing, int enable_at_target);
+
+/**
+ * When the player needs to turn to face a different direction
+ * than his current facing, this routine rotates him one place
+ * in the right direction.
+ */
+extern void player_keep_turning();
+
+extern void player_activate_trigger();
+
+/**
+ * Saves the current player state to a static buffer for later restoration.
+ */
+extern void save_player();
+
+/**
+ * Restores the player state previously saved by save_player().
+ */
+extern void restore_player();
 
 } // namespace MADSV2
 } // namespace MADS

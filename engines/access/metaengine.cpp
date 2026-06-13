@@ -30,6 +30,7 @@
 #include "access/access.h"
 #include "access/amazon/amazon_game.h"
 #include "access/martian/martian_game.h"
+#include "access/noctropolis/noctropolis_game.h"
 
 #include "access/detection.h"
 
@@ -43,8 +44,8 @@
 
 namespace Access {
 
-uint32 AccessEngine::getGameID() const {
-	return _gameDescription->gameID;
+AccessGameType AccessEngine::getGameID() const {
+	return (AccessGameType)(_gameDescription->gameID);
 }
 
 uint32 AccessEngine::getGameFeatures() const {
@@ -108,6 +109,9 @@ Common::Error AccessMetaEngine::createInstance(OSystem *syst, Engine **engine, c
 		break;
 	case Access::kGameMartianMemorandum:
 		*engine = new Access::Martian::MartianEngine(syst, gd);
+		break;
+	case Access::kGameNoctropolis:
+		*engine = new Access::Noctropolis::NoctropolisEngine(syst, gd);
 		break;
 	default:
 		return Common::kUnsupportedGameidError;
@@ -177,7 +181,7 @@ SaveStateDescriptor AccessMetaEngine::querySaveMetaInfos(const char *target, int
 			desc.setPlayTime(eHeader.playtime);
 			return desc;
 		}
-			
+
 		Access::AccessSavegameHeader header;
 		if (Access::AccessEngine::readSavegameHeader(f, header, false)) {
 			delete f;
@@ -191,7 +195,7 @@ SaveStateDescriptor AccessMetaEngine::querySaveMetaInfos(const char *target, int
 
 		delete f;
 
-		return SaveStateDescriptor();				
+		return SaveStateDescriptor();
 	}
 
 	return SaveStateDescriptor();

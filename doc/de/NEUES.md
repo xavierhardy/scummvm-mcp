@@ -6,11 +6,17 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
  Neue Spiele:
    - Unterstützung für Nancy Drew: The Haunted Carousel hinzugefügt.
    - Unterstützung für Nancy Drew: Danger on Deception Island hinzugefügt.
+   - Unterstützung für Cartoon Carnival hinzugefügt.
+   - Unterstützung für Alfred Pelrock: En Busca de un Sueño hinzugefügt.
+   - Unterstützung für Noctropolis hinzugefügt.
 
  Allgemein:
    - Klickbare Links in der Benutzeroberfläche werden jetzt durch einen veränderten Cursor hervorgehoben.
    - Die Fenstergröße wird jetzt korrekt wiederhergestellt, wenn in 3D-Engines von Vollbild zurück zum Fenster-Modus gewechselt wird.
    - NULL OPL-Treiber für schwächere Systeme implementiert.
+
+ ACCESS:
+   - Mehrere Skript-Fehler in Martian Memorandum behoben.
 
  AGOS:
    - Unterstützung für die von der Amiga- und Macintosh-Versionen von Simon2 verwendeten
@@ -19,13 +25,54 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
  GLK:
    - Text- und Engine-Optionen können jetzt über die Benutzeroberfläche gesetzt werden.
 
+ LastExpress:
+   - Das Spiel wird schon seit einer Weile (2026.1.0) unterstützt,
+     wir haben aber vergessen, hier einen News-Eintrag hinzuzufügen. Ups!
+   - Mehrere Ungenauigkeiten in der Charakter-Logik wurden korrigiert,
+     sodass einige seltene Probleme mit Charakteren nun nicht mehr auftreten
+	 sollten.
+
+ MADS:
+   - Fehler in Rex Nebular behoben, der dazu führt, dass das Spiel einfriert, wenn
+     das Fernglas benutzt wird.
+
  MM:
    - Verbesserte Unterstützung für Tastenkürzel in MM1.
+   - Charaktere können in MM1 Enhanced nur die Gegenstände verkaufen, die sie besitzen.
+   - In MM1 Enhanced ist kostenfreies Heilen jetzt nur noch an ausgewählten Tempeln möglich.
+   - In MM1 Enhanced wird die Musik nicht mehr fälschlicherweise neu gestartet, wenn der
+     GMM geöffnet und wieder geschlossen wird.
+
+ MYST3:
+   - Fehler in der Animation des Kontroll-Rads am Strand von J'nanin behoben.
+   - Die Kamera kann nun frei bewegt werden, nachdem ein Symbol am Uhren-Turm in J'nanin abgelegt wurde.
+
+ NANCY:
+   - Ein Fehler bei Rätseln mit herausgerissenen Buchstaben wurde behoben,
+     der alle Nancy-Spiele betraf, in denen solche Rätsel vorkommen.
+   - Mögliche Abstürze bei Rätseln mit herausgerissenen Buchstaben nach dem Laden eines Spielstandes wurden behoben.
+   - Bei Rätseln mit drehbaren Schlössern wird nun der richtige Mauszeiger angezeigt.
+   - Beim Laden eines gespeicherten Spiels über den Launcher oder das GMM wird nun direkt
+     die Spielszene aufgerufen, anstatt im Hauptmenü des Spiels zu starten.
+   - Die Schaltfläche "Spiel fortsetzen" wird nun korrekt verarbeitet, nachdem auf die Schaltfläche "Mehr Nancy" geklickt wurde.
+   - Es wurde ein seltener Fehler bei Klavierrätseln behoben, bei dem es zu einem Grafikfehler kam,
+     wenn auf eine Taste geklickt wurde, während eine andere noch gedrückt war.
+   - Es wurde ein Problem behoben, bei dem einige Sounds in "Nancy Drew: Secret of the Scarlet Hand" und neueren Spielen vorzeitig abbrachen.
+   - Die Animationsgeschwindigkeit und das Timing bei Drehpuzzles wurden angepasst.
 
  SLUDGE:
    - Zwei weitere Spiele wurden zur Erkennungs-Datenbank hinzugefügt:
      "Sam and Max Flintlocked" und "Full Moon".
 
+ TwinE:
+   - Fehler behoben, der bei Kollisionen mit dem Bulldozer zu einem Soft-Lock führte.
+   - Falsche Skalierung des Plasma-Menüeffekts behoben.
+   - Darstellung des Holomap-Modells korrigiert.
+   - Automatische Speicherung beim Fahren eines Fahrzeugs deaktiviert.
+
+ PS3-Portierung:
+   - ScummVM-Engines können jetzt als separate Module/Programmdateien ausgeführt werden.
+     Dadurch werden etwa 90 MB RAM eingespart. Die Option wird nur in Release-Paketen aktiviert.
 
 #### 2026.2.0 "Railmonicon" (28.03.2026)
 

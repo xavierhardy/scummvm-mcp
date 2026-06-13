@@ -76,5 +76,9 @@ void global_write_config_file() {
 	write_config_file();
 }
 
+void init_global() {
+	memset(global, 0, sizeof(global));
+}
+
 } // namespace MADSV2
 } // namespace MADS

@@ -71,7 +71,7 @@ struct ProfileScriptConstantInfo {
 // running any games.
 class Profile {
 public:
-	void load(const Common::Path &filename);
+	void load();
 
 	Common::String formatActorName(uint actorId, bool attemptToGetType = false);
 	Common::String formatActorName(const Actor *actor);

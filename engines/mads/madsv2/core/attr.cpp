@@ -175,5 +175,9 @@ done:
 	return error_flag;
 }
 
+void init_attr() {
+	attr_load_error = 0;
+}
+
 } // namespace MADSV2
 } // namespace MADS

@@ -92,6 +92,8 @@ extern int vocab_make_active(int id);
 extern int vocab_load_active(void);
 extern char *vocab_string(int vocab_id);
 
+extern void init_vocab();
+
 } // namespace MADSV2
 } // namespace MADS
 

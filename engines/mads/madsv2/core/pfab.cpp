@@ -276,7 +276,6 @@ static void match(CompWork *w, unsigned di) {
 
 	int   best_len = 0;
 	unsigned best_pos = 0;
-	int   rem = ZIV - 1;  // chars still to match
 
 	unsigned chain = w->hash[key];
 	while (chain != NIL) {
@@ -300,7 +299,6 @@ static void match(CompWork *w, unsigned di) {
 		if (this_len > best_len) {
 			best_len = this_len;
 			best_pos = chain;
-			rem = ZIV - 1 - matched;
 		}
 		chain = w->hash[chain];
 	}

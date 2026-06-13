@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef MADS_MPS_INSTALLER_H
-#define MADS_MPS_INSTALLER_H
+#ifndef MADS_CORE_INSTALLER_H
+#define MADS_CORE_INSTALLER_H
 
 #include "common/archive.h"
 #include "common/ptr.h"
@@ -37,7 +37,7 @@ public:
 	const Common::ArchiveMemberPtr getMember(const Common::Path &path) const override;
 	Common::SharedArchiveContents readContentsForPath(const Common::Path &translatedPath) const override;
 
-	static MpsInstaller* open(const Common::Path &baseName);
+	static MpsInstaller *open(const Common::Path &baseName);
 
 private:
 	// Similar to FileDescriptionBin but in native-endian and native strings.
@@ -45,24 +45,26 @@ private:
 	public:
 		// Public for hashmap
 		FileDescriptor() : _compressedSize(0),
-				   _uncompressedSize(),
-				   _compressionAlgo(0),
-				   _offsetInVolume(0),
-				   _volumeNumber(0) {}
+			_uncompressedSize(),
+			_compressionAlgo(0),
+			_offsetInVolume(0),
+			_volumeNumber(0) {
+		}
 	protected:
 		FileDescriptor(const Common::Path &name,
-			       uint16 compression,
-			       uint16 volumeNumber,
-			       uint32 offsetInVolume,
-			       uint32 compressedSize,
-			       uint32 uncompressedSize) :
+			uint16 compression,
+			uint16 volumeNumber,
+			uint32 offsetInVolume,
+			uint32 compressedSize,
+			uint32 uncompressedSize) :
 			_fileName(name),
 			_compressionAlgo(compression),
 			_volumeNumber(volumeNumber),
 			_offsetInVolume(offsetInVolume),
 			_compressedSize(compressedSize),
-			_uncompressedSize(uncompressedSize) {}
-		
+			_uncompressedSize(uncompressedSize) {
+		}
+
 		Common::Path _fileName;
 		uint _compressionAlgo;
 		uint _volumeNumber;
@@ -75,12 +77,14 @@ private:
 
 	typedef Common::HashMap<Common::Path, FileDescriptor, Common::Path::IgnoreCase_Hash, Common::Path::IgnoreCase_EqualTo> FileMap;
 
-	MpsInstaller(const FileMap& files,
-		     const Common::Path& baseName) : _files(files), _baseName(baseName) {}
+	MpsInstaller(const FileMap &files,
+		const Common::Path &baseName) : _files(files), _baseName(baseName) {
+	}
 
 	FileMap _files;
 	Common::Path _baseName;
 };
-}
+
+} // namespace MADS
 
 #endif

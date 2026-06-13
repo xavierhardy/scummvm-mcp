@@ -26,6 +26,8 @@
 
 #include "engines/nancy/state/scene.h"
 
+#include "engines/nancy/ui/taskbar.h"
+
 namespace Nancy {
 namespace Action {
 
@@ -176,14 +178,14 @@ void SetValueCombo::execute() {
 			} else {
 				if (_indices[i] < numSingleValues) {
 					// Add a single value
-					if (playerTable->singleValues[_indices[i]] != kNoTableValue) {
-						valueToAdd = playerTable->singleValues[_indices[i]];
+					if (playerTable->getSingleValue(_indices[i]) != kNoTableValue) {
+						valueToAdd = playerTable->getSingleValue(_indices[i]);
 						valueToAdd = valueToAdd * ((float)_percentages[i] / 100.f);
 					}
 				} else {
 					// Add another combo value
-					if (playerTable->comboValues[_indices[i] - numSingleValues] != kNoTableValue) {
-						valueToAdd = playerTable->comboValues[_indices[i] - numSingleValues];
+					if (playerTable->getComboValue(_indices[i] - numSingleValues) != (float)kNoTableValue) {
+						valueToAdd = playerTable->getComboValue(_indices[i] - numSingleValues);
 						valueToAdd = valueToAdd * ((float)_percentages[i] / 100.f);
 					}
 				}
@@ -361,6 +363,12 @@ void EventFlagsMultiHS::readData(Common::SeekableReadStream &stream) {
 	}
 }
 
+CursorManager::CursorType EventFlagsMultiHS::getHoverCursor() const {
+	if (g_nancy->getGameType() >= kGameTypeNancy10 && NancySceneState.getHeldItem() >= 0)
+		return CursorManager::kHotspot;
+	return _hoverCursor;
+}
+
 void EventFlagsMultiHS::execute() {
 	switch (_state) {
 	case kBegin:
@@ -379,14 +387,18 @@ void EventFlagsMultiHS::execute() {
 
 		break;
 	case kActionTrigger:
-		if (_hoverCursor != CursorManager::kCustom1 && _hoverCursor != CursorManager::kCustom2) {
+		// Swallow clicks if the cursor is in the puzzle-drag range
+		if (g_nancy->getGameType() <= kGameTypeNancy9 && (_hoverCursor == CursorManager::kCustom1 || _hoverCursor == CursorManager::kCustom2)) {
+			_state = kRun;
+		} else if (g_nancy->getGameType() >= kGameTypeNancy10 && (int)_hoverCursor >= 35) {
+			_state = kRun;
+		} else {
 			_hasHotspot = false;
 			EventFlags::execute();
 			finishExecution();
-			break;
-		} else {
-			_state = kRun;
 		}
+
+		break;
 	}
 }
 
@@ -407,13 +419,19 @@ void ModifyListEntry::readData(Common::SeekableReadStream &stream) {
 	readFilename(stream, _stringID);
 	_mark = stream.readUint16LE();
 
-	if (g_nancy->getGameType() >= kGameTypeNancy9 && _mark >= 10) {
+	if (g_nancy->getGameType() >= kGameTypeNancy10) {
+		// Nancy 10+: the trailing sceneID is always present
+		_sceneID = stream.readUint16LE();
+		if (_mark < 10 && _mark != 7)
+			_sceneID = kNoScene;
+	} else if (g_nancy->getGameType() >= kGameTypeNancy9 && _mark >= 10) {
+		// Nancy 9: the trailing sceneID is only present when mark >= 10.
 		_sceneID = stream.readUint16LE();
 	}
 }
 
 void ModifyListEntry::execute() {
-	JournalData *journalData = (Nancy::JournalData *)NancySceneState.getPuzzleData(Nancy::JournalData::getTag());
+	JournalData *journalData = (JournalData *)NancySceneState.getPuzzleData(JournalData::getTag());
 	assert(journalData);
 
 	Common::Array<JournalData::Entry> &array = journalData->journalEntries[_surfaceID];
@@ -432,6 +450,21 @@ void ModifyListEntry::execute() {
 			array.push_back(JournalData::Entry(_stringID, _mark, _sceneID));
 		}
 
+		if (found && g_nancy->getGameType() == kGameTypeNancy9 && NancySceneState.getSceneInfo().sceneID == 2491) {
+			// WORKAROUND: We did not persist the sceneID information for journal entries in
+			// nancy9 saved games earlier than version 4, due to an oversight when the sceneID
+			// field was added. This means that for the search functionality in the laptop
+			// (which is the only place where the sceneID field is used in nancy9), the sceneID
+			// values won't be correctly initialized on save/load in older saved games.
+			// Fortunately, these are always initialized by the game scripts, so we can use
+			// those script values instead. This code will ensure that the sceneID values are
+			// obtained from the game scripts in that scene when they're missing, so the search
+			// functionality will work correctly.
+			if (_stringID.hasPrefix("S0") && found->mark == _mark && _mark >= 10 &&
+				found->sceneID == kNoScene && _sceneID != kNoScene) {
+				found->sceneID = _sceneID;
+			}
+		}
 		break;
 	case kDelete:
 		if (found) {
@@ -445,6 +478,24 @@ void ModifyListEntry::execute() {
 		}
 
 		break;
+	}
+
+	// Nancy 10+: if the notebook popup is currently visible, refresh the
+	// rendered list, so the new/changed entry shows up.
+	if (g_nancy->getGameType() >= kGameTypeNancy10 && NancySceneState.getNotebookPopup().isVisible()) {
+		NancySceneState.getNotebookPopup().refreshContent();
+	}
+
+	// Nancy 10+: raise the notebook notification badge on the taskbar when
+	// a new entry is added to one of the tracked lists.
+	if (_type == kAdd && g_nancy->getGameType() >= kGameTypeNancy10) {
+		if (UI::Taskbar *taskbar = NancySceneState.getTaskbar()) {
+			if (_surfaceID == 4) {
+				taskbar->setNotification(kTaskButtonNotebook, 0);
+			} else if (_surfaceID == 3) {
+				taskbar->setNotification(kTaskButtonNotebook, 1);
+			}
+		}
 	}
 
 	finishExecution();

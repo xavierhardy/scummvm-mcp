@@ -41,12 +41,8 @@
 
 namespace Freescape {
 
-// Forward declaration (defined in atari.music.cpp)
-Audio::AudioStream *makeEclipseAtariMusicStream(const byte *data, uint32 dataSize,
-                                                  int songNum = 1, int rate = 44100);
-
 // Wally Beben table offsets for Total Eclipse Amiga TEMUSIC.AM
-static const WBTableOffsets kEclipseAmigaMusicOffsets = {
+const WBTableOffsets kEclipseAmigaMusicOffsets = {
 	0x0ACA, // periodTable
 	0x0C5E, // samplePtrTable
 	0x0CA6, // instrumentTable
@@ -58,10 +54,8 @@ static const WBTableOffsets kEclipseAmigaMusicOffsets = {
 };
 
 EclipseEngine::EclipseEngine(OSystem *syst, const ADGameDescription *gd) : FreescapeEngine(syst, gd) {
-	_playerC64Music = nullptr;
 	_playerC64Sfx = nullptr;
-	_playerAYMusic = nullptr;
-	_playerOPLMusic = nullptr;
+	_playerMusic = nullptr;
 	_c64UseSFX = false;
 
 	// These sounds can be overriden by the class of each platform
@@ -136,34 +130,21 @@ EclipseEngine::EclipseEngine(OSystem *syst, const ADGameDescription *gd) : Frees
 }
 
 void EclipseEngine::stopBackgroundMusic() {
-	if (_playerOPLMusic)
-		_playerOPLMusic->stopMusic();
-	if (_playerAYMusic)
-		_playerAYMusic->stopMusic();
-	if (_playerC64Music)
-		_playerC64Music->stopMusic();
+	if (_playerMusic)
+		_playerMusic->stopMusic();
 	if (_mixer)
 		_mixer->stopHandle(_musicHandle);
 }
 
 void EclipseEngine::restartBackgroundMusic() {
-	if (isC64() && _playerC64Music) {
-		_playerC64Music->startMusic();
-	} else if ((isCPC() || isSpectrum()) && _playerAYMusic) {
-		_playerAYMusic->startMusic();
-	} else if (isDOS() && _playerOPLMusic) {
-		_playerOPLMusic->startMusic();
-	} else if ((isAtariST() || isAmiga()) && !_musicData.empty()) {
+	if (_playerMusic) {
+		_playerMusic->startMusic();
+	} else if (isAmiga() && !_musicData.empty()) {
 		if (_mixer)
 			_mixer->stopHandle(_musicHandle);
-		Audio::AudioStream *musicStream = nullptr;
-		if (isAmiga())
-			musicStream = makeWallyBebenStream(
-				_musicData.data(), _musicData.size(), 1, 44100, true,
-				&kEclipseAmigaMusicOffsets);
-		else
-			musicStream = makeEclipseAtariMusicStream(
-				_musicData.data(), _musicData.size(), 1);
+		Audio::AudioStream *musicStream = makeWallyBebenStream(
+			_musicData.data(), _musicData.size(), 1, 44100, true,
+			&kEclipseAmigaMusicOffsets);
 		if (musicStream) {
 			_mixer->playStream(Audio::Mixer::kMusicSoundType,
 				&_musicHandle, musicStream);
@@ -183,9 +164,7 @@ EclipseEngine::~EclipseEngine() {
 		_compassBackground->free();
 		delete _compassBackground;
 	}
-	delete _playerOPLMusic;
-	delete _playerAYMusic;
-	delete _playerC64Music;
+	delete _playerMusic;
 	delete _playerC64Sfx;
 }
 
@@ -485,16 +464,11 @@ void EclipseEngine::gotoArea(uint16 areaID, int entranceID) {
 		}
 	}
 
-	// Start background music (Atari ST / Amiga)
-	if ((isAtariST() || isAmiga()) && !_musicData.empty() && !_mixer->isSoundHandleActive(_musicHandle)) {
-		Audio::AudioStream *musicStream = nullptr;
-		if (isAmiga())
-			musicStream = makeWallyBebenStream(
-				_musicData.data(), _musicData.size(), 1, 44100, true,
-				&kEclipseAmigaMusicOffsets);
-		else
-			musicStream = makeEclipseAtariMusicStream(
-				_musicData.data(), _musicData.size(), 1);
+	// Start background music (Amiga)
+	if (isAmiga() && !_musicData.empty() && !_mixer->isSoundHandleActive(_musicHandle)) {
+		Audio::AudioStream *musicStream = makeWallyBebenStream(
+			_musicData.data(), _musicData.size(), 1, 44100, true,
+			&kEclipseAmigaMusicOffsets);
 		if (musicStream) {
 			_mixer->playStream(Audio::Mixer::kMusicSoundType,
 				&_musicHandle, musicStream);
@@ -648,6 +622,12 @@ void EclipseEngine::drawInfoMenu() {
 				break;
 			case Common::EVENT_SCREEN_CHANGED:
 				_gfx->computeScreenViewport();
+				break;
+			case Common::EVENT_RBUTTONDOWN:
+			// fallthrough
+			case Common::EVENT_LBUTTONDOWN:
+				if (isTouchscreenActive())
+					cont = false;
 				break;
 
 			default:

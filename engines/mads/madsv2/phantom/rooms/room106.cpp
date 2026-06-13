@@ -50,6 +50,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_106_init() {
 	int dyn_floor;
 
@@ -626,6 +628,14 @@ void room_106_preload() {
 	}
 	section_1_walker();
 	section_1_interface();
+}
+
+
+void room_106_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(local->dynamic_sandbag);
 }
 
 } // namespace Rooms

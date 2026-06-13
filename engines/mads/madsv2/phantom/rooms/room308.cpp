@@ -38,6 +38,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_308_init() {
 	global_speech_load(speech_christine_scream);
 
@@ -382,6 +384,21 @@ void room_308_preload() {
 
 	section_3_walker();
 	section_3_interface();
+}
+
+
+void room_308_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->anim_0_running,
+		local->anim_1_running,
+		local->anim_2_running,
+		local->anim_3_running,
+		local->on_floor,
+		local->prevent,
+		local->prevent_2);
 }
 
 } // namespace Rooms

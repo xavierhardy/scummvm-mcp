@@ -37,6 +37,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_505_init() {
 	int id;
 
@@ -852,6 +854,29 @@ void room_505_preload() {
 	}
 
 	vocab_make_active(words_Christine);
+}
+
+
+void room_505_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->raoul_action,
+		local->raoul_frame,
+		local->raoul_talk_count,
+		local->both_action,
+		local->both_frame,
+		local->both_talk_count,
+		local->part_action,
+		local->part_frame,
+		local->part_talk_count,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->anim_2_running,
+		local->made_it_past_106,
+		local->leave_room,
+		local->they_parted);
 }
 
 } // namespace Rooms

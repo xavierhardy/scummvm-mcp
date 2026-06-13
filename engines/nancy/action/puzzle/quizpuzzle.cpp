@@ -20,6 +20,7 @@
  */
 
 #include "engines/nancy/nancy.h"
+#include "engines/nancy/cursor.h"
 #include "engines/nancy/graphics.h"
 #include "engines/nancy/sound.h"
 #include "engines/nancy/input.h"
@@ -42,13 +43,40 @@ QuizPuzzle::~QuizPuzzle() {
 
 void QuizPuzzle::init() {
 	Common::Rect screenClip = NancySceneState.getViewport().getBounds();
+	const uint16 sceneId = NancySceneState.getSceneInfo().sceneID;
+	if (g_nancy->getGameType() == kGameTypeNancy9 && (sceneId == 6441 || sceneId == 6443))
+		screenClip.right += 20; // WORKAROUND for chess puzzle in Nancy 9: the rightmost answer box is partially off-screen
 	_screenPosition = screenClip;
 	_drawSurface.create(screenClip.width(), screenClip.height(), g_nancy->_graphics->getInputPixelFormat());
 	_drawSurface.clear(g_nancy->_graphics->getTransColor());
 	setTransparent(true);
 
 	g_nancy->_input->setVKEnabled(true);
-	RenderObject::init();
+	RenderActionRecord::init();
+}
+
+Common::String QuizPuzzle::readSubtitle(Common::SeekableReadStream &stream) {
+	const CVTX *autotext = (const CVTX *)g_nancy->getEngineData("AUTOTEXT");
+	assert(autotext);
+
+	Common::String result;
+	char textBuf[30];
+
+	stream.read(textBuf, 30);
+	textBuf[29] = '\0';
+	result = textBuf;
+
+	if (!result.empty() && autotext->texts.contains(result))
+		result = autotext->texts[result];
+
+	return result;
+}
+
+void QuizPuzzle::showSubtitle(const Common::String &text) {
+	if (!text.empty()) {
+		NancySceneState.getTextbox().clear();
+		NancySceneState.getTextbox().addTextLine(text);
+	}
 }
 
 // ---- Nancy 8 data format ----
@@ -85,15 +113,17 @@ void QuizPuzzle::readDataOld(Common::SeekableReadStream &stream) {
 		_answerFlags[i] = stream.readSint16LE();
 	}
 
+	char textBuf[30];
+
 	_correctSound.readNormal(stream);
-	stream.skip(30); // correct subtitle
+	_correctText = readSubtitle(stream);
 
 	_wrongSound.readNormal(stream);
-	stream.skip(30); // wrong subtitle
+	_wrongText = readSubtitle(stream);
 
 	_solveScene.readData(stream);
 	_doneSound.readNormal(stream);
-	stream.skip(30); // done subtitle
+	_doneText = readSubtitle(stream);
 
 	_cancelScene.readData(stream);
 }
@@ -125,6 +155,9 @@ void QuizPuzzle::readDataOld(Common::SeekableReadStream &stream) {
 // +0xB0  2   wrong sound volume
 // +0xB2  30  wrong subtitle (skip)
 void QuizPuzzle::readDataNew(Common::SeekableReadStream &stream) {
+	const CVTX *autotext = (const CVTX *)g_nancy->getEngineData("AUTOTEXT");
+	assert(autotext);
+
 	_fontID            = stream.readUint16LE();
 	_cursorBlinkInterval = stream.readUint16LE();
 	_cursorChar        = stream.readByte();
@@ -136,7 +169,7 @@ void QuizPuzzle::readDataNew(Common::SeekableReadStream &stream) {
 
 	_solveScene.readData(stream);
 	_doneSound.readNormal(stream);
-	stream.skip(30); // done subtitle
+	_doneText = readSubtitle(stream);
 
 	_cancelScene.readData(stream);
 	stream.skip(16); // unknown
@@ -169,13 +202,13 @@ void QuizPuzzle::readDataNew(Common::SeekableReadStream &stream) {
 		soundNameBuf[32] = '\0';
 		_boxCorrectSoundName[i] = soundNameBuf;
 		_boxCorrectSoundVolume[i] = stream.readUint16LE();
-		stream.skip(30); // correct subtitle
+		_boxCorrectText[i] = readSubtitle(stream);
 
 		stream.read(soundNameBuf, 33);
 		soundNameBuf[32] = '\0';
 		_boxWrongSoundName[i] = soundNameBuf;
 		_boxWrongSoundVolume[i] = stream.readUint16LE();
-		stream.skip(30); // wrong subtitle
+		_boxWrongText[i] = readSubtitle(stream);
 
 		// Precompute max answer length for auto-check mode
 		_boxMaxLen[i] = 0;
@@ -258,7 +291,9 @@ void QuizPuzzle::executeOld() {
 			_solved = checkAllSolved();
 			_internalState = _solved ? kStartDone : kTyping;
 		} else {
+			g_nancy->_sound->loadSound(_correctSound);
 			g_nancy->_sound->playSound(_correctSound);
+			showSubtitle(_correctText);
 			_internalState = kWaitCorrect;
 		}
 		_nextBlinkTime = 0;
@@ -283,7 +318,9 @@ void QuizPuzzle::executeOld() {
 		if (_wrongSound.name == "NO SOUND") {
 			_internalState = kTyping;
 		} else {
+			g_nancy->_sound->loadSound(_wrongSound);
 			g_nancy->_sound->playSound(_wrongSound);
+			showSubtitle(_wrongText);
 			_internalState = kWaitWrong;
 		}
 		break;
@@ -301,7 +338,9 @@ void QuizPuzzle::executeOld() {
 		if (_doneSound.name == "NO SOUND") {
 			_internalState = kFinish;
 		} else {
+			g_nancy->_sound->loadSound(_doneSound);
 			g_nancy->_sound->playSound(_doneSound);
+			showSubtitle(_doneText);
 			_internalState = kWaitDone;
 		}
 		break;
@@ -364,7 +403,7 @@ void QuizPuzzle::executeNew() {
 						bool correct = checkAnswerForCurrentBox();
 						if (correct) {
 							_internalState = kStartCorrect;
-						} else if ((uint16)text.size() > _boxMaxLen[_currentBox]) {
+						} else if ((uint16)text.size() >= _boxMaxLen[_currentBox]) {
 							_internalState = kStartWrong;
 						}
 					}
@@ -410,6 +449,7 @@ void QuizPuzzle::executeNew() {
 		} else {
 			g_nancy->_sound->loadSound(_activeBoxSound);
 			g_nancy->_sound->playSound(_activeBoxSound);
+			showSubtitle(_boxCorrectText[_currentBox]);
 			advanceToNextBox();
 			_internalState = kWaitCorrect;
 		}
@@ -443,6 +483,7 @@ void QuizPuzzle::executeNew() {
 		} else {
 			g_nancy->_sound->loadSound(_activeBoxSound);
 			g_nancy->_sound->playSound(_activeBoxSound);
+			showSubtitle(_boxWrongText[_currentBox]);
 			_internalState = kWaitWrong;
 		}
 		break;
@@ -460,7 +501,9 @@ void QuizPuzzle::executeNew() {
 		if (_doneSound.name == "NO SOUND") {
 			_internalState = kFinish;
 		} else {
+			g_nancy->_sound->loadSound(_doneSound);
 			g_nancy->_sound->playSound(_doneSound);
+			showSubtitle(_doneText);
 			_internalState = kWaitDone;
 		}
 		break;
@@ -543,24 +586,28 @@ void QuizPuzzle::handleInput(NancyInput &input) {
 
 	char cursorChar = (g_nancy->getGameType() == kGameTypeNancy8) ? '-' : _cursorChar;
 
-	// Mouse click: select a different (unsolved) box
-	if (input.input & NancyInput::kLeftMouseButtonUp) {
-		for (uint i = 0; i < _numBoxes; ++i) {
-			if (_boxCorrect[i])
-				continue;
-			Common::Rect screenRect = NancySceneState.getViewport().convertViewportToScreen(_boxRects[i]);
-			if (screenRect.contains(input.mousePos)) {
-				if (i != _currentBox) {
-					Common::String &oldText = _typedText[_currentBox];
-					if (!oldText.empty() && oldText.lastChar() == cursorChar)
-						oldText.deleteLastChar();
-					_currentBox = i;
-					_nextBlinkTime = 0;
-					drawText();
-				}
-				break;
+	// Hover over an unsolved text box: show the hotspot cursor and, on click,
+	// move the typing focus to that box.
+	for (uint i = 0; i < _numBoxes; ++i) {
+		if (_boxCorrect[i])
+			continue;
+		Common::Rect screenRect = NancySceneState.getViewport().convertViewportToScreen(_boxRects[i]);
+		if (!screenRect.contains(input.mousePos))
+			continue;
+
+		g_nancy->_cursor->setCursorType(CursorManager::kHotspot);
+
+		if (input.input & NancyInput::kLeftMouseButtonUp) {
+			if (i != _currentBox) {
+				Common::String &oldText = _typedText[_currentBox];
+				if (!oldText.empty() && oldText.lastChar() == cursorChar)
+					oldText.deleteLastChar();
+				_currentBox = i;
+				_nextBlinkTime = 0;
+				drawText();
 			}
 		}
+		break;
 	}
 
 	for (auto &key : input.otherKbdInput) {
@@ -616,8 +663,8 @@ void QuizPuzzle::drawText() {
 		bounds = NancySceneState.getViewport().convertViewportToScreen(bounds);
 		bounds = convertToLocal(bounds);
 
-		int y = bounds.bottom + 1 - font->getFontHeight();
-		font->drawString(&_drawSurface, text, bounds.left, y, bounds.width(), 0);
+		int y = bounds.bottom - font->getFontHeight();
+		font->drawString(&_drawSurface, text, bounds.left - 1, y, bounds.width(), 0);
 	}
 
 	_needsRedraw = true;

@@ -47,6 +47,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 static void animate_top_left() {
 	int delay;
 	int random;
@@ -461,6 +463,25 @@ void room_208_preload() {
 
 	section_2_walker();
 	section_2_interface();
+}
+
+
+void room_208_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->middle_direction,
+		local->top_left_frame,
+		local->top_right_frame,
+		local->middle_left_frame,
+		local->middle_middle_frame,
+		local->middle_right_frame,
+		local->bottom_left_frame,
+		local->bottom_middle_frame,
+		local->bottom_right_frame,
+		local->prevent,
+		local->prevent_2);
 }
 
 } // namespace Rooms

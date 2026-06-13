@@ -37,7 +37,7 @@ namespace DM {
 	class CreatureInfo;
 
 /* Creature types */
-enum CreatureType {
+enum CreatureType : uint16 {
 	kDMCreatureTypeGiantScorpion = 0, // @ C00_CREATURE_GIANT_SCORPION_SCORPION
 	kDMCreatureTypeSwampSlime = 1, // @ C01_CREATURE_SWAMP_SLIME_SLIME_DEVIL
 	kDMCreatureTypeGiggler = 2, // @ C02_CREATURE_GIGGLER
@@ -218,7 +218,7 @@ public:
 										   bool isAttacking); // @ F0179_GROUP_GetCreatureAspectUpdateTime
 	void setGroupDirection(ActiveGroup *activeGroup, int16 dir, int16 creatureIndex, bool twoHalfSquareSizedCreatures); // @ F0205_GROUP_SetDirection
 	void addGroupEvent(TimelineEvent *event, uint32 time); // @ F0208_GROUP_AddEvent
-	int16 getSmelledPartyPrimaryDirOrdinal(CreatureInfo *creatureInfo, int16 mapY, int16 mapX); // @ F0201_GROUP_GetSmelledPartyPrimaryDirectionOrdinal
+	int16 getSmelledPartyPrimaryDirOrdinal(CreatureInfo *creatureInfo, int16 mapX, int16 mapY); // @ F0201_GROUP_GetSmelledPartyPrimaryDirectionOrdinal
 	bool isSmellPartyBlocked(uint16 mapX, uint16 mapY); // @ F0198_GROUP_IsSmellPartyBlocked
 	int16 getFirstPossibleMovementDirOrdinal(CreatureInfo *info, int16 mapX, int16 mapY,
 												  bool allowMovementOverImaginaryPitsAndFakeWalls); // @ F0203_GROUP_GetFirstPossibleMovementDirectionOrdinal

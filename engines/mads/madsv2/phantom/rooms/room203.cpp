@@ -42,6 +42,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 static void handle_animation_brie() {
 	int random = 0;
 	int brie_reset_frame;
@@ -1855,6 +1857,32 @@ void room_203_preload() {
 
 	section_2_walker();
 	section_2_interface();
+}
+
+
+void room_203_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->brie_action,
+		local->brie_frame,
+		local->brie_talk_count,
+		local->raoul_action,
+		local->raoul_frame,
+		local->raoul_talk_count,
+		local->rich_action,
+		local->rich_frame,
+		local->rich_talk_count,
+		local->daae_action,
+		local->daae_frame,
+		local->daae_talk_count,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->anim_2_running,
+		local->anim_3_running,
+		local->show_note,
+		local->converse_counter);
 }
 
 } // namespace Rooms

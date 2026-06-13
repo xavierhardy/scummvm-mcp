@@ -240,7 +240,6 @@ ActionRecord *ActionManager::createAndLoadNewRecord(Common::SeekableReadStream &
 }
 
 void ActionManager::processActionRecords() {
-	bool activeRecordsThisFrame = false;
 	_activatedRecordsThisFrame.clear();
 
 	for (auto record : _records) {
@@ -251,7 +250,7 @@ void ActionManager::processActionRecords() {
 		// Process dependencies every call. We make sure to ignore cursor dependencies,
 		// as they are only handled when calling from handleInput()
 		processDependency(record->_dependencies, *record, record->canHaveHotspot());
-		record->_isActive = record->_dependencies.satisfied;
+		record->_isActive = _previousRecordWasExecuted = record->_dependencies.satisfied;
 
 		if (record->_isActive) {
 			if(record->_state == ActionRecord::kBegin) {
@@ -259,26 +258,13 @@ void ActionManager::processActionRecords() {
 			}
 
 			record->execute();
-			_recordsWereExecuted = true;
-			activeRecordsThisFrame = true;
 		}
 
-		if (g_nancy->getGameType() >= kGameTypeNancy4 && NancySceneState._state == State::Scene::kLoad) {
+		if (g_nancy->getGameType() >= kGameTypeNancy4 && NancySceneState.getState() == State::Scene::kLoad) {
 			// changeScene() must have been called, abort any further processing.
 			// Both old and new behavior is needed (nancy3 intro narration, nancy4 garden gate)
 			return;
 		}
-	}
-
-	if (!activeRecordsThisFrame) {
-		// No active records were found for this frame.
-		// This will lead to an infinite loop without
-		// anything happening, so we reset the
-		// _recordsWereExecuted flag, to fall back to
-		// the kDefaultAR dependency. This is needed for
-		// some scenes in Nancy 8, where SetVolume() is
-		// called, but no other action records are active.
-		_recordsWereExecuted = false;
 	}
 
 	synchronizeMovieWithSound();
@@ -338,22 +324,7 @@ void ActionManager::processDependency(DependencyRecord &dep, ActionRecord &recor
 			dep.satisfied = true;
 			break;
 		case DependencyType::kInventory:
-			if (dep.condition == g_nancy->_false) {
-				// Item not in possession or held
-				if (NancySceneState._flags.items[dep.label] == g_nancy->_false &&
-					dep.label != NancySceneState._flags.heldItem) {
-					dep.satisfied = true;
-				} else {
-					dep.satisfied = false;
-				}
-			} else {
-				if (NancySceneState._flags.items[dep.label] == g_nancy->_true ||
-					dep.label == NancySceneState._flags.heldItem) {
-					dep.satisfied = true;
-				} else {
-					dep.satisfied = false;
-				}
-			}
+			dep.satisfied = NancySceneState.hasItem(dep.label) == dep.condition;
 
 			break;
 		case DependencyType::kEvent:
@@ -372,7 +343,7 @@ void ActionManager::processDependency(DependencyRecord &dep, ActionRecord &recor
 				// other way around here. So, we need to check for inequality
 				if (!NancySceneState.getLogicCondition(dep.label, dep.condition)) {
 					// Wait for specified time before satisfying dependency condition
-					Time elapsed = NancySceneState._timers.lastTotalTime - NancySceneState._flags.logicConditions[dep.label].timestamp;
+					Time elapsed = NancySceneState._timers.lastTotalTime - NancySceneState.getLogicConditionTimestamp(dep.label);
 
 					if (elapsed >= dep.timeData) {
 						dep.satisfied = true;
@@ -405,8 +376,8 @@ void ActionManager::processDependency(DependencyRecord &dep, ActionRecord &recor
 			break;
 		case DependencyType::kElapsedPlayerTime: {
 			// We're only interested in the hours and minutes
-			Time playerTime = NancySceneState._timers.playerTime.getHours() * 3600000 +
-								NancySceneState._timers.playerTime.getMinutes() * 60000;
+			Time playerTime = NancySceneState.getPlayerTime().getHours() * 3600000 +
+								NancySceneState.getPlayerTime().getMinutes() * 60000;
 			switch (dep.condition) {
 			case 0:
 				dep.satisfied = dep.timeData < playerTime;
@@ -424,8 +395,7 @@ void ActionManager::processDependency(DependencyRecord &dep, ActionRecord &recor
 			// Check how many times a scene has been visited.
 			// This dependency type keeps its data in the time variables
 			// Note: nancy7 completely flipped the meaning of 1 and 2
-			int count = NancySceneState._flags.sceneCounts.contains(dep.hours) ?
-				NancySceneState._flags.sceneCounts[dep.hours] : 0;
+			int count = NancySceneState.getSceneCounts(dep.hours);
 			switch (dep.milliseconds) {
 			case 1:
 				if (	(dep.minutes < count && g_nancy->getGameType() <= kGameTypeNancy6) ||
@@ -459,13 +429,13 @@ void ActionManager::processDependency(DependencyRecord &dep, ActionRecord &recor
 		}
 		case DependencyType::kElapsedPlayerDay:
 			if (record._days == -1) {
-				record._days = NancySceneState._timers.playerTime.getDays();
+				record._days = NancySceneState.getPlayerTime().getDays();
 				dep.satisfied = true;
 				break;
 			}
 
-			if (record._days < NancySceneState._timers.playerTime.getDays()) {
-				record._days = NancySceneState._timers.playerTime.getDays();
+			if (record._days < NancySceneState.getPlayerTime().getDays()) {
+				record._days = NancySceneState.getPlayerTime().getDays();
 
 				// This is not used in nancy3 and up, so it's a safe assumption that we
 				// do not need to check types recursively
@@ -542,7 +512,7 @@ void ActionManager::processDependency(DependencyRecord &dep, ActionRecord &recor
 
 			break;
 		case DependencyType::kDifficultyLevel:
-			if (dep.condition == NancySceneState._difficulty) {
+			if (dep.condition == NancySceneState.getDifficulty()) {
 				dep.satisfied = true;
 			} else {
 				dep.satisfied = false;
@@ -588,13 +558,7 @@ void ActionManager::processDependency(DependencyRecord &dep, ActionRecord &recor
 
 			break;
 		case DependencyType::kDefaultAR:
-			// Only execute if no other AR has executed yet
-			if (_recordsWereExecuted) {
-				dep.satisfied = false;
-			} else {
-				dep.satisfied = true;
-			}
-
+			dep.satisfied = !_previousRecordWasExecuted;
 			break;
 		default:
 			warning("Unimplemented Dependency type %i", (int)dep.type);
@@ -608,7 +572,8 @@ void ActionManager::clearActionRecords() {
 		delete r;
 	}
 	_records.clear();
-	_recordsWereExecuted = false;
+	_activatedRecordsThisFrame.clear();
+	_previousRecordWasExecuted = false;
 }
 
 void ActionManager::onPause(bool pause) {

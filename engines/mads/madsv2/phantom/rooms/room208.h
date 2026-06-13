@@ -31,7 +31,7 @@ namespace Rooms {
 
 /* ---- Scratch (room-local variables) ---- */
 
-struct Room208Scratch {
+struct Scratch {
 	int16 sprite[15];           // Sprite series handles
 	int16 sequence[15];         // Sequence handles
 	int16 animation[4];         // Animation handles
@@ -48,7 +48,7 @@ struct Room208Scratch {
 	int16 prevent_2;
 };
 
-#define local ((Room208Scratch *)(&game.scratch[0]))
+#define local (&scratch)
 #define ss    local->sprite
 #define seq   local->sequence
 #define aa    local->animation

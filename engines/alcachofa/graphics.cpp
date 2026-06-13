@@ -616,8 +616,8 @@ void Animation::prerenderFrame(int32 frameI) {
 
 struct TexCoords {
 	TexCoords(const Rect &inner, int16 outerW, int16 outerH) {
-		_min = Vector2d(0.5f / outerW, 0.5f / outerH);
-		_max = Vector2d((inner.width() - 0.5f) / outerW, (inner.height() - 0.5f) / outerH);
+		_min = Vector2d(0.0f, 0.0f);
+		_max = Vector2d((inner.width()) / (float)outerW, (inner.height()) / (float)outerH);
 	}
 
 	Vector2d _min, _max;
@@ -1196,10 +1196,12 @@ Task *fade(Process &process, FadeType fadeType,
 	int32 duration, EasingType easingType,
 	int8 order,
 	PermanentFadeAction permanentFadeAction) {
-	if (duration <= 0)
-		return new DelayTask(process, 0);
 	if (!process.isActiveForPlayer())
 		return new DelayTask(process, (uint32)duration);
+	if (duration <= 0) {
+		g_engine->globalUI().isPermanentFaded() = permanentFadeAction == PermanentFadeAction::SetFaded;
+		return new DelayTask(process, 0);
+	}
 	return new FadeTask(process, fadeType, from, to, duration, easingType, order, permanentFadeAction);
 }
 

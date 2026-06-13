@@ -53,7 +53,7 @@ void ScrollContainerWidget::init() {
 }
 
 void ScrollContainerWidget::handleMouseWheel(int x, int y, int direction) {
-	if (!isEnabled())
+	if (!isEnabled() || !_verticalScroll->isVisible())
 		return;
 
 	_fluidScroller->handleMouseWheel(direction);
@@ -65,14 +65,19 @@ void ScrollContainerWidget::handleMouseDown(int x, int y, int button, int clickC
 	_fluidScroller->stopAnimation();
 	Widget *child = _childUnderMouse;
 	if (child) {
-		int childX = (x + _scrolledX) - child->getRelX();
-		int childY = (y + _scrolledY) - child->getRelY();
+		int childX = x - (child->getAbsX() - getAbsX());
+		int childY = y - (child->getAbsY() - getAbsY());
 		child->handleMouseDown(childX, childY, button, clickCount);
+
+		if (child->getFlags() & WIDGET_IGNORE_DRAG) {
+			_isMouseDown = false;
+			_isDragging = false;
+		}
 	}
 }
 
 void ScrollContainerWidget::handleMouseMoved(int x, int y, int button) {
-	if (!_isMouseDown || _mouseDownY == y)
+	if (!_isMouseDown || _mouseDownY == y || !_verticalScroll->isVisible())
 		return;
 
 	if (!_isDragging && ABS(y - _mouseDownStartY) > kDragThreshold)
@@ -120,8 +125,8 @@ void ScrollContainerWidget::handleMouseUp(int x, int y, int button, int clickCou
 	_childUnderMouse = nullptr;
 
 	if (!isDragging && child) {
-		int childX = (x + _scrolledX) - child->getRelX();
-		int childY = (y + _scrolledY) - child->getRelY();
+		int childX = x - (child->getAbsX() - getAbsX());
+		int childY = y - (child->getAbsY() - getAbsY());
 		child->handleMouseUp(childX, childY, button, clickCount);
 	}
 }
@@ -243,6 +248,11 @@ void ScrollContainerWidget::markAsDirty() {
 	}
 }
 
+void ScrollContainerWidget::lostFocusWidget() {
+	_isMouseDown = _isDragging = false;
+	_mouseDownY = _mouseDownStartY = 0;
+}
+
 bool ScrollContainerWidget::containsWidget(Widget *w) const {
 	if (w == _verticalScroll || _verticalScroll->containsWidget(w))
 		return true;
@@ -257,6 +267,10 @@ Widget *ScrollContainerWidget::findWidget(int x, int y) {
 	_childUnderMouse = Widget::findWidgetInChain(_firstWidget, x + _scrolledX, y + _scrolledY);
 	if (_childUnderMouse == _verticalScroll) 
 		_childUnderMouse = nullptr;
+
+	if (_childUnderMouse && _childUnderMouse->wantsFocus())
+		return _childUnderMouse;
+
 	return this;
 }
 

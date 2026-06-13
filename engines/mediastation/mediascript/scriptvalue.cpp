@@ -197,6 +197,17 @@ double ScriptValue::asFloat() const {
 	}
 }
 
+double ScriptValue::asFloatOrTime() const {
+	if (_type == kScriptValueTypeFloat || _type == kScriptValueTypeTime) {
+		return _u.d;
+	} else {
+		// Times usually appear as floats (not the other way around), so
+		// for the one log we will use the time type.
+		VALUETYPEMISMATCH(kScriptValueTypeTime);
+		return 0.0;
+	}
+}
+
 void ScriptValue::setToBool(bool b) {
 	_type = kScriptValueTypeBool;
 	_u.b = b;
@@ -314,6 +325,9 @@ Common::String ScriptValue::getDebugString() const {
 	case kScriptValueTypeEmpty:
 		return "empty";
 
+	case kScriptValueTypeBool:
+		return Common::String::format("bool: %s", asBool() ? "TRUE" : "FALSE");
+
 	case kScriptValueTypeFloat:
 		return Common::String::format("float: %f", asFloat());
 
@@ -333,6 +347,21 @@ Common::String ScriptValue::getDebugString() const {
 	case kScriptValueTypeString:
 		return Common::String::format("string: \"%s\"", asString().c_str());
 
+	case kScriptValueTypeCollection: {
+		Collection *collection = asCollection();
+		uint itemCount = collection ? collection->size() : 0;
+		return Common::String::format("collection: [%d items]", itemCount);
+	}
+
+	case kScriptValueTypeFunctionId: {
+		Common::String functionName = g_engine->formatFunctionName(asFunctionId());
+		return Common::String::format("function: %s", functionName.c_str());
+	}
+
+	case kScriptValueTypeMethodId: {
+		return Common::String::format("method: %s", builtInMethodToStr(asMethodId()));
+	}
+
 	default:
 		return Common::String::format("arg type %s", scriptValueTypeToStr(getType()));
 	}
@@ -351,7 +380,7 @@ bool ScriptValue::compare(Opcode op, const ScriptValue &lhs, const ScriptValue &
 		break;
 
 	case kScriptValueTypeFloat:
-		result = compare(op, lhs.asFloat(), rhs.asFloat());
+		result = compare(op, lhs.asFloatOrTime(), rhs.asFloatOrTime());
 		break;
 
 	case kScriptValueTypeBool:
@@ -359,7 +388,7 @@ bool ScriptValue::compare(Opcode op, const ScriptValue &lhs, const ScriptValue &
 		break;
 
 	case kScriptValueTypeTime:
-		result = compare(op, lhs.asTime(), rhs.asTime());
+		result = compare(op, lhs.asFloatOrTime(), rhs.asFloatOrTime());
 		break;
 
 	case kScriptValueTypeParamToken:

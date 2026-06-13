@@ -38,6 +38,7 @@ extern word mouse_driver;       /* True if mouse driver is currently active  */
 extern word mouse_known_mode;   /* True if mouse in a 320x200 graphics mode  */
 extern int  mouse_video_mode;   /* Rom BIOS video mode # of current cursor   */
 extern byte mouse_showing;      /* Mouse cursor showing status (0 = show)    */
+extern byte mouse_hidden;
 
 extern int mouse_button;        /* Last button pressed (0 = left, 1 = right) */
 extern int mouse_status;        /* Button status flags                       */
@@ -110,6 +111,7 @@ extern void mouse_cursor_sprite(SeriesPtr series, int id);
 extern void mouse_video_init();
 extern void mouse_video_update(int from_x, int from_y,
 	int unto_x, int unto_y, int size_x, int size_y);
+extern void mouse_hard_cursor_mode(int mode, Palette mypal);
 
 } // namespace MADSV2
 } // namespace MADS

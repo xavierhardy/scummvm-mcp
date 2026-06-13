@@ -1,3 +1,24 @@
+/* ScummVM - Graphic Adventure Engine
+ *
+ * ScummVM is the legal property of its developers, whose names
+ * are too numerous to list here. Please refer to the COPYRIGHT
+ * file distributed with this source distribution.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
 package org.scummvm.scummvm;
 
 import android.Manifest;
@@ -72,7 +93,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeSet;
 
-public class ScummVMActivity extends Activity implements OnKeyboardVisibilityListener {
+public class ScummVMActivity extends Activity {
 	/* Establish whether the hover events are available */
 	private static boolean _hoverAvailable;
 
@@ -1114,7 +1135,7 @@ public class ScummVMActivity extends Activity implements OnKeyboardVisibilityLis
 		_openMenuBtnIcon.setOnClickListener(menuBtnOnClickListener);
 
 		// Keyboard visibility listener - mainly to hide system UI if keyboard is shown and we return from Suspend to the Activity
-		setKeyboardVisibilityListener(this);
+		setupKeyboardVisibilityListener();
 
 		_main_surface.setOnKeyListener(_events);
 		_main_surface.setOnTouchListener(_events);
@@ -1436,37 +1457,36 @@ public class ScummVMActivity extends Activity implements OnKeyboardVisibilityLis
 
 	// Listener to check for keyboard visibility changes
 	// https://stackoverflow.com/a/36259261
-	private void setKeyboardVisibilityListener(final OnKeyboardVisibilityListener onKeyboardVisibilityListener) {
+	private void setupKeyboardVisibilityListener() {
 		final View parentView = ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
-		if (parentView != null) {
-			parentView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-
-				private boolean alreadyOpen;
-				private final int defaultKeyboardHeightDP = 100;
-				private final int EstimatedKeyboardDP = defaultKeyboardHeightDP + (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP ? 48 : 0);
-				private final Rect rect = new Rect();
-
-				@TargetApi(Build.VERSION_CODES.CUPCAKE)
-				@Override
-				public void onGlobalLayout() {
-					int estimatedKeyboardHeight = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, EstimatedKeyboardDP, parentView.getResources().getDisplayMetrics());
-					parentView.getWindowVisibleDisplayFrame(rect);
-					int heightDiff = parentView.getRootView().getHeight() - (rect.bottom - rect.top);
-					boolean isShown = heightDiff >= estimatedKeyboardHeight;
-
-					if (isShown == alreadyOpen) {
-						Log.i(ScummVM.LOG_TAG, "Keyboard state:: ignoring global layout change...");
-						return;
-					}
-					alreadyOpen = isShown;
-					onKeyboardVisibilityListener.onVisibilityChanged(isShown);
-				}
-			});
+		if (parentView == null) {
+			return;
 		}
+		parentView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+			private boolean alreadyOpen;
+			private final int defaultKeyboardHeightDP = 100;
+			private final int EstimatedKeyboardDP = defaultKeyboardHeightDP + (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP ? 48 : 0);
+			private final Rect rect = new Rect();
+
+			@TargetApi(Build.VERSION_CODES.CUPCAKE)
+			@Override
+			public void onGlobalLayout() {
+				int estimatedKeyboardHeight = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, EstimatedKeyboardDP, parentView.getResources().getDisplayMetrics());
+				parentView.getWindowVisibleDisplayFrame(rect);
+				int heightDiff = parentView.getRootView().getHeight() - (rect.bottom - rect.top);
+				boolean isShown = heightDiff >= estimatedKeyboardHeight;
+
+				if (isShown == alreadyOpen) {
+					Log.i(ScummVM.LOG_TAG, "Keyboard state:: ignoring global layout change...");
+					return;
+				}
+				alreadyOpen = isShown;
+				onKeyboardVisibilityChanged(isShown);
+			}
+		});
 	}
 
-	@Override
-	public void onVisibilityChanged(boolean visible) {
+	public void onKeyboardVisibilityChanged(boolean visible) {
 //		Toast.makeText(HomeActivity.this, visible ? "Keyboard is active" : "Keyboard is Inactive", Toast.LENGTH_SHORT).show();
 		CompatHelpers.HideSystemStatusBar.hide(getWindow());
 	}

@@ -308,7 +308,6 @@ bool MovesensMan::getMoveResult(Thing thing, int16 mapX, int16 mapY, int16 destM
 			} else {
 				if ((destinationSquareType == (int)kDMElementTypePit) && !thingLevitates && getFlag(destinationSquareData, kDMSquareMaskPitOpen) && !getFlag(destinationSquareData, kDMSquareMaskPitImaginary)) {
 					if (drawDungeonViewWhileFalling && !_useRopeToClimbDownPit) {
-						drawDungeonViewWhileFalling = true;
 						if (traversedPitCount) {
 							dungeon.setCurrentMapAndPartyMap(mapIndexDestination);
 							display.loadCurrentMapGraphics();
@@ -937,7 +936,7 @@ void MovesensMan::triggerEffect(Sensor *sensor, SensorEffect effect, int16 mapX,
 
 void MovesensMan::triggerLocalEffect(SensorEffect localEffect, int16 effX, int16 effY, int16 effCell) {
 	if (localEffect == kDMSensorEffectAddExperience) {
-		addSkillExperience(kDMSkillSteal, 300, localEffect != kDMSensorEffectNone);
+		addSkillExperience(kDMSkillSteal, 300, effCell != kDMCellAny);
 		return;
 	}
 	_sensorRotationEffect = localEffect;
@@ -972,14 +971,14 @@ void MovesensMan::processRotationEffect() {
 		{
 			Thing firstSensorThing = dungeon.getSquareFirstThing(_sensorRotationEffMapX, _sensorRotationEffMapY);
 			while ((firstSensorThing.getType() != kDMThingTypeSensor)
-				|| ((_sensorRotationEffCell != kDMCellAny) && (firstSensorThing.getCell() != _sensorRotationEffCell))) {
+				|| ((_sensorRotationEffCell != kDMCellAny) && ((int16)firstSensorThing.getCell() != _sensorRotationEffCell))) {
 				firstSensorThing = dungeon.getNextThing(firstSensorThing);
 			}
 			Sensor *firstSensor = (Sensor *)dungeon.getThingData(firstSensorThing);
 			Thing lastSensorThing = firstSensor->getNextThing();
 			while ((lastSensorThing != _vm->_thingEndOfList)
 				&& ((lastSensorThing.getType() != kDMThingTypeSensor)
-				|| ((_sensorRotationEffCell != kDMCellAny) && (lastSensorThing.getCell() != _sensorRotationEffCell)))) {
+				|| ((_sensorRotationEffCell != kDMCellAny) && ((int16)lastSensorThing.getCell() != _sensorRotationEffCell)))) {
 				lastSensorThing = dungeon.getNextThing(lastSensorThing);
 			}
 			if (lastSensorThing == _vm->_thingEndOfList)
@@ -988,7 +987,7 @@ void MovesensMan::processRotationEffect() {
 			Sensor *lastSensor = (Sensor *)dungeon.getThingData(lastSensorThing);
 			lastSensorThing = dungeon.getNextThing(lastSensorThing);
 			while (((lastSensorThing != _vm->_thingEndOfList) && (lastSensorThing.getType() == kDMThingTypeSensor))) {
-				if ((_sensorRotationEffCell == kDMCellAny) || (lastSensorThing.getCell() == _sensorRotationEffCell))
+				if ((_sensorRotationEffCell == kDMCellAny) || ((int16)lastSensorThing.getCell() == _sensorRotationEffCell))
 					lastSensor = (Sensor *)dungeon.getThingData(lastSensorThing);
 				lastSensorThing = dungeon.getNextThing(lastSensorThing);
 			}
@@ -1017,7 +1016,7 @@ Thing MovesensMan::getObjectOfTypeInCell(int16 mapX, int16 mapY, int16 cell, int
 	DungeonMan &dungeon = *_vm->_dungeonMan;
 	Thing curThing = dungeon.getSquareFirstObject(mapX, mapY);
 	while (curThing != _vm->_thingEndOfList) {
-		if ((_vm->_objectMan->getObjectType(curThing) == objectType) && ((cell == kDMCellAny) || (curThing.getCell() == cell)))
+		if ((_vm->_objectMan->getObjectType(curThing) == objectType) && ((cell == kDMCellAny) || ((int16)curThing.getCell() == cell)))
 			return curThing;
 
 		curThing = dungeon.getNextThing(curThing);

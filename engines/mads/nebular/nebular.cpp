@@ -27,20 +27,20 @@
 #include "engines/util.h"
 #include "mads/nebular/nebular.h"
 #include "mads/nebular/sound_nebular.h"
-#include "mads/core/game.h"
-#include "mads/core/screen.h"
-#include "mads/core/msurface.h"
-#include "mads/core/resources.h"
-#include "mads/core/sound.h"
-#include "mads/core/sprites.h"
+#include "mads/nebular/core/game.h"
+#include "mads/nebular/core/screen.h"
+#include "mads/nebular/core/msurface.h"
+#include "mads/nebular/core/resources.h"
+#include "mads/nebular/core/sprites.h"
 #include "mads/core/mps_installer.h"
 
 namespace MADS {
+namespace Nebular {
 
 RexNebularEngine *g_engine;
 
 RexNebularEngine::RexNebularEngine(OSystem *syst, const MADSGameDescription *gameDesc) :
-		MADSEngine(syst, gameDesc) {
+	MADSEngine(syst, gameDesc) {
 	// Initialize game/engine options
 	_easyMouse = true;
 	_invObjectsAnimated = true;
@@ -81,7 +81,7 @@ RexNebularEngine::~RexNebularEngine() {
 void RexNebularEngine::initialize() {
 	if (_gameDescription->desc.flags & GF_INSTALLER) {
 		// Right now used only by Rex Nebular
-		Common::Archive* arch = MpsInstaller::open("MPSLABS");
+		Common::Archive *arch = MpsInstaller::open("MPSLABS");
 		if (arch)
 			SearchMan.add("mpslabs", arch);
 	}
@@ -208,4 +208,5 @@ Common::Error RexNebularEngine::saveGameState(int slot, const Common::String &de
 	return Common::kNoError;
 }
 
+} // namespace Nebular
 } // namespace MADS

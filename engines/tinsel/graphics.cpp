@@ -434,9 +434,9 @@ static void WrtNonZero(DRAWOBJECT *pObj, uint8 *srcP, uint8 *destP, bool applyCl
 		int width = pObj->width;
 
 		if (!applyClipping) {
-			// No clipping, so so set box bounding area for drawing full 4x4 pixel blocks
+			// No clipping, so set box bounding area for drawing full 4x4 pixel blocks
 			boxBounds.top = 0;
-			boxBounds.bottom = 3;
+			boxBounds.bottom = MIN(pObj->height - 1, 3);
 			boxBounds.left = 0;
 		} else {
 			// Handle any possible clipping at the top of the char block.

@@ -62,7 +62,6 @@ public:
 		_tempSurface->copyRectToSurface(_screen->getBasePtr(_bbox.left, _bbox.top), _screen->pitch,
 			0, 0, _bbox.width() + 1, _bbox.height() + 1);
 		_wm->pushCursor(Graphics::kMacCursorArrow, nullptr);
-		g_system->showMouse(true);
 		CursorMan.showMouse(true);
 
 		while (!shouldQuit) {
@@ -72,20 +71,40 @@ public:
 				if (processEvent(event))
 					continue;
 
+				// MacDialog button rects are in _screen coordinates (engine
+				// logical, e.g. 853×480). With kSupportsArbitraryResolutions
+				// the framework rewrites g_system->getWidth/Height to window
+				// pixel size, so event.mouse arrives in window pixels —
+				// convert back to _screen coords before hit-testing.
+				auto toLocal = [this](const Common::Point &p) -> Common::Point {
+					const int sysW = g_system->getWidth();
+					const int sysH = g_system->getHeight();
+					if (sysW <= 0 || sysH <= 0 || (sysW == _screen->w && sysH == _screen->h))
+						return p;
+					return Common::Point((int)((int64)p.x * _screen->w / sysW),
+						(int)((int64)p.y * _screen->h / sysH));
+				};
+
 				switch (event.type) {
 				case Common::EVENT_QUIT:
 					shouldQuitEngine = true;
 					shouldQuit = true;
 					break;
-				case Common::EVENT_MOUSEMOVE:
-					mouseMove(event.mouse.x, event.mouse.y);
+				case Common::EVENT_MOUSEMOVE: {
+					const Common::Point p = toLocal(event.mouse);
+					mouseMove(p.x, p.y);
 					break;
-				case Common::EVENT_LBUTTONDOWN:
-					mouseClick(event.mouse.x, event.mouse.y);
+				}
+				case Common::EVENT_LBUTTONDOWN: {
+					const Common::Point p = toLocal(event.mouse);
+					mouseClick(p.x, p.y);
 					break;
-				case Common::EVENT_LBUTTONUP:
-					shouldQuit = mouseRaise(event.mouse.x, event.mouse.y);
+				}
+				case Common::EVENT_LBUTTONUP: {
+					const Common::Point p = toLocal(event.mouse);
+					shouldQuit = mouseRaise(p.x, p.y);
 					break;
+				}
 				case Common::EVENT_KEYDOWN:
 					if (event.kbd.keycode == Common::KEYCODE_ESCAPE) {
 						_pressedButton = -1;
@@ -121,7 +140,7 @@ public:
 };
 
 int ColonyEngine::runMacEndgameDialog(const Common::String &message) {
-	if (_renderMode != Common::kRenderMacintosh || !_wm || !_menuSurface || !_gfx)
+	if (!isMacRenderMode() || !_wm || !_menuSurface || !_gfx)
 		return Graphics::kMacDialogQuitRequested;
 
 	if (_macMenu && _wm->isMenuActive())
@@ -218,7 +237,10 @@ void ColonyEngine::playIntro() {
 			_gfx->clear(_gfx->black());
 			if (!drawPict(-32565))  // Color Colony
 				drawPict(-32748);   // B&W Colony
-			_sound->play(Sound::kMars);
+			// Original intro.c: PlayMars() → PlayCSound(mars), looped via VBL
+			// task. Mars stays alive across the next several intro sections
+			// until EndCSound() is called.
+			_sound->play(Sound::kMars, true);
 			qt = makeStars(_screenR, 0);
 
 			if (!qt) {
@@ -480,7 +502,7 @@ bool ColonyEngine::scrollInfo(const Graphics::Font *macFont) {
 	// Set up gradient palette entries (200-213) for story text
 	// Mac original: tColor.blue starts at 0xFFFF and decreases by 4096 per visible line
 	// B&W Mac: white gradient instead of blue
-	const bool bwMac = (macFont && !_hasMacColors);
+	const bool bwMac = (macFont && !isMacColorMode());
 	byte pal[14 * 3]; // storyLength entries
 	memset(pal, 0, sizeof(pal));
 	for (int i = 0; i < storyLength; i++) {
@@ -946,7 +968,7 @@ bool ColonyEngine::timeSquare(const Common::String &str, const Graphics::Font *m
 
 	int centery = _height / 2 - 10;
 
-	const bool bwMac = (macFont && !_hasMacColors);
+	const bool bwMac = (macFont && !isMacColorMode());
 	const bool macStyle = (macFont != nullptr);
 	const uint32 grayIndex = 160;
 	const uint32 textIndex = 176;
@@ -968,12 +990,11 @@ bool ColonyEngine::timeSquare(const Common::String &str, const Graphics::Font *m
 			_gfx->setPalette(pal, textIndex, 1);
 		}
 
-		// Draw the blue gradient lines above/below the center band.
+		// Draw the blue gradient bands above/below the center band — each
+		// iteration is a 2-pixel-tall stripe in palette index 160+i.
 		for (int i = 0; i < 16; i++) {
-			_gfx->drawLine(0, centery - 2 - i * 2, _width, centery - 2 - i * 2, 160 + i);
-			_gfx->drawLine(0, centery - 2 - (i * 2 + 1), _width, centery - 2 - (i * 2 + 1), 160 + i);
-			_gfx->drawLine(0, centery + 16 + i * 2, _width, centery + 16 + i * 2, 160 + i);
-			_gfx->drawLine(0, centery + 16 + i * 2 + 1, _width, centery + 16 + i * 2 + 1, 160 + i);
+			_gfx->fillRect(Common::Rect(0, centery - 3 - i * 2, _width, centery - 1 - i * 2), 160 + i);
+			_gfx->fillRect(Common::Rect(0, centery + 16 + i * 2, _width, centery + 18 + i * 2), 160 + i);
 		}
 	} else {
 		// DOS warning band: white outer lines, gray inner lines, white text.
@@ -1044,8 +1065,9 @@ bool ColonyEngine::timeSquare(const Common::String &str, const Graphics::Font *m
 	_sound->stop();
 
 	// Phase 3: Mac resumes Mars here; DOS scrolls out silently.
+	// Original intro.c TimeSquare line 323: PlayMars() restarts the loop.
 	if (macStyle)
-		_sound->play(Sound::kMars);
+		_sound->play(Sound::kMars, true);
 	for (int x = targetX; x > endX; x -= stepX) {
 		_gfx->fillRect(textBand, 0);
 		_gfx->drawString(font, str, x, centery + 2, textIndex, Graphics::kTextAlignLeft);
@@ -1121,7 +1143,7 @@ bool ColonyEngine::drawPict(int resID) {
 						uint32 pixel = surface->getPixel(ix, iy);
 						surface->format.colorToRGB(pixel, r, g, b);
 					}
-					_gfx->setPixel(sx, sy, 0xFF000000 | ((uint32)r << 16) | ((uint32)g << 8) | b);
+					_gfx->setPixel(sx, sy, packRGB(r, g, b));
 				}
 			}
 			_gfx->copyToScreen();
@@ -1150,7 +1172,6 @@ void ColonyEngine::terminateGame(bool blowup) {
 	_animationRunning = false;
 	_mouseLocked = false;
 	_system->lockMouse(false);
-	_system->showMouse(true);
 	CursorMan.setDefaultArrowCursor(true);
 	CursorMan.showMouse(true);
 
@@ -1193,7 +1214,7 @@ void ColonyEngine::terminateGame(bool blowup) {
 	_centerX = savedCenterX;
 	_centerY = savedCenterY;
 
-	if (_renderMode == Common::kRenderMacintosh) {
+	if (isMacRenderMode()) {
 		while (!shouldQuit()) {
 			switch (runMacEndgameDialog(_("You have been terminated."))) {
 			case 0:
@@ -1300,7 +1321,6 @@ void ColonyEngine::gameOver(bool kill) {
 
 	_mouseLocked = false;
 	_system->lockMouse(false);
-	_system->showMouse(true);
 	CursorMan.setDefaultArrowCursor(true);
 	CursorMan.showMouse(true);
 

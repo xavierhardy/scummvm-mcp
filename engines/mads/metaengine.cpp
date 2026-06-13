@@ -36,11 +36,13 @@
 #include "common/translation.h"
 #include "graphics/surface.h"
 
-#include "mads/core/events.h"
-#include "mads/core/game.h"
+#include "mads/nebular/core/events.h"
+#include "mads/nebular/core/game.h"
 #include "mads/detection.h"
 #ifdef ENABLE_MADSV2
 #include "mads/madsv2/phantom/phantom.h"
+#include "mads/madsv2/dragonsphere/dragonsphere.h"
+#include "mads/madsv2/forest/forest.h"
 #endif
 
 #define MAX_SAVES 99
@@ -108,6 +110,18 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 		}
 	},
 
+	{
+		GAMEOPTION_ORIGINAL_SAVELOAD,
+		{
+			_s("Use original save/load screens"),
+			_s("Use the original save/load screens instead of the ScummVM ones"),
+			"original_menus",
+			false,
+			0,
+			0
+		}
+	},
+
 	/*{
 		GAMEOPTION_GRAPHICS_DITHERING,
 		{
@@ -151,6 +165,10 @@ uint32 MADSEngine::getFeatures() const {
 
 bool MADSEngine::isDemo() const {
 	return (bool)(_gameDescription->desc.flags & ADGF_DEMO);
+}
+
+bool MADSEngine::isCDROM() const {
+	return (bool)(_gameDescription->desc.flags & ADGF_CD);
 }
 
 Common::Language MADSEngine::getLanguage() const {
@@ -206,10 +224,14 @@ Common::Error MADSMetaEngine::createInstance(OSystem *syst, Engine **engine, con
 #ifdef ENABLE_MADSV2
 	if (desc->gameID == MADS::GType_Phantom)
 		*engine = new MADS::MADSV2::Phantom::PhantomEngine(syst, desc);
+	else if (desc->gameID == MADS::GType_Forest)
+		*engine = new MADS::MADSV2::Forest::ForestEngine(syst, desc);
+	else if (desc->gameID == MADS::GType_Dragonsphere)
+		*engine = new MADS::MADSV2::Dragonsphere::DragonsphereEngine(syst, desc);
 	else
 #endif
 
-	*engine = new MADS::RexNebularEngine(syst,desc);
+	*engine = new MADS::Nebular::RexNebularEngine(syst,desc);
 	return Common::kNoError;
 }
 
@@ -221,7 +243,7 @@ SaveStateList MADSMetaEngine::listSaves(const char *target) const {
 	Common::StringArray filenames;
 	Common::String saveDesc;
 	Common::String pattern = Common::String::format("%s.0##", target);
-	MADS::MADSSavegameHeader header;
+	MADS::Nebular::MADSSavegameHeader header;
 
 	filenames = saveFileMan->listSavefiles(pattern);
 
@@ -234,7 +256,7 @@ SaveStateList MADSMetaEngine::listSaves(const char *target) const {
 			Common::InSaveFile *in = g_system->getSavefileManager()->openForLoading(*file);
 
 			if (in) {
-				if (MADS::Game::readSavegameHeader(in, header))
+				if (MADS::Nebular::Game::readSavegameHeader(in, header))
 					saveList.push_back(SaveStateDescriptor(this, slot, header._saveName));
 				delete in;
 			}
@@ -267,8 +289,8 @@ SaveStateDescriptor MADSMetaEngine::querySaveMetaInfos(const char *target, int s
 	Common::InSaveFile *f = g_system->getSavefileManager()->openForLoading(filename);
 
 	if (f) {
-		MADS::MADSSavegameHeader header;
-		if (!MADS::Game::readSavegameHeader(f, header, false)) {
+		MADS::Nebular::MADSSavegameHeader header;
+		if (!MADS::Nebular::Game::readSavegameHeader(f, header, false)) {
 			delete f;
 			return SaveStateDescriptor();
 		}

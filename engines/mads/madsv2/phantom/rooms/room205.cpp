@@ -47,6 +47,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 static void handle_animation_rich() {
 	int random;
 	int rich_reset_frame;
@@ -1232,12 +1234,12 @@ void room_205_parser() {
 	}
 
 	if ((player_said_1(enter)) || (player_said_1(open)) || player_said_1(unlock) || player_said_1(lock)) {
-		if (((player_said_1(box_five)) && ((global[doors_in_205] == BOTH_LOCKED) || (global[doors_in_205] == RIGHT_OPEN))
-		  || player_said_1(unlock) || player_said_1(lock))
-		                                         ||
-		 ((player_said_1(box_nine)) && ((global[doors_in_205] == BOTH_LOCKED) || (global[doors_in_205] == LEFT_OPEN)))
-		                                         ||
-		  (player_said_1(box_six)) || (player_said_1(box_seven)) || (player_said_1(box_eight))) {
+		if ((((player_said_1(box_five)) && ((global[doors_in_205] == BOTH_LOCKED) || (global[doors_in_205] == RIGHT_OPEN)))
+			|| player_said_1(unlock) || player_said_1(lock))
+			||
+			(((player_said_1(box_nine)) && ((global[doors_in_205] == BOTH_LOCKED) || (global[doors_in_205] == LEFT_OPEN)))
+				||
+				(player_said_1(box_six)) || (player_said_1(box_seven)) || (player_said_1(box_eight)))) {
 			switch (kernel.trigger) {
 			case 0:
 				player.commands_allowed = false;
@@ -1791,6 +1793,26 @@ void room_205_preload() {
 			}
 		}
 	}
+}
+
+
+void room_205_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->rich_frame,
+		local->rich_action,
+		local->rich_talk_count,
+		local->giry_frame,
+		local->giry_action,
+		local->giry_talk_count,
+		local->just_did_option,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->converse_counter,
+		local->no_hold,
+		local->give_ticket);
 }
 
 } // namespace Rooms

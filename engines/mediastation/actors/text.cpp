@@ -37,7 +37,7 @@ void TextActor::readParameter(Chunk &chunk, ActorHeaderSectionType paramType) {
 
 	case kActorHeaderFontActorId: {
 		uint fontActorId = chunk.readTypedUint16();
-		_fontActor = static_cast<FontActor *>(g_engine->getActorByIdAndType(fontActorId, kActorTypeFont));
+		_fontActor = static_cast<FontActor *>(g_engine->getImtGod()->getActorByIdAndType(fontActorId, kActorTypeFont));
 		break;
 	}
 
@@ -137,7 +137,7 @@ ScriptValue TextActor::callMethod(BuiltInMethod methodId, Common::Array<ScriptVa
 	case kTextSetFontActorMethod: {
 		ARGCOUNTCHECK(1);
 		uint fontActorId = args[0].asActorId();
-		_fontActor = static_cast<FontActor *>(g_engine->getActorByIdAndType(fontActorId, kActorTypeFont));
+		_fontActor = static_cast<FontActor *>(g_engine->getImtGod()->getActorByIdAndType(fontActorId, kActorTypeFont));
 		invalidateLocalBounds();
 		break;
 	}
@@ -358,7 +358,7 @@ uint16 TextActor::findActorToAcceptKeyboardEvents(uint16 charCode, uint16 eventM
 	return result;
 }
 
-void TextActor::keyboardEvent(const Common::Event &event) {
+void TextActor::keyboardEvent(const KeyboardEvent &event) {
 	// TODO: Implement this once we have a title that actually uses it.
 	warning("STUB: %s", __func__);
 }

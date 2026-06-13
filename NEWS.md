@@ -6,11 +6,17 @@ For a more comprehensive changelog of the latest experimental code, see:
  New games:
    - Added support for Nancy Drew: The Haunted Carousel.
    - Added support for Nancy Drew: Danger on Deception Island.
+   - Added support for Noctropolis.
+   - Added support for Alfred Pelrock: En Busca de un Sueño.
+   - Added support for Cartoon Carnival.
 
  General:
    - Highlight clickable links in the GUI with a cursor change.
    - Fixed window size when switching out of fullscreen mode on 3D engines.
    - Implemented NULL OPL driver for lower-base systems.
+
+ ACCESS:
+   - Fixed various script issues in Martian Memorandum.
 
  AGOS:
    - Added support for language files used by Amiga and Macintosh
@@ -19,13 +25,49 @@ For a more comprehensive changelog of the latest experimental code, see:
  GLK:
    - Exposed text and engine settings in the GUI.
 
+ LastExpress:
+   - The game has been supported for a while now (2026.1.0), we just
+     forgot to add a news entry here. Whoops!
+   - Several inaccuracies from the character logic have been fixed,
+     which means that some rare issues concerning characters behavior
+     should now be gone.
+
+ MADS:
+   - In Rex Nebular fix game being semi-stuck while using binoculars.
+
  MM:
    - Reworked keymapper for MM1.
+   - Fixed MM1 Enhanced allowing trading more than the character owned.
+   - Fixed MM1 Enhanced allowing free temple healing where it shouldn't.
+   - MM1 Enhanced most recently played music was restarting after opening and closing the GMM.
+
+ MYST3:
+   - Fixed a regression for the animation of the control wheel at J'nanin's shore.
+   - Camera movement is now free after placing a symbol on the pedestal at the watch tower in J'nanin.
+
+ NANCY:
+   - Fixed a regression in ripped letter types of puzzles, affecting all the Nancy games that feature such puzzles.
+   - Fixed potential crashes in ripped letter types of puzzles, after loading a saved game.
+   - Show the correct mouse cursor in rotating lock types of puzzles.
+   - Enter the game scene directly when loading a saved game from the launcher or the GMM, instead of starting in the main game menu.
+   - Properly handle the "Continue Game" button after clicking on the "More Nancy" button.
+   - Fixed an edge case in piano types of puzzles, where clicking on a key while another was still down produced a graphical glitch.
+   - Fixed some sounds stopping prematurely in Nancy Drew: Secret of the Scarlet Hand and newer games.
+   - Fixed animation speed and timing in turning types of puzzles.
 
  SLUDGE:
    - Added two more games to detection, "Sam and Max Flintlocked" and
-	   "Full Moon".
+     "Full Moon".
 
+ TwinE:
+   - Fixed soft lock collision bug with bulldozer.
+   - Fixed wrong scaling for plasma menu effect.
+   - Fixed holomap model rendering.
+   - Disable autosaves while driving a vehicle.
+
+ PS3 port:
+   - Added support for running ScummVM engines as separate modules/executables.
+     This saves about 90 MB of RAM. It is enabled only for release packages.
 
 #### 2026.2.0 "Railmonicon" (2026-03-28)
 

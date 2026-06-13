@@ -39,7 +39,7 @@ int window_line_type;       /* Line type used to draw last window border */
 
 WindowPtr trap_window;
 
-void (*(window_any_char_routine))() = NULL;
+void (*window_any_char_routine)() = NULL;
 int  window_num_trap_routines = 0;
 byte *window_trap_routine[WINDOW_MAX_TRAP_ROUTINES];
 char window_trap_string[WINDOW_MAX_TRAP_ROUTINES][WINDOW_TRAP_WIDTH];
@@ -521,7 +521,7 @@ byte *window_create(WindowPtr window) {
 void window_destroy(WindowPtr window) {
 	byte *address;
 	byte *storage;
-	int baseadd, nextadd, rowbump, memory;
+	int baseadd, nextadd, rowbump;
 	int width_bonus, height_bonus;
 	int width, height;
 
@@ -538,7 +538,6 @@ void window_destroy(WindowPtr window) {
 	width = (window->lr_x - window->ul_x) + width_bonus;
 	height = (window->lr_y - window->ul_y) + height_bonus;
 	rowbump = (nextadd - baseadd) - (width << 1);
-	memory = (width * height) << 1;
 
 	mouse_hide();
 
@@ -670,25 +669,6 @@ void window_draw_box(WindowPtr window, int type) {
 	}
 }
 
-/**
- * main interrupt 21 write string server
- */
-static void window_server(void) {
-	error("TODO: window_server");
-}
-
-static void window_21_install() {
-	error("TODO: window_21_install");
-}
-
-static void window_21_remove() {
-	error("TODO: window_21_remove");
-}
-
-static void window_21_server() {
-	error("TODO: window_21_server");
-}
-
 void window_trap_output(WindowPtr window,
 		void (*(any_char_routine))(),
 		char *trap_string, ...) {
@@ -728,16 +708,10 @@ void window_trap_output(WindowPtr window,
 		next_trap_string = va_arg(marker, char *);
 	}
 
-	window_21_install();
-
 	window_server_installed = true;
 }
 
 void window_restore_output(void) {
-	if (window_server_installed) {
-		window_21_remove();
-	}
-
 	window_server_installed = false;
 }
 

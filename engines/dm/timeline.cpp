@@ -308,8 +308,8 @@ void Timeline::processTimeline() {
 			case kDMEventTypeRemoveFluxcage:
 				if (!_vm->_gameWon) {
 					_vm->_dungeonMan->unlinkThingFromList(Thing(newEvent._Cu._slot), Thing(0), newEvent._Bu._location._mapX, newEvent._Bu._location._mapY);
-					curEvent = (TimelineEvent *)_vm->_dungeonMan->getThingData(Thing(newEvent._Cu._slot));
-					((Explosion *)curEvent)->setNextThing(_vm->_thingNone);
+					Explosion *explosion = (Explosion *)_vm->_dungeonMan->getThingData(Thing(newEvent._Cu._slot));
+					explosion->setNextThing(_vm->_thingNone);
 				}
 				break;
 			case kDMEventTypeEnableChampionAction:
@@ -352,7 +352,7 @@ void Timeline::processTimeline() {
 				break;
 			case kDMEventTypePoisonChampion: {
 				uint16 championIndex = newEvent._priority;
-				_vm->_championMan->_champions[championIndex = newEvent._priority]._poisonEventCount--;
+				_vm->_championMan->_champions[championIndex]._poisonEventCount--;
 				_vm->_championMan->championPoison(championIndex, newEvent._Bu._attack);
 				}
 				break;
@@ -417,8 +417,10 @@ void Timeline::processEventDoorAnimation(TimelineEvent *event) {
 				if (_vm->_groupMan->getDamageAllCreaturesOutcome((Group *)_vm->_dungeonMan->getThingData(groupThing), mapX, mapY, 5, true) != kDMKillOutcomeAllCreaturesInGroup)
 					_vm->_groupMan->processEvents29to41(mapX, mapY, kDMEventTypeCreateReactionDangerOnSquare, 0);
 
-				int16 nextState = doorState - 1;
-				doorState = (doorState == kDMDoorStateOpen) ? kDMDoorStateOpen : (DoorState) nextState;
+				int16 nextState = (int16)doorState - 1;
+				if (nextState < 0)
+					nextState = 0;
+				doorState = (DoorState)nextState;
 				curSquare->setDoorState(doorState);
 				_vm->_sound->requestPlay(kDMSoundIndexWoodenThudAttackTrolinAntmanStoneGolem, mapX, mapY, kDMSoundModePlayIfPrioritized);
 				event->_mapTime++;
@@ -433,9 +435,13 @@ void Timeline::processEventDoorAnimation(TimelineEvent *event) {
 	if ((sensorEffect == kDMSensorEffectClear) && (doorState == kDMDoorStateClosed))
 		return;
 
-	int16 nextDoorEffect = doorState + 1;
-	int16 prevDoorEffect = doorState - 1;
-	doorState = (DoorState) ((sensorEffect == kDMSensorEffectSet) ? prevDoorEffect : nextDoorEffect);
+	int16 nextDoorStateVal = (sensorEffect == kDMSensorEffectSet) ? (int16)doorState - 1 : (int16)doorState + 1;
+	if (nextDoorStateVal < 0) {
+		nextDoorStateVal = 0;
+	} else if (nextDoorStateVal > 4) {
+		nextDoorStateVal = 4;
+	}
+	doorState = (DoorState)nextDoorStateVal;
 	curSquare->setDoorState(doorState);
 	_vm->_sound->requestPlay(kDMSoundIndexDoorRattle, mapX, mapY, kDMSoundModePlayIfPrioritized);
 
@@ -482,11 +488,16 @@ void Timeline::processEventSquareDoor(TimelineEvent *event) {
 	if (doorState == kDMDoorStateDestroyed)
 		return;
 
-	if (event->_Cu.A._effect == kDMSensorEffectToggle)
+	if (event->_Cu.A._effect == kDMSensorEffectToggle) {
 		event->_Cu.A._effect = (doorState == kDMDoorStateOpen) ? kDMSensorEffectClear : kDMSensorEffectSet;
-	else if (event->_Cu.A._effect == kDMSensorEffectSet) {
-		if ((doorState == kDMDoorStateOpen) || (doorState == kDMDoorStateClosed))
-			return;
+	} else {
+		if (event->_Cu.A._effect == kDMSensorEffectSet) {
+			if (doorState == kDMDoorStateOpen)
+           		return;
+		} else if (event->_Cu.A._effect == kDMSensorEffectClear) {
+			if (doorState == kDMDoorStateClosed)
+            	return;
+		}
 	}
 	event->_type = kDMEventTypeDoorAnimation;
 	addEventGetEventIndex(event);
@@ -754,7 +765,6 @@ void Timeline::processEventSquareCorridor(TimelineEvent *event) {
 						newEvent._mapTime = _vm->setMapAndTime(_vm->_dungeonMan->_currMapIndex, _vm->_gameTime + actionTicks);
 						newEvent._priority = 0;
 						newEvent._Bu._location._mapX = mapX;
-						newEvent._Bu._location._mapY = mapY;
 						newEvent._Bu._location._mapY = mapY;
 						addEventGetEventIndex(&newEvent);
 					}

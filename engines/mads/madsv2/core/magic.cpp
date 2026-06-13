@@ -43,12 +43,12 @@ namespace MADSV2 {
 #define MAX_RADIUS      210
 
 /*
-/*      If the "magic_color_flag" for a color gun is set, then the grey
-/*      intensity ramp for its pixels is used during the fade, shifted
-/*      left by its "magic_color_value" (0 means no shift, negative means
-/*      shift right).  If "magic_color_flag" is false, then then that gun
-/*      fades to the precise color value specified by magic_color_value.
-*/
+ * If the "magic_color_flag" for a color gun is set, then the grey
+ * intensity ramp for its pixels is used during the fade, shifted
+ * left by its "magic_color_value" (0 means no shift, negative means
+ * shift right).  If "magic_color_flag" is false, then then that gun
+ * fades to the precise color value specified by magic_color_value.
+ */
 byte magic_color_flags[3] = { true, true, true };
 byte magic_color_values[3] = { 0, 0, 0 };
 

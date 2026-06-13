@@ -27,14 +27,14 @@
 #include "common/serializer.h"
 #include "common/rendermode.h"
 #include "engines/engine.h"
-#include "gui/debugger.h"
+#include "chamber/renderer.h"
+
+struct ADGameDescription;
 
 namespace Audio {
 class SoundHandle;
 class PCSpeaker;
 }
-
-struct ADGameDescription;
 
 namespace Chamber {
 
@@ -82,6 +82,7 @@ public:
 	bool _prioritycommand_2;
 
 	Common::RenderMode _videoMode;
+	Common::RenderMode _renderMode;
 
 	byte *_pxiData;
 
@@ -97,6 +98,8 @@ public:
 
 
 	Audio::PCSpeaker *_speaker;
+
+	Renderer *_renderer = nullptr;
 
 private:
 	const ADGameDescription *_gameDescription;

@@ -30,50 +30,50 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
-#define local ((Scratch *)(&game.scratch[0]))
+#define local (&scratch)
 #define ss    local->sprite
 #define seq   local->sequence
 #define aa    local->animation
 
-typedef struct {        /* Room local variables */
+struct Scratch {        /* Room local variables */
 
-	int sprite[15];       /* Sprite series handles */
-	int sequence[15];     /* Sequence handles      */
-	int animation[6];     /* Animation handles     */
-	int anim_0_running;
-	int anim_1_running;
-	int anim_2_running;
+	int16 sprite[15];       /* Sprite series handles */
+	int16 sequence[15];     /* Sequence handles      */
+	int16 animation[6];     /* Animation handles     */
+	int16 anim_0_running;
+	int16 anim_1_running;
+	int16 anim_2_running;
 
-	int get_ready_she_leave;    /* if T, Daae will, after talking, leave scene */
-	int get_ready_he_leave;     /* if T, Daae will, after talking, leave scene */
+	int16 get_ready_she_leave;    /* if T, Daae will, after talking, leave scene */
+	int16 get_ready_he_leave;     /* if T, Daae will, after talking, leave scene */
 
-	int wants_to_talk;          /* if T, Raoul will talk */
-	int wants_to_get_up;        /* if T, Raoul will sit up */
+	int16 wants_to_talk;          /* if T, Raoul will talk */
+	int16 wants_to_get_up;        /* if T, Raoul will sit up */
 
-	int sitting_up;             /* T if Raoul is sitting up from fall */
+	int16 sitting_up;             /* T if Raoul is sitting up from fall */
 
-	int rich_action;            /* action Richard is going to perform */
-	int rich_frame;
+	int16 rich_action;            /* action Richard is going to perform */
+	int16 rich_frame;
 
-	int raoul_action;           /* action Raoul is going to perform */
-	int raoul_frame;
+	int16 raoul_action;           /* action Raoul is going to perform */
+	int16 raoul_frame;
 
-	int daae_walk_action;       /* action Daae is going to perform */
-	int daae_walk_frame;
+	int16 daae_walk_action;       /* action Daae is going to perform */
+	int16 daae_walk_frame;
 
-	int couple_action;          /* action couple is going to perform */
-	int couple_frame;
+	int16 couple_action;          /* action couple is going to perform */
+	int16 couple_frame;
 
-	int rich_talk_count;        /* counters for talking */
-	int couple_he_talk_count;   /* counters for he talking */
-	int couple_she_talk_count;  /* counters for she talking */
-	int couple_look_rich_count; /* counter for couple looking at Richard */
+	int16 rich_talk_count;        /* counters for talking */
+	int16 couple_he_talk_count;   /* counters for he talking */
+	int16 couple_she_talk_count;  /* counters for she talking */
+	int16 couple_look_rich_count; /* counter for couple looking at Richard */
 
-	int wants_to_stand_up;      /* if T, will not talk, etc. */
+	int16 wants_to_stand_up;      /* if T, will not talk, etc. */
 
-	int last_player_step;       /* Frame marker for player walk */
+	int16 last_player_step;       /* Frame marker for player walk */
 
-} Scratch;
+};
 
 
 /* ========================= Sprite Series ========================= */

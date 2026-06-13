@@ -69,6 +69,8 @@ extern void camera_jump_to(int x, int y);
 extern void camera_pan_to(Camera *camera, int target);
 extern void camera_update();
 
+extern void init_camera();
+
 } // namespace MADSV2
 } // namespace MADS
 

@@ -42,6 +42,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_105_init() {
 	global_speech_load(speech_christine_scales);
 
@@ -616,6 +618,14 @@ void room_105_preload() {
 	section_1_interface();
 
 	vocab_make_active(words_light_fixture);
+}
+
+
+void room_105_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(local->column_prop);
 }
 
 } // namespace Rooms

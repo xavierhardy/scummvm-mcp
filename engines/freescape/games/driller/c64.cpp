@@ -163,7 +163,7 @@ void DrillerEngine::loadAssetsC64FullGame() {
 	// the active player's SID is created.
 	_playerC64Sfx = new DrillerC64SFXPlayer();
 	_playerC64Sfx->destroySID();
-	_playerSid = new DrillerSIDPlayer();
+	_playerMusic = new DrillerSIDPlayer();
 
 	// C64 SFX index mapping
 	// Based on analysis of the C64 binary SFX routines
@@ -195,14 +195,12 @@ void DrillerEngine::toggleC64Sound() {
 	if (_c64UseSFX) {
 		if (_playerC64Sfx)
 			_playerC64Sfx->destroySID();
-		if (_playerSid) {
-			_playerSid->initSID();
-			_playerSid->startMusic();
-		}
+		if (_playerMusic)
+			_playerMusic->startMusic();
 		_c64UseSFX = false;
 	} else {
-		if (_playerSid)
-			_playerSid->destroySID();
+		if (_playerMusic)
+			_playerMusic->stopMusic();
 		if (_playerC64Sfx)
 			_playerC64Sfx->initSID();
 		_c64UseSFX = true;
@@ -288,7 +286,7 @@ void DrillerEngine::drawC64UI(Graphics::Surface *surface) {
 	uint32 yellow = _gfx->_texturePixelFormat.ARGBToColor(0xFF, r, g, b);
 
 	surface->fillRect(Common::Rect(87, 156, 104, 166), back);
-	drawCompass(surface, 94, 156, _yaw - 30, 11, 75, yellow);
+	drawCompass(surface, 94, 156, compassYaw() - 30, 11, 75, yellow);
 	surface->fillRect(Common::Rect(224, 151, 235, 160), back);
 	drawCompass(surface, 223, 156, _pitch - 30, 12, 60, yellow);
 }

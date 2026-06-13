@@ -22,7 +22,7 @@
 #ifndef MADS_SOUND_NEBULAR_H
 #define MADS_SOUND_NEBULAR_H
 
-#include "mads/core/sound.h"
+#include "mads/nebular/core/asound.h"
 
 namespace MADS {
 namespace Nebular {
@@ -46,7 +46,7 @@ protected:
 
 public:
 	RexASound(Audio::Mixer *mixer, OPL::OPL *opl,
-		const Common::Path &filename, int dataOffset);
+		const Common::Path &filename, int dataOffset, int dataSize);
 };
 
 class ASound1 : public RexASound {

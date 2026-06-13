@@ -23,8 +23,8 @@
 #define MADS_NEBULAR_SCENES2_H
 
 #include "common/scummsys.h"
-#include "mads/core/game.h"
-#include "mads/core/scene.h"
+#include "mads/nebular/core/game.h"
+#include "mads/nebular/core/scene.h"
 #include "mads/nebular/nebular_scenes.h"
 
 namespace MADS {

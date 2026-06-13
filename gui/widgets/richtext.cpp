@@ -103,6 +103,8 @@ RichTextWidget::~RichTextWidget() {
 }
 
 void RichTextWidget::handleMouseWheel(int x, int y, int direction) {
+	if (!_verticalScroll->isVisible())
+		return;
 	_fluidScroller->handleMouseWheel(direction);
 	applyScrollPos();
 }
@@ -146,7 +148,7 @@ void RichTextWidget::handleMouseMoved(int x, int y, int button) {
 			g_gui.theme()->setActiveCursor(GUI::ThemeEngine::kCursorNormal);
 	}
 
-	if (_mouseDownStartY == 0 || _mouseDownY == y || !_txtWnd)
+	if (_mouseDownStartY == 0 || _mouseDownY == y || !_txtWnd || !_verticalScroll->isVisible())
 		return;
 
 	int deltaY = _mouseDownY - y;
@@ -388,6 +390,11 @@ void RichTextWidget::markAsDirty() {
 	if (_verticalScroll->isVisible()) {
 		_verticalScroll->markAsDirty();
 	}
+}
+
+void RichTextWidget::lostFocusWidget() {
+	_mouseDownY = _mouseDownStartY = 0;
+	_isDragging = false;
 }
 
 bool RichTextWidget::containsWidget(Widget *w) const {

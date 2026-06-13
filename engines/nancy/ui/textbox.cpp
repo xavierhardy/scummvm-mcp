@@ -36,23 +36,67 @@ namespace Nancy {
 namespace UI {
 
 Textbox::Textbox() :
-		RenderObject(6),
+		RenderObject(g_nancy->getGameType() >= kGameTypeNancy10 ? 10 : 6),
 		_scrollbar(nullptr),
 		_scrollbarPos(0),
-		_highlightRObj(7),
+		_highlightRObj(g_nancy->getGameType() >= kGameTypeNancy10 ? 11 : 7),
 		_fontIDOverride(-1),
-		_autoClearTime(0) {}
+		_autoClearTime(0),
+		_isFullMode(false),
+		_fullModeCloseTime(0) {}
 
 Textbox::~Textbox() {
 	delete _scrollbar;
 }
 
 void Textbox::init() {
-	auto *bsum = GetEngineData(BSUM);
-	assert(bsum);
-
 	auto *tbox = GetEngineData(TBOX);
 	assert(tbox);
+
+	if (g_nancy->getGameType() >= kGameTypeNancy10) {
+		auto *bsum = GetEngineData(BSUM);
+		assert(bsum);
+
+		// The bsum rect spans the full taskbar strip (open mode); the
+		// closed mode clips at the taskbar's top edge so the buttons stay
+		// visible. We keep both rects so setFullMode() can toggle between
+		// them without reallocating.
+		_openRect = bsum->textboxScreenPosition;
+		_closedRect = _openRect;
+		const TASK *taskData = GetEngineData(TASK);
+		if (taskData && taskData->dstRect.top > _closedRect.top &&
+				taskData->dstRect.top < _closedRect.bottom) {
+			_closedRect.bottom = taskData->dstRect.top;
+		}
+
+		// Size the backing surface to the OPEN rect so toggling never
+		// reallocates. The visible slice is constrained via _drawSurface.
+		initSurfaces(_openRect.width(), _openRect.height(),
+			g_nancy->_graphics->getScreenPixelFormat(),
+			tbox->textBackground, tbox->highlightTextBackground);
+
+		_isFullMode = false;
+		applyDisplayMode();
+
+		RenderObject::init();
+
+		// Nancy 11+ scrollbar for the OPEN-mode text overflow. Nancy 10
+		// has no scrollbar in either state; left intentionally nullptr.
+		if (g_nancy->getGameType() >= kGameTypeNancy11
+				&& tbox->scrollbarSrcBounds.width() > 0) {
+			_scrollbar = new Scrollbar(11,
+				tbox->scrollbarSrcBounds,
+				tbox->scrollbarDefaultPos,
+				tbox->scrollbarMaxScroll - tbox->scrollbarDefaultPos.y);
+			_scrollbar->init();
+		}
+
+		setVisible(false);
+		return;
+	}
+
+	auto *bsum = GetEngineData(BSUM);
+	assert(bsum);
 
 	moveTo(bsum->textboxScreenPosition);
 	_highlightRObj.moveTo(bsum->textboxScreenPosition);
@@ -74,22 +118,33 @@ void Textbox::init() {
 }
 
 void Textbox::registerGraphics() {
+	if (g_nancy->getGameType() >= kGameTypeNancy11) {
+		// TODO: Textbox for Nancy11+
+		return;
+	}
+
 	RenderObject::registerGraphics();
-	_scrollbar->registerGraphics();
+	if (_scrollbar)
+		_scrollbar->registerGraphics();
 	_highlightRObj.registerGraphics();
 	_highlightRObj.setVisible(false);
 }
 
 void Textbox::updateGraphics() {
-	if (_autoClearTime && g_nancy->getTotalPlayTime() > _autoClearTime) {
+	if (_autoClearTime && g_nancy->getTotalPlayTime() > _autoClearTime)
 		clear();
+
+	// Nancy 10+ open-mode auto-close timer (mirrors the DAT_005a7a7d
+	// check in case 0x4a of ProcessActionRecords).
+	if (_isFullMode && _fullModeCloseTime &&
+			g_nancy->getTotalPlayTime() > _fullModeCloseTime) {
+		setFullMode(false);
 	}
 
-	if (_needsTextRedraw) {
+	if (_needsTextRedraw)
 		drawTextbox();
-	}
 
-	if (_scrollbarPos != _scrollbar->getPos()) {
+	if (_scrollbar && _scrollbarPos != _scrollbar->getPos()) {
 		_scrollbarPos = _scrollbar->getPos();
 
 		onScrollbarMove();
@@ -98,8 +153,51 @@ void Textbox::updateGraphics() {
 	RenderObject::updateGraphics();
 }
 
+void Textbox::applyDisplayMode() {
+	if (g_nancy->getGameType() < kGameTypeNancy10) {
+		return;
+	}
+
+	const Common::Rect &target = _isFullMode ? _openRect : _closedRect;
+	moveTo(target);
+	_highlightRObj.moveTo(target);
+
+	Common::Rect outerBoundingBox = target;
+	outerBoundingBox.moveTo(0, 0);
+	_drawSurface.create(_fullSurface, outerBoundingBox);
+
+	// Nancy 11+ scrollbar only makes sense in open mode; hide it in
+	// closed mode regardless of game version.
+	if (_scrollbar) {
+		_scrollbar->setVisible(_isFullMode);
+	}
+
+	_needsTextRedraw = true;
+	_needsRedraw = true;
+}
+
+void Textbox::setFullMode(bool open, uint32 timeoutMs) {
+	if (g_nancy->getGameType() < kGameTypeNancy10) {
+		return;
+	}
+	if (_isFullMode == open) {
+		// Re-arm the timer on a repeat open call.
+		if (open && timeoutMs) {
+			_fullModeCloseTime = g_nancy->getTotalPlayTime() + timeoutMs;
+		}
+		return;
+	}
+
+	_isFullMode = open;
+	_fullModeCloseTime = (open && timeoutMs)
+			? g_nancy->getTotalPlayTime() + timeoutMs
+			: 0;
+	applyDisplayMode();
+}
+
 void Textbox::handleInput(NancyInput &input) {
-	_scrollbar->handleInput(input);
+	if (_scrollbar)
+		_scrollbar->handleInput(input);
 
 	bool hasHighlight = false;
 	for (uint i = 0; i < _hotspots.size(); ++i) {
@@ -129,9 +227,8 @@ void Textbox::handleInput(NancyInput &input) {
 		}
 	}
 
-	if (!hasHighlight && _highlightRObj.isVisible()) {
+	if (!hasHighlight && _highlightRObj.isVisible())
 		_highlightRObj.setVisible(false);
-	}
 }
 
 void Textbox::drawTextbox() {
@@ -139,33 +236,64 @@ void Textbox::drawTextbox() {
 	assert(tbox);
 
 	Common::Rect textBounds = _fullSurface.getBounds();
-	textBounds.top += tbox->upOffset;
-	textBounds.bottom -= tbox->downOffset;
-	textBounds.left += tbox->leftOffset;
-	textBounds.right -= tbox->rightOffset;
+	uint16 baseFontID;
+	uint16 highlightFontID = tbox->highlightConversationFontID;
 
-	const Font *font = g_nancy->_graphics->getFont(_fontIDOverride != -1 ? _fontIDOverride : tbox->defaultFontID);
-	textBounds.top -= font->getFontHeight();
+	if (g_nancy->getGameType() >= kGameTypeNancy10) {
+		baseFontID = (_fontIDOverride != -1) ? _fontIDOverride : tbox->conversationFontID;
+	} else {
+		// TODO: These bounds are not right: the right offset is a bit off,
+		// and the left offset takes into account the scrollbar, which doesn't
+		// exist in this widget.
+		textBounds.top += tbox->upOffset;
+		textBounds.bottom -= tbox->downOffset;
+		textBounds.left += tbox->leftOffset;
+		textBounds.right -= tbox->rightOffset;
 
-	HypertextParser::drawAllText(	textBounds,	0,													// bounds of text within full surface
-									_fontIDOverride != -1 ? _fontIDOverride : tbox->defaultFontID,	// font for basic text
-									tbox->highlightConversationFontID);								// font for highlight text
+		baseFontID = (_fontIDOverride != -1) ? _fontIDOverride : tbox->defaultFontID;
 
-	setVisible(true);
+		const Font *font = g_nancy->_graphics->getFont(baseFontID);
+		textBounds.top -= font->getFontHeight();
+	}
+
+	HypertextParser::drawAllText(textBounds, 0, baseFontID, highlightFontID);
+
+	setVisible(g_nancy->getGameType() <= kGameTypeNancy9 || _isFullMode);
 }
 
 void Textbox::clear() {
-	if (_textLines.size()) {
+	if (!_textLines.empty() || g_nancy->getGameType() >= kGameTypeNancy10) {
 		HypertextParser::clear();
-		_scrollbar->resetPosition();
-		onScrollbarMove();
+		if (_scrollbar) {
+			_scrollbar->resetPosition();
+			onScrollbarMove();
+		}
 		_fontIDOverride = -1;
 		_needsRedraw = true;
 		_autoClearTime = 0;
+
+		// Nancy 10+: the text strip overlaps the taskbar buttons, so
+		// hide it whenever it has no content to show. Also drop the
+		// open-mode overlay so the next entry starts fresh in closed
+		// mode unless a kVariant74 AR re-opens it.
+		if (g_nancy->getGameType() >= kGameTypeNancy10) {
+			if (_isFullMode) {
+				setFullMode(false);
+			}
+			setVisible(false);
+		}
 	}
 }
 
 void Textbox::addTextLine(const Common::String &text, uint32 autoClearTime) {
+	// WORKAROUND: Don't draw debug strings in the textbox. Refer to bug
+	// #16745 for a case in Nancy9, scene 2579 (after making a sandwich).
+	// TODO: Check why this text doesn't appear in the original. All the
+	// dependencies of the associated AR are satisfied.
+	Common::String debugString = Common::String::format("%d *** ", NancySceneState.getSceneInfo().sceneID);
+	if (text.contains(debugString))
+		return;
+
 	HypertextParser::addTextLine(text);
 
 	if (autoClearTime != 0) {
@@ -174,8 +302,10 @@ void Textbox::addTextLine(const Common::String &text, uint32 autoClearTime) {
 		_autoClearTime = g_nancy->getTotalPlayTime() + autoClearTime;
 	}
 
-	_scrollbar->resetPosition();
-	onScrollbarMove();
+	if (_scrollbar) {
+		_scrollbar->resetPosition();
+		onScrollbarMove();
+	}
 }
 
 void Textbox::setOverrideFont(const uint fontID) {

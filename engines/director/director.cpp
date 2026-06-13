@@ -157,7 +157,6 @@ DirectorEngine::DirectorEngine(OSystem *syst, const DirectorGameDescription *gam
 		_machineType = 9;	// Macintosh IIci
 	}
 
-	_playbackPaused = false;
 	_centerStage = true;
 
 	_surface = nullptr;
@@ -181,9 +180,7 @@ DirectorEngine::~DirectorEngine() {
 		_currentWindow = nullptr;
 	}
 	delete _wm;
-	for (auto &it : _allSeenResFiles) {
-		delete it._value;
-	}
+	_allSeenResFiles.clear();
 	for (uint i = 0; i < _winCursor.size(); i++)
 		delete _winCursor[i];
 
@@ -227,6 +224,7 @@ void DirectorEngine::forgetWindow(Window *window) {
 			return;
 	}
 	window->setVisible(false, true);
+	window->getSoundManager()->stopSound();
 	_windowsToForget.push_back(window);
 }
 
@@ -276,8 +274,12 @@ Common::Error DirectorEngine::run() {
 
 #ifdef USE_RGB_COLOR
 	if (ConfMan.getBool("true_color") || (getGameFlags() & GF_32BPP) || debugChannelSet(-1, kDebug32bpp))
-		_wmMode |= Graphics::kWMMode32bpp;
+		_pixelformat = Graphics::PixelFormat(4, 8, 8, 8, 8, 24, 16, 8, 0);
+	else
 #endif
+		_pixelformat = Graphics::PixelFormat::createFormatCLUT8();
+
+	debugC(1, kDebugImages, "Director pixelformat is: %s", _pixelformat.toString().c_str());
 
 	if (getGameFlags() & GF_DESKTOP)
 		_wmMode &= ~Graphics::kWMModeNoDesktop;
@@ -287,7 +289,7 @@ Common::Error DirectorEngine::run() {
 		_wmHeight = 480;
 	}
 
-	_wm = new Graphics::MacWindowManager(_wmMode, &_director3QuickDrawPatterns, getLanguage());
+	_wm = new Graphics::MacWindowManager(_wmMode, &_director3QuickDrawPatterns, getLanguage(), _pixelformat);
 	_wm->setEngine(this);
 
 	gameQuirks(_gameDescription->desc.gameId, _gameDescription->desc.platform);
@@ -298,10 +300,6 @@ Common::Error DirectorEngine::run() {
 	_wm->setDesktopMode(_wmMode);
 
 	_wm->printWMMode();
-
-	_pixelformat = _wm->_pixelformat;
-
-	debugC(1, kDebugImages, "Director pixelformat is: %s", _pixelformat.toString().c_str());
 
 	_stage = new Window(_wm->getNextId(), false, false, false, _wm, this, true);
 	_stage->incRefCount();
@@ -360,7 +358,7 @@ Common::Error DirectorEngine::run() {
 
 	while (loop) {
 		if (_stage->getCurrentMovie())
-			processEvents();
+			processSysEvents();
 
 		setCurrentWindow(_stage);
 		g_lingo->switchStateFromWindow();

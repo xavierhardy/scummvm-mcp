@@ -23,12 +23,11 @@
 #define MADS_GAME_NEBULAR_H
 
 #include "common/scummsys.h"
-#include "mads/core/game.h"
-#include "mads/core/globals.h"
+#include "mads/nebular/core/game.h"
+#include "mads/nebular/core/globals.h"
 #include "mads/nebular/globals_nebular.h"
 
 namespace MADS {
-
 namespace Nebular {
 
 enum StoryMode { STORYMODE_NAUGHTY = 1, STORYMODE_NICE = 2 };
@@ -42,7 +41,7 @@ enum ProtectionResult {
 	PROTECTION_SUCCEED = 0, PROTECTION_FAIL = 1, PROTECTION_ESCAPE = 2
 };
 
-enum InventoryObject {
+enum {
 	OBJ_NONE = -1,
 	OBJ_BINOCULARS = 0,
 	OBJ_BURGER = 1,
@@ -154,7 +153,6 @@ typedef Section1Handler Section7Handler;
 typedef Section1Handler Section8Handler;
 
 } // namespace Nebular
-
 } // namespace MADS
 
-#endif /* MADS_GAME_NEBULAR_H */
+#endif

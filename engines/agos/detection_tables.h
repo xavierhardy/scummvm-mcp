@@ -246,6 +246,30 @@ static const AGOSGameDescription gameDescriptions[] = {
 		GF_OLD_BUNDLE | GF_CRUNCHED | GF_PLANAR
 	},
 
+	// Elvira 1 - French Atari ST Floppy
+	// Suppliedd by Parotaku in bug report #16707
+	{
+		{
+			"elvira1",
+			"Floppy",
+
+			{
+				{"gamest", 		GAME_BASEFILE, 	"39bb4399d1b79a9c9d60279237a856f9", 120990},
+				{"icon.dat", 	GAME_ICONFILE, 	"2db931e84f1ca01f0816dddfae3f49e1", 36573},
+				{"tbllist", 	GAME_TBLFILE, 	"5b6ff494bf7e24213758598ef4ac0a8b", 476},
+				AD_LISTEND
+			},
+			Common::FR_FRA,
+			Common::kPlatformAtariST,
+			ADGF_NO_FLAGS,
+			GUIO2(GUIO_NOSPEECH, GUIO_NOMIDI)
+		},
+
+		GType_ELVIRA1,
+		GID_ELVIRA1,
+		GF_OLD_BUNDLE | GF_CRUNCHED | GF_PLANAR
+	},
+
 	// Elvira 1 - German Atari ST Floppy
 	{
 		{
@@ -3054,11 +3078,12 @@ static const AGOSGameDescription gameDescriptions[] = {
 		GF_TALKIE
 	},
 
-	// Simon the Sorcerer 2 - Amiga CD (Update 5)
+	// Simon the Sorcerer 2 - Mac/Amiga CD (Update 5)
+	// kPlatformUnknown because Mac/Amiga(update 5) are identical.
 	{
 		{
 			"simon2",
-			"Amiga CD - Update 5",
+			"Mac/Amiga(Update 5)",
 
 			{
 				{ "gsptr30",		GAME_BASEFILE,	"608e277904d87dd28725fa08eacc2c0d", 58652},
@@ -3070,7 +3095,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 				AD_LISTEND
 			},
 			Common::EN_ANY,
-			Common::kPlatformAmiga,
+			Common::kPlatformUnknown,
 			ADGF_CD,
 			GUIO1(GAMEOPTION_DISABLE_FADE_EFFECTS)
 		},

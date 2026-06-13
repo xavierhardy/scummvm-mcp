@@ -31,7 +31,7 @@ namespace MADSV2 {
 inline void echo(const char *item, bool carriage_return) {
 	auto &dbg = *g_engine->getDebugger();
 
-	dbg.debugPrintf(item);
+	dbg.debugPrintf("%s",item);
 	if (carriage_return)
 		dbg.debugPrintf("\n");
 }

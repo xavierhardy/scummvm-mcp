@@ -444,6 +444,9 @@ Common::SeekableReadStream *env_open(const char *filename, const char *options) 
 		index_handle = NULL;
 
 	} else {
+		if (!Common::File::exists(load_file))
+			goto done;
+
 		Common::File *f = new Common::File();
 		f->open(load_file);
 		handle = f;
@@ -736,23 +739,6 @@ int env_insert(char *environment, char *variable, char *value) {
 
 done:
 	return error_flag;
-}
-
-char *env_level_path(char *string, int first_level, int second_level) {
-	int env_mode;
-	int env_sect;
-	int env_room = 0;
-
-	if (second_level >= 0) {
-		env_mode = ROOM;
-		env_sect = first_level;
-		env_room = second_level;
-	} else {
-		env_mode = SECTION;
-		env_sect = first_level;
-	}
-
-	return env_fill_path(string, env_mode, env_room);
 }
 
 } // namespace MADSV2

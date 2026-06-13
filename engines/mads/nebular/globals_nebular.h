@@ -24,8 +24,8 @@
 
 #include "common/scummsys.h"
 #include "common/array.h"
-#include "mads/core/game.h"
-#include "mads/core/resources.h"
+#include "mads/nebular/core/game.h"
+#include "mads/nebular/core/resources.h"
 
 namespace MADS {
 

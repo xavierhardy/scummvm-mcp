@@ -43,6 +43,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void set_chandelier_positions() {
 	int chandelier;
 	int center;
@@ -990,6 +992,29 @@ void room_202_preload() {
 
 	vocab_make_active(words_chandelier);
 	vocab_make_active(words_Edgar_Degas);
+}
+
+
+void room_202_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->usher_action,
+		local->usher_frame,
+		local->usher_talk_count,
+		local->degas_action,
+		local->degas_frame,
+		local->rich_frame,
+		local->rich_action,
+		local->rich_talk_count,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->converse_counter,
+		local->prevent);
+	s.syncMultipleLE(local->chandelier_base);
+	s.syncMultipleLE(local->dyn_chandeliers);
+	s.syncMultipleLE(local->gave);
 }
 
 } // namespace Rooms

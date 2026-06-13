@@ -33,6 +33,7 @@ private:
 	static void global_object_sprite();
 	static void stop_walker_basic();
 	static void stop_walker_tricks();
+	void lookAtLens();
 
 public:
 	PhantomEngine(OSystem *syst, const MADSGameDescription *gameDesc) :
@@ -40,6 +41,7 @@ public:
 	~PhantomEngine() override {}
 
 	Common::Error run() override;
+	void syncRoom(Common::Serializer &s) override;
 
 	void global_init_code() override;
 	void section_music(int section_num) override;

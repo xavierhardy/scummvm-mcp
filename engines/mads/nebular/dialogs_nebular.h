@@ -23,8 +23,8 @@
 #define MADS_DIALOGS_NEBULAR_H
 
 #include "common/scummsys.h"
-#include "mads/core/game.h"
-#include "mads/core/dialogs.h"
+#include "mads/nebular/core/game.h"
+#include "mads/nebular/core/dialogs.h"
 
 namespace MADS {
 

@@ -57,5 +57,12 @@ void cursor_set_follow(int follow) {
 	cursor_follow = follow;
 }
 
+void init_cursor() {
+	cursor_mode = 0;
+	cursor_follow = false;
+	text_x = 0;
+	text_y = 0;
+}
+
 } // namespace MADSV2
 } // namespace MADS

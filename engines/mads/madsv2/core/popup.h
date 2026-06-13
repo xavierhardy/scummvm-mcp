@@ -177,10 +177,12 @@ typedef struct {
 	int preserve_handle;
 	int depth_preserve_handle;
 
-	Buffer screen_buffer;     /* Direct copy of screen area under popup */
-	Buffer depth_buffer;      /* Direct copy of depth area under popup  */
+	Buffer screen_buffer;  /* scr_main copy covering the full popup rect       */
+	Buffer orig_buffer;    /* scr_orig copy for the game-area portion (depth)  */
+	Buffer depth_buffer;   /* scr_depth copy (clipped to depth-buffer height)  */
 
 	int screen_saved;
+	int orig_saved;
 	int depth_saved;
 
 	word fill_accum;
@@ -402,7 +404,6 @@ extern int popup_asking_number;
 
 extern int popup_available;
 
-
 extern int popup_preserve_initiator[3];
 
 extern byte popup_colors[24];
@@ -410,6 +411,7 @@ extern byte popup_num_colors;
 
 extern BoxParam box_param;
 
+extern void init_popup();
 
 int  popup_create(int horiz_pieces, int x, int y);
 void popup_add_icon(SeriesPtr series, int id, int center);
@@ -467,15 +469,9 @@ PopupItem *popup_cancel_button(const char *prompt);
 PopupItem *popup_message(const char *prompt, int x, int y);
 PopupItem *popup_execute(void);
 
-PopupItem *popup_savelist(const char *data,
-	const char *empty_string,
-	int elements,
-	int element_offset,
-	int element_max_length,
-	int pixel_width,
-	int rows,
-	int accept_input,
-	int default_element);
+PopupItem *popup_savelist(char *data, char *empty_string,
+	int elements, int element_offset, int element_max_length,
+	int pixel_width, int rows, int accept_input, int default_element);
 
 void popup_blank(int num_lines);
 void popup_blank_line(void);

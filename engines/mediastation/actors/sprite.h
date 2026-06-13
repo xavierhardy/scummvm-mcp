@@ -46,7 +46,7 @@ struct SpriteMovieClip {
 
 class SpriteFrame : public PixMapImage {
 public:
-	SpriteFrame(Chunk &chunk, uint index, Common::Point origin, const ImageInfo &imageInfo);
+	SpriteFrame(Chunk &chunk, uint index, Common::Point origin, const ImageInfo &imageInfo, bool decompressInPlace);
 
 	int _index = 0;
 	Common::Point _origin;
@@ -68,20 +68,21 @@ public:
 	SpriteMovieActor() : SpatialEntity(kActorTypeSprite) {};
 	~SpriteMovieActor();
 
-	virtual void process() override;
 	virtual void draw(DisplayContext &displayContext) override;
 
+	virtual void readChunk(Chunk &chunk) override;
 	virtual void readParameter(Chunk &chunk, ActorHeaderSectionType paramType) override;
 	virtual void loadIsComplete() override;
 	virtual ScriptValue callMethod(BuiltInMethod methodId, Common::Array<ScriptValue> &args) override;
 
-	virtual void readChunk(Chunk &chunk) override;
+	virtual void onEvent(const ActorEvent &event) override;
+	virtual void timerEvent(const TimerEvent &event) override;
 
 private:
 	const uint DEFAULT_FORWARD_CLIP_ID = 0x4B0;
 	const uint DEFAULT_BACKWARD_CLIP_ID = 0x4B1;
 
-	bool _decompressImmediately = false;
+	bool _decompressInPlace = false;
 	uint _frameRate = 0;
 	uint _actorReference = 0;
 	Common::HashMap<uint, SpriteMovieClip> _clips;
@@ -107,9 +108,6 @@ private:
 	void scheduleNextTimerEvent();
 	void postMovieEndEventIfNecessary();
 	void setVisibility(bool visibility);
-
-	void updateFrameState();
-	void timerEvent();
 };
 
 } // End of namespace MediaStation

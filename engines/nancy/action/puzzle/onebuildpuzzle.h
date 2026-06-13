@@ -45,9 +45,10 @@ public:
 	void execute() override;
 	void handleInput(NancyInput &input) override;
 
+	bool isViewportRelative() const override { return true; }
+
 protected:
 	Common::String getRecordTypeName() const override { return "OneBuildPuzzle"; }
-	bool isViewportRelative() const override { return true; }
 
 	struct Piece : RenderObject {
 		Piece() : RenderObject(0) {}
@@ -70,7 +71,6 @@ protected:
 
 		void setZ(uint16 z) { _z = z; _needsRedraw = true; }
 
-	protected:
 		bool isViewportRelative() const override { return true; }
 	};
 
@@ -83,6 +83,22 @@ protected:
 	int16 _slotTolerance = 0;      // Proximity for snapping to slot
 	bool _orderedPlacement = false; // Pieces must be placed in a specific order
 	Common::Array<int16> _placementOrder; // 1-indexed piece IDs in required placement order
+
+	// --- Nancy 10 additions ---
+
+	// TODO: runtime role unknown; parsed for round-trip but not consumed.
+	bool _legacyOrderedFlag = false;
+	Common::Array<int16> _legacyPlacementOrder;
+
+	// Filename only (no SoundDescription metadata).
+	Common::String _extraSoundName;
+
+	// Completion sprite-sheet animation; TODO: not wired up.
+	Common::Rect _animRectA;
+	Common::Rect _animRectB;
+	int16 _animLayout[6] = {}; // cols, framesPerStep, baseX, baseY, spacing, totalRows
+	SoundDescription _animSound1;
+	SoundDescription _animSound2;
 
 	Common::Array<Piece> _pieces;
 
@@ -139,6 +155,10 @@ protected:
 
 	// Currently playing sound (scratch copy updated each time a sound is played)
 	SoundDescription _currentSound;
+
+	// Initialization flag, used to ensure that the puzzle pieces have been initialized
+	// before drawing them on screen
+	bool _isInitialized = false;
 
 	// --- Internal methods ---
 

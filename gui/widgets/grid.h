@@ -85,12 +85,15 @@ class GridItemTray: public Dialog, public CommandSender {
 	PicButtonWidget	*_playButton;
 	PicButtonWidget	*_loadButton;
 	PicButtonWidget	*_editButton;
+
+	bool _mouseOutside;
 public:
 	GridItemTray(GuiObject *boss, int x, int y, int w, int h, int entryID, GridWidget *grid);
 	void enableLoadButton(bool canLoad) { _loadButton->setEnabled(canLoad); }
 
 	void reflowLayout() override;
 
+	void receivedFocus(int x = -1, int y = -1) override;
 	void handleCommand(CommandSender *sender, uint32 cmd, uint32 data) override;
 	void handleMouseDown(int x, int y, int button, int clickCount) override;
 	void handleMouseUp(int x, int y, int button, int clickCount) override;
@@ -177,6 +180,7 @@ protected:
 	static const int kDragThreshold = 5;
 
 	FluidScroller *_fluidScroller;
+	GridItemWidget *_highlightedItem = nullptr;
 
 public:
 	int				_gridItemHeight;
@@ -249,6 +253,7 @@ public:
 
 	bool wantsFocus() override { return true; }
 
+	void lostFocusWidget() override;
 	bool handleKeyDown(Common::KeyState state) override;
 	bool handleKeyUp(Common::KeyState state) override;
 	void openTrayAtSelected();

@@ -186,8 +186,8 @@ public:
 	void setCursorWindow(Window *window) { _cursorWindow = window; }
 	Movie *getCurrentMovie() const;
 	void setCurrentMovie(Movie *movie);
-	Archive *getMainArchive() const { return _mainArchive; }
-	void setMainArchive(Archive *archive) { _mainArchive = archive; }
+	Common::SharedPtr<Archive> getMainArchive() const { return _mainArchive; }
+	void setMainArchive(Common::SharedPtr<Archive> archive) { _mainArchive = archive; }
 	Common::String getCurrentPath() const;
 	Common::String getCurrentAbsolutePath();
 	Common::Path getStartupPath() const;
@@ -230,7 +230,7 @@ public:
 	Common::CodePage getPlatformEncoding();
 
 	Archive *createArchive();
-	Archive *openArchive(const Common::Path &movie);
+	Common::SharedPtr<Archive> openArchive(const Common::Path &movie);
 	void addArchiveToOpenList(const Common::Path &path);
 	Archive *loadEXE(const Common::Path &movie);
 	Archive *loadEXEv3(Common::SeekableReadStream *stream);
@@ -244,7 +244,7 @@ public:
 
 	// events.cpp
 	bool pollEvent(Common::Event &event);
-	bool processEvents(bool captureClick = false, bool skipWindowManager = false);
+	bool processSysEvents(bool captureClick = false, bool skipWindowManager = false);
 	void processEventQUIT();
 	int getMacTicks();
 	Common::Array<Common::Event> _injectedEvents;
@@ -267,19 +267,18 @@ public:
 	int _colorDepth;
 	Common::HashMap<int, int> _KeyCodes;
 	int _machineType;
-	bool _playbackPaused;
 	bool _centerStage;
 	char _dirSeparator;
 	bool _fixStageSize;
-	Archive *_mainArchive;
+	Common::SharedPtr<Archive> _mainArchive;
 	Common::Rect _fixStageRect;
 	Common::List<Common::String> _extraSearchPath;
 	bool _emulateMultiButtonMouse;
 
 	// Owner of all Archive objects.
-	Common::HashMap<Common::Path, Archive *, Common::Path::IgnoreCaseAndMac_Hash, Common::Path::IgnoreCaseAndMac_EqualTo> _allSeenResFiles;
+	Common::HashMap<Common::Path, Common::SharedPtr<Archive>, Common::Path::IgnoreCaseAndMac_Hash, Common::Path::IgnoreCaseAndMac_EqualTo> _allSeenResFiles;
 	// Handles to resource files that were opened by OpenResFile.
-	Common::HashMap<Common::Path, Archive *, Common::Path::IgnoreCaseAndMac_Hash, Common::Path::IgnoreCaseAndMac_EqualTo> _openResFiles;
+	Common::HashMap<Common::Path, Common::SharedPtr<Archive>, Common::Path::IgnoreCaseAndMac_Hash, Common::Path::IgnoreCaseAndMac_EqualTo> _openResFiles;
 	// List of all currently open resource files
 	Common::List<Common::Path> _allOpenResFiles;
 

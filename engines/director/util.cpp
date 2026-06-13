@@ -869,12 +869,12 @@ Common::Path findPath(const Common::Path &path, bool currentFolder, bool searchP
 	return findPath(path.toString(g_director->_dirSeparator), currentFolder, searchPaths, directory, exts);
 }
 
-Common::Path findPath(const Common::String &path, bool currentFolder, bool searchPaths, bool directory, const char **exts) {
+Common::Path findPath(const Common::String &path, bool currentFolder, bool searchPaths, bool directory, const char **exts, Common::String currentPath_) {
 	Common::Path result, base;
 	debugCN(1, kDebugPaths, "%s", recIndent());
 	debugC(1, kDebugPaths, "findPath(): beginning search for \"%s\"", path.c_str());
 
-	Common::String currentPath = g_director->getCurrentPath();
+	Common::String currentPath = currentPath_.empty() ? g_director->getCurrentPath() : currentPath_;
 	Common::Path current = resolvePath(currentPath, base, true, exts);
 
 	Common::String testPath = path;
@@ -948,7 +948,7 @@ Common::Path findPath(const Common::String &path, bool currentFolder, bool searc
 	return Common::Path();
 }
 
-Common::Path findMoviePath(const Common::String &path, bool currentFolder, bool searchPaths) {
+Common::Path findMoviePath(const Common::String &path, bool currentFolder, bool searchPaths, Common::String currentPath) {
 	const char *extsD3[] = { ".MMM", nullptr };
 	const char *extsD4[] = { ".DIR", ".DXR", ".EXE", nullptr };
 	const char *extsD5[] = { ".DIR", ".DXR", ".CST", ".CXT", ".EXE", nullptr };
@@ -965,7 +965,7 @@ Common::Path findMoviePath(const Common::String &path, bool currentFolder, bool 
 		exts = extsD6;
 	}
 
-	Common::Path result = findPath(path, currentFolder, searchPaths, false, exts);
+	Common::Path result = findPath(path, currentFolder, searchPaths, false, exts, currentPath);
 	return result;
 }
 
@@ -1203,8 +1203,15 @@ Common::Path dumpFactoryName(const char *prefix, const char *name, const char *e
 	return Common::Path(Common::String::format("./dumps/%s-factory-%s.%s", prefix, name, ext), '/');
 }
 
-void RandomState::setSeed(int seed) {
-	init(32);
+void RandomState::setSeed(int seed, bool runInit) {
+	if (runInit)
+		init(32);
+
+	// If we a GUI override, use that instead of the provided seed
+	if (ConfMan.hasKey("random_seed")) {
+		debugC(1, kDebugLingoExec, "Random seed is requested to be set to %d, but overridden by config to %d", seed, ConfMan.getInt("random_seed"));
+		seed = ConfMan.getInt("random_seed");
+	}
 
 	_seed = seed ? seed : 1;
 }
@@ -1238,7 +1245,9 @@ void RandomState::init(int len) {
 		_len = (1 << len) - 1;
 	}
 
-	_seed = 1;
+	// The original is _always_ initalized with a seed of 1. It is hardcoded and is by design
+	// The developers were offered to use `set the randomSeed` Lingo
+	setSeed(1, false);
 	_mask = masks[len - 2];
 }
 
@@ -1319,7 +1328,9 @@ uint16 humanVersion(uint16 ver) {
 		return 310;
 	if (ver >= kFileVer300)
 		return 300;
-	return 200;
+	if (ver >= kFileVer200)
+		return 200;
+	return 100;
 }
 
 Common::Platform platformFromID(uint16 id) {

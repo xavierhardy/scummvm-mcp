@@ -42,17 +42,20 @@
 
 #include "backends/platform/atari/osystem_atari.h"
 
-#include "backends/audiocd/default/default-audiocd.h"
-#include "common/config-manager.h"
+#include "backends/audiocd/atari/atari-audiocd.h"
 #include "backends/events/atari/atari-events.h"
 #include "backends/events/default/default-events.h"
 #include "backends/graphics/atari/atari-graphics.h"
 #include "backends/keymapper/hardware-input.h"
 #include "backends/mixer/atari/atari-mixer.h"
 #include "backends/mutex/null/null-mutex.h"
+#ifdef DYNAMIC_MODULES
+#include "backends/plugins/atari/atari-provider.h"
+#endif
 #include "backends/saves/default/default-saves.h"
 #include "backends/timer/default/default-timer.h"
 #include "base/main.h"
+#include "common/config-manager.h"
 #include "common/debug.h"
 
 #define INPUT_ACTIVE
@@ -347,10 +350,17 @@ void OSystem_Atari::initBackend() {
 		ConfMan.set("mt32_device", "auto");
 	}
 #endif
+	// This produces hard pause even in most optimised engines
+	// and even on CT60...
+	if (!ConfMan.hasKey("autosave_period")) {
+		ConfMan.setInt("autosave_period", 0);
+	}
 
 	_mixerManager = new AtariMixerManager();
 	// Setup and start mixer
 	_mixerManager->init();
+
+	_audiocdManager = new AtariAudioCDManager();
 
 	BaseBackend::initBackend();
 }
@@ -521,6 +531,10 @@ OSystem *OSystem_Atari_create() {
 int main(int argc, char *argv[]) {
 	g_system = OSystem_Atari_create();
 	assert(g_system);
+
+#ifdef DYNAMIC_MODULES
+	PluginManager::instance().addPluginProvider(new AtariPluginProvider());
+#endif
 
 	// Invoke the actual ScummVM main entry point:
 	int res = scummvm_main(argc, argv);

@@ -48,6 +48,10 @@ static const KeybindingRecord MENU_KEYS[] = {
 	{ KEYBIND_ESCAPE, "ESCAPE", _s("Escape"), "ESCAPE", nullptr },
 	// I18N: Return key
 	{ KEYBIND_SELECT, "SELECT", _s("Select"), "RETURN", nullptr },
+	// I18N: N key for No
+	{ KEYBIND_KEY_N, "KEY_N", _s("No"), "n", nullptr },
+	// I18N: Y key for Yes
+	{ KEYBIND_KEY_Y, "KEY_Y", _s("Yes"), "y", nullptr },
 	{ KEYBIND_NONE, nullptr, nullptr, nullptr, nullptr }
 };
 
@@ -242,6 +246,17 @@ void MetaEngine::setKeybindingMode(KeybindingMode mode) {
 
 void MetaEngine::executeAction(KeybindingAction keyAction) {
 	g_engine->send(ActionMessage(keyAction));
+}
+
+Common::KeyState MetaEngine::getActionKeyState(KeybindingAction keyAction) {
+	switch (keyAction) {
+	case KEYBIND_KEY_N:
+		return Common::KeyState(Common::KEYCODE_n, 'n');
+	case KEYBIND_KEY_Y:
+		return Common::KeyState(Common::KEYCODE_y, 'y');
+	default:
+		return Common::KeyState(Common::KEYCODE_INVALID, 0);
+	}
 }
 
 } // End of namespace MM1

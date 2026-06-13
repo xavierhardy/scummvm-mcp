@@ -37,6 +37,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_101_init(void) {
 	kernel.disable_fastwalk = true;
 
@@ -637,6 +639,28 @@ void room_101_preload(void) {
 	section_1_interface();
 
 	vocab_make_active(words_Monsieur_Brie);
+}
+
+void room_101_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->brie_calling_position,
+		local->brie_chandelier_position,
+		local->brie_calling_frame,
+		local->brie_chandelier_frame,
+		local->talk_count,
+		local->start_sitting_down,
+		local->dynamic_brie,
+		local->dynamic_brie_2,
+		local->execute_chan,
+		local->execute_wipe,
+		local->start_walking,
+		local->start_walking_0,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->converse_counter);
 }
 
 } // namespace Rooms

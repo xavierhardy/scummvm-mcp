@@ -42,6 +42,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 static void handle_animation_florent() {
 	int random;
 	int florent_reset_frame;
@@ -1604,6 +1606,43 @@ void room_113_preload() {
 	vocab_make_active(words_Christine);
 	vocab_make_active(words_woman);
 	vocab_make_active(words_Julie);
+}
+
+
+void room_113_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->chris_daae_dynamic,
+		local->chris_flor_dynamic,
+		local->standing_talking,
+		local->day_wants_to_talk,
+		local->music_is_playing,
+		local->right_after_kiss,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->anim_2_running,
+		local->anim_3_running,
+		local->anim_4_running,
+		local->prevent_1,
+		local->prevent_2,
+		local->raoul_is_up,
+		local->arms_are_out,
+		local->day_frame,
+		local->day_action,
+		local->day_talk_count,
+		local->stand_talk_count,
+		local->florent_frame,
+		local->florent_action,
+		local->florent_talk_count,
+		local->raoul_frame,
+		local->raoul_action,
+		local->raoul_talk_count,
+		local->julie_frame,
+		local->julie_action,
+		local->julie_talk_count,
+		local->just_did_option);
 }
 
 } // namespace Rooms

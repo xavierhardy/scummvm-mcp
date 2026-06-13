@@ -38,6 +38,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_501_init() {
 	kernel_flip_hotspot(words_Christine, false);
 	kernel_flip_hotspot(words_boat, false);
@@ -649,6 +651,16 @@ void room_501_preload() {
 	vocab_make_active(words_Christine);
 	vocab_make_active(words_look_at);
 	vocab_make_active(words_walk_to);
+}
+
+
+void room_501_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->anim_0_running,
+		local->prevent_2);
 }
 
 } // namespace Rooms

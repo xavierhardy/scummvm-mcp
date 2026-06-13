@@ -29,48 +29,48 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
-#define local ((Scratch *)(&game.scratch[0]))
+#define local (&scratch)
 #define ss    local->sprite
 #define seq   local->sequence
 #define aa    local->animation
 
-typedef struct {        /* Room local variables */
-	int sprite[20];       /* Sprite series handles  */
-	int sequence[20];     /* Sequence handles       */
-	int animation[7];     /* Animation handles      */
-	int prompt_1;         /* Dynamic var for prompter's stand */
-	int prompt_2;         /* Dynamic var for prompter's stand */
-	int prompt_3;         /* Dynamic var for prompter's stand */
-	int prompt_4;         /* Dynamic var for prompter's stand */
-	int prompt_5;         /* Dynamic var for prompter's stand */
-	int floor_r_1;        /* Dynamic var for floor  */
-	int floor_r_2;        /* Dynamic var for floor  */
-	int floor_l_1;        /* Dynamic var for floor  */
-	int floor_l_2;        /* Dynamic var for floor  */
-	int man;              /* Dynamic var for man / Jacques */
+struct Scratch {			/* Room local variables */
+	int16 sprite[20];       /* Sprite series handles  */
+	int16 sequence[20];     /* Sequence handles       */
+	int16 animation[7];     /* Animation handles      */
+	int16 prompt_1;         /* Dynamic var for prompter's stand */
+	int16 prompt_2;         /* Dynamic var for prompter's stand */
+	int16 prompt_3;         /* Dynamic var for prompter's stand */
+	int16 prompt_4;         /* Dynamic var for prompter's stand */
+	int16 prompt_5;         /* Dynamic var for prompter's stand */
+	int16 floor_r_1;        /* Dynamic var for floor  */
+	int16 floor_r_2;        /* Dynamic var for floor  */
+	int16 floor_l_1;        /* Dynamic var for floor  */
+	int16 floor_l_2;        /* Dynamic var for floor  */
+	int16 man;              /* Dynamic var for man / Jacques */
 
-	int jacques_frame;
-	int jacques_action;
-	int jacques_talk_count;
+	int16 jacques_frame;
+	int16 jacques_action;
+	int16 jacques_talk_count;
 
-	int just_did_option;
-	int anim_0_running;
-	int anim_1_running;
-	int anim_2_running;
-	int anim_3_running;
-	int anim_4_running;
-	int anim_5_running;
-	int anim_6_running;
+	int16 just_did_option;
+	int16 anim_0_running;
+	int16 anim_1_running;
+	int16 anim_2_running;
+	int16 anim_3_running;
+	int16 anim_4_running;
+	int16 anim_5_running;
+	int16 anim_6_running;
 
-	int top_of_stand;     /* Either NO, YES_LEFT, or YES_RIGHT */
+	int16 top_of_stand;     /* Either NO, YES_LEFT, or YES_RIGHT */
 
-	int converse_counter; /* counter for talking displacements */
-	int frame_guard;      /* guards against running certain daemon code more than once */
+	int16 converse_counter; /* counter for talking displacements */
+	int16 frame_guard;      /* guards against running certain daemon code more than once */
 
-	int stairs_frame;
-	int climb_thru;
-	int sit_on_it;
-} Scratch;
+	int16 stairs_frame;
+	int16 climb_thru;
+	int16 sit_on_it;
+};
 
 
 /* ========================= Sprite Series =================== */

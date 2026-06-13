@@ -55,10 +55,11 @@ public:
 
 	HotspotDescription _sceneHotspot;
 
+	bool canHaveHotspot() const override { return true; }
+
 protected:
 	CursorManager::CursorType _hoverCursor;
 
-	bool canHaveHotspot() const override { return true; }
 	Common::String getRecordTypeName() const override { return "HotSingleFrameSceneChange"; }
 };
 
@@ -79,8 +80,9 @@ public:
 	Common::Array<HotspotDescription> _hotspots;
 	bool _isTerse = false;
 
-protected:
 	bool canHaveHotspot() const override { return true; }
+
+protected:
 	Common::String getRecordTypeName() const override {
 		if (_isTerse)
 			return "HotMultiframeSceneChangeTerse";
@@ -105,8 +107,8 @@ protected:
 // hovering; all of them are handled in this class as well.
 class Hot1FrSceneChange : public SceneChange {
 public:
-	Hot1FrSceneChange(CursorManager::CursorType hoverCursor, bool dynamicCursor = false) :
-		_hoverCursor(hoverCursor), _dynamicCursor(dynamicCursor) {}
+	Hot1FrSceneChange(CursorManager::CursorType hoverCursor, bool dynamicCursor = false, bool isTerse = false) :
+		_hoverCursor(hoverCursor), _dynamicCursor(dynamicCursor), _isTerse(isTerse) {}
 	virtual ~Hot1FrSceneChange() {}
 
 	void readData(Common::SeekableReadStream &stream) override;
@@ -118,8 +120,9 @@ public:
 	bool _isTerse = false;
 	bool _dynamicCursor = false;
 
-protected:
 	bool canHaveHotspot() const override { return true; }
+
+protected:
 	Common::String getRecordTypeName() const override {
 		if (_isTerse)
 			return "HotSceneChangeTerse";
@@ -162,8 +165,9 @@ public:
 	byte _conditionPayload;
 	Common::Array<HotspotDescription> _hotspots;
 
-protected:
 	bool canHaveHotspot() const override { return true; }
+
+protected:
 	Common::String getRecordTypeName() const override { return "HotMultiframeMultisceneChange"; }
 };
 
@@ -205,8 +209,9 @@ public:
 
 	HotspotDescription _hotspotDesc;
 
-protected:
 	bool canHaveHotspot() const override { return true; }
+
+protected:
 	Common::String getRecordTypeName() const override { return "MapCallHot1Fr"; }
 };
 
@@ -218,8 +223,9 @@ public:
 
 	Common::Array<HotspotDescription> _hotspots;
 
-protected:
 	bool canHaveHotspot() const override { return true; }
+
+protected:
 	Common::String getRecordTypeName() const override { return "MapCallHotMultiframe"; }
 };
 

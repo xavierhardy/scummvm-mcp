@@ -40,6 +40,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 int conv027_second = 0;
 
 void room_504_init() {
@@ -1515,6 +1517,36 @@ void room_504_preload() {
 
 	vocab_make_active(words_Phantom);
 	vocab_make_active(words_Christine);
+}
+
+
+void room_504_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->music_choice,
+		local->input_count,
+		local->anim_0_running,
+		local->anim_1_running,
+		local->anim_2_running,
+		local->anim_3_running,
+		local->anim_4_running,
+		local->anim_5_running,
+		local->music_is_playing,
+		local->play_count,
+		local->fire_breath,
+		local->listen_action,
+		local->listen_frame,
+		local->chair_action,
+		local->chair_frame,
+		local->play_action,
+		local->play_frame,
+		local->prevent,
+		local->phan_action,
+		local->phan_frame,
+		local->chris_talk_count,
+		local->death_count);
 }
 
 } // namespace Rooms

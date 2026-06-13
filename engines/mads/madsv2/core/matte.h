@@ -151,6 +151,8 @@ void matte_inter_frame(int update_live, int clear_chaff);
 int  matte_allocate_inter_image(void);
 void matte_refresh_inter(void);
 
+extern void init_matte();
+
 } // namespace MADSV2
 } // namespace MADS
 

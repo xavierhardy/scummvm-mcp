@@ -28,9 +28,9 @@
 #include "gui/saveload.h"
 
 #include "mads/nebular/nebular.h"
-#include "mads/core/screen.h"
-#include "mads/core/msurface.h"
-#include "mads/core/staticres.h"
+#include "mads/nebular/core/screen.h"
+#include "mads/nebular/core/msurface.h"
+#include "mads/nebular/core/staticres.h"
 #include "mads/nebular/dialogs_nebular.h"
 #include "mads/nebular/game_nebular.h"
 #include "mads/nebular/menu_nebular.h"
@@ -288,7 +288,7 @@ void DialogsNebular::showDialog() {
 		_pendingDialog = DIALOG_NONE;
 
 		Common::Keymapper *keymapper = _vm->getEventManager()->getKeymapper();
-		if (dialogId == MADS::DIALOG_MAIN_MENU) {
+		if (dialogId == DIALOG_MAIN_MENU) {
 			keymapper->getKeymap("menu-shortcuts")->setEnabled(true);
 		} else {
 			keymapper->getKeymap("menu-shortcuts")->setEnabled(false);

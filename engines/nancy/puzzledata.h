@@ -24,6 +24,7 @@
 #include "common/hashmap.h"
 
 #include "engines/nancy/commontypes.h"
+#include "engines/nancy/enginedata.h"
 
 #ifndef NANCY_PUZZLEDATA_H
 #define NANCY_PUZZLEDATA_H
@@ -114,6 +115,56 @@ struct AssemblyPuzzleData : public SimplePuzzleData {
 	static constexpr uint32 getTag() { return MKTAG('A', 'S', 'M', 'B'); }
 };
 
+// Placed bead-type ids on the thread.
+struct BeadPuzzleData : public PuzzleData {
+	BeadPuzzleData() {}
+	virtual ~BeadPuzzleData() {}
+
+	static constexpr uint32 getTag() { return MKTAG('B', 'E', 'A', 'D'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<int16> placedBeads;
+};
+
+// Cached current/solved tile layouts for a SortPuzzle. Each cell is encoded as
+// 4 consecutive int16s: srcRow, srcCol, value, isEmpty. The first two int16s
+// of each array are the grid rows and cols.
+struct SortPuzzleData : public PuzzleData {
+	SortPuzzleData() {}
+	virtual ~SortPuzzleData() {}
+
+	static constexpr uint32 getTag() { return MKTAG('S', 'O', 'R', 'T'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<int16> currentState;
+	Common::Array<int16> solvedState;
+};
+
+// Per-magnet (left, top, right, bottom, locked) packed as 5 int16s. The
+// puzzle's two scenes (3280, 3281) are the same puzzle with the same data,
+// so a single flat array suffices.
+struct MagnetMazePuzzleData : public PuzzleData {
+	MagnetMazePuzzleData() {}
+	virtual ~MagnetMazePuzzleData() {}
+
+	static constexpr uint32 getTag() { return MKTAG('M', 'M', 'A', 'Z'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<int16> magnetState;
+};
+
+// Per-item (inMap, inItems, mapRow, mapCol, itemsRow, itemsCol) packed as
+// 6 int16s.
+struct GridMapPuzzleData : public PuzzleData {
+	GridMapPuzzleData() {}
+	virtual ~GridMapPuzzleData() {}
+
+	static constexpr uint32 getTag() { return MKTAG('G', 'M', 'A', 'P'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<int16> itemState;
+};
+
 struct QuizPuzzleData : public PuzzleData {
 	QuizPuzzleData() {}
 	virtual ~QuizPuzzleData() {}
@@ -165,6 +216,42 @@ struct TableData : public PuzzleData {
 
 	Common::Array<int16> singleValues;
 	Common::Array<float> comboValues;
+};
+
+// Nancy 10+ cellphone state mutated by the ChangeCellPhoneInfo,
+// SetCellPhoneBatteryAndSignal and AddSearchLink action records,
+// persisted between saves.
+struct CellPhoneData : public PuzzleData {
+	struct LinkEntry {
+		Common::String key;       // CVTX key whose looked-up text is shown in the list
+		Common::String value;     // CVTX key for the body (email only); unused for search
+		int16 extra = 0;          // search mode: page index (mode-1 only); unused for email
+		int16 flag = -1;          // stored by the AR but unused by the original; reserved
+		int16 eventFlag = -1;     // event-flag index set when the entry is opened
+		bool read = false;        // email only: set once the message is opened
+	};
+
+	CellPhoneData() {}
+	virtual ~CellPhoneData() {}
+
+	static constexpr uint32 getTag() { return MKTAG('C', 'E', 'L', 'L'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	bool noSignal = false;
+	bool batteryLow = false;
+	// Loaded set to true once the popup has seeded the contact list from
+	// the UICL chunk; we then own it as runtime data.
+	bool seeded = false;
+	Common::Array<UICL::Contact> contacts;
+
+	// Populated by AR 131 (AddSearchLink). Mode 0 → emailMessages (each
+	// with a body-text CVTX key + read flag); any non-zero mode →
+	// searchLinks (web search topics).
+	Common::Array<LinkEntry> emailMessages;
+	Common::Array<LinkEntry> searchLinks;
+
+private:
+	void syncLinkArray(Common::Serializer &ser, Common::Array<LinkEntry> &arr);
 };
 
 PuzzleData *makePuzzleData(const uint32 tag);

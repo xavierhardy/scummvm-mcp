@@ -57,6 +57,8 @@ extern int font_write(FontPtr font, Buffer *target, const char *out_string,
 extern void font_set_colors(int background, int high_intense, int med_intense, int low_intense);
 extern int font_string_width(FontPtr font, const char *out_string, int auto_spacing);
 
+extern void init_font();
+
 } // namespace MADSV2
 } // namespace MADS
 

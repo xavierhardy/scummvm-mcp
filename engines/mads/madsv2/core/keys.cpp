@@ -149,5 +149,9 @@ int keys_fix_alt(int target) {
 	}
 }
 
+void init_keys() {
+	keys_special_button = 0;
+}
+
 } // namespace MADSV2
 } // namespace MADS

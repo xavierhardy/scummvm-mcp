@@ -32,6 +32,8 @@ void Color::load(Common::SeekableReadStream *src) {
 	src->readMultipleLE(r, g, b, x16, cycle, group);
 }
 
+//====================================================================
+
 bool ColorList::load(Load &load_handle, int size) {
 	// Load in the needed data
 	byte *buffer = (byte *)malloc(size);
@@ -56,16 +58,22 @@ void ColorList::load(Common::SeekableReadStream *src) {
 		table[i].load(src);
 }
 
-void Cycle::load(Common::SeekableReadStream *src) {
-	src->readMultipleLE(num_colors, first_list_color, first_palette_color, ticks);
+//====================================================================
+
+void Cycle::synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(num_colors, first_list_color, first_palette_color, ticks);
 }
 
-void CycleList::load(Common::SeekableReadStream *src) {
-	num_cycles = src->readUint16LE();
+//====================================================================
+
+void CycleList::synchronize(Common::Serializer &s) {
+	s.syncAsUint16LE(num_cycles);
 
 	for (int i = 0; i < COLOR_MAX_CYCLES; ++i)
-		table[i].load(src);
+		table[i].synchronize(s);
 }
+
+//====================================================================
 
 void ShadowList::load(Common::SeekableReadStream *src) {
 	src->readMultipleLE(num_shadow_colors);

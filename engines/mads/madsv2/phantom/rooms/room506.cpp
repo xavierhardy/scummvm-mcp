@@ -37,6 +37,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_506_init() {
 	int id;
 
@@ -463,6 +465,17 @@ void room_506_preload() {
 	if (!global[christine_is_in_boat]) {
 		kernel_initial_variant = 1;
 	}
+}
+
+
+void room_506_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->anim_0_running,
+		local->prevent,
+		local->ascending);
 }
 
 } // namespace Rooms

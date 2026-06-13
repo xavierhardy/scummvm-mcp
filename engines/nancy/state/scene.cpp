@@ -39,6 +39,7 @@
 #include "engines/nancy/ui/button.h"
 #include "engines/nancy/ui/ornaments.h"
 #include "engines/nancy/ui/clock.h"
+#include "engines/nancy/ui/taskbar.h"
 
 #include "engines/nancy/misc/lightning.h"
 #include "engines/nancy/misc/specialeffect.h"
@@ -121,6 +122,7 @@ Scene::Scene() :
 		_inventoryBox(),
 		_menuButton(nullptr),
 		_helpButton(nullptr),
+		_taskbar(nullptr),
 		_viewportOrnaments(nullptr),
 		_textboxOrnaments(nullptr),
 		_inventoryBoxOrnaments(nullptr),
@@ -137,6 +139,7 @@ Scene::Scene() :
 Scene::~Scene() {
 	delete _helpButton;
 	delete _menuButton;
+	delete _taskbar;
 	delete _viewportOrnaments;
 	delete _textboxOrnaments;
 	delete _inventoryBoxOrnaments;
@@ -247,6 +250,14 @@ void Scene::changeScene(const SceneChangeDescription &sceneDescription) {
 		return;
 	}
 
+	// HACK: The event flag for meeting Dave in the cellar is not set
+	// correctly in Nancy 10, so we hardcode the flag change here to
+	// avoid talking with him over and over again.
+	// TODO: Find out why this flag is not set correctly and implement a
+	// proper solution for it.
+	if (g_nancy->getGameType() == kGameTypeNancy10 && sceneDescription.sceneID == 3996)
+		NancySceneState.setEventFlag(314, g_nancy->_true);	// EV_Met_DG_Cellar
+
 	_sceneState.nextScene = sceneDescription;
 	_state = kLoad;
 }
@@ -344,7 +355,15 @@ void Scene::addItemToInventory(int16 id) {
 
 		g_nancy->_sound->playSound("BUOK");
 
-		_inventoryBox.addItem(id);
+		if (g_nancy->getGameType() <= kGameTypeNancy9) {
+			_inventoryBox.addItem(id);
+		} else {
+			if (_inventoryPopup.isOpen()) {
+				_inventoryPopup.refreshGrid();
+			} else if (_taskbar) {
+				_taskbar->setNotification(kTaskButtonInventory, 0);
+			}
+		}
 	}
 }
 
@@ -358,13 +377,17 @@ void Scene::removeItemFromInventory(int16 id, bool pickUp) {
 
 		if (pickUp) {
 			setHeldItem(id);
+			g_nancy->_sound->playSound("BUOK");
 		} else if (getHeldItem() == id) {
 			setHeldItem(-1);
+			g_nancy->_sound->playSound("BUOK");
 		}
 
-		g_nancy->_sound->playSound("BUOK");
-
-		_inventoryBox.removeItem(id);
+		if (g_nancy->getGameType() <= kGameTypeNancy9) {
+			_inventoryBox.removeItem(id);
+		} else if (_inventoryPopup.isOpen()) {
+			_inventoryPopup.refreshGrid();
+		}
 	}
 }
 
@@ -381,8 +404,17 @@ void Scene::setNoHeldItem() {
 byte Scene::hasItem(int16 id) const {
 	if (getHeldItem() == id) {
 		return g_nancy->_true;
-	} else {
+	} else if (id >= 0 && (uint)id < _flags.items.size()) {
 		return _flags.items[id];
+	} else {
+		// TODO: Happens in Nancy10+. Gets called for item IDs
+		// 1824, 1825, 1826, 1827, when adding tasks to the
+		// notebook, for an array of 70 items in total. Looks
+		// like a case where a flag is contained for the held
+		// item ID to be checked.
+		debug(2, "Scene::hasItem: out-of-range id %d (items.size=%u)", id,
+			  (uint)_flags.items.size());
+		return g_nancy->_false;
 	}
 }
 
@@ -587,10 +619,19 @@ void Scene::useHint(uint16 characterID, uint16 hintID) {
 void Scene::registerGraphics() {
 	_frame.registerGraphics();
 	_viewport.registerGraphics();
+
 	_textbox.registerGraphics();
 
-	if (g_nancy->getGameType() <= kGameTypeNancy9)
+	// Pre-Nancy 10: inventory box is always-on-screen.
+	// Nancy 10+: a separate popup widget driven by UIIV (initially hidden).
+	if (g_nancy->getGameType() <= kGameTypeNancy9) {
 		_inventoryBox.registerGraphics();
+	} else {
+		_inventoryPopup.registerGraphics();
+		_notebookPopup.registerGraphics();
+		_cellPhonePopup.registerGraphics();
+		_conversationPopup.registerGraphics();
+	}
 
 	_hotspotDebug.registerGraphics();
 
@@ -602,6 +643,10 @@ void Scene::registerGraphics() {
 	if (_helpButton) {
 		_helpButton->registerGraphics();
 		_helpButton->setVisible(false);
+	}
+
+	if (_taskbar) {
+		_taskbar->registerGraphics();
 	}
 
 	if (_viewportOrnaments) {
@@ -625,6 +670,9 @@ void Scene::registerGraphics() {
 }
 
 void Scene::synchronize(Common::Serializer &ser) {
+	if (_flags.eventFlags.empty())
+		init();
+
 	ser.syncAsUint16LE(_sceneState.currentScene.sceneID);
 	ser.syncAsUint16LE(_sceneState.currentScene.frameID);
 	ser.syncAsUint16LE(_sceneState.currentScene.verticalOffset);
@@ -669,9 +717,9 @@ void Scene::synchronize(Common::Serializer &ser) {
 		ser.syncAsUint32LE((uint32 &)_flags.logicConditions[i].timestamp);
 	}
 
-	auto &order = getInventoryBox()._order;
-	uint prevSize = getInventoryBox()._order.size();
-	getInventoryBox()._order.resize(g_nancy->getStaticData().numItems);
+	auto &order = getInventoryBox().getOrder();
+	uint prevSize = order.size();
+	order.resize(g_nancy->getStaticData().numItems);
 
 	if (ser.isSaving()) {
 		for (uint i = prevSize; i < order.size(); ++i) {
@@ -933,6 +981,10 @@ void Scene::load(bool fromSaveFile) {
 	if (sceneSummaryChunk) {
 		_sceneState.summary.read(*sceneSummaryChunk);
 	} else {
+		// Reset panning type set from previous scenes, since terse summary
+		// chunks don't contain panning type information
+		_sceneState.summary.panningType = kPan360;
+
 		sceneSummaryChunk = sceneIFF->getChunkStream("TSUM");
 		if (sceneSummaryChunk) {
 			_sceneState.summary.readTerse(*sceneSummaryChunk);
@@ -974,12 +1026,18 @@ void Scene::load(bool fromSaveFile) {
 		_sceneState.currentScene.paletteID = 0;
 	}
 
-	_viewport.loadVideo(_sceneState.summary.videoFile,
-						_sceneState.currentScene.frameID,
-						_sceneState.currentScene.verticalOffset,
-						_sceneState.summary.panningType,
-						_sceneState.summary.videoFormat,
-						_sceneState.summary.palettes.size() ? _sceneState.summary.palettes[(byte)_sceneState.currentScene.paletteID] : Common::Path());
+	if (_sceneState.summary.videoFile != "NO_ART_SCENE") {
+		const Common::Path palettePath = !_sceneState.summary.palettes.empty() ?
+			_sceneState.summary.palettes[(byte)_sceneState.currentScene.paletteID] :
+			Common::Path();
+
+		_viewport.loadVideo(_sceneState.summary.videoFile,
+							_sceneState.currentScene.frameID,
+							_sceneState.currentScene.verticalOffset,
+							_sceneState.summary.panningType,
+							_sceneState.summary.videoFormat,
+							palettePath);
+	}
 
 	if (_viewport.getFrameCount() <= 1) {
 		_viewport.disableEdges(kLeft | kRight);
@@ -1014,6 +1072,11 @@ void Scene::load(bool fromSaveFile) {
 	// loading from a save
 	if (!fromSaveFile) {
 		_flags.sceneCounts.getOrCreateVal(_sceneState.currentScene.sceneID)++;
+	}
+
+	// Re-evaluate taskbar notification states against the new scene.
+	if (g_nancy->getGameType() >= kGameTypeNancy10) {
+		_taskbar->updateNotificationStates(_sceneState.currentScene.sceneID);
 	}
 
 	delete sceneIFF;
@@ -1109,9 +1172,22 @@ void Scene::handleInput() {
 	}
 
 	// We handle the textbox and inventory box first because of their scrollbars, which
-	// need to take highest priority
+	// need to take highest priority. On Nancy 10+ the taskbar-driven popups
+	// (inventory/notebook/cellphone) sit visually on top of the textbox
+	// strip, so they get first crack at input — otherwise a click inside
+	// the popup that overlapped the textbox area could accidentally pick
+	// a conversation response.
+	if (g_nancy->getGameType() >= kGameTypeNancy10) {
+		_conversationPopup.handleInput(input);
+		_inventoryPopup.handleInput(input);
+		_notebookPopup.handleInput(input);
+		_cellPhonePopup.handleInput(input);
+	}
+
 	_textbox.handleInput(input);
-	_inventoryBox.handleInput(input);
+	if (g_nancy->getGameType() <= kGameTypeNancy9) {
+		_inventoryBox.handleInput(input);
+	}
 
 	// Handle invisible map button
 	// We do this before the viewport since TVD's map button overlaps the viewport's right hotspot
@@ -1151,8 +1227,35 @@ void Scene::handleInput() {
 
 	_actionManager.handleInput(input);
 
-	// Menu/help are disabled when a movie is active
+	// Menu/help are disabled when a movie is active. The taskbar is also
+	// skipped while the textbox is in open mode (it visually covers the
+	// buttons, so they should not receive hover/clicks).
 	if (!_activeMovie) {
+		if (_taskbar && !_textbox.isFullMode()) {
+			_taskbar->handleInput(input);
+
+			int clicked = _taskbar->getClickedButton();
+			switch (clicked) {
+			case kTaskButtonMenu:
+				requestStateChange(NancyState::kMainMenu);
+				break;
+			case kTaskButtonInventory:
+				_inventoryPopup.toggle();
+				break;
+			case kTaskButtonNotebook:
+				_notebookPopup.toggle();
+				break;
+			case kTaskButtonCellphone:
+				_cellPhonePopup.toggle();
+				break;
+			case kTaskButtonHelp:
+				requestStateChange(NancyState::kHelp);
+				break;
+			default:
+				break;
+			}
+		}
+
 		if (_menuButton) {
 			_menuButton->handleInput(input);
 
@@ -1209,8 +1312,14 @@ void Scene::initStaticData() {
 	_viewport.init();
 	_textbox.init();
 
-	if (g_nancy->getGameType() <= kGameTypeNancy9)
+	if (g_nancy->getGameType() <= kGameTypeNancy9) {
 		_inventoryBox.init();
+	} else {
+		_inventoryPopup.init();
+		_notebookPopup.init();
+		_cellPhonePopup.init();
+		_conversationPopup.init();
+	}
 
 	// Init buttons
 	if (g_nancy->getGameType() == kGameTypeVampire) {
@@ -1219,8 +1328,18 @@ void Scene::initStaticData() {
 		_mapHotspot = mapData->buttonDest;
 	}
 
-	_menuButton = new UI::Button(5, g_nancy->_graphics->_object0, bootSummary->menuButtonSrc, bootSummary->menuButtonDest, bootSummary->menuButtonHighlightSrc);
-	_helpButton = new UI::Button(5, g_nancy->_graphics->_object0, bootSummary->helpButtonSrc, bootSummary->helpButtonDest, bootSummary->helpButtonHighlightSrc);
+	if (g_nancy->getGameType() <= kGameTypeNancy9) {
+		// Pre-Nancy 10: free-floating MENU and HELP buttons whose
+		// rects come from BSUM. Replaced in Nancy 10+ by the taskbar.
+		_menuButton = new UI::Button(5, g_nancy->_graphics->_object0, bootSummary->menuButtonSrc, bootSummary->menuButtonDest, bootSummary->menuButtonHighlightSrc);
+		_helpButton = new UI::Button(5, g_nancy->_graphics->_object0, bootSummary->helpButtonSrc, bootSummary->helpButtonDest, bootSummary->helpButtonHighlightSrc);
+	} else {
+		// Nancy 10+: bottom-of-screen taskbar holds MENU / inventory /
+		// notebook / cellphone / HELP buttons. Built from the TASK chunk.
+		_taskbar = new UI::Taskbar();
+		_taskbar->init();
+	}
+
 	g_nancy->setMouseEnabled(true);
 
 	// Init ornaments and clock (TVD only)
@@ -1270,7 +1389,7 @@ void Scene::clearSceneData() {
 		_lightning->endLightning();
 	}
 
-	if (_textbox.hasBeenDrawn()) {
+	if (_textbox.hasBeenDrawn() || g_nancy->getGameType() >= kGameTypeNancy10) {
 		// Improvement: the dog portrait scenes in nancy7 queue a piece of text,
 		// then immediately change the scene. This makes the text disappear instantly;
 		// instead, we check if the textbox has been drawn, and don't clear it if it hasn't.

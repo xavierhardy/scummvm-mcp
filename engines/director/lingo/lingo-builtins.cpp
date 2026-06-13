@@ -802,8 +802,8 @@ void LB::b_offset(int nargs) {
 		b_offsetRect(nargs);
 		return;
 	}
-	Common::String source = g_lingo->pop().asString();
-	Common::String target = g_lingo->pop().asString();
+	Common::String source = Common::U32String(g_lingo->pop().asString()).encode(g_director->getPlatformEncoding());
+	Common::String target = Common::U32String(g_lingo->pop().asString()).encode(g_director->getPlatformEncoding());
 
 	const char *str = d_strstr(source.c_str(), target.c_str());
 
@@ -1806,13 +1806,11 @@ void LB::b_openResFile(int nargs) {
  	}
 
 	if (!g_director->_allSeenResFiles.contains(resPath)) {
-		MacArchive *arch = new MacArchive();
+		Common::SharedPtr<Archive> arch(new MacArchive());
 		if (arch->openFile(findPath(resPath))) {
 			g_director->_openResFiles.setVal(resPath, arch);
 			g_director->_allSeenResFiles.setVal(resPath, arch);
 			g_director->addArchiveToOpenList(resPath);
-		} else {
-			delete arch;
 		}
 	}
 }
@@ -1956,7 +1954,7 @@ void LB::b_cancelIdleLoad(int nargs) {
 }
 
 void LB::b_continue(int nargs) {
-	g_director->_playbackPaused = false;
+	g_director->getCurrentWindow()->_playbackPaused = false;
 }
 
 void LB::b_dontPassEvent(int nargs) {
@@ -2089,7 +2087,7 @@ void LB::b_pass(int nargs) {
 }
 
 void LB::b_pause(int nargs) {
-	g_director->_playbackPaused = true;
+	g_director->getCurrentWindow()->_playbackPaused = true;
 }
 
 void LB::b_play(int nargs) {
@@ -2727,12 +2725,12 @@ void LB::b_editableText(int nargs) {
 	} else if (nargs == 0) {
 		g_lingo->dropStack(nargs);
 
-		if (g_lingo->_currentChannelId == -1) {
+		if (g_lingo->_state->currentChannelId == -1) {
 			warning("b_editableText: channel Id is missing");
 			return;
 		}
-		sc->getSpriteById(g_lingo->_currentChannelId)->_editable = true;
-		sc->getOriginalSpriteById(g_lingo->_currentChannelId)->_editable = true;
+		sc->getSpriteById(g_lingo->_state->currentChannelId)->_editable = true;
+		sc->getOriginalSpriteById(g_lingo->_state->currentChannelId)->_editable = true;
 	} else {
 		warning("b_editableText: unexpectedly received %d arguments", nargs);
 		g_lingo->dropStack(nargs);
@@ -2750,7 +2748,7 @@ void LB::b_erase(int nargs) {
 
 		for (uint i = 0; i < channels.size(); i++) {
 			if (channels[i]->_sprite->_castId == d.asMemberID()) {
-				channels[i]->_dirty = true;
+				channels[i]->setDirty();
 			}
 		}
 	}
@@ -2868,12 +2866,11 @@ void LB::b_installMenu(int nargs) {
 	// Menu definitions use the character 0xc5 to denote a code separator.
 	// For Mac D4 and below, this is ≈. For Windows D4 and below, this is Å.
 	char CODE_SEPARATOR_CHAR = '\xC5';
-	char CODE_SEPARATOR_CHAR_2 = '\xC5';
+	// FIXME: For some reason there are games which use º (Mac) or ¼ (Win) and it works too?
+	char CODE_SEPARATOR_CHAR_2 = '\xBC';
 	if (g_director->getVersion() >= 500) {
 		// D5 changed this to be the pipe | character, the same in Windows and Mac.
 		CODE_SEPARATOR_CHAR = '\x7C';
-		// FIXME: For some reason there are games which use º (Mac) or ¼ (Win) and it works too?
-		CODE_SEPARATOR_CHAR_2 = '\xBC';
 	}
 	// Continuation character is 0xac to denote a line running over.
 	// For Mac, this is ¨. For Windows, this is ¬.
@@ -3057,16 +3054,16 @@ void LB::b_moveableSprite(int nargs) {
 	Score *score = movie->getScore();
 	Frame *frame = score->_currentFrame;
 
-	if (g_lingo->_currentChannelId == -1) {
+	if (g_lingo->_state->currentChannelId == -1) {
 		warning("b_moveableSprite: channel Id is missing");
 		assert(0);
 		return;
 	}
 
 	// since we are using value copying, in order to make it taking effect immediately. we modify the sprites in channel
-	if (score->_channels[g_lingo->_currentChannelId])
-		score->_channels[g_lingo->_currentChannelId]->_sprite->_moveable = true;
-	frame->_sprites[g_lingo->_currentChannelId]->_moveable = true;
+	if (score->_channels[g_lingo->_state->currentChannelId])
+		score->_channels[g_lingo->_state->currentChannelId]->_sprite->_moveable = true;
+	frame->_sprites[g_lingo->_state->currentChannelId]->_moveable = true;
 }
 
 void LB::b_pasteClipBoardInto(int nargs) {
@@ -3276,11 +3273,11 @@ void LB::b_immediateSprite(int nargs) {
 	} else if (nargs == 0 && g_director->getVersion() < 400) {
 		g_lingo->dropStack(nargs);
 
-		if (g_lingo->_currentChannelId == -1) {
+		if (g_lingo->_state->currentChannelId == -1) {
 			warning("b_immediateSprite: channel Id is missing");
 			return;
 		}
-		sc->getSpriteById(g_lingo->_currentChannelId)->_immediate = true;
+		sc->getSpriteById(g_lingo->_state->currentChannelId)->_immediate = true;
 	} else {
 		warning("b_immediateSprite: unexpectedly received %d arguments", nargs);
 		g_lingo->dropStack(nargs);
@@ -3309,10 +3306,8 @@ void LB::b_puppetSprite(int nargs) {
 			if (refresh) {
 				// puppetSprite set to FALSE, copy back sprite data from frame cache
 				Channel *chan = sc->getChannelById(spriteId);
-				movie->getWindow()->addDirtyRect(chan->getBbox());
-				chan->_dirty = true;
 				chan->setClean(sc->_currentFrame->_sprites[spriteId]);
-				chan->_dirty = true;
+				chan->setDirty();
 			}
 		} else {
 			warning("b_puppetSprite: sprite index out of bounds");
@@ -3320,11 +3315,11 @@ void LB::b_puppetSprite(int nargs) {
 	} else if (nargs == 0 && g_director->getVersion() < 400) {
 		g_lingo->dropStack(nargs);
 
-		if (g_lingo->_currentChannelId == -1) {
+		if (g_lingo->_state->currentChannelId == -1) {
 			warning("b_puppetSprite: channel Id is missing");
 			return;
 		}
-		sc->getSpriteById(g_lingo->_currentChannelId)->_puppet = true;
+		sc->getSpriteById(g_lingo->_state->currentChannelId)->_puppet = true;
 	} else {
 		warning("b_puppetSprite: unexpectedly received %d arguments", nargs);
 		g_lingo->dropStack(nargs);
@@ -3469,7 +3464,7 @@ void LB::b_spriteBox(int nargs) {
 	// This automatically sets the stretch mode
 	channel->_sprite->_stretch = true;
 
-	g_director->getCurrentWindow()->addDirtyRect(channel->getBbox());
+	channel->setDirty();
 	channel->setBbox(
 		l < r ? l : r,
 		t < b ? t : b,
@@ -3478,7 +3473,6 @@ void LB::b_spriteBox(int nargs) {
 	);
 	if (channel->_sprite->_cast)
 		channel->_sprite->_cast->setModified(true);
-	channel->_dirty = true;
 }
 
 void LB::b_unLoad(int nargs) {
@@ -4071,7 +4065,7 @@ void LB::b_member(int nargs) {
 	if (res.member > g_lingo->getMembersNum(res.castLib)) {
 		// D6 and up does not error on non-existing cast members
 		if (g_director->getVersion() < 600) {
-			g_lingo->lingoError("b_member: Cast member ID out of range");
+			debugC(5, kDebugLingoExec, "b_member: Cast member ID %s out of range! In real D5 this would cause Lingo errors for some use cases", res.asString().c_str());
 		}
 	}
 	g_lingo->push(res);

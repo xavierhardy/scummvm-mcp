@@ -22,6 +22,7 @@
 #ifndef MADS_CORE_COLOR_H
 #define MADS_CORE_COLOR_H
 
+#include "common/serializer.h"
 #include "common/stream.h"
 #include "mads/madsv2/core/loader.h"
 
@@ -96,7 +97,7 @@ struct Cycle {
 	byte ticks;                         /* 60/s ticks between cycles     */
 
 	static constexpr int SIZE = 1 + 1 + 1 + 1;
-	void load(Common::SeekableReadStream *src);
+	void synchronize(Common::Serializer &s);
 };
 
 typedef Cycle *CyclePtr;
@@ -105,11 +106,19 @@ typedef Cycle *CyclePtr;
 /* List of color cycling ranges */
 
 struct CycleList {
-	int   num_cycles;
+	int16 num_cycles;
 	Cycle table[COLOR_MAX_CYCLES];
 
 	static constexpr int SIZE = 2 + (Cycle::SIZE * COLOR_MAX_CYCLES);
-	void load(Common::SeekableReadStream *src);
+	void synchronize(Common::Serializer &s);
+	void load(Common::SeekableReadStream *src) {
+		Common::Serializer s(src, nullptr);
+		synchronize(s);
+	}
+	void save(Common::WriteStream *dest) {
+		Common::Serializer s(nullptr, dest);
+		synchronize(s);
+	}
 };
 
 typedef CycleList *CycleListPtr;

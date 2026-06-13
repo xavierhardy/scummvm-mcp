@@ -43,6 +43,13 @@ extern void speech_go();
 extern void global_speech_load(int id);
 extern void global_speech_go(int id);
 extern void global_speech(int id);
+extern int speech_status();
+
+extern void init_speech();
+
+inline void speech_ems_play(const char *resName, int id, bool /*memFlag?*/) {
+	speech_play(resName, id);
+}
 
 } // namespace MADSV2
 } // namespace MADS

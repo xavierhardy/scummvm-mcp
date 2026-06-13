@@ -82,13 +82,16 @@ const LingoDec::Handler *getHandler(CastMemberID id, const Common::String &handl
 	if (id.castLib == SHARED_CAST_LIB)
 		return getHandler(movie->getSharedCast(), id, handlerId);
 
-	const Cast *cast = movie->getCasts()->getVal(id.castLib);
+	const Cast *cast = movie->getCasts()->getValOrDefault(id.castLib, nullptr);
 
 	const LingoDec::Handler *handler = getHandler(cast, id, handlerId);
 	if (handler)
 		return handler;
 
-	return getHandler(movie->getSharedCast(), id, handlerId);
+	Cast *sharedCast = movie->getSharedCast();
+	if (!sharedCast)
+		return nullptr;
+	return getHandler(sharedCast, id, handlerId);
 }
 
 ImGuiScript toImGuiScript(ScriptType scriptType, CastMemberID id, const Common::String &handlerId) {
@@ -101,7 +104,11 @@ ImGuiScript toImGuiScript(ScriptType scriptType, CastMemberID id, const Common::
 	if (!handler) {
 		const ScriptContext *ctx;
 		if (id.castLib == SHARED_CAST_LIB) {
-			ctx = g_director->getCurrentMovie()->getSharedCast()->_lingoArchive->getScriptContext(scriptType, id.member);
+			// null guard
+			Cast *sharedCast = g_director->getCurrentMovie()->getSharedCast();
+			if (!sharedCast)
+				return result;
+			ctx = sharedCast->_lingoArchive->getScriptContext(scriptType, id.member);
 		} else {
 			ctx = g_director->getCurrentMovie()->getScriptContext(scriptType, id);
 		}
@@ -127,7 +134,7 @@ ImGuiScript toImGuiScript(ScriptType scriptType, CastMemberID id, const Common::
 
 ScriptContext *getScriptContext(CastMemberID id) {
 	const Director::Movie *movie = g_director->getCurrentMovie();;
-	const Cast *cast = movie->getCasts()->getVal(id.castLib);
+	const Cast *cast;
 
 	if (id.castLib == SHARED_CAST_LIB)
 		cast = movie->getSharedCast();
@@ -144,10 +151,17 @@ ScriptContext *getScriptContext(CastMemberID id) {
 
 ScriptContext *getScriptContext(uint32 nameIndex, CastMemberID id, Common::String handlerName) {
 	Movie *movie = g_director->getCurrentMovie();
-	Cast *cast = movie->getCasts()->getVal(id.castLib);
+	Cast *cast;
+	if (id.castLib == SHARED_CAST_LIB)
+		cast = movie->getSharedCast();
+	else
+		cast = movie->getCasts()->getValOrDefault(id.castLib, nullptr);
+
+	if (!cast)
+		return nullptr;
 
 	// If the name at nameIndex is not the same as handler name, means its a local script (in the same Lscr resource)
-	if (cast && cast->_lingoArchive->names[nameIndex] != handlerName) {
+	if (cast->_lingoArchive->names[nameIndex] != handlerName) {
 		return cast->_lingoArchive->findScriptContext(id.member);
 	}
 
@@ -299,6 +313,8 @@ static void setToolTipImage(const ImGuiImage &image, const char *name) {
 }
 
 void showImage(const ImGuiImage &image, const char *name, float thumbnailSize) {
+	if (!image.width || !image.height)
+		return;
 	ImVec2 size;
 	if (image.width > image.height) {
 		size = {thumbnailSize - 2, (thumbnailSize - 2) * image.height / image.width};
@@ -320,6 +336,8 @@ void showImage(const ImGuiImage &image, const char *name, float thumbnailSize) {
 }
 
 void showImageWrappedBorder(const ImGuiImage &image, const char *name, float imageSize) {
+	if (!image.width || !image.height)
+		return;
 	ImVec2 size;
 	if (image.width > image.height) {
 		size = {imageSize, imageSize * image.height / image.width};
@@ -424,8 +442,11 @@ ImGuiImage getTextID(CastMember *castMember) {
 	Graphics::MacWidget *widget = castMember->createWidget(bbox, channel, kTextSprite);
 	Graphics::Surface surface;
 
-	if (!widget || !widget->getSurface() || !widget->getSurface()->getPixels())
-      return {};
+	if (!widget || !widget->getSurface() || !widget->getSurface()->getPixels()) {
+		delete channel;
+		delete sprite;
+		return {};
+	}
 
 	surface.copyFrom(*widget->getSurface());
 
@@ -754,6 +775,14 @@ void setTheme(int themeIndex) {
 	}
 }
 
+// helper to draw Image Viewer
+void openImageViewer(ImGuiImage image, const Common::String &text, const Common::String &title) {
+	_state->_imageViewerState.image = image;
+    _state->_imageViewerState.text = text;
+    _state->_imageViewerState.title = title;
+    _state->_w.imageViewer = true;
+}
+
 static void showSettings() {
 	if (!_state->_w.settings)
 		return;
@@ -887,6 +916,7 @@ void onImGuiRender() {
 			ImGui::MenuItem("Watched Vars", NULL, &_state->_w.watchedVars);
 			ImGui::MenuItem("Logger", NULL, &_state->_w.logger);
 			ImGui::MenuItem("Archive", NULL, &_state->_w.archive);
+			ImGui::MenuItem("Windows", NULL, &_state->_w.windows);
 			ImGui::MenuItem("Execution Context", NULL, &_state->_w.executionContext);
 
 			ImGui::SeparatorText("Misc");
@@ -913,12 +943,14 @@ void onImGuiRender() {
 	showChannels();
 	showCast();
 	showCastDetails();
+	showImageViewer();
 	showFuncList();
 	showScore();
 	showSearchBar();
 	showBreakpointList();
 	showSettings();
 	showArchive();
+	showWindows();
 	showWatchedVars();
 	_state->_logger->draw("Logger", &_state->_w.logger);
 }

@@ -43,10 +43,19 @@
 namespace MADS {
 namespace MADSV2 {
 
-
 #define popup_padding_width     3       /* Extra space on each side */
 
-Box text_box = { false };
+byte popup_colors[24] = {
+	18, 19, 20, 21, 22, 23, 24, 25,
+	25, 24,  0,  0,  0,  3,  0,  0,
+	0,   0,  0,  0,  3,  0,  0,  0
+};
+
+int popup_preserve_initiator[3] = {
+	BUFFER_PRESERVE, BUFFER_PRESERVE, BUFFER_PRESERVE
+};
+
+Box text_box;
 Box *box = &text_box;
 
 int popup_key = 0;
@@ -55,20 +64,33 @@ int popup_asking_number = false;
 
 int popup_available = false;
 
-int popup_preserve_initiator[3] = { BUFFER_PRESERVE,
-								   BUFFER_PRESERVE,
-								   BUFFER_PRESERVE };
-
-byte popup_colors[24] = { 18, 19, 20, 21, 22, 23, 24, 25,
-						 25, 24,  0,  0,  0,  3,  0,  0,
-						 0,   0,  0,  0,  3,  0,  0,  0 };
-
-BoxParam box_param = { NULL };
+BoxParam box_param;
 Popup *popup = NULL;
 word popup_default_status = POPUP_STATUS_BAR;
 
 static char *popup_savelist_string(PopupItem *item, int element);
 
+
+void init_popup() {
+	memset(&box_param, 0, sizeof(BoxParam));
+	memset(&text_box, 0, sizeof(Box));
+	box = &text_box;
+
+	popup_key = 0;
+	popup_esc_key = false;
+	popup_asking_number = false;
+	popup_available = false;
+	popup = NULL;
+	popup_default_status = POPUP_STATUS_BAR;
+
+	static const byte POPUP_COLORS[24] = {
+		18, 19, 20, 21, 22, 23, 24, 25,
+		25, 24,  0,  0,  0,  3,  0,  0,
+		0,   0,  0,  0,  3,  0,  0,  0
+	};
+	Common::copy(POPUP_COLORS, POPUP_COLORS + 24, popup_colors);
+	memset(&popup_preserve_initiator[0], BUFFER_PRESERVE, 3);
+}
 
 int popup_create(int horiz_pieces, int x, int y) {
 	int error_flag = true;
@@ -115,10 +137,12 @@ int popup_create(int horiz_pieces, int x, int y) {
 	box->text_width = (box->text_xs / box_param.font->max_x_size) << 1;
 
 	box->screen_buffer.data = NULL;
+	box->orig_buffer.data   = NULL;
 	box->depth_buffer.data  = NULL;
 
 	box->screen_saved = false;
-	box->depth_saved = false;
+	box->orig_saved   = false;
+	box->depth_saved  = false;
 
 	box->active = true;
 
@@ -207,8 +231,8 @@ void popup_add_string(const char *string) {
 
 
 void popup_write_string(const char *string) {
-	char word[80];
-	char word2[80];
+	char wordStr[80];
+	char word2Str[80];
 	const char *marker;
 	char *word_ptr;
 	int any_space;
@@ -223,7 +247,7 @@ void popup_write_string(const char *string) {
 
 	while (*marker != 0) {
 
-		word_ptr = word;
+		word_ptr = wordStr;
 		any_space = false;
 		any_hyphen = false;
 		cr = false;
@@ -278,30 +302,30 @@ void popup_write_string(const char *string) {
 
 		*word_ptr = 0;
 
-		len = strlen(word);
+		len = strlen(wordStr);
 		if (len > 0) {
-			if (word[len - 1] == 0x20) {
-				word[len - 1] = 0;
+			if (wordStr[len - 1] == 0x20) {
+				wordStr[len - 1] = 0;
 			}
 		}
 
-		word2[0] = 0;
+		word2Str[0] = 0;
 
 		if ((box->text_x > 0) && !box->dont_add_space) {
-			Common::strcat_s(word2, " ");
+			Common::strcat_s(word2Str, " ");
 		}
-		Common::strcat_s(word2, word);
+		Common::strcat_s(word2Str, wordStr);
 
 		box->dont_add_space = stop_on_hyphen;
 
-		len = strlen(word2);
-		width = font_string_width(box_param.font, word2, POPUP_SPACING);	 // - POPUP_SPACING
+		len = strlen(word2Str);
+		width = font_string_width(box_param.font, word2Str, POPUP_SPACING);	 // - POPUP_SPACING
 
 		if (((box->text_x + len) > box->text_width) || ((box->cursor_x + width) > box->text_xs)) {
 			popup_next_line();
-			popup_add_string(word);
+			popup_add_string(wordStr);
 		} else {
-			popup_add_string(word2);
+			popup_add_string(word2Str);
 		}
 		if (cr) popup_next_line();
 	}
@@ -498,19 +522,13 @@ int popup_draw(int save_screen, int depth_code) {
 	if (save_screen) {
 		matte_map_work_screen();
 
-		if (depth_code) {
-			buffer_init(&box->screen_buffer, box->xs, box->ys);
-			if (box->screen_buffer.data != NULL)
-				buffer_rect_copy_2(scr_orig, box->screen_buffer,
-					box->x + picture_map.pan_offset_x,
-					box->y + picture_map.pan_offset_y,
-					0, 0, box->xs, box->ys);
-		} else {
-			buffer_init(&box->screen_buffer, box->xs, box->ys);
-			if (box->screen_buffer.data != NULL)
-				buffer_rect_copy_2(scr_main, box->screen_buffer,
-					box->x, box->y, 0, 0, box->xs, box->ys);
-		}
+		// Always save from scr_main — it spans both the game area and the
+		// interface strip, so dialogs that overlap the interface are handled
+		// without any buffer splitting.
+		buffer_init(&box->screen_buffer, box->xs, box->ys);
+		if (box->screen_buffer.data != NULL)
+			buffer_rect_copy_2(scr_main, box->screen_buffer,
+				box->x, box->y, 0, 0, box->xs, box->ys);
 
 		box->screen_saved = (box->screen_buffer.data != NULL);
 
@@ -528,14 +546,36 @@ int popup_draw(int save_screen, int depth_code) {
 			box->depth_x = box->depth_x >> 1;
 			box->depth_xs = box->depth_xs >> 1;
 
-			buffer_init(&box->depth_buffer, box->depth_xs, box->ys);
-			if (box->depth_buffer.data != NULL)
-				buffer_rect_copy_2(scr_depth, box->depth_buffer,
-					box->depth_x,
-					box->y + picture_map.pan_offset_y,
-					0, 0, box->depth_xs, box->ys);
+			// Clip to scr_depth bounds — the interface strip has no depth data.
+			int depth_ys = MAX(0, MIN(box->ys, scr_depth.y - (box->y + picture_map.pan_offset_y)));
+
+			if (depth_ys > 0) {
+				buffer_init(&box->depth_buffer, box->depth_xs, depth_ys);
+				if (box->depth_buffer.data != NULL)
+					buffer_rect_copy_2(scr_depth, box->depth_buffer,
+						box->depth_x,
+						box->y + picture_map.pan_offset_y,
+						0, 0, box->depth_xs, depth_ys);
+			}
 
 			box->depth_saved = (box->depth_buffer.data != NULL);
+
+			// Also save the corresponding scr_orig region so that matte_frame()'s
+			// IMAGE_REFRESH path (which blits scr_orig → scr_work → scr_main) does
+			// not re-introduce popup pixels into the game area after we close.
+			// Clip to scr_orig.y — the interface strip has no orig data.
+			int orig_ys = MAX(0, MIN(box->ys, scr_orig.y - (box->y + picture_map.pan_offset_y)));
+
+			if (orig_ys > 0) {
+				buffer_init(&box->orig_buffer, box->xs, orig_ys);
+				if (box->orig_buffer.data != NULL)
+					buffer_rect_copy_2(scr_orig, box->orig_buffer,
+						box->x + picture_map.pan_offset_x,
+						box->y + picture_map.pan_offset_y,
+						0, 0, box->xs, orig_ys);
+			}
+
+			box->orig_saved = (box->orig_buffer.data != NULL);
 		}
 	}
 
@@ -729,21 +769,36 @@ void popup_destroy(void) {
 	int xs, ys;
 
 	if (box->active && box->screen_saved) {
+		// Always restore the screen from scr_main — it spans both the game
+		// area and the interface strip, so no buffer split is required.
+		matte_map_work_screen();
+		if (box->screen_buffer.data != NULL) {
+			buffer_rect_copy_2(box->screen_buffer, scr_main,
+				0, 0, box->x, box->y, box->xs, box->ys);
+			buffer_free(&box->screen_buffer);
+		}
+
 		if (box->depth_saved) {
-			if (box->screen_buffer.data != NULL) {
-				buffer_rect_copy_2(box->screen_buffer, scr_orig,
-					0, 0,
-					box->x + picture_map.pan_offset_x,
-					box->y + picture_map.pan_offset_y,
-					box->xs, box->ys);
-				buffer_free(&box->screen_buffer);
-			}
 			if (box->depth_buffer.data != NULL) {
 				buffer_rect_copy_2(box->depth_buffer, scr_depth,
 					0, 0,
 					box->depth_x, box->y + picture_map.pan_offset_y,
-					box->depth_xs, box->ys);
+					box->depth_xs, box->depth_buffer.y);
 				buffer_free(&box->depth_buffer);
+			}
+
+			// Restore scr_orig before matte_refresh_work() so that the next
+			// matte_frame() IMAGE_REFRESH blit doesn't propagate popup pixels
+			// from scr_orig back into the game area of scr_main.
+			if (box->orig_saved) {
+				if (box->orig_buffer.data != NULL) {
+					buffer_rect_copy_2(box->orig_buffer, scr_orig,
+						0, 0,
+						box->x + picture_map.pan_offset_x,
+						box->y + picture_map.pan_offset_y,
+						box->orig_buffer.x, box->orig_buffer.y);
+					buffer_free(&box->orig_buffer);
+				}
 			}
 
 			matte_guard_depth_0 = false;
@@ -765,16 +820,21 @@ void popup_destroy(void) {
 				mouse_show();
 
 				matte_disable_screen_update = false;
-			}
+			} else {
+				matte_map_work_screen();
 
+				x = box->x;
+				y = box->y;
+				xs = box->xs;
+				ys = box->ys;
+
+				buffer_conform(&scr_main, &x, &y, &xs, &ys);
+
+				mouse_hide();
+				video_update(&scr_main, x, y, x, y, xs, ys);
+				mouse_show();
+			}
 		} else {
-			matte_map_work_screen();
-			if (box->screen_buffer.data != NULL) {
-				buffer_rect_copy_2(box->screen_buffer, scr_main,
-					0, 0, box->x, box->y, box->xs, box->ys);
-				buffer_free(&box->screen_buffer);
-			}
-
 			matte_map_work_screen();
 
 			x = box->x;
@@ -785,9 +845,7 @@ void popup_destroy(void) {
 			buffer_conform(&scr_main, &x, &y, &xs, &ys);
 
 			mouse_hide();
-			video_update(&scr_main, x, y,
-				x, y,
-				xs, ys);
+			video_update(&scr_main, x, y, x, y, xs, ys);
 			mouse_show();
 		}
 	}
@@ -799,7 +857,8 @@ void popup_destroy(void) {
 	}
 
 	box->screen_saved = false;
-	box->depth_saved = false;
+	box->orig_saved   = false;
+	box->depth_saved  = false;
 	box->active = false;
 }
 
@@ -866,7 +925,7 @@ done:
 
 
 void popup_update_ask(char *string, int maxlen) {
-	int x1, y1, x2, x3, xs, ys, xs2, xs3;
+	int x1, y1, x2, x3, xs, ys, xs2;
 
 	xs = box->text_xs;
 	ys = (box_param.font->max_y_size + 1);
@@ -886,7 +945,6 @@ void popup_update_ask(char *string, int maxlen) {
 	xs2 = (font_string_width(box_param.font, "W", box_param.font_spacing) * maxlen) + 4;
 
 	x3 = x2 + 2;
-	xs3 = font_string_width(box_param.font, string, box_param.font_spacing) + 2;
 
 	buffer_rect_fill(scr_main, x2 - 1, y1 - 3, xs2, 1, 0);
 	buffer_rect_fill(scr_main, x2 - 1, y1 + ys, xs2, 1, 0);
@@ -1321,10 +1379,7 @@ Popup *popup_dialog_create(void *memory, long heap_size, int max_items) {
 	if ((heap_size == 0) && (memory == NULL)) heap_size = 2048;
 	if (!max_items) max_items = 10;
 
-	if (heap_size < (sizeof(Popup) + 400)) goto done;
-
 	if (memory == NULL) {
-
 		status |= POPUP_STATUS_DYNAMIC;
 		block = (byte *)mem_get_name(heap_size, "$popheap");
 		if (block == NULL) goto done;
@@ -1333,9 +1388,7 @@ Popup *popup_dialog_create(void *memory, long heap_size, int max_items) {
 		memory = block;
 
 	} else {
-
 		dlg = (Popup *)memory;
-
 	}
 
 	heap_declare(&dlg->heap, MODULE_POPUP, (char *)memory + sizeof(Popup),
@@ -1857,7 +1910,6 @@ static int popup_button_x_size(PopupItem *item) {
 
 
 static int popup_button_y_size(PopupItem *item) {
-	item = NULL;  // delete if this routine is to be used
 	return (box_param.font->max_y_size + 4 + 2);
 }
 
@@ -2056,7 +2108,6 @@ static int popup_menu_x_size(PopupItem *item) {
 
 
 static int popup_menu_y_size(PopupItem *item) {
-	item = NULL;  // delete if this routine is to be used
 	return(box_param.menu->index[0].ys);
 }
 
@@ -2414,7 +2465,7 @@ static void popup_savelist_element_draw(PopupItem *item, int element) {
 		Common::strcpy_s(temp_buf, item->buffer->data);
 	} else {
 		text_locator = popup_savelist_string(item, element);
-		Common::strcpy_s(temp_buf, text_locator);
+		Common::strcpy_s(temp_buf, text_locator ? text_locator : "");
 		if (!strlen(temp_buf) && (item->prompt != NULL) && (element != list->picked_element)) {
 			Common::strcpy_s(temp_buf, item->prompt);
 		}
@@ -2662,7 +2713,6 @@ static int popup_savelist_mouse(PopupItem *item) {
 	bool in_up_arrow;
 	bool in_down_arrow;
 	bool in_main_box;
-	bool in_main_range;
 	int update_sign;
 	int force_update;
 	int old_status;
@@ -2742,8 +2792,7 @@ static int popup_savelist_mouse(PopupItem *item) {
 			}
 
 		} else {
-
-			if (in_main_range) {
+			if (in_main_box) {
 				y = mouse_y - (item->y + 2);
 				relative = y / list->list_ys;
 				if (relative < 0) relative = 0;
@@ -3184,15 +3233,9 @@ PopupItem *popup_sprite(SeriesPtr series, int sprite, int x, int y) {
 
 
 
-PopupItem *popup_savelist(const char *data,
-	const char *empty_string,
-	int elements,
-	int element_offset,
-	int element_max_length,
-	int pixel_width,
-	int rows,
-	int accept_input,
-	int default_element) {
+PopupItem *popup_savelist(char *data, char *empty_string,
+		int elements, int element_offset, int element_max_length,
+		int pixel_width, int rows, int accept_input, int default_element) {
 	PopupItem *item;
 	PopupList *list;
 	PopupBuffer *buffer;
@@ -3211,8 +3254,8 @@ PopupItem *popup_savelist(const char *data,
 
 	item->list = list = list_allocate();
 
-	item->prompt = (char *)empty_string;
-	list->data = (char *)data;
+	item->prompt = empty_string;
+	list->data = data;
 
 	list->elements = elements;
 	list->element_offset = element_offset;

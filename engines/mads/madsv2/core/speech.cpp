@@ -68,7 +68,7 @@ void speech_shutdown() {
 	speech_system_active = false;
 }
 
-Audio::AudioStream *speech_load(const char *resName, int id, bool useMainMemory) {
+Audio::AudioStream *speech_load(const char *resName, int id, bool) {
 	Common::MemoryReadStream *memStream;
 	Audio::AudioStream *audioStream = nullptr;
 	uint filePos;
@@ -76,9 +76,6 @@ Audio::AudioStream *speech_load(const char *resName, int id, bool useMainMemory)
 	SpeechDir speechDir;
 	byte *load_buf = nullptr;
 	int packing_flag;
-
-	// Always use main memory in ScummVM
-	useMainMemory = true;
 
 	// Open the sound resource for access
 	Common::SeekableReadStream *handle = env_open(resName);
@@ -179,6 +176,18 @@ void global_speech_go(int id) {
 			global_speech(id);
 		}
 	}
+}
+
+void init_speech() {
+	speech_system_active = false;
+	speech_on = false;
+	Common::strlcpy(global_speech_resource, "*PHAN009.DSR", sizeof(global_speech_resource));
+	global_speech_ready = -1;
+	speech_stream = nullptr;
+}
+
+int speech_status() {
+	return g_engine->isSpeechPlaying() ? 1 : 0;
 }
 
 } // namespace MADSV2

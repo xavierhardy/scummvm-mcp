@@ -28,8 +28,6 @@
 
 namespace Colony {
 
-namespace {
-
 const uint32 kSaveVersion = 1;
 const uint32 kMaxSaveObjects = 4096;
 const uint32 kMaxSavePatches = 100;
@@ -274,12 +272,15 @@ bool findInvalidActiveObjectSlot(const Common::Array<Thing> &objects, uint32 &in
 	return false;
 }
 
-} // anonymous namespace
-
 bool ColonyEngine::hasFeature(EngineFeature f) const {
 	return f == kSupportsReturnToLauncher ||
 		f == kSupportsLoadingDuringRuntime ||
-		f == kSupportsSavingDuringRuntime;
+		f == kSupportsSavingDuringRuntime ||
+		// Skip the OpenGL backend's FBO compositing pass: render directly
+		// to the default framebuffer (Freescape's pattern, freescape.cpp:
+		// 1170). Side effect: the user-facing screenshot hotkey now reads
+		// the correct buffer because there's no FBO bound between frames.
+		f == kSupportsArbitraryResolutions;
 }
 
 bool ColonyEngine::canSaveGameStateCurrently(Common::U32String *msg) {
@@ -576,6 +577,8 @@ Common::Error ColonyEngine::loadGameStream(Common::SeekableReadStream *stream) {
 	_lastWarningChimeTime = 0;
 	_battledx = _width / 59;
 	updateViewportLayout();
+	if (_gameMode == kModeBattle)
+		normalizeBattlePlayerPosition();
 
 	return Common::kNoError;
 }

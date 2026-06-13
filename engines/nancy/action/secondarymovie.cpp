@@ -56,6 +56,8 @@ void PlaySecondaryMovie::readData(Common::SeekableReadStream &stream) {
 	ser.syncAsUint16LE(_videoType, kGameTypeNancy7);
 	ser.skip(2, kGameTypeVampire, kGameTypeNancy9); // videoPlaySource
 	ser.syncAsUint16LE(_videoFormat);
+	if (g_nancy->getGameType() >= kGameTypeNancy10)
+		_videoFormat = kLargeVideoFormat;
 	ser.skip(4, kGameTypeVampire, kGameTypeVampire); // paletteStart, paletteSize
 	ser.skip(2, kGameTypeVampire, kGameTypeNancy9);  // hasBitmapOverlaySurface
 	ser.skip(2, kGameTypeVampire, kGameTypeNancy9);  // VIDEO_STOP_RENDERING, VIDEO_CONTINUE_RENDERING
@@ -104,11 +106,10 @@ void PlaySecondaryMovie::readData(Common::SeekableReadStream &stream) {
 
 void PlaySecondaryMovie::init() {
 	if (!_decoder) {
-		if (_videoType == kVideoPlaytypeAVF) {
+		if (_videoType == kVideoPlaytypeAVF)
 			_decoder.reset(new AVFDecoder());
-		} else {
+		else
 			_decoder.reset(new Video::BinkDecoder());
-		}
 	}
 
 	if (!_decoder->isVideoLoaded()) {
@@ -137,6 +138,13 @@ void PlaySecondaryMovie::init() {
 }
 
 void PlaySecondaryMovie::onPause(bool pause) {
+	if (!_decoder) {
+		if (_videoType == kVideoPlaytypeAVF)
+			_decoder.reset(new AVFDecoder());
+		else
+			_decoder.reset(new Video::BinkDecoder());
+	}
+
 	_decoder->pauseVideo(pause);
 	RenderActionRecord::onPause(pause);
 }
@@ -250,11 +258,6 @@ void PlaySecondaryMovie::execute() {
 		_triggerFlags.execute();
 		if (_videoSceneChange == kMovieSceneChange) {
 			NancySceneState.changeScene(_sceneChange);
-		} else {
-			// Not changing the scene so enable the mouse now
-			if (_playerCursorAllowed == kNoPlayerCursorAllowed) {
-				g_nancy->setMouseEnabled(true);
-			}
 		}
 
 		NancySceneState.setActiveMovie(nullptr);

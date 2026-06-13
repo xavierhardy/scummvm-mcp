@@ -20,9 +20,11 @@
  */
 
 #include "common/file.h"
+#include "common/config-manager.h"
 
 #include "freescape/freescape.h"
 #include "freescape/games/driller/driller.h"
+#include "freescape/games/driller/opl.music.h"
 #include "freescape/language/8bitDetokeniser.h"
 
 namespace Freescape {
@@ -285,6 +287,9 @@ void DrillerEngine::loadAssetsDOSFullGame() {
 		_indicators[0]->convertToInPlace(_gfx->_texturePixelFormat);
 		_indicators[1]->convertToInPlace(_gfx->_texturePixelFormat);
 	}
+
+	if (ConfMan.getBool("opl_music"))
+		_playerMusic = new DrillerOPLMusicPlayer();
 }
 
 void DrillerEngine::loadAssetsDOSDemo() {
@@ -437,7 +442,7 @@ void DrillerEngine::drawDOSUI(Graphics::Surface *surface) {
 	uint32 other = _gfx->_texturePixelFormat.ARGBToColor(0xFF, r, g, b);
 
 	Common::Point compassYawPos = _renderMode == Common::kRenderHercG ? Common::Point(214, 264) : Common::Point(87, 156);
-	drawCompass(surface, compassYawPos.x, compassYawPos.y, _yaw - 30, 10, 75, other);
+	drawCompass(surface, compassYawPos.x, compassYawPos.y, compassYaw() - 30, 10, 75, other);
 	Common::Point compassPitchPos = _renderMode == Common::kRenderHercG ? Common::Point(502, 264) : Common::Point(230, 156);
 	drawCompass(surface, compassPitchPos.x, compassPitchPos.y, _pitch - 30, 10, 60, other);
 }

@@ -48,11 +48,11 @@ void *timer_low_routine;
 
 
 void timer_install() {
-	// No implementation in ScummVM
+	timer_activate_low_priority(nullptr);
 }
 
 void timer_remove() {
-	// No implementation in ScummVM
+	timer_activate_low_priority(nullptr);
 }
 
 long timer_read() {
@@ -89,12 +89,25 @@ int timer_get_copy_protect() {
 	return timer_copy_protect_out;
 }
 
-void timer_activate_low_priority(void (*(routine))()) {
-	warning("TODO: timer_activate_low_priority");
+void timer_activate_low_priority(void (*routine)()) {
+	g_engine->setTimerFunction(routine);
 }
 
 byte *timer_get_interrupt_stack() {
 	return _interrupt_stack;
+}
+
+void init_timer() {
+	_timer_clock = 0;
+	timer_service_active = false;
+	timer_sound_on = 0;
+	timer_noise_on = 0;
+	timer_copy_protect_in = 0;
+	timer_copy_protect_out = 0;
+	timer_low_priority = 0;
+	timer_low_semaphore = 0;
+	timer_low_stacking = 0;
+	timer_low_deferred = 0;
 }
 
 } // namespace MADSV2

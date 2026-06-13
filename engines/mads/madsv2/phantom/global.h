@@ -22,6 +22,7 @@
 #ifndef MADS_PHANTOM_GLOBAL_H
 #define MADS_PHANTOM_GLOBAL_H
 
+#include "common/serializer.h"
 #include "mads/madsv2/core/vocabh.h"
 
 namespace MADS {
@@ -276,6 +277,7 @@ enum {
 
 
 extern void global_section_constructor();
+extern void sync_room(Common::Serializer &s);
 
 } // namespace Phantom
 } // namespace MADSV2

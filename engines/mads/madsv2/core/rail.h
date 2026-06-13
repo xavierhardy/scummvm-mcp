@@ -62,5 +62,7 @@ extern void rail_disconnect_node(int id);
  */
 extern void rail_check_path(int allow_one_illegal);
 
+extern void init_rail();
+
 } // namespace MADSV2
 } // namespace MADS

@@ -40,6 +40,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 static void handle_animation_char() {
 	int random = 0;
 	int char_reset_frame;
@@ -573,6 +575,24 @@ void room_108_preload() {
 
 	vocab_make_active(words_gentleman);
 	vocab_make_active(words_Charles);
+}
+
+
+void room_108_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->anim_0_running,
+		local->char_action,
+		local->char_frame,
+		local->char_talk_count,
+		local->char_shut_up_count,
+		local->dynamic_char,
+		local->prev_shut_up_frame,
+		local->max_talk_count,
+		local->did_raise_hand,
+		local->converse_counter);
 }
 
 } // namespace Rooms

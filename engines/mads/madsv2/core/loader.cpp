@@ -67,7 +67,6 @@ int loader_open(LoadHandle handle, const char *filename, const char *options, in
 	int reading;
 	int count;
 	int search_himem;
-	long base_position;
 
 	strncpy(loader_last, filename, 13);
 
@@ -116,12 +115,8 @@ int loader_open(LoadHandle handle, const char *filename, const char *options, in
 		handle->pack_list_marker = 0;
 
 		if (reading) {
-			base_position = handle->handle->pos();
-
 			if (!handle->pack.load(handle->handle))
 				goto done;
-
-			base_position = handle->handle->pos();
 
 			handle->decompress_size = 0;
 			for (count = 0; count < (int)handle->pack.num_records; count++) {
@@ -191,7 +186,6 @@ int loader_close(LoadHandle handle) {
 
 long loader_read(void *target, long record_size, long record_count, LoadHandle handle) {
 	long total_size;
-	long total_left;
 	long result;
 	long file_position;
 	long compressed_size;
@@ -212,7 +206,6 @@ long loader_read(void *target, long record_size, long record_count, LoadHandle h
 		return 0;
 
 	total_size = record_size * record_count;
-	total_left = total_size;
 
 	marker = handle->pack_list_marker++;
 

@@ -27,6 +27,7 @@
 static const PlainGameDescriptor AccessGames[] = {
 	{"amazon", "Amazon: Guardians of Eden"},
 	{"martian", "Martian Memorandum"},
+	{"noctropolis", "Noctropolis"},
 	{nullptr, nullptr}
 };
 
@@ -43,6 +44,9 @@ static const DebugChannelDef debugFlagList[] = {
 class AccessMetaEngineDetection : public AdvancedMetaEngineDetection<Access::AccessGameDescription> {
 public:
 	AccessMetaEngineDetection() : AdvancedMetaEngineDetection(Access::gameDescriptions, AccessGames) {
+		static const char *const DIRECTORY_GLOBS[3] = { "dark", "demo", 0 };
+		_directoryGlobs = DIRECTORY_GLOBS;
+		_flags = kADFlagMatchFullPaths;
 		_maxScanDepth = 3;
 	}
 

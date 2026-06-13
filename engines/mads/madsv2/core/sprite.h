@@ -388,6 +388,8 @@ void dont_frag_the_palette();
 void go_ahead_and_frag_the_palette();
 void sprite_free(SeriesPtr *series, int free_memory);
 
+extern void init_sprite();
+
 } // namespace MADSV2
 } // namespace MADS
 

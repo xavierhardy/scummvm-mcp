@@ -19,7 +19,6 @@
  *
  */
 
-#include "common/config-manager.h"
 #include "common/debug.h"
 #include "mads/madsv2/engine.h"
 #include "mads/madsv2/core/game.h"
@@ -64,9 +63,9 @@
 #include "mads/madsv2/core/camera.h"
 #include "mads/madsv2/core/quote.h"
 #include "mads/madsv2/core/text.h"
-#include "mads/madsv2/core/extra.h"
 #include "mads/madsv2/core/imath.h"
 #include "mads/madsv2/core/screen.h"
+#include "mads/madsv2/forest/extra.h"
 
 namespace MADS {
 namespace MADSV2 {
@@ -84,6 +83,7 @@ char config_file_name[20];
 int win_status = WIN_NOTHING;
 
 int art_hags_are_on_hd;
+int savegame_slot = -1;
 byte game_restore_flag = false;         /* Flag if restoring game */
 byte game_autosaved = false;         /* Flag if autosaved      */
 byte game_mouse_cursor_fix = false;     /* Use special cursor fix */
@@ -457,36 +457,6 @@ void problem() {
 	debug("\nA slight problem . . .\n\n");
 }
 
-static void show_walk() {
-	int y, x;
-	int xx, yy;
-	int ox, oy;
-	byte *scan;
-	int walk;
-
-	for (y = 0; y < display_y; y++) {
-		ox = picture_map.pan_base_x;
-		oy = y + picture_map.pan_base_y;
-		scan = buffer_pointer(&scr_orig, ox, oy);
-		for (x = 0; x < video_x; x++) {
-			xx = x + picture_view_x;
-			yy = y + picture_view_y;
-			walk = attr_walk(&scr_walk, xx, yy);
-
-			if (walk) {
-				*scan = 2;
-			} else if (*scan == 2) {
-				*scan = 0;
-			}
-
-			scan++;
-		}
-	}
-
-	matte_refresh_work();
-}
-
-
 static void game_fix_save_name() {
 	char *mark;
 
@@ -508,34 +478,16 @@ void game_save_name(int id) {
 
 
 static void game_player_status() {
-	int image, flags, count;
 	char work_buf[80];
 	char temp_buf_3[80];
 
-	image = -1;
-	flags = -9;
-	for (count = 0; count < (int)image_marker; count++) {
-		if (image_list[count].segment_id == KERNEL_SEGMENT_PLAYER) {
-			if (image_list[count].flags >= flags) {
-				image = count;
-				flags = image_list[count].flags;
-			}
-		}
-	}
 	Common::strcpy_s(temp_buf_3, "Room: ");
 	Common::strcat_s(temp_buf_3, mads_itoa(room_id, work_buf, 10));
 	Common::strcat_s(temp_buf_3, " (From: ");
 	Common::strcat_s(temp_buf_3, mads_itoa(previous_room, work_buf, 10));
 	Common::strcat_s(temp_buf_3, ")");
 
-	popup_alert(20, "PLAYER GRAPHICS STATUS",
-		"  ",
-		temp_buf_3,
-		// temp_buf,
-		// temp_buf_2,
-		// temp_buf_4,
-		// temp_buf_5,
-		NULL);
+	popup_alert(20, "PLAYER GRAPHICS STATUS", "  ", temp_buf_3, NULL);
 }
 
 
@@ -1089,7 +1041,13 @@ int game_parse_keystroke(int mykey) {
 
 	case f5_key:
 		if (room_id != 199 && section_id != 9) {
-			kernel.activate_menu = GAME_OPTIONS_MENU;
+			kernel.activate_menu = GAME_SAVE_MENU;
+		}
+		break;
+
+	case f7_key:
+		if (room_id != 199 && section_id != 9) {
+			kernel.activate_menu = GAME_RESTORE_MENU;
 		}
 		break;
 
@@ -1257,11 +1215,11 @@ void game_control() {
 
 	conv_system_init();
 
-	if (ConfMan.hasKey("save_slot")) {
+	if (savegame_slot != -1) {
 		// Flag to do a savegame load
 		game_restore_flag = 1;
 
-	} else {
+	} else if (!game_restore_flag) {
 		result = main_copy_verify();
 		if (result == COPY_FAIL) {
 			game.going = false;
@@ -1287,7 +1245,8 @@ void game_control() {
 		// Get difficulty level if new game
 		if (!kernel.teleported_in && (game.difficulty == -1)) {
 			// Difficulty menu
-			if (g_engine->getGameID() == GType_Phantom)
+			int gameId = g_engine->getGameID();
+			if (gameId == GType_Phantom || gameId == GType_Dragonsphere)
 				kernel.activate_menu = GAME_DIFFICULTY_MENU;
 			game_exec_function(game_menu_routine);
 			if (!game.going)
@@ -1320,8 +1279,8 @@ void game_control() {
 				force_chain = true;
 			}
 		} else {
-			// Savegame load from GMM
-			g_engine->loadGameState(ConfMan.getInt("save_slot"));
+			// Savegame load from GMM or Resume from main menu
+			g_engine->loadGameState(savegame_slot);
 		}
 	}
 
@@ -1549,7 +1508,7 @@ void game_control() {
 				buffer_rect_fill(scr_main, 0, viewing_at_y + scr_work.y, video_x, video_y, 0);
 			}
 
-			// pl conv_restore_running = -1;
+			conv_restore_running = -1;
 			player.target_x = player.x;
 			player.target_y = player.y;
 			player.target_facing = player.turn_to_facing = player.facing;
@@ -1720,55 +1679,10 @@ static void game_system_maintenance() {
 	}
 }
 
-
-void do_interface_for_ouaf() {
-	if (mouse_y > 156 &&
-		mouse_stop_stroke &&
-		player.commands_allowed &&
-		/* global[4] == -1 && */
-		!kernel.trigger &&
-		/* player.command_ready && */
-		inter_input_mode == INTER_LIMITED_SENTENCES &&
-		!global[2]  /* inventory_is_displayed */
-		/* pl conv_control.running < 0 */) {
-		if (room_id == 199) {  // Taranjeet's Journal
-
-			leave_journal();
-
-		} else if (mouse_x < 64) {
-			display_journal();
-		} else if (mouse_x < 139) {
-			display_inventory();
-		} else if (mouse_x < 195) {
-		} else if (mouse_x < 250) {
-			solve_me_selected();
-		} else {
-			door_selected();
-		}
-	}
-
-
-	if (kernel.trigger == 40) {
-		display_inventory();
-	}
-}
-
-
 /**
  * Calls, in proper order, all daemon code for this framing round.
  */
 static void game_daemon_code() {
-#if 0
-	global[4] = -1;  // turn off global[player_selected_object]
-
-	digi_read_another_chunk();
-
-	if (global[9]) midi_loop();  // please loop the damn music
-
-	if (section_id != 9) {
-		do_interface_for_ouaf();
-	}
-#endif
 	kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
 
 	game_exec_function(room_daemon_code_pointer);
@@ -1975,14 +1889,14 @@ static void game_main_loop() {
 	int temp_message_4 = 0;
 	long one_clock, two_clock;
 	static char temp_buf[20];
+
+#if 0
 	static char temp_buf_2[20];
 	static char temp_buf_3[20];
 	static char temp_buf_4[20];
-
-#if 0
-	// these 3 are for the background efx
 	int yy;
 	long dif;
+
 	if (global[10]) {  // please play the damn targets
 
 		// this is for the background sound efx
@@ -2233,14 +2147,21 @@ static void game_main_loop() {
 	if ((inter_awaiting == AWAITING_COMMAND) && !mouse_button) {
 		if (inter_spot_class == STROKE_INTERFACE) {
 			id = inter_spot_index - spot_base[STROKE_INTERFACE - 1];
-			if (id < room_num_spots) {
-				id = room_num_spots - (id + 1);
-				cursor_id = room_spots[id].cursor_number;
-			} else {
-				id -= room_num_spots;
-				cursor_id = kernel_dynamic_hot[id].cursor;
+
+			// WORKAROUND: In ROTP entering underground from pillar
+			if (id >= 0) {
+				if (id < room_num_spots) {
+					id = room_num_spots - (id + 1);
+					cursor_id = room_spots[id].cursor_number;
+				} else {
+					id -= room_num_spots;
+
+					// WORKAROUND: Dragonsphere globe cutscenes
+					if (id < kernel_num_dynamic)
+						cursor_id = kernel_dynamic_hot[id].cursor;
+				}
+				if (!cursor_id) cursor_id = 1;
 			}
-			if (!cursor_id) cursor_id = 1;
 		}
 	}
 	if (!player.commands_allowed && ((conv_control.running < 0) || conv_control.status == CONV_STATUS_HOLDING))
@@ -2396,8 +2317,10 @@ static void game_read_save_directory() {
 	memset(game_save_directory, 0, GAME_MAX_SAVE_SLOTS * (GAME_MAX_SAVE_LENGTH + 1));
 
 	for (auto it = list.begin(); it != list.end(); ++it) {
-		char *slot = game_save_directory + it->getSaveSlot() * (GAME_MAX_SAVE_LENGTH + 1);
-		Common::strcpy_s(slot, GAME_MAX_SAVE_LENGTH + 1, it->getDescription().c_str());
+		if (it->getSaveSlot() > 0) {
+			char *slot = game_save_directory + (it->getSaveSlot() - 1) * (GAME_MAX_SAVE_LENGTH + 1);
+			Common::strcpy_s(slot, GAME_MAX_SAVE_LENGTH + 1, it->getDescription().c_str());
+		}
 	}
 }
 
@@ -2743,7 +2666,6 @@ static void game_conversation() {
 	int my_status;
 	char temp_buf[80];
 	Conv *my_conv;
-	ConvData *my_data;
 
 	if (conv_control.running != previous_running) {
 		game_debugger_reset();
@@ -2761,7 +2683,6 @@ static void game_conversation() {
 	}
 
 	my_conv = conv[conv_control.index];
-	my_data = conv_data[conv_control.index];
 
 	temp_buf[0] = 0;
 	if (conv_control.status == CONV_STATUS_HOLDING) {
@@ -3050,6 +2971,74 @@ int main_normal_key(int mykey) {
 
 int main_copy_verify() {
 	return g_engine->main_copy_verify();
+}
+
+void init_game() {
+	win_status = WIN_NOTHING;
+	game_restore_flag = false;
+	savegame_slot = -1;
+	game_autosaved = false;
+	game_mouse_cursor_fix = false;
+	abort_value = 0;
+	abort_clock = 0;
+	memset(chain_line, 0, sizeof(chain_line));
+	chain_flag = false;
+	force_chain = false;
+	key_abort_level = 0;
+	report_version = false;
+	game_menu_routine = NULL;
+	game_menu_init = NULL;
+	game_menu_exit = NULL;
+	game_emergency_save = NULL;
+	debugger = false;
+	debugger_state = DEBUGGER_MAIN;
+	debugger_matte_before = false;
+	debugger_memory_skip = 0;
+	debugger_memory_all = false;
+	debugger_memory_keywait = false;
+	debugger_reset = NULL;
+	debugger_update = NULL;
+	memset(int_sprite, 0, sizeof(int_sprite));
+	selected_intro = false;
+	correction_clock = 0;
+	memset(save_game_key, 0, sizeof(save_game_key));
+	memset(restart_game_key, 0, sizeof(restart_game_key));
+	memset(save_game_buf, 0, sizeof(save_game_buf));
+	last_keypressed = -1;
+	section_preload_code_pointer = NULL;
+	section_init_code_pointer = NULL;
+	section_room_constructor = NULL;
+	section_daemon_code_pointer = NULL;
+	section_pre_parser_code_pointer = NULL;
+	section_parser_code_pointer = NULL;
+	section_error_code_pointer = NULL;
+	section_music_reset_pointer = NULL;
+	room_preload_code_pointer = NULL;
+	room_init_code_pointer = NULL;
+	room_daemon_code_pointer = NULL;
+	room_pre_parser_code_pointer = NULL;
+	room_parser_code_pointer = NULL;
+	room_error_code_pointer = NULL;
+	room_shutdown_code_pointer = NULL;
+	game_any_emergency = false;
+	game_keystroke = 0;
+	game_any_keystroke = 0;
+	lets_get_a_move_on_anim = true;
+	noise_clock = 0;
+	noise_timer = 0;
+	noise_length = -1;
+	move_your_butt_enabled = 1;
+	move_your_butt_clock = 0;
+	move_your_butt_timer = 0;
+	move_your_butt_anim_handle = -1;
+	move_your_butt_anim_frame = -1;
+	last_bird_sound = (byte)-1;
+	Common::strcpy_s(game_save_file, "SAVES.DIR");
+	game_save_directory = NULL;
+	game_preserve_handle = 0;
+	debugger_previous = DEBUGGER_NONE;
+	debugger_watch = 0;
+	memset(debugger_watch_index, 0, sizeof(debugger_watch_index));
 }
 
 } // namespace MADSV2

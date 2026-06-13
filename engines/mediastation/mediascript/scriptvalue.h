@@ -45,7 +45,9 @@ public:
 	void setToFloat(int i);
 	void setToFloat(double d);
 	double asFloat() const;
-	int asIntFromFloat() const;
+	// Some transitions expect either a float or a time depending on engine version.
+	// To keep things simple, we have a method to try both.
+	double asFloatOrTime() const;
 
 	void setToBool(bool b);
 	bool asBool() const;

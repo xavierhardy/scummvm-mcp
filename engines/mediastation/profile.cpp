@@ -74,11 +74,12 @@ void Profile::readSection(Common::File &file, void (Profile::*sectionParserMetho
 	}
 }
 
-void Profile::load(const Common::Path &filename) {
+void Profile::load() {
+	const Common::Path FILENAME = "PROFILE._ST";
 	Common::File file;
-	if (!file.open(filename)) {
+	if (!file.open(FILENAME)) {
 		debugC(5, kDebugLoading, "%s: Could not open profile %s. Entity names will not be available.",
-			__func__, filename.toString().c_str());
+			__func__, FILENAME.toString().c_str());
 		return;
 	}
 	parseVersionInfo(file.readLine());
@@ -213,7 +214,7 @@ void Profile::parseScriptConstantInfo(const Common::String &line) {
 Common::String Profile::formatActorName(uint actorId, bool attemptToGetType) {
 	// If requested, try to get the actor type by looking up the loaded actor
 	if (attemptToGetType) {
-		Actor *actor = g_engine->getActorById(actorId);
+		Actor *actor = g_engine->getImtGod()->getActorById(actorId);
 		if (actor != nullptr) {
 			return formatActorName(actor);
 		}
@@ -257,7 +258,7 @@ Common::String Profile::formatFunctionName(uint functionId) {
 		formattedName = Common::String::format("%s (%d)", functionName.c_str(), functionId);
 	} else {
 		// This might be a built-in function, in which case we can try to get the built-in name.
-		formattedName = Common::String::format("%s (%d)", builtInFunctionToStr(static_cast<BuiltInFunction>(functionId)), functionId);
+		formattedName = Common::String::format("%s (%d)", builtInFunctionToStr(functionId), functionId);
 	}
 	return formattedName;
 }

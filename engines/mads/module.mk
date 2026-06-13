@@ -1,6 +1,8 @@
 MODULE := engines/mads
 
 MODULE_OBJS := \
+	core/mps_installer.o \
+	core/sound_manager.o \
 	nebular/nebular.o \
 	nebular/debugger.o \
 	nebular/dialogs_nebular.o \
@@ -17,52 +19,48 @@ MODULE_OBJS := \
 	nebular/nebular_scenes6.o \
 	nebular/nebular_scenes7.o \
 	nebular/nebular_scenes8.o \
-	core/action.o \
-	core/animation.o \
-	core/assets.o \
-	core/audio.o \
-	core/camera.o \
-	core/compression.o \
-	core/conversations.o \
-	core/dialogs.o \
-	core/events.o \
-	core/font.o \
-	core/game.o \
-	core/game_data.o \
-	core/globals.o \
-	core/hag.o \
-	core/hotspots.o \
-	core/inventory.o \
-	core/menu_views.o \
-	core/messages.o \
-	core/msurface.o \
-	core/mps_installer.o \
-	core/palette.o \
-	core/player.o \
-	core/rails.o \
-	core/resources.o \
-	core/scene.o \
-	core/scene_data.o \
-	core/screen.o \
-	core/sequence.o \
-	core/sound.o \
-	core/sprites.o \
-	core/staticres.o \
-	core/user_interface.o \
+	nebular/core/action.o \
+	nebular/core/animation.o \
+	nebular/core/assets.o \
+	nebular/core/asound.o \
+	nebular/core/audio.o \
+	nebular/core/camera.o \
+	nebular/core/compression.o \
+	nebular/core/conversations.o \
+	nebular/core/dialogs.o \
+	nebular/core/events.o \
+	nebular/core/font.o \
+	nebular/core/game.o \
+	nebular/core/game_data.o \
+	nebular/core/globals.o \
+	nebular/core/hag.o \
+	nebular/core/hotspots.o \
+	nebular/core/inventory.o \
+	nebular/core/menu_views.o \
+	nebular/core/messages.o \
+	nebular/core/msurface.o \
+	nebular/core/palette.o \
+	nebular/core/player.o \
+	nebular/core/rails.o \
+	nebular/core/resources.o \
+	nebular/core/scene.o \
+	nebular/core/scene_data.o \
+	nebular/core/screen.o \
+	nebular/core/sequence.o \
+	nebular/core/sprites.o \
+	nebular/core/staticres.o \
+	nebular/core/user_interface.o \
 	metaengine.o \
 	mads.o
 
 ifdef ENABLE_MADSV2
 MODULE_OBJS += \
-	dragonsphere/game_dragonsphere.o \
-	dragonsphere/dragonsphere_scenes.o \
-	dragonsphere/dragonsphere_scenes1.o \
-	dragonsphere/globals_dragonsphere.o \
-	forest/game_forest.o \
-	forest/forest_scenes.o \
-	forest/globals_forest.o \
 	madsv2/console.o \
 	madsv2/engine.o \
+	madsv2/animview/anim_timer.o \
+	madsv2/animview/animview.o \
+	madsv2/animview/functions.o \
+	madsv2/textview/textview.o \
 	madsv2/core/anim.o \
 	madsv2/core/attr.o \
 	madsv2/core/buffer.o \
@@ -74,10 +72,10 @@ MODULE_OBJS += \
 	madsv2/core/cursor.o \
 	madsv2/core/cycle.o \
 	madsv2/core/dialog.o \
+	madsv2/core/digi.o \
 	madsv2/core/ems.o \
 	madsv2/core/env.o \
 	madsv2/core/error.o \
-	madsv2/core/extra.o \
 	madsv2/core/fileio.o \
 	madsv2/core/font.o \
 	madsv2/core/game.o \
@@ -98,6 +96,7 @@ MODULE_OBJS += \
 	madsv2/core/matte.o \
 	madsv2/core/mcga.o \
 	madsv2/core/mem.o \
+	madsv2/core/midi.o \
 	madsv2/core/mouse.o \
 	madsv2/core/object.o \
 	madsv2/core/pack.o \
@@ -176,12 +175,148 @@ MODULE_OBJS += \
 	madsv2/phantom/rooms/room505.o \
 	madsv2/phantom/rooms/room506.o \
 	madsv2/phantom/phantom.o \
+	madsv2/phantom/asound.o \
 	madsv2/phantom/catacombs.o \
 	madsv2/phantom/global.o \
 	madsv2/phantom/main_menu.o \
 	madsv2/phantom/menus.o \
 	madsv2/phantom/main.o \
-	madsv2/phantom/sound_phantom.o
+	madsv2/phantom/sound_phantom.o \
+	madsv2/dragonsphere/mads/mads.o \
+	madsv2/dragonsphere/rooms/section1.o \
+	madsv2/dragonsphere/rooms/room101.o \
+	madsv2/dragonsphere/rooms/section2.o \
+	madsv2/dragonsphere/rooms/section3.o \
+	madsv2/dragonsphere/rooms/section4.o \
+	madsv2/dragonsphere/rooms/section5.o \
+	madsv2/dragonsphere/rooms/section6.o \
+	madsv2/dragonsphere/rooms/section9.o \
+	madsv2/dragonsphere/rooms/room102.o \
+	madsv2/dragonsphere/rooms/room103.o \
+	madsv2/dragonsphere/rooms/room104.o \
+	madsv2/dragonsphere/rooms/room105.o \
+	madsv2/dragonsphere/rooms/room106.o \
+	madsv2/dragonsphere/rooms/room107.o \
+	madsv2/dragonsphere/rooms/room108.o \
+	madsv2/dragonsphere/rooms/room109.o \
+	madsv2/dragonsphere/rooms/room110.o \
+	madsv2/dragonsphere/rooms/room111.o \
+	madsv2/dragonsphere/rooms/room112.o \
+	madsv2/dragonsphere/rooms/room113.o \
+	madsv2/dragonsphere/rooms/room114.o \
+	madsv2/dragonsphere/rooms/room115.o \
+	madsv2/dragonsphere/rooms/room116.o \
+	madsv2/dragonsphere/rooms/room117.o \
+	madsv2/dragonsphere/rooms/room118.o \
+	madsv2/dragonsphere/rooms/room119.o \
+	madsv2/dragonsphere/rooms/room120.o \
+	madsv2/dragonsphere/rooms/room201.o \
+	madsv2/dragonsphere/rooms/room203.o \
+	madsv2/dragonsphere/rooms/room204.o \
+	madsv2/dragonsphere/rooms/room205.o \
+	madsv2/dragonsphere/rooms/room206.o \
+	madsv2/dragonsphere/rooms/room301.o \
+	madsv2/dragonsphere/rooms/room302.o \
+	madsv2/dragonsphere/rooms/room303.o \
+	madsv2/dragonsphere/rooms/room401.o \
+	madsv2/dragonsphere/rooms/room402.o \
+	madsv2/dragonsphere/rooms/room403.o \
+	madsv2/dragonsphere/rooms/room404.o \
+	madsv2/dragonsphere/rooms/room405.o \
+	madsv2/dragonsphere/rooms/room406.o \
+	madsv2/dragonsphere/rooms/room407.o \
+	madsv2/dragonsphere/rooms/room408.o \
+	madsv2/dragonsphere/rooms/room409.o \
+	madsv2/dragonsphere/rooms/room410.o \
+	madsv2/dragonsphere/rooms/room411.o \
+	madsv2/dragonsphere/rooms/room412.o \
+	madsv2/dragonsphere/rooms/room454.o \
+	madsv2/dragonsphere/rooms/room501.o \
+	madsv2/dragonsphere/rooms/room502.o \
+	madsv2/dragonsphere/rooms/room503.o \
+	madsv2/dragonsphere/rooms/room504.o \
+	madsv2/dragonsphere/rooms/room505.o \
+	madsv2/dragonsphere/rooms/room506.o \
+	madsv2/dragonsphere/rooms/room507.o \
+	madsv2/dragonsphere/rooms/room508.o \
+	madsv2/dragonsphere/rooms/room509.o \
+	madsv2/dragonsphere/rooms/room510.o \
+	madsv2/dragonsphere/rooms/room511.o \
+	madsv2/dragonsphere/rooms/room512.o \
+	madsv2/dragonsphere/rooms/room557.o \
+	madsv2/dragonsphere/rooms/room601.o \
+	madsv2/dragonsphere/rooms/room603.o \
+	madsv2/dragonsphere/rooms/room604.o \
+	madsv2/dragonsphere/rooms/room605.o \
+	madsv2/dragonsphere/rooms/room606.o \
+	madsv2/dragonsphere/rooms/room607.o \
+	madsv2/dragonsphere/rooms/room609.o \
+	madsv2/dragonsphere/rooms/room612.o \
+	madsv2/dragonsphere/rooms/room613.o \
+	madsv2/dragonsphere/rooms/room614.o \
+	madsv2/dragonsphere/rooms/room909.o \
+	madsv2/dragonsphere/dragonsphere.o \
+	madsv2/dragonsphere/asound.o \
+	madsv2/dragonsphere/global.o \
+	madsv2/dragonsphere/main.o \
+	madsv2/dragonsphere/main_menu.o \
+	madsv2/dragonsphere/menus.o \
+	madsv2/dragonsphere/sound_dragonsphere.o \
+	madsv2/forest/forest.o \
+	madsv2/forest/asound.o \
+	madsv2/forest/extra.o \
+	madsv2/forest/global.o \
+	madsv2/forest/journal.o \
+	madsv2/forest/main.o \
+	madsv2/forest/main_menu.o \
+	madsv2/forest/menus.o \
+	madsv2/forest/sound_forest.o \
+	madsv2/forest/mads/mads.o \
+	madsv2/forest/rooms/room101.o \
+	madsv2/forest/rooms/room103.o \
+	madsv2/forest/rooms/room104.o \
+	madsv2/forest/rooms/room106.o \
+	madsv2/forest/rooms/room107.o \
+	madsv2/forest/rooms/room199.o \
+	madsv2/forest/rooms/room201.o \
+	madsv2/forest/rooms/room203.o \
+	madsv2/forest/rooms/room204.o \
+	madsv2/forest/rooms/room205.o \
+	madsv2/forest/rooms/room210.o \
+	madsv2/forest/rooms/room211.o \
+	madsv2/forest/rooms/room220.o \
+	madsv2/forest/rooms/room221.o \
+	madsv2/forest/rooms/room301.o \
+	madsv2/forest/rooms/room302.o \
+	madsv2/forest/rooms/room303.o \
+	madsv2/forest/rooms/room304.o \
+	madsv2/forest/rooms/room305.o \
+	madsv2/forest/rooms/room306.o \
+	madsv2/forest/rooms/room307.o \
+	madsv2/forest/rooms/room308.o \
+	madsv2/forest/rooms/room321.o \
+	madsv2/forest/rooms/room322.o \
+	madsv2/forest/rooms/room401.o \
+	madsv2/forest/rooms/room402.o \
+	madsv2/forest/rooms/room403.o \
+	madsv2/forest/rooms/room404.o \
+	madsv2/forest/rooms/room405.o \
+	madsv2/forest/rooms/room420.o \
+	madsv2/forest/rooms/room501.o \
+	madsv2/forest/rooms/room503.o \
+	madsv2/forest/rooms/room509.o \
+	madsv2/forest/rooms/room510.o \
+	madsv2/forest/rooms/room520.o \
+	madsv2/forest/rooms/room901.o \
+	madsv2/forest/rooms/room903.o \
+	madsv2/forest/rooms/room904.o \
+	madsv2/forest/rooms/section1.o \
+	madsv2/forest/rooms/section2.o \
+	madsv2/forest/rooms/section3.o \
+	madsv2/forest/rooms/section4.o \
+	madsv2/forest/rooms/section5.o \
+	madsv2/forest/rooms/section9.o
+
 endif
 
 # This module can be built as a plugin

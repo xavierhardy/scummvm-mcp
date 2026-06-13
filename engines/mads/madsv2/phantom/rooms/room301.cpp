@@ -40,6 +40,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_301_init() {
 	kernel.disable_fastwalk = true;
 
@@ -394,6 +396,19 @@ void room_301_preload(void) {
 
 	section_3_walker();
 	section_3_interface();
+}
+
+
+void room_301_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->dynamic_light,
+		local->dynamic_sand,
+		local->anim_0_running,
+		local->guard,
+		local->prevent);
 }
 
 } // namespace Rooms

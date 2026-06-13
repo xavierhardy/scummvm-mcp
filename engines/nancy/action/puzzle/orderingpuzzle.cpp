@@ -336,6 +336,19 @@ void OrderingPuzzle::execute() {
 								clearAllElements();
 								return;
 							}
+
+							// In the clam puzzle with flags in Nancy9, test for the exact
+							// number of flag buttons pressed. Keeping this with a game
+							// version check for now, to avoid regressions in other puzzle
+							// types in other games.
+							// TODO: Merge with the above check once all the puzzle types
+							// have been retested
+							if (g_nancy->getGameType() == kGameTypeNancy9 && _puzzleType == kOrdering) {
+								if (_clickedSequence.size() >= _correctSequence.size()) {
+									clearAllElements();
+									return;
+								}
+							}
 						} else {
 							// OrderItems has a slight delay, after which it actually clears
 							if (_clickedSequence.size() == _correctSequence.size()) {
@@ -484,6 +497,7 @@ void OrderingPuzzle::handleInput(NancyInput &input) {
 
 		if (canClick && input.input & NancyInput::kLeftMouseButtonUp) {
 			_checkButtonPressed = true;
+			g_nancy->_sound->loadSound(_pushDownSound);
 			g_nancy->_sound->playSound(_pushDownSound);
 			Common::Rect destRect = _checkButtonDest;
 			destRect.translate(-_screenPosition.left, -_screenPosition.top);
@@ -579,6 +593,7 @@ void OrderingPuzzle::pushDown(uint id) {
 	if (g_nancy->getGameType() == kGameTypeVampire) {
 		g_nancy->_sound->playSound("BUOK");
 	} else {
+		g_nancy->_sound->loadSound(_pushDownSound);
 		g_nancy->_sound->playSound(_pushDownSound);
 	}
 
@@ -591,6 +606,7 @@ void OrderingPuzzle::pushDown(uint id) {
 }
 
 void OrderingPuzzle::setToSecondState(uint id) {
+	g_nancy->_sound->loadSound(_itemSound);
 	g_nancy->_sound->playSound(_itemSound);
 
 	_secondStateItems[id] = true;
@@ -607,7 +623,7 @@ void OrderingPuzzle::popUp(uint id) {
 		if (g_nancy->getGameType() == kGameTypeVampire) {
 			g_nancy->_sound->playSound("BUOK");
 		} else {
-			if (_popUpSound.name.size()) {
+			if (!_popUpSound.name.empty() && _popUpSound.name != "NO SOUND") {
 				g_nancy->_sound->playSound(_popUpSound);
 			} else {
 				g_nancy->_sound->playSound(_pushDownSound);

@@ -96,8 +96,8 @@ struct MacFinderInfo {
 
 	MacFinderInfoData toData() const;
 
-	byte type[4];
-	byte creator[4];
+	uint32 type;
+	uint32 creator;
 	uint16 flags;
 	Common::Point position;
 	int16 windowID;
@@ -360,11 +360,13 @@ private:
 	bool loadFromRawFork(SeekableReadStream *stream);
 	bool loadFromAppleDouble(SeekableReadStream *stream);
 
+public:
 	/**
 	 * Get Finder info from a file in MacBinary format
 	 */
 	static bool getFinderInfoFromMacBinary(SeekableReadStream *stream, MacFinderInfo &outFinderInfo, MacFinderExtendedInfo &outFinderExtendedInfo);
 
+private:
 	/**
 	 * Get Finder info from a file in AppleDouble format
 	 */

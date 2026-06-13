@@ -48,6 +48,8 @@ extern int attr_load(char *base_name, int item_type, int variant,
 
 extern int attr_load_error;
 
+extern void init_attr();
+
 } // namespace MADSV2
 } // namespace MADS
 

@@ -29,12 +29,12 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
-#define local ((Scratch *)(&game.scratch[0]))
+#define local (&scratch)
 #define ss    local->sprite
 #define seq   local->sequence
 #define aa    local->animation
 
-typedef struct {        /* Room local variables */
+struct Scratch {        /* Room local variables */
 	int16 sprite[15];       /* Sprite series handles */
 	int16 sequence[15];     /* Sequence handles      */
 	int16 animation[4];     /* Animation handles     */
@@ -55,8 +55,7 @@ typedef struct {        /* Room local variables */
 	int16 anim_1_running;           /* T if aa[1] is running */
 
 	int16 converse_counter; /* counter for talking displacements */
-
-} Scratch;
+};
 
 
 /* ========================= Sprite Series =================== */

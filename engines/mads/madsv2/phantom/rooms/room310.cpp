@@ -34,6 +34,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_310_init() {
 	viewing_at_y = ((video_y - display_y) >> 1);
 
@@ -266,6 +268,18 @@ void room_310_preload() {
 
 	section_3_walker();
 	section_3_interface();
+}
+
+
+void room_310_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->message_1,
+		local->message_2);
+	s.syncMultipleLE(local->multiplane_base);
+	s.syncMultipleLE(local->lake_frame);
 }
 
 } // namespace Rooms

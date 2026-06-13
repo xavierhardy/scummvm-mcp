@@ -59,7 +59,7 @@ void sprite_draw(SeriesPtr series, int id, Buffer *buf, int target_x, int target
 	#include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -78,7 +78,7 @@ void sprite_draw_scaled(SeriesPtr series, int id, Buffer *buf,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -97,7 +97,7 @@ void sprite_draw_3d_big(SeriesPtr series, int id, Buffer *buf, Buffer *attr,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -117,7 +117,7 @@ void sprite_draw_3d_scaled_big(SeriesPtr series, int id, Buffer *buf, Buffer *at
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -136,7 +136,7 @@ void sprite_draw_3d_x16(SeriesPtr series, int id, Buffer *buf, Buffer *attr,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -157,7 +157,7 @@ void sprite_draw_3d_scaled_x16(SeriesPtr series, int id,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -177,7 +177,7 @@ void sprite_draw_3d_big_x16(SeriesPtr series, int id, Buffer *buf, Buffer *attr,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -197,7 +197,7 @@ void sprite_draw_3d_big_x16(SeriesPtr series, int id,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -216,7 +216,7 @@ void sprite_draw_x16(SeriesPtr series, int id, Buffer * buf,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -235,7 +235,7 @@ void sprite_draw_interface(SeriesPtr series, int id, Buffer *buf,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -259,7 +259,7 @@ void sprite_draw_3d_scaled_to_attr
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -282,7 +282,7 @@ void sprite_draw_3d_scaled_mono(SeriesPtr series, int id,
 #include "mads/madsv2/core/sprite_0.cpp"
 }
 
-#undef three_d    
+#undef three_d
 #undef bresenham
 #undef packed_attr
 #undef translate
@@ -347,8 +347,7 @@ void FileSprite::load(Common::SeekableReadStream *src) {
 //====================================================================
 
 SeriesPtr sprite_series_load(const char *filename, int load_flags) {
-	register int count;
-	int len;
+	int count;
 	int len2;
 	int found, low_color, color_pointer;
 	byte *base_pointer;
@@ -402,7 +401,6 @@ SeriesPtr sprite_series_load(const char *filename, int load_flags) {
 
 	/* Determine length of header, and read it */
 
-	len = sizeof(FileSeries) - sizeof(FileSprite);
 	if (!header.loadHeader(load_handle))
 		goto done;
 
@@ -772,9 +770,15 @@ word sprite_pack_line_irle(byte *target, Buffer *source, byte *palette_map, byte
 		/* if no more real pixels */
 		if (a == lastpel) {
 			switch (run_len) {
-			case 3: *(unto++) = run_byte;
-			case 2: *(unto++) = run_byte;
-			case 1: *(unto++) = run_byte;    break;
+			case 3:
+				*(unto++) = run_byte;
+				// Fall through
+			case 2:
+				*(unto++) = run_byte;
+				// Fall through
+			case 1:
+				*(unto++) = run_byte;
+				break;
 			default:
 				*(unto++) = SS_RUN;      /* mark as a run */
 				*(unto++) = run_len;
@@ -799,9 +803,15 @@ word sprite_pack_line_irle(byte *target, Buffer *source, byte *palette_map, byte
 			/* if run exists, write it */
 			if (run_len > 0) {
 				switch (run_len) {
-				case 3: *(unto++) = run_byte;
-				case 2: *(unto++) = run_byte;
-				case 1: *(unto++) = run_byte;    break;
+				case 3:
+					*(unto++) = run_byte;
+					// Fall through
+				case 2:
+					*(unto++) = run_byte;
+					// Fall through
+				case 1:
+					*(unto++) = run_byte;
+					break;
 				default:
 					*(unto++) = SS_RUN;      /* mark as a run */
 					*(unto++) = run_len;
@@ -826,9 +836,15 @@ word sprite_pack_line_irle(byte *target, Buffer *source, byte *palette_map, byte
 	}
 
 	switch (run_len) {
-	case 3: *(unto++) = run_byte;  /* intentional fall-through */
-	case 2: *(unto++) = run_byte;
-	case 1: *(unto++) = run_byte;    break;
+	case 3:
+		*(unto++) = run_byte;
+		// Fall through
+	case 2:
+		*(unto++) = run_byte;
+		// Fall through
+	case 1:
+		*(unto++) = run_byte;
+		break;
 	default:
 		*(unto++) = SS_RUN;      /* mark as a run */
 		*(unto++) = run_len;
@@ -1174,16 +1190,9 @@ void sprite_free(SeriesPtr *series, int free_memory) {
 		}
 	}
 
-	if (kidney) {
-		/* release the flag - dont deallocate the colors from the list */
-		if ((*series)->color_handle)
-			pal_deallocate((*series)->color_handle);
-		/* flag_used[(*series)->color_handle] = false; */
-	} else {
-		/* deallocate the colors from the list */
-		if ((*series)->color_handle)
-			pal_deallocate((*series)->color_handle);
-	}
+	// Deallocate the colors from the list
+	if ((*series)->color_handle)
+		pal_deallocate((*series)->color_handle);
 
 	if (free_memory)
 		mem_free(*series);
@@ -1191,6 +1200,13 @@ void sprite_free(SeriesPtr *series, int free_memory) {
 
 done:
 	;
+}
+
+void init_sprite() {
+	sprite_error = 0;
+	sprite_force_memory = NULL;
+	sprite_force_size = 0;
+	kidney = false;
 }
 
 } // namespace MADSV2

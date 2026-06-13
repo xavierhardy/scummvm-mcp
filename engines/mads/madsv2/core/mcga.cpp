@@ -137,11 +137,6 @@ void mcga_retrace() {
 	g_engine->getScreen()->update();
 }
 
-static word mcga_time_palette_swap(Palette *pal, int first_color, int num_colors) {
-	mcga_setpal(pal);
-	return 0;
-}
-
 void mcga_compute_retrace_parameters(void) {
 	mcga_setpal(&master_palette);
 

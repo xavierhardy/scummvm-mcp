@@ -115,7 +115,7 @@ void drawStringImpl(const Font &font, SurfaceType *dst, const StringType &str, i
 	// ever change something here we will need to change it there too.
 	assert(dst != 0);
 
-	const int leftX = x, rightX = x + w + 1;
+	const int leftX = MAX<int>(x, 0), rightX = x + w + 1;
 	int width = font.getStringWidth(str);
 
 	if (align == kTextAlignCenter)

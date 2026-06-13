@@ -96,10 +96,11 @@ int kernel_allow_peel = false;
 
 int kernel_panning_speed = 0;
 int kernel_screen_fade   = 0;
+bool stop_speech_on_run_animation = false;
 
 Animation kernel_anim[KERNEL_MAX_ANIMATIONS];
 
-ShadowList kernel_shadow_main  = { 0 };
+ShadowList kernel_shadow_main = { 0, { 0 } };
 ShadowList kernel_shadow_inter = { 1, { 15 } };
 
 int kernel_ok_to_fail_load = false;
@@ -153,8 +154,6 @@ int random_message_duration;            /* Duration of messages       */
 
 char kernel_interface_loaded[40] = "";
 
-static char digital_name[12] = "digital.aga";
-
 
 static void kernel_seq_image(SequencePtr sequence, ImagePtr image, int sequence_id);
 static void kernel_reconstruct_screen(int anim_handle);
@@ -163,8 +162,7 @@ static void kernel_animation_get_sprite(int handle, int id);
 void KernelGame::synchronize(Common::Serializer &s) {
 	s.syncAsByte(going);
 	s.skip(1);
-	for (int i = 0; i < KERNEL_SCRATCH_SIZE; ++i)
-		s.syncAsSint16LE(scratch[i]);
+	s.syncBytes(scratch, KERNEL_SCRATCH_SIZE);
 	s.syncAsByte(difficulty);
 	s.skip(1);
 	s.syncAsSint16LE(last_save);
@@ -515,6 +513,9 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 		}
 	}
 
+	buffer_fill(scr_live, 0);
+	mcga_setpal(&master_palette);
+
 	error_flag = false;
 
 done:
@@ -685,19 +686,25 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 		goto done;
 	}
 
-	kernel_load_vocab();
-
 	pal_activate_shadow(&kernel_shadow_inter);
-	load_flags = ANIM_LOAD_BACKGROUND | ANIM_INTERFACE;
-	if (kernel.translating)
-		load_flags |= ANIM_LOAD_TRANSLATE;
-	inter_anim = (AnimInterPtr)anim_load(interface, &scr_inter_orig, nullptr, nullptr,
-		nullptr, nullptr, nullptr, nullptr, nullptr, load_flags);
-	if (!inter_anim) goto done;
 
-	if (!inter_anim->font) {
-		mem_free(inter_anim);
+	if (g_engine->getGameID() == GType_Dragonsphere) {
 		inter_anim = nullptr;
+
+	} else {
+		kernel_load_vocab();
+
+		load_flags = ANIM_LOAD_BACKGROUND | ANIM_INTERFACE;
+		if (kernel.translating)
+			load_flags |= ANIM_LOAD_TRANSLATE;
+		inter_anim = (AnimInterPtr)anim_load(interface, &scr_inter_orig, nullptr, nullptr,
+			nullptr, nullptr, nullptr, nullptr, nullptr, load_flags);
+		if (!inter_anim) goto done;
+
+		if (!inter_anim->font) {
+			mem_free(inter_anim);
+			inter_anim = nullptr;
+		}
 	}
 
 	// Set up interface background screen
@@ -871,16 +878,17 @@ int kernel_seq_forward(int series_id, int mirror, word ticks, word interval_tick
 		start_ticks, expire));
 }
 
-int kernel_seq_forward_scroll(int series_id, int mirror, word ticks, word interval_ticks,
-		word start_ticks, int expire) {
+
+int kernel_seq_forward_scroll(int series_id, int mirror,
+		word ticks, word interval_ticks, word start_ticks, int expire) {
 	int depth = 0;
 	SpritePtr sprite;
 
 	sprite = &series_list[series_id]->index[0];
 
-	return (kernel_seq_add(series_id, mirror, 1, 0, 0, AA_LINEAR, 1,
+	return kernel_seq_add(series_id, mirror, 1, 0, 0, AA_LINEAR, 1,
 		depth, 100, true, 0, 0, ticks, interval_ticks,
-		start_ticks, expire));
+		start_ticks, expire);
 }
 
 int kernel_seq_pingpong(int series_id, int mirror,
@@ -902,9 +910,7 @@ int kernel_seq_pingpong(int series_id, int mirror,
 }
 
 int kernel_seq_pingpong_scroll(int series_id, int mirror,
-	word ticks, word interval_ticks,
-	word start_ticks,
-	int expire) {
+		word ticks, word interval_ticks, word start_ticks, int expire) {
 	int depth = 0;
 	SpritePtr sprite;
 
@@ -937,15 +943,13 @@ int kernel_seq_backward_scroll(int series_id, int mirror,
 	word start_ticks,
 	int expire) {
 	int depth = 0;
-	SpritePtr sprite;
-
-	sprite = &series_list[series_id]->index[0];
 
 	return (kernel_seq_add(series_id, mirror,
 		series_list[series_id]->num_sprites,
 		0, 0, AA_LINEAR, -1, depth, 100, true, 0, 0,
 		ticks, interval_ticks, start_ticks, expire));
 }
+
 void kernel_synch(int slave_type, int slave_id, int master_type, int master_id) {
 	long master_time;
 
@@ -1188,16 +1192,22 @@ void kernel_seq_correction(long old_clock, long new_clock) {
 void kernel_draw_to_background(int series_id, int sprite_id,
 	int x, int y,
 	int depth, int scale) {
+
+	// WORKAROUND: In the ROTP mask puzzle room, the x/y are passed
+	// as KERNEL_HOME, but sprite_id == KERNEL_LAST, which is negative
+	int sprite_index = (sprite_id != KERNEL_LAST) ? sprite_id :
+		series_list[series_id]->num_sprites;
+
 	if (x == KERNEL_HOME) {
-		x = series_list[series_id]->index[sprite_id - 1].x;
+		x = series_list[series_id]->index[sprite_index - 1].x;
 	}
 
 	if (y == KERNEL_HOME) {
-		y = series_list[series_id]->index[sprite_id - 1].y;
+		y = series_list[series_id]->index[sprite_index - 1].y;
 	}
 
 	sprite_draw_3d_scaled_big(series_list[series_id],
-		sprite_id,
+		sprite_index,
 		&scr_orig, &scr_depth,
 		x - picture_map.pan_base_x,
 		y - picture_map.pan_base_y,
@@ -1441,7 +1451,6 @@ void kernel_animation_init() {
 }
 
 int kernel_run_animation(const char *name, int trigger_code) {
-	int result = -1;
 	int found = -1;
 	int error_flag = true;
 	int count;
@@ -1520,7 +1529,6 @@ int kernel_run_animation(const char *name, int trigger_code) {
 	}
 
 	error_flag = false;
-	result = found;
 
 	kernel_anim[found].last_frame = -1;
 
@@ -1797,15 +1805,14 @@ static void kernel_process_animation(int handle, int asynchronous) {
 
 				seg_id = image_list[id].segment_id;
 
-				// image_list[id].segment_id += KERNEL_SEGMENT_ANIMATION;
 				image_list[id].segment_id = (byte)(KERNEL_SEGMENT_ANIMATION + handle);
-				image_list[id].flags = series_list[image_list[id].series_id]->delta_series ? IMAGE_DELTA : IMAGE_UPDATE;
-				// if (kernel_anim[handle].anim->misc_any_packed) {
-				// if (image_list[id].series_id == (byte)kernel_anim[handle].anim->series_id[kernel_anim[handle].anim->misc_packed_series]) {
-				// series_id = image_list[id].series_id;
-				// sprite_data_load (series_list[series_id], image_list[id].sprite_id, series_list[series_id]->arena);
-				// }
-				// }
+				if (image_list[id].series_id < (SERIES_LIST_SIZE + SERIES_BONUS_SIZE) && series_list[image_list[id].series_id])
+					image_list[id].flags = series_list[image_list[id].series_id]->delta_series ? IMAGE_DELTA : IMAGE_UPDATE;
+				else
+					// WORKAROUND: For invalid series_id. This at least happens when rescuing the king from ice
+					// in Dragonsphere whilst in bear form - the series_id == 0xff
+					image_list[id].flags = IMAGE_ERASE;
+
 				if (hot >= 0) {
 					kernel_hot_check(hot, id, seg_id);
 				}
@@ -1815,7 +1822,7 @@ static void kernel_process_animation(int handle, int asynchronous) {
 	}
 
 	for (count = 0; count < kernel_anim[handle].anim->num_speech; count++) {
-		if ((int)(kernel_anim[handle].anim->speech[count].flags) >= 0) {
+		if ((int16)(kernel_anim[handle].anim->speech[count].flags) >= 0) {
 			if ((kernel_anim[handle].frame < kernel_anim[handle].anim->speech[count].first_frame) ||
 				(kernel_anim[handle].frame > kernel_anim[handle].anim->speech[count].last_frame)) {
 				kernel_message_delete(kernel_anim[handle].anim->speech[count].flags);
@@ -1959,7 +1966,7 @@ void kernel_abort_animation(int handle) {
 		}
 
 		for (count = 0; count < kernel_anim[handle].anim->num_speech; count++) {
-			if ((int)(kernel_anim[handle].anim->speech[count].flags) >= 0) {
+			if ((int16)(kernel_anim[handle].anim->speech[count].flags) >= 0) {
 				kernel_message_delete(kernel_anim[handle].anim->speech[count].flags);
 			}
 		}
@@ -2551,7 +2558,7 @@ int kernel_load_sound_driver(const char *name, char sound_card_, int sound_board
 	// Get the section number from the end of the driver filename, and use it to initialize
 	// the sound system; we provide our own implementation of the drivers
 	int sectionNum = *(name + strlen(name) - 1) - '0';
-	assert((sectionNum >= 1 && sectionNum <= 5) || sectionNum == 9);
+	assert(sectionNum >= 1 && sectionNum <= 9);
 
 	g_engine->_soundManager->init(sectionNum);
 
@@ -2765,7 +2772,7 @@ done:
 }
 
 void kernel_set_interface_mode(int mode) {
-	if (mode != inter_input_mode) {
+	if (mode != inter_input_mode || g_engine->getGameID() == GType_Dragonsphere) {
 		char fname[80];
 		Common::strcpy_s(fname, kernel.interface);
 		char *dot = strchr(fname, '.');
@@ -2910,6 +2917,116 @@ done:
 	}
 
 	return error_flag;
+}
+
+void init_kernel() {
+	memset(room_state, 0, sizeof(room_state));
+	video_mode = 0;
+	room = NULL;
+	room_id = KERNEL_STARTING_GAME;
+	section_id = KERNEL_STARTING_GAME;
+	room_variant = 0;
+	new_room = 101;
+	new_section = 1;
+	previous_room = 0;
+	previous_section = 0;
+	kernel_initial_variant = 0;
+	room_spots = NULL;
+	room_num_spots = 0;
+	kernel_room_series_marker = 0;
+	kernel_room_bound_dif = 0;
+	kernel_room_scale_dif = 0;
+	kernel_allow_peel = false;
+	kernel_panning_speed = 0;
+	kernel_screen_fade = 0;
+	memset(kernel_anim, 0, sizeof(kernel_anim));
+	memset(&kernel_shadow_main, 0, sizeof(ShadowList));
+	memset(&kernel_shadow_inter, 0, sizeof(ShadowList));
+	kernel_shadow_inter.num_shadow_colors = 1;
+	kernel_shadow_inter.shadow_color[0] = 15;
+	kernel_ok_to_fail_load = false;
+	kernel_mode = KERNEL_GAME_LOAD;
+	memset(kernel_cheating_password, 0, sizeof(kernel_cheating_password));
+	kernel_cheating_allowed = 0;
+	kernel_cheating_forbidden = 0;
+	memset(kernel_dynamic_hot, 0, sizeof(kernel_dynamic_hot));
+	kernel_num_dynamic = 0;
+	kernel_dynamic_changed = 0;
+	cursor = NULL;
+	cursor_id = 1;
+	cursor_last = -1;
+	memset(&kernel, 0, sizeof(Kernel));
+	memset(&game, 0, sizeof(KernelGame));
+	memset(sequence_list, 0, sizeof(sequence_list));
+	stop_speech_on_run_anim = true;
+	memset(kernel_message, 0, sizeof(kernel_message));
+	kernel_message_font = NULL;
+	kernel_message_spacing = 0;
+	kernel_sound_handle = 0;
+	memset(random_message_handle, 0, sizeof(random_message_handle));
+	memset(random_message_quote, 0, sizeof(random_message_quote));
+	random_max_messages = 1;
+	memset(random_quote_list, 0, sizeof(random_quote_list));
+	random_quote_list_size = 0;
+	random_min_x = 0;
+	random_max_x = video_x;
+	random_min_y = 0;
+	random_max_y = display_y;
+	random_spacing = 0;
+	random_teletype_rate = 0;
+	random_message_color = 0;
+	random_message_duration = 0;
+	memset(kernel_interface_loaded, 0, sizeof(kernel_interface_loaded));
+	stop_speech_on_run_animation = false;
+}
+
+void kernel_random_frame(int handle, int16 *frame, int mode) {
+	int16 newFrame = -1;
+
+	if (kernel_anim[handle].frame == *frame)
+		return;
+
+	int16 currentFrame = (int16)kernel_anim[handle].frame;
+	*frame = currentFrame;
+
+	if (currentFrame >= 1 && currentFrame <= 8) {
+		if (mode == 0)
+			newFrame = 0;
+		else if (mode == 1)
+			newFrame = 7;
+		else
+			newFrame = (int16)imath_random(1, 6);
+	}
+
+	if (newFrame >= 0) {
+		kernel_reset_animation(handle, newFrame);
+		*frame = newFrame;
+	}
+}
+
+void kernel_translate_anim(int handle, int delta_x, int delta_y, int delta_scale) {
+	Animation &k_anim = kernel_anim[handle];
+	Anim *anim = k_anim.anim;
+
+	for (int count = 0; count < anim->num_frames; ++count) {
+		Image &image = anim->image[count];
+		image.x += delta_x;
+		image.y += delta_y;
+		image.scale += delta_scale;
+	}
+}
+
+void kernel_position_anim(int handle, int x, int y, int scale, int depth) {
+	Animation &k_anim = kernel_anim[handle];
+	Anim *anim = k_anim.anim;
+
+	for (int count = 0; count < anim->num_frames; ++count) {
+		Image &image = anim->image[count];
+		image.x = x;
+		image.y = y;
+		image.scale = scale;
+		image.depth = depth;
+	}
 }
 
 } // namespace MADSV2

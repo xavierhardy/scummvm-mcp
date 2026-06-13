@@ -23,6 +23,7 @@
 #define MADS_CORE_KERNEL_H
 
 #include "common/serializer.h"
+#include "common/textconsole.h"
 #include "mads/madsv2/core/general.h"
 #include "mads/madsv2/core/anim.h"
 #include "mads/madsv2/core/color.h"
@@ -128,7 +129,7 @@ namespace MADSV2 {
 
 #define KERNEL_MAX_ANIMATIONS         10       /* Max number of animations    */
 
-#define KERNEL_SCRATCH_SIZE           256     /* Size of game scratch area   */
+#define KERNEL_SCRATCH_SIZE           512     /* Size of game scratch area   */
 
 #define KERNEL_HOME                   -32000  /* Sprite home location        */
 
@@ -227,7 +228,7 @@ typedef struct {
 	byte prep;
 	byte cursor;
 	byte syntax;
-	char auto_anim;
+	int8 auto_anim;
 	byte auto_segment[KERNEL_DYNAMIC_MAX_SEGMENTS];
 } KernelDynamicHotSpot;
 
@@ -307,7 +308,7 @@ typedef struct {
 
 struct KernelGame {
 	byte going;							/* Game is running OK          */
-	int16 scratch[KERNEL_SCRATCH_SIZE];	/* Scratch variables for room  */
+	byte scratch[KERNEL_SCRATCH_SIZE * 2];	/* Scratch variables for room  */
 	int8 difficulty;					/* Difficulty level            */
 	int16  last_save;					/* Most recent save slot #     */
 
@@ -364,6 +365,7 @@ extern int kernel_screen_fade;
 
 
 extern Animation kernel_anim[KERNEL_MAX_ANIMATIONS];
+extern bool stop_speech_on_run_animation;
 
 /*  Old animation stuff
 extern AnimPtr kernel_animation;
@@ -622,6 +624,16 @@ extern void kernel_room_scale(int front_y, int front_scale, int back_y, int back
  */
 extern void kernel_background_shutdown();
 extern int kernel_background_startup(int new_room, int initial_variant);
+
+extern void init_kernel();
+
+extern void kernel_random_frame(int handle, int16 *frame, int mode);
+extern void kernel_translate_anim(int handle, int delta_x, int delta_y, int delta_scale);
+extern void kernel_position_anim(int handle, int x, int y, int scale, int depth);
+
+inline void kernel_save_game(const char *buf) {
+	error("TODO: refactor to ScummVM savegame code");
+}
 
 } // namespace MADSV2
 } // namespace MADS

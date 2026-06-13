@@ -30,14 +30,14 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
-#define local ((Scratch *)(&game.scratch[0]))
+#define local (&scratch)
 #define ss    local->sprite
 #define seq   local->sequence
 #define aa    local->animation
 
 #define num_cycle_stages        9       /* 9 stages of color cycling */
 
-typedef struct {        /* Room local variables */
+struct Scratch {        /* Room local variables */
 
 	byte puzzle_picture[16];  /* one of 4                   */
 	byte puzzle_sprite[16];  /* which sprite in ss         */
@@ -72,7 +72,7 @@ typedef struct {        /* Room local variables */
 	uint32 hot_timer;    /* Timer count             */
 	uint32 death_timer;  /* when this reaches LENGTH_OF_LIFE, die */
 
-} Scratch;
+};
 
 
 /* ========================= Sprite Series =================== */

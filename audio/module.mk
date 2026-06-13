@@ -70,8 +70,7 @@ MODULE_OBJS := \
 	softsynth/fluidsynth.o \
 	softsynth/eas.o \
 	softsynth/pcspk.o \
-	softsynth/ay8912.o \
-	softsynth/ym2149.o
+	softsynth/ay8912.o
 
 ifndef DISABLE_NUKED_OPL
 MODULE_OBJS += \
@@ -86,6 +85,14 @@ endif
 ifdef USE_ALSA
 MODULE_OBJS += \
 	alsa_opl.o
+endif
+
+ifeq ($(BACKEND),atari)
+MODULE_OBJS += \
+	atari_ym2149.o
+else
+MODULE_OBJS += \
+	softsynth/ym2149.o
 endif
 
 ifdef USE_FMTOWNS_PC98_AUDIO

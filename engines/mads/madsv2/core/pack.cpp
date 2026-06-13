@@ -34,7 +34,7 @@ namespace MADS {
 namespace MADSV2 {
 
 byte *pack_special_buffer = NULL;
-void (*(pack_special_function))() = NULL;
+void (*pack_special_function)() = NULL;
 byte *pack_read_memory_ptr;
 byte *pack_write_memory_ptr;
 long pack_read_size;            /* Size left to read   */

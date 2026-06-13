@@ -10,10 +10,15 @@ MODULE_OBJS := \
 	font.o \
 	freescape.o \
 	games/castle/castle.o \
+	games/castle/castle.musicdata.o \
 	games/castle/amiga.o \
+	games/castle/atari.o \
+	games/castle/ay.music.o \
 	games/castle/c64.o \
+	games/castle/c64.music.o \
 	games/castle/cpc.o \
 	games/castle/dos.o \
+	games/castle/opl.music.o \
 	games/castle/zx.o \
 	games/dark/amiga.o \
 	games/dark/atari.o \
@@ -32,6 +37,7 @@ MODULE_OBJS := \
 	games/driller/cpc.o \
 	games/driller/dos.o \
 	games/driller/driller.o \
+	games/driller/opl.music.o \
 	games/driller/sounds.o \
 	games/driller/zx.o \
 	games/eclipse/amiga.o \
@@ -66,7 +72,8 @@ MODULE_OBJS := \
 	sound/zx.o \
 	ui.o \
 	unpack.o \
-	wb.o
+	wb.o \
+	zx_tape.o
 
 ifdef USE_TINYGL
 MODULE_OBJS += \
@@ -100,3 +107,10 @@ include $(srcdir)/rules.mk
 
 # Detection objects
 DETECT_OBJS += $(MODULE)/detection.o
+
+# Skip building the following objects if a static
+# module is enabled, because it already has the contents.
+ifneq ($(ENABLE_FREESCAPE), STATIC_PLUGIN)
+# External dependencies for detection.
+DETECT_OBJS += $(MODULE)/zx_tape.o
+endif

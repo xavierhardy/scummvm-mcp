@@ -21,12 +21,12 @@
 
 #include "common/scummsys.h"
 #include "common/config-manager.h"
-#include "mads/core/game.h"
+#include "mads/nebular/core/game.h"
 #include "mads/nebular/nebular.h"
-#include "mads/core/menu_views.h"
-#include "mads/core/resources.h"
-#include "mads/core/scene.h"
-#include "mads/core/screen.h"
+#include "mads/nebular/core/menu_views.h"
+#include "mads/nebular/core/resources.h"
+#include "mads/nebular/core/scene.h"
+#include "mads/nebular/core/screen.h"
 #include "mads/nebular/menu_nebular.h"
 
 namespace MADS {
@@ -136,6 +136,7 @@ void MainMenu::doFrame() {
 			addSpriteSlot();
 		}
 
+		_vm->_screen->markAllDirty();
 		_vm->_events->showCursor();
 		showBonusItems();
 	} else {

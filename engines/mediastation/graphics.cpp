@@ -80,7 +80,9 @@ void Clip::addToRegion(const Common::Rect &rect) {
 }
 
 bool Clip::clipIntersectsRect(const Common::Rect &rect) {
-	return _region.intersects(rect);
+	Common::Rect adjustedRect = rect;
+	adjustedRect.translate(-_bounds.origin().x, -_bounds.origin().y);
+	return _region.intersects(adjustedRect);
 }
 
 void Clip::intersectWithRegion(const Common::Rect &rect) {
@@ -202,6 +204,20 @@ void DisplayContext::setClipTo(Region region) {
 	}
 }
 
+void DisplayUpdateManager::performUpdateAll() {
+	debugC(9, kDebugGraphics, "%s", __func__);
+	g_engine->getStageDirector()->drawAll();
+	g_engine->getStageDirector()->clearDirtyRegion();
+	g_engine->getDisplayManager()->flushToDisplay();
+}
+
+void DisplayUpdateManager::performUpdateDirty() {
+	debugC(9, kDebugGraphics, "%s", __func__);
+	g_engine->getStageDirector()->drawDirtyRegion();
+	g_engine->getStageDirector()->clearDirtyRegion();
+	g_engine->getDisplayManager()->flushToDisplay();
+}
+
 VideoDisplayManager::VideoDisplayManager(MediaStationEngine *vm) : _vm(vm) {
 	initGraphics(MediaStationEngine::SCREEN_WIDTH, MediaStationEngine::SCREEN_HEIGHT);
 	_screen = new Graphics::Screen();
@@ -220,11 +236,11 @@ bool VideoDisplayManager::attemptToReadFromStream(Chunk &chunk, uint sectionType
 	bool handledParam = true;
 	switch (sectionType) {
 	case kVideoDisplayManagerUpdateDirty:
-		performUpdateDirty();
+		g_engine->getDisplayUpdateManager()->performUpdateDirty();
 		break;
 
 	case kVideoDisplayManagerUpdateAll:
-		performUpdateAll();
+		g_engine->getDisplayUpdateManager()->performUpdateAll();
 		break;
 
 	case kVideoDisplayManagerEffectTransition:
@@ -232,7 +248,7 @@ bool VideoDisplayManager::attemptToReadFromStream(Chunk &chunk, uint sectionType
 		break;
 
 	case kVideoDisplayManagerSetTime:
-		debugC(5, kDebugGraphics, "%s", __func__);
+		debugC(7, kDebugGraphics, "%s", __func__);
 		_defaultTransitionTime = chunk.readTypedTime();
 		break;
 
@@ -245,6 +261,67 @@ bool VideoDisplayManager::attemptToReadFromStream(Chunk &chunk, uint sectionType
 	}
 
 	return handledParam;
+}
+
+void VideoDisplayManager::flushToDisplay() {
+	_screen->update();
+	doTransitionOnSync();
+}
+
+void DisplayUpdateManager::onEvent(const DisplayEvent &event) {
+	switch (event.type) {
+	case kDisplayAutoUpdateEvent:
+		performAutoUpdateAndFlush();
+		break;
+
+	case kDisplayEnableAutoUpdateEvent:
+		enableAutoUpdate(event.disableScreenAutoUpdateToken);
+		break;
+
+	default:
+		break;
+	}
+}
+
+bool DisplayUpdateManager::needToDisplay() {
+	return !g_engine->getStageDirector()->getRootStage()->_dirtyRegion._rects.empty();
+}
+
+void DisplayUpdateManager::performAutoUpdateAndFlush() {
+	bool screenUpdated = false;
+	if (_autoUpdateEnabled && _forceFlush) {
+		performUpdateDirty();
+		screenUpdated = true;
+		_forceFlush = false;
+	} else if (_autoUpdateEnabled) {
+		if (needToDisplay()) {
+			performUpdateDirty();
+			screenUpdated = true;
+		}
+	}
+
+	// Any mouse movements and such need to be committed even if there
+	// was nothing else to draw.
+	if (!screenUpdated) {
+		g_system->updateScreen();
+	}
+}
+
+void DisplayUpdateManager::enableAutoUpdate(uint disabledScreenAutoUpdateToken) {
+	if (disabledScreenAutoUpdateToken == _disabledScreenAutoUpdateToken) {
+		_autoUpdateEnabled = true;
+		_forceFlush = true;
+	}
+}
+
+uint DisplayUpdateManager::disableAutoUpdate() {
+	_autoUpdateEnabled = false;
+	_forceFlush = false;
+	_disabledScreenAutoUpdateToken += 1;
+	if (_disabledScreenAutoUpdateToken == 0) {
+		_disabledScreenAutoUpdateToken = 1;
+	}
+	return _disabledScreenAutoUpdateToken;
 }
 
 void VideoDisplayManager::readAndEffectTransition(Chunk &chunk) {
@@ -330,23 +407,13 @@ void VideoDisplayManager::doTransitionOnSync() {
 	}
 }
 
-void VideoDisplayManager::performUpdateDirty() {
-	debugC(5, kDebugGraphics, "%s", __func__);
-	g_engine->draw();
-}
-
-void VideoDisplayManager::performUpdateAll() {
-	debugC(5, kDebugGraphics, "%s", __func__);
-	g_engine->draw(false);
-}
-
 void VideoDisplayManager::fadeToBlack(Common::Array<ScriptValue> &args) {
 	double fadeTime = DEFAULT_FADE_TRANSITION_TIME_IN_SECONDS;
 	uint startIndex = DEFAULT_PALETTE_TRANSITION_START_INDEX;
 	uint colorCount = DEFAULT_PALETTE_TRANSITION_COLOR_COUNT;
 
 	if (args.size() >= 2) {
-		fadeTime = args[1].asTime();
+		fadeTime = args[1].asFloatOrTime();
 	}
 	if (args.size() >= 4) {
 		startIndex = static_cast<uint>(args[2].asFloat());
@@ -363,7 +430,7 @@ void VideoDisplayManager::fadeToRegisteredPalette(Common::Array<ScriptValue> &ar
 	uint colorCount = DEFAULT_PALETTE_TRANSITION_COLOR_COUNT;
 
 	if (args.size() >= 2) {
-		fadeTime = args[1].asTime();
+		fadeTime = args[1].asFloatOrTime();
 	}
 	if (args.size() >= 4) {
 		startIndex = static_cast<uint>(args[2].asFloat());
@@ -410,10 +477,10 @@ void VideoDisplayManager::fadeToColor(Common::Array<ScriptValue> &args) {
 		r = static_cast<byte>(args[1].asFloat());
 		g = static_cast<byte>(args[2].asFloat());
 		b = static_cast<byte>(args[3].asFloat());
-		fadeTime = args[4].asTime();
+		fadeTime = args[4].asFloatOrTime();
 	}
 	if (args.size() >= 7) {
-		fadeTime = args[5].asTime();
+		fadeTime = args[5].asFloatOrTime();
 		startIndex = static_cast<uint>(args[6].asFloat());
 		colorCount = static_cast<uint>(args[7].asFloat());
 	}
@@ -471,7 +538,7 @@ void VideoDisplayManager::fadeToPaletteObject(Common::Array<ScriptValue> &args) 
 		return;
 	}
 	if (args.size() >= 3) {
-		fadeTime = args[2].asFloat();
+		fadeTime = args[2].asFloatOrTime();
 	}
 	if (args.size() >= 5) {
 		startIndex = static_cast<uint>(args[3].asFloat());
@@ -697,19 +764,19 @@ void VideoDisplayManager::_colorShiftCurrentPalette(uint startIndex, uint shiftA
 }
 
 void VideoDisplayManager::_fadeToPaletteObject(uint paletteId, double fadeTime, uint startIndex, uint colorCount) {
-	PaletteActor *paletteActor = static_cast<PaletteActor *>(_vm->getActorByIdAndType(paletteId, kActorTypePalette));
+	PaletteActor *paletteActor = static_cast<PaletteActor *>(_vm->getImtGod()->getActorByIdAndType(paletteId, kActorTypePalette));
 	Graphics::Palette *palette = paletteActor->_palette;
 	_fadeToPalette(fadeTime, *palette, startIndex, colorCount);
 }
 
 void VideoDisplayManager::_setToPaletteObject(uint paletteId, uint startIndex, uint colorCount) {
-	PaletteActor *paletteActor = static_cast<PaletteActor *>(_vm->getActorByIdAndType(paletteId, kActorTypePalette));
+	PaletteActor *paletteActor = static_cast<PaletteActor *>(_vm->getImtGod()->getActorByIdAndType(paletteId, kActorTypePalette));
 	Graphics::Palette *palette = paletteActor->_palette;
 	_setPalette(*palette, startIndex, colorCount);
 }
 
 void VideoDisplayManager::_setPercentToPaletteObject(double percent, uint paletteId, uint startIndex, uint colorCount) {
-	PaletteActor *paletteActor = static_cast<PaletteActor *>(_vm->getActorByIdAndType(paletteId, kActorTypePalette));
+	PaletteActor *paletteActor = static_cast<PaletteActor *>(_vm->getImtGod()->getActorByIdAndType(paletteId, kActorTypePalette));
 	Graphics::Palette *palette = paletteActor->_palette;
 	_setToPercentPalette(percent, *_registeredPalette, *palette, startIndex, colorCount);
 }

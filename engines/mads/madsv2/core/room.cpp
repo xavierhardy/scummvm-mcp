@@ -711,5 +711,14 @@ done:
 	return error_flag;
 }
 
+void init_room() {
+	memset(&roomdef, 0, sizeof(RoomDef));
+	room_load_error = 0;
+	room_loaded_depth = false;
+	room_loaded_walk = false;
+	room_loaded_special = false;
+	memset(&roompict, 0, sizeof(RoomPict));
+}
+
 } // namespace MADSV2
 } // namespace MADS

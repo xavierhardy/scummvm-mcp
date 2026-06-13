@@ -45,6 +45,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_304_init() {
 	local->raoul_look_count = 0;
 	player.x = 0;
@@ -480,6 +482,25 @@ void room_304_preload() {
 
 	section_3_walker();
 	section_3_interface();
+}
+
+
+void room_304_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->anim_0_running,
+		local->anim_1_running,
+		local->anim_2_running,
+		local->raoul_frame,
+		local->raoul_action,
+		local->raoul_look_count,
+		local->raoul_fight_frame,
+		local->raoul_fight_action,
+		local->raoul_fight_talk_count,
+		local->phantom_frame,
+		local->phantom_action);
 }
 
 } // namespace Rooms

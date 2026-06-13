@@ -23,9 +23,9 @@
 #define MADS_MENU_NEBULAR_H
 
 #include "common/scummsys.h"
-#include "mads/core/game.h"
-#include "mads/core/menu_views.h"
-#include "mads/core/msurface.h"
+#include "mads/nebular/core/game.h"
+#include "mads/nebular/core/menu_views.h"
+#include "mads/nebular/core/msurface.h"
 #include "mads/nebular/dialogs_nebular.h"
 
 namespace MADS {

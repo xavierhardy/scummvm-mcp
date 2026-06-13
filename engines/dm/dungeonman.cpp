@@ -415,7 +415,6 @@ DungeonMan::DungeonMan(DMEngine *dmEngine) : _vm(dmEngine) {
 	_dungeonColumCount = 0;
 	_dungeonMapsFirstColumnIndex = nullptr;
 
-	_dungeonColumCount = 0;
 	_dungeonColumnsCumulativeSquareThingCount = nullptr;
 	_squareFirstThings = nullptr;
 	_dungeonTextData = nullptr;
@@ -831,8 +830,11 @@ Square DungeonMan::getRelSquare(Direction dir, int16 stepsForward, int16 stepsRi
 }
 
 int16 DungeonMan::getSquareFirstThingIndex(int16 mapX, int16 mapY) {
+	if ((mapX < 0) || (mapX >= _currMapWidth) || (mapY < 0) || (mapY >= _currMapHeight))
+		return -1;
+
 	unsigned char *curSquare = _currMapData[mapX];
-	if ((mapX < 0) || (mapX >= _currMapWidth) || (mapY < 0) || (mapY >= _currMapHeight) || !getFlag(curSquare[mapY], kDMSquareMaskThingListPresent))
+	if (!getFlag(curSquare[mapY], kDMSquareMaskThingListPresent))
 		return -1;
 
 	int16 curMapY = 0;
@@ -962,8 +964,7 @@ T0172010_ClosedFakeWall:
 			curThing = getNextThing(curThing);
 		}
 
-		AL0307_uc_ScentOrdinal = championMan.getScentOrdinal(mapX, mapY);
-		if (AL0307_uc_FootprintsAllowed && (AL0307_uc_ScentOrdinal) && (--AL0307_uc_ScentOrdinal >= championMan._party._firstScentIndex) && (AL0307_uc_ScentOrdinal < championMan._party._lastScentIndex))
+		if (AL0307_uc_FootprintsAllowed && (AL0307_uc_ScentOrdinal = championMan.getScentOrdinal(mapX, mapY)) && (--AL0307_uc_ScentOrdinal >= championMan._party._firstScentIndex) && (AL0307_uc_ScentOrdinal < championMan._party._lastScentIndex))
 			setFlag(aspectArray[kDMSquareAspectFloorOrn], kDMMaskFootprints);
 
 		break;
@@ -987,8 +988,7 @@ T0172010_ClosedFakeWall:
 		while ((curThing != _vm->_thingEndOfList) && (curThing.getType() <= kDMThingTypeSensor))
 			curThing = getNextThing(curThing);
 
-		AL0307_uc_ScentOrdinal = championMan.getScentOrdinal(mapX, mapY);
-		if (AL0307_uc_FootprintsAllowed && (AL0307_uc_ScentOrdinal) && (--AL0307_uc_ScentOrdinal >= championMan._party._firstScentIndex) && (AL0307_uc_ScentOrdinal < championMan._party._lastScentIndex))
+		if ((AL0307_uc_ScentOrdinal = championMan.getScentOrdinal(mapX, mapY)) && (--AL0307_uc_ScentOrdinal >= championMan._party._firstScentIndex) && (AL0307_uc_ScentOrdinal < championMan._party._lastScentIndex))
 			setFlag(aspectArray[kDMSquareAspectFloorOrn], kDMMaskFootprints);
 		break;
 	default:
@@ -1046,7 +1046,7 @@ Thing DungeonMan::getNextThing(Thing thing) {
 	return Thing(getThingData(thing)[0]);
 }
 
-void DungeonMan::decodeText(char *destString, size_t maxSize, Thing thing, TextType type) {
+void DungeonMan::decodeText(char *destString, size_t maxSize, Thing thing, int16 type) {
 	static char messageAndScrollEscReplacementStrings[32][8] = { // @ G0255_aac_Graphic559_MessageAndScrollEscapeReplacementStrings
 		{'x',   0,   0,   0, 0, 0, 0, 0}, /* Atari ST Version 1.0 1987-12-08 1987-12-11 1.1 1.2EN 1.2GE: { '?',  0,  0,  0, 0, 0, 0, 0 }, */
 		{'y',   0,   0,   0, 0, 0, 0, 0}, /* Atari ST Version 1.0 1987-12-08 1987-12-11 1.1 1.2EN 1.2GE: { '!',  0,  0,  0, 0, 0, 0, 0 }, */
@@ -1130,7 +1130,7 @@ void DungeonMan::decodeText(char *destString, size_t maxSize, Thing thing, TextT
 
 	TextString textString(_thingData[kDMstringTypeText] + thing.getIndex() * _thingDataWordCount[kDMstringTypeText]);
 	if ((textString.isVisible()) || (type & kDMMaskDecodeEvenIfInvisible)) {
-		type = (TextType)(type & ~kDMMaskDecodeEvenIfInvisible);
+		type &= ~kDMMaskDecodeEvenIfInvisible;
 		char sepChar;
 		if (type == kDMTextTypeMessage) {
 			*destString++ = '\n';
@@ -1387,7 +1387,10 @@ int16 DungeonMan::getProjectileAspect(Thing thing) {
 			return -projAspOrd;
 	}
 
-	return _objectInfos[getObjectInfoIndex(thing)]._objectAspectIndex;
+	int16 infoIndex = getObjectInfoIndex(thing);
+	if (infoIndex < 0 || infoIndex >= 180)
+		return 0;
+	return _objectInfos[infoIndex]._objectAspectIndex;
 }
 
 int16 DungeonMan::getLocationAfterLevelChange(int16 mapIndex, int16 levelDelta, int16 *mapX, int16 *mapY) {

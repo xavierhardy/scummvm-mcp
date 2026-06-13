@@ -77,6 +77,7 @@
 #include "director/lingo/xlibs/g/getscreensizexfcn.h"
 #include "director/lingo/xlibs/g/getsoundinlevel.h"
 #include "director/lingo/xlibs/g/gpid.h"
+#include "director/lingo/xlibs/g/getuinfo.h"
 #include "director/lingo/xlibs/h/henry.h"
 #include "director/lingo/xlibs/h/hitmap.h"
 #include "director/lingo/xlibs/i/inixobj.h"
@@ -103,6 +104,7 @@
 #include "director/lingo/xlibs/m/msfile.h"
 #include "director/lingo/xlibs/m/mystisle.h"
 #include "director/lingo/xlibs/m/mazexobj.h"
+#include "director/lingo/xlibs/m/myfolder.h"
 #include "director/lingo/xlibs/o/openbleedwindowxcmd.h"
 #include "director/lingo/xlibs/o/orthoplayxobj.h"
 #include "director/lingo/xlibs/p/paco.h"
@@ -156,6 +158,7 @@
 #include "director/lingo/xtras/d/directsound.h"
 #include "director/lingo/xtras/d/displayres.h"
 #include "director/lingo/xtras/f/filextra.h"
+#include "director/lingo/xtras/g/getdir.h"
 #include "director/lingo/xtras/k/keypoll.h"
 #include "director/lingo/xtras/m/masterapp.h"
 #include "director/lingo/xtras/m/mui.h"
@@ -297,9 +300,11 @@ static const struct XLibProto {
 	XLIBDEF(FlushXObj,			kXObj,			300),	// D3
 	XLIBDEF(FPlayXObj,			kXObj,			200),	// D2
 	XLIBDEF(GenUtilsXObj,		kXObj,			400),	// D4
+	XLIBDEF(GetDirXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(GetScreenRectsXFCN,	kXObj,			300),	// D3
 	XLIBDEF(GetScreenSizeXFCN,	kXObj,			300),	// D3
 	XLIBDEF(GetSoundInLevelXObj,kXObj,			400),	// D4
+	XLIBDEF(GetUInfoXObj,			kXObj,					400),	// D4
 	XLIBDEF(GpidXObj,			kXObj,			400),	// D4
 	XLIBDEF(HenryXObj,			kXObj,			400),	// D4
 	XLIBDEF(HitMap,				kXObj,			400),	// D4
@@ -329,6 +334,7 @@ static const struct XLibProto {
 	XLIBDEF(MovUtilsXObj,		kXObj,			400),	// D4
 	XLIBDEF(MSFile,             kXObj,          400),   // D4
 	XLIBDEF(MuiXtra,			kXtraObj,					500),	// D5
+	XLIBDEF(MyFolderXObj,			kXObj,					400),	// D4
 	XLIBDEF(MystIsleXObj,		kXObj,			400),	// D4
 	XLIBDEF(OSCheckXtra,		kXtraObj,		400),	// D4
 	XLIBDEF(OpenBleedWindowXCMD,kXObj,			300),	// D3

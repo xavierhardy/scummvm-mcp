@@ -452,5 +452,11 @@ int object_examine(int number, long message, int speech) {
 	return (restored_screen);
 }
 
+void init_object() {
+	object = NULL;
+	num_objects = 0;
+	object_ems_handle = BUFFER_PRESERVE;
+}
+
 } // namespace MADSV2
 } // namespace MADS

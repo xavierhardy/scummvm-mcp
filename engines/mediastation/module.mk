@@ -5,6 +5,7 @@ MODULE_OBJS = \
 	actors/camera.o \
 	actors/canvas.o \
 	actors/cursor.o \
+	actors/diskimage.o \
 	actors/document.o \
 	actors/font.o \
 	actors/hotspot.o \
@@ -25,6 +26,7 @@ MODULE_OBJS = \
 	context.o \
 	cursors.o \
 	datafile.o \
+	events.o \
 	graphics.o \
 	mediascript/codechunk.o \
 	mediascript/collection.o \

@@ -19,6 +19,8 @@
  *
  */
 
+#include "common/memstream.h"
+
 #include "mediastation/mediascript/scriptresponse.h"
 #include "mediastation/debugchannels.h"
 #include "mediastation/mediastation.h"
@@ -27,10 +29,15 @@ namespace MediaStation {
 
 ScriptResponse::ScriptResponse(Chunk &chunk) {
 	_type = static_cast<EventType>(chunk.readTypedUint16());
-	debugC(5, kDebugLoading, "%s: %s (%d)", __func__, eventTypeToStr(_type), static_cast<uint>(_type));
-
 	_argumentValue = ScriptValue(&chunk);
-	_code = new CodeChunk(chunk);
+	_bytecodeSize = chunk.readTypedUint32();
+	debugC(5, kDebugLoading, "%s: %s (%d) [%d bytes]",
+		__func__, eventTypeToStr(_type), static_cast<uint>(_type), _bytecodeSize);
+
+	// Store bytecode as a flat buffer rather than a stream, so we can create
+	// fresh streams for each execution (necessary for recursive function calls).
+	_bytecodeBuffer = static_cast<byte *>(malloc(_bytecodeSize));
+	chunk.read(_bytecodeBuffer, _bytecodeSize);
 }
 
 ScriptValue ScriptResponse::execute(uint actorId) {
@@ -41,16 +48,24 @@ ScriptValue ScriptResponse::execute(uint actorId) {
 	Common::String argValue = Common::String::format("(%s)", _argumentValue.getDebugString().c_str());
 	debugC(5, kDebugScript, "\n********** SCRIPT RESPONSE %s %s **********", actorAndType.c_str(), argValue.c_str());
 
-	// The only argument that can be provided to a script response is the argument value.
-	ScriptValue returnValue = _code->execute();
+	// Create a new stream for this execution to avoid conflicts with recursive calls.
+	Common::SeekableReadStream *baseStream = new Common::MemoryReadStream(_bytecodeBuffer, _bytecodeSize, DisposeAfterUse::NO);
+	ParameterReadStream *bytecodeStream = static_cast<ParameterReadStream *>(baseStream);
+	CodeChunk code(bytecodeStream);
+	ScriptValue returnValue = code.executeNextBlock();
+	delete bytecodeStream;
 
 	debugC(5, kDebugScript, "********** END SCRIPT RESPONSE %s %s **********", actorAndType.c_str(), argValue.c_str());
 	return returnValue;
 }
 
 ScriptResponse::~ScriptResponse() {
-	delete _code;
-	_code = nullptr;
+	free(_bytecodeBuffer);
+	_bytecodeBuffer = nullptr;
+}
+
+int64 ScriptResponse::lengthInBytes() const {
+	return _bytecodeSize;
 }
 
 } // End of namespace MediaStation

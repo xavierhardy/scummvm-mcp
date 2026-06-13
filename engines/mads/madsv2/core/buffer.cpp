@@ -81,7 +81,7 @@ bool buffer_free(Buffer *buf) {
 	return flag;
 }
 
-bool buffer_fill(Buffer target, byte value) {
+bool buffer_fill(Buffer &target, byte value) {
 	return buffer_rect_fill(target, 0, 0, target.x, target.y, value);
 }
 
@@ -107,7 +107,7 @@ bool buffer_rect_copy(Buffer from, Buffer unto,
 	return result;
 }
 
-bool buffer_rect_fill(Buffer target, int ul_x, int  ul_y, int  size_x, int  size_y, byte value) {
+bool buffer_rect_fill(Buffer &target, int ul_x, int  ul_y, int  size_x, int  size_y, byte value) {
 	bool result;
 
 	if (buffer_conform(&target, &ul_x, &ul_y, &size_x, &size_y))
@@ -128,7 +128,7 @@ bool buffer_rect_fill(Buffer target, int ul_x, int  ul_y, int  size_x, int  size
 	return result;
 }
 
-bool buffer_rect_copy_2(Buffer from, Buffer unto,
+bool buffer_rect_copy_2(const Buffer &from, Buffer &unto,
 		int from_x, int from_y, int unto_x, int unto_y, int size_x, int size_y) {
 	bool result;
 
@@ -136,7 +136,7 @@ bool buffer_rect_copy_2(Buffer from, Buffer unto,
 
 	if (result && size_x > 0 && size_y > 0)
 	{
-		byte *from_ptr = buffer_pointer(&from, from_x, from_y);
+		const byte *from_ptr = buffer_pointer(&from, from_x, from_y);
 		byte *unto_ptr = buffer_pointer(&unto, unto_x, unto_y);
 		int   from_wrap = from.x - size_x;
 		int   unto_wrap = unto.x - size_x;
@@ -152,22 +152,22 @@ bool buffer_rect_copy_2(Buffer from, Buffer unto,
 	return result;
 }
 
-void buffer_put_pixel(Buffer buf, word x, word y, byte c) {
+void buffer_put_pixel(Buffer &buf, word x, word y, byte c) {
 	buf.data[y * buf.x + x] = c;
 }
 
-byte buffer_get_pixel(Buffer buf, word x, word y) {
+byte buffer_get_pixel(const Buffer &buf, word x, word y) {
 	return buf.data[y * buf.x + x];
 }
 
-void buffer_hline(Buffer buf, word x1, word x2, word y, byte color) {
+void buffer_hline(Buffer &buf, word x1, word x2, word y, byte color) {
 	byte *ptr = buf.data + (y * buf.x) + x1;
 	int   count = x2 - x1 + 1;
 
 	memset(ptr, color, count);
 }
 
-void buffer_vline(Buffer buf, word x, word y1, word y2, byte color) {
+void buffer_vline(Buffer &buf, word x, word y1, word y2, byte color) {
 	byte *ptr = buf.data + (y1 * buf.x) + x;
 	int   count = y2 - y1 + 1;
 
@@ -175,7 +175,7 @@ void buffer_vline(Buffer buf, word x, word y1, word y2, byte color) {
 		*ptr = color;
 }
 
-void buffer_draw_box(Buffer buf, word x1, word y1, word x2, word y2, byte color) {
+void buffer_draw_box(Buffer &buf, word x1, word y1, word x2, word y2, byte color) {
 	int tmp;
 
 	if (x1 > x2) {
@@ -189,7 +189,7 @@ void buffer_draw_box(Buffer buf, word x1, word y1, word x2, word y2, byte color)
 	buffer_vline(buf, x1, y1, y2, color); buffer_vline(buf, x2, y1, y2, color);
 }
 
-void buffer_hline_xor(Buffer buf, int x1, int x2, int y) {
+void buffer_hline_xor(Buffer &buf, int x1, int x2, int y) {
 	if (x1 > x2)
 	{
 		int tmp = x1;
@@ -204,7 +204,7 @@ void buffer_hline_xor(Buffer buf, int x1, int x2, int y) {
 		ptr[i] ^= 0xFF;
 }
 
-void buffer_vline_xor(Buffer buf, int x, int y1, int y2) {
+void buffer_vline_xor(Buffer &buf, int x, int y1, int y2) {
 	if (y1 > y2)
 	{
 		int tmp = y1;
@@ -219,12 +219,12 @@ void buffer_vline_xor(Buffer buf, int x, int y1, int y2) {
 		*ptr ^= 0xFF;
 }
 
-void buffer_draw_crosshair(Buffer buf, int x, int y) {
+void buffer_draw_crosshair(Buffer &buf, int x, int y) {
 	buffer_hline_xor(buf, 0, buf.x - 1, y);
 	buffer_vline_xor(buf, x, 0, buf.y - 1);
 }
 
-void buffer_draw_box_xor(Buffer buf, int x1, int y1, int x2, int y2) {
+void buffer_draw_box_xor(Buffer &buf, int x1, int y1, int x2, int y2) {
 	int tmp;
 
 	if (x1 > x2) {
@@ -240,7 +240,7 @@ void buffer_draw_box_xor(Buffer buf, int x1, int y1, int x2, int y2) {
 	buffer_vline_xor(buf, x2, y1 + 1, y2 - 1);
 }
 
-int buffer_get_delta_bounds(Buffer buf1, Buffer buf2, int newcol,
+int buffer_get_delta_bounds(Buffer &buf1, Buffer buf2, int newcol,
 	word *xl, word *xh, word *yl, word *yh) {
 	if (buf1.x != buf2.x || buf1.y != buf2.y)
 		return -1;
@@ -276,15 +276,16 @@ int buffer_get_delta_bounds(Buffer buf1, Buffer buf2, int newcol,
 byte *buffer_pointer(Buffer *buf, int x, int y) {
 	return buf->data + y * buf->x + x;
 }
+const byte *buffer_pointer(const Buffer *buf, int x, int y) {
+	return buf->data + y * buf->x + x;
+}
 
 bool buffer_conform(Buffer *buffer, int *x, int *y, int *xs, int *ys) {
-	if (*x < 0)
-	{
+	if (*x < 0) {
 		*xs += *x;
 		*x = 0;
 	}
-	if (*y < 0)
-	{
+	if (*y < 0) {
 		*ys += *y;
 		*y = 0;
 	}
@@ -422,7 +423,7 @@ int buffer_legal(const Buffer &walk, int orig_wrap,
 	for (int col = x_count; col > 0; col--) {
 		dAccum += y_count;
 
-		bool blocked = ((*ptr >> bit_pos) & 1) != 0;
+		bool blocked = ((*ptr >> (bit_pos - 1)) & 1) != 0;
 
 		if (blocked) {
 			if (!currently_illegal) {
@@ -436,7 +437,7 @@ int buffer_legal(const Buffer &walk, int orig_wrap,
 
 		while (dAccum >= x_count) {
 			dAccum -= x_count;
-			blocked = ((*ptr >> bit_pos) & 1) != 0;
+			blocked = ((*ptr >> (bit_pos - 1)) & 1) != 0;
 			if (blocked) {
 				if (!currently_illegal) {
 					currently_illegal = true;

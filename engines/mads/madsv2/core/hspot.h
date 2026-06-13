@@ -94,6 +94,8 @@ extern int hspot_which(int x, int y, int video_mode);
  */
 extern int hspot_which_reverse(int x, int y, int video_mode);
 
+extern void init_hspot();
+
 } // namespace MADSV2
 } // namespace MADS
 

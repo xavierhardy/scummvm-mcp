@@ -31,23 +31,24 @@
 #include "graphics/surface.h"
 #include "mads/mads.h"
 #include "mads/nebular/debugger.h"
-#include "mads/core/conversations.h"
-#include "mads/core/dialogs.h"
-#include "mads/core/events.h"
-#include "mads/core/font.h"
-#include "mads/core/game.h"
-#include "mads/core/screen.h"
-#include "mads/core/msurface.h"
-#include "mads/core/resources.h"
-#include "mads/core/sound.h"
+#include "mads/nebular/core/conversations.h"
+#include "mads/nebular/core/dialogs.h"
+#include "mads/nebular/core/events.h"
+#include "mads/nebular/core/font.h"
+#include "mads/nebular/core/game.h"
+#include "mads/nebular/core/screen.h"
+#include "mads/nebular/core/msurface.h"
+#include "mads/nebular/core/resources.h"
+#include "mads/nebular/sound_nebular.h"
 
 namespace MADS {
+namespace Nebular {
 
 #define DEBUG_BASIC 1
 #define DEBUG_INTERMEDIATE 2
 #define DEBUG_DETAILED 3
 
-class RexNebularEngine : public MADSEngine {
+class RexNebularEngine : public MADS::MADSEngine {
 private:
 	/**
 	 * Handles basic initialisation
@@ -66,7 +67,7 @@ public:
 	EventsManager *_events;
 	Font *_font;
 	Game *_game;
-	GameConversations * _gameConv;
+	GameConversations *_gameConv;
 	Palette *_palette;
 	Resources *_resources;
 	Screen *_screen;
@@ -112,6 +113,7 @@ public:
 	void saveOptions();
 };
 
+} // namespace Nebular
 } // namespace MADS
 
 #endif

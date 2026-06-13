@@ -209,5 +209,12 @@ void camera_update() {
 	}
 }
 
+void init_camera() {
+	memset(&camera_x, 0, sizeof(Camera));
+	memset(&camera_y, 0, sizeof(Camera));
+	camera_old_x_target = 0;
+	camera_old_y_target = 0;
+}
+
 } // namespace MADSV2
 } // namespace MADS

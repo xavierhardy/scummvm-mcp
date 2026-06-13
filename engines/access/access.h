@@ -81,49 +81,49 @@ enum ACCESSActions : Common::CustomEventType {
 	kActionMoveDownRight,
 	kActionLook,
 	kActionUse,
-	kActionTake,
+	kActionTake,  // aka GET
 	kActionInventory,
 	kActionClimb,
 	kActionTalk,
-	kActionWalk,
+	kActionWalk, // aka GOTO
 	kActionHelp,
 	kActionOpen,
 	kActionMove,
 	kActionTravel,
 	kActionSkip,
 	kActionSaveLoad,
+	kActionOptions,
 };
+
+/* These are the commands for MM. Noctropolis uses different numbers */
+enum MartianCommands {
+	kMartianCmdLook = 0,
+	kMartianCmdOpen = 1,
+	kMartianCmdMove = 2,
+	kMartianCmdGetTake = 3,
+	kMartianCmdUse = 4,
+	kMartianCmdGoto = 5, // aka walk-to
+	kMartianCmdTalk = 6,
+};
+
+
+/* These are the commands for MM and Amazon. Noctropolis uses different numbers */
+enum AmazonCommands {
+	kAmazonCmdLook = 0,
+	kAmazonCmdOpen = 1,
+	kAmazonCmdMove = 2,
+	kAmazonCmdGetTake = 3,
+	kAmazonCmdUse = 4,
+	kAmazonCmdGoto = 5, // aka walk-to
+	kAmazonCmdTalk = 6,
+	kAmazonCmdWalkToCursor = 7,
+	kAmazonCmdHelp = 8,
+};
+
 
 struct AccessActionCode {
 	ACCESSActions _action;
 	int8 _code;
-};
-
-static const AccessActionCode AMAZON_ACTION_CODES[] = {
-	{ kActionLook, 1 },
-	{ kActionUse, 2 },
-	{ kActionTake, 3 },
-	{ kActionInventory, 4 },
-	{ kActionClimb, 5 },
-	{ kActionTalk, 6 },
-	{ kActionWalk, 7 },
-	{ kActionHelp, 8 },
-	{ kActionSaveLoad, -2 },
-	{ kActionNone, -1 },
-};
-
-static const AccessActionCode MARTIAN_ACTION_CODES[] = {
-	{ kActionLook, 0 },
-	{ kActionOpen, 1 },
-	{ kActionMove, 2 },
-	{ kActionTake, 3 },
-	{ kActionUse, 4 },
-	{ kActionWalk, 5 },
-	{ kActionTalk, 6 },
-	{ kActionTravel, 7 },
-	{ kActionHelp, 8 },
-	{ kActionSaveLoad, -2 },
-	{ kActionNone, -1 },
 };
 
 #define ACCESS_SAVEGAME_VERSION 1
@@ -157,6 +157,11 @@ private:
 	 */
 	void setVGA();
 
+	/**
+	 * Add hotspots to buffer2 for debugging purposes
+	 */
+	void addHotspotHighlights();
+
 protected:
 	const AccessGameDescription *_gameDescription;
 	Common::RandomSource _randomSource;
@@ -186,6 +191,16 @@ protected:
 	*/
 	virtual Common::Error synchronize(Common::Serializer &s);
 
+	/**
+	 * Create game-specific objects, called just before setupGame.
+	 */
+	virtual void initObjects() = 0;
+
+	/**
+	 * Set up the game game-specific objects, called just before playGame.
+	 */
+	virtual void setupGame() = 0;
+
 public:
 	AnimationManager *_animation;
 	BubbleBox *_bubbleBox;
@@ -198,6 +213,7 @@ public:
 	FileManager *_files;
 	InventoryManager *_inventory;
 	Player *_player;
+	Player *_curPlayer; // current player being animated (only changes in Noctropolis)
 	Resources *_res;
 	Room *_room;
 	Screen *_screen;
@@ -212,8 +228,8 @@ public:
 	ASurface _buffer2;
 	ASurface _vidBuf;
 	int _vidX, _vidY;
-	SpriteResource *_objectsTable[100];
-	bool _establishTable[100];
+	SpriteResource *_objectsTable[128];
+	bool _establishTable[128];
 	bool _establishFlag;
 	int _establishMode;
 	int _establishGroup;
@@ -240,7 +256,6 @@ public:
 	int _scaleI;
 	int _scrollX, _scrollY;
 	int _scrollCol, _scrollRow;
-	bool _imgUnscaled;
 	bool _canSaveLoad;
 
 	Resource *_establish;
@@ -257,26 +272,33 @@ public:
 	uint32 _newDate;
 	int _flags[256];
 
-	// Fields used by MM
+	// Fields used by MM and sometimes Noctropolis
 	// TODO: Refactor
-	byte _travel[60];
+	byte _travel[60]; // only first ~15 used in MM
 	byte _ask[40];
+	byte _asked[40]; // Noctropolis only
 	int _startTravelItem;
 	int _startTravelBox;
 	int _startAboutItem;
 	int _startAboutBox;
+
+	Common::Point _askBase; // Noctropolis only
+	bool _keepAskPosition;  // Noctropolis only
 	int _boxDataStart;
 	bool _boxDataEnd;
 	int _boxSelectY;
 	int _boxSelectYOld;
 	int _numLines;
-	byte _byte26CB5;
 	int _bcnt;
 
-	bool _vidEnd;
-	bool _clearSummaryFlag;
-	bool _cheatFl;
-	bool _restartFl;
+	bool _clearSummaryFlag; // amazon only
+	bool _cheatFl; 	 // cheats are enabled
+	bool _restartFl; // game should restart
+	bool _textFlag;  // whether subtitles are enabled
+	bool _hotspotFl; // whether hotspot highlighting is enabled (for debug)
+	bool _exitBox;   // whether the current hotspot is an exit (Noctropolis only)
+	uint16 _stilScaleOff;
+
 	// Fields mapped into the flags array
 	int &_useItem;
 	int &_startup;
@@ -295,7 +317,7 @@ public:
 	Common::Language getLanguage() const;
 	Common::Platform getPlatform() const;
 	uint16 getVersion() const;
-	uint32 getGameID() const;
+	AccessGameType getGameID() const;
 	uint32 getGameFeatures() const;
 	bool shouldQuitOrRestart();
 
@@ -314,6 +336,8 @@ public:
 
 	void plotList();
 	void plotList1();
+	void clearPlotImagesIn(int16 x, int16 y, int16 w, int16 h);
+	void clearPlotVidsIn(int16 x, int16 y, int16 w, int16 h);
 
 	void copyBlocks();
 
@@ -324,6 +348,9 @@ public:
 	void copyBF2Vid();
 
 	void freeChar();
+
+	virtual int16 getScreenWidth() const { return 320; }
+	virtual int16 getScreenHeight() const { return 200; }
 
 	/**
 	 * Draw a string on a given surface and update text positioning
@@ -359,6 +386,14 @@ public:
 	static bool readSavegameHeader(Common::InSaveFile *in, AccessSavegameHeader &header, bool skipThumbnail = true);
 
 	bool playMovie(const Common::Path &filename, const Common::Point &pos);
+
+	const AccessActionCode *getActionCodes();
+
+	/**
+	 * Draw additional things on the screen after main rendering
+     */
+	virtual void drawOverlays();
+
 };
 
 } // End of namespace Access

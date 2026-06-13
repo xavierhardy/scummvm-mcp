@@ -30,7 +30,7 @@
 
 namespace MADS {
 
-MpsInstaller* MpsInstaller::open(const Common::Path& baseName) {
+MpsInstaller *MpsInstaller::open(const Common::Path &baseName) {
 	Common::File indexFile;
 	FileMap _files;
 
@@ -89,7 +89,7 @@ Common::SharedArchiveContents MpsInstaller::readContentsForPath(const Common::Pa
 	FileDescriptor desc = _files.getVal(translated);
 
 	if (desc._compressionAlgo != 0 && desc._compressionAlgo != 1) {
-		debug ("Unsupported compression algorithm %d for %s", desc._compressionAlgo, desc._fileName.toString().c_str());
+		debug("Unsupported compression algorithm %d for %s", desc._compressionAlgo, desc._fileName.toString().c_str());
 		return Common::SharedArchiveContents();
 	}
 
@@ -131,19 +131,20 @@ Common::SharedArchiveContents MpsInstaller::readContentsForPath(const Common::Pa
 		uncompressedSize = desc._compressedSize;
 		compressedBuf = nullptr;
 		break;
-	case 1: {
-			Common::MemoryReadStream compressedReadStream(compressedBuf, desc._compressedSize);
-			uncompressedBuf = new byte[uncompressedSize];
-			if (!Common::decompressDCL(&compressedReadStream, uncompressedBuf, desc._compressedSize, uncompressedSize)) {
-				delete[] compressedBuf;
-				delete[] uncompressedBuf;
-				error("Unable to decompress %s", desc._fileName.toString().c_str());
-				return Common::SharedArchiveContents();
-			}
+	case 1:
+	{
+		Common::MemoryReadStream compressedReadStream(compressedBuf, desc._compressedSize);
+		uncompressedBuf = new byte[uncompressedSize];
+		if (!Common::decompressDCL(&compressedReadStream, uncompressedBuf, desc._compressedSize, uncompressedSize)) {
 			delete[] compressedBuf;
-			compressedBuf = nullptr;
+			delete[] uncompressedBuf;
+			error("Unable to decompress %s", desc._fileName.toString().c_str());
+			return Common::SharedArchiveContents();
+		}
+		delete[] compressedBuf;
+		compressedBuf = nullptr;
 
-		} break;
+	} break;
 	default:
 		error("Unsupported compression algorithm");
 		uncompressedBuf = nullptr;
@@ -153,4 +154,5 @@ Common::SharedArchiveContents MpsInstaller::readContentsForPath(const Common::Pa
 	// TODO: Make it configurable to read directly from disk, at least in the uncompressed case
 	return Common::SharedArchiveContents(uncompressedBuf, desc._uncompressedSize);
 }
-}
+
+} // namespace MADS

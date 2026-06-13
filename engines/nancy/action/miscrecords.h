@@ -23,6 +23,7 @@
 #define NANCY_ACTION_RECORDTYPES_H
 
 #include "engines/nancy/action/actionrecord.h"
+#include "engines/nancy/enginedata.h"
 
 namespace Nancy {
 
@@ -107,6 +108,124 @@ public:
 
 protected:
 	Common::String getRecordTypeName() const override { return "TextboxClear"; }
+};
+
+// Nancy 10+ replacement for TextBoxWrite. Pushes a line of conversation
+// text into the new (UICO-driven) textbox
+class FrameTextBox : public ActionRecord {
+public:
+	enum Variant {
+		kVariant74 = 74,
+		kVariant75 = 75,
+		kVariant81 = 81
+	};
+
+	FrameTextBox(Variant variant) : _variant(variant), _flags(0), _slot(0) {}
+
+	void readData(Common::SeekableReadStream &stream) override;
+	void execute() override;
+
+	Variant _variant;
+	Common::String _text;
+	int16 _flags;
+	int16 _slot;
+
+protected:
+	Common::String getRecordTypeName() const override { return "FrameTextBox"; }
+};
+
+// Nancy 10+ opcode 29. Toggles whether one of the taskbar popups
+// (inventory / notebook / cellphone) is enabled.
+class ControlUIItems : public ActionRecord {
+public:
+	enum UIType {
+		kUITypeInventory = 1,
+		kUITypeNotebook  = 2,
+		kUITypeCellphone = 3
+	};
+
+	void readData(Common::SeekableReadStream &stream) override;
+	void execute() override;
+
+	uint16 _uiButton = 0;
+	byte _autoOpenOrBadgeSound = 0; // 1 = auto-open popup; 0/10 = notification-badge click-sound selector
+	byte _flagB = 0;    // 0 = clear, 1 = enable+remember scene
+	int16 _startScene = 0; // start scene id (9999 = none); also the auto-open cell phone's call target
+	int16 _endScene = 0;   // end scene id (9999 = none)
+
+protected:
+	Common::String getRecordTypeName() const override { return "ControlUIItems"; }
+};
+
+// Nancy 10+ opcode 32. Prepares a UI popup
+class UIPopupPrepScene : public ActionRecord {
+public:
+	void readData(Common::SeekableReadStream &stream) override;
+	void execute() override;
+
+	int32 _uiType = 0;
+	int32 _signalValue = 0;
+
+protected:
+	Common::String getRecordTypeName() const override { return "UIPopupPrepScene"; }
+};
+
+// Nancy 10+ opcode 131. Pushes a new entry into either the cellphone
+// search-results list (mode 0) or the URL link list (mode 1).
+class AddSearchLink : public ActionRecord {
+public:
+	void readData(Common::SeekableReadStream &stream) override;
+	void execute() override;
+
+	int16 _mode = 0;
+	Common::String _key;          // CVTX key for the list row text (both modes)
+	Common::String _value;        // body CVTX key (mode 0/email); unused for mode 1
+	int16 _extra = 0;             // page index (mode 1); unused for mode 0
+	int16 _flag = 0;              // stored but unused by the original; reserved
+	int16 _eventFlag = 0;         // event-flag index set when the entry is opened
+
+protected:
+	Common::String getRecordTypeName() const override { return "AddSearchLink"; }
+};
+
+// Sets the cellphone's battery/signal indicators. Modes 0/1 toggle the
+// battery (normal / low) and 2/3 toggle the signal (normal / no signal).
+class SetCellPhoneBatteryAndSignal : public ActionRecord {
+public:
+	void readData(Common::SeekableReadStream &stream) override;
+	void execute() override;
+
+	uint16 _mode = 0;
+
+protected:
+	Common::String getRecordTypeName() const override { return "SetCellPhoneBatteryAndSignal"; }
+};
+
+// Adds a new entry to the cellphone directory, or overwrites an existing
+// one matched by dial pattern. Used to unlock contacts as the player
+// progresses (Nancy 10+).
+class ChangeCellPhoneInfo : public ActionRecord {
+public:
+	void readData(Common::SeekableReadStream &stream) override;
+	void execute() override;
+
+	UICL::Contact _contact;
+
+protected:
+	Common::String getRecordTypeName() const override { return "ChangeCellPhoneInfo"; }
+};
+
+// Returns from a cellphone-driven conversation scene to the pre-call scene.
+// sceneID == kNoScene pops the saved scene; any other sceneID overrides it.
+class CellPhonePopCellSceneFromStack : public ActionRecord {
+public:
+	void readData(Common::SeekableReadStream &stream) override;
+	void execute() override;
+
+	SceneChangeDescription _sceneChange;
+
+protected:
+	Common::String getRecordTypeName() const override { return "CellPhonePopCellSceneFromStack"; }
 };
 
 // Changes the in-game time. Used prior to the introduction of SetPlayerClock.

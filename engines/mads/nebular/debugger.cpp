@@ -20,17 +20,18 @@
  */
 
 #include "common/file.h"
-#include "mads/core/compression.h"
+#include "mads/nebular/core/compression.h"
 #include "mads/nebular/nebular.h"
 #include "mads/nebular/debugger.h"
 #include "mads/nebular/menu_nebular.h"
 
 namespace MADS {
+namespace Nebular {
 
 Debugger::Debugger(RexNebularEngine *vm) : GUI::Debugger(), _vm(vm) {
 	_showMousePos = false;
 
-	registerCmd("continue",		WRAP_METHOD(Debugger, cmdExit));
+	registerCmd("continue", WRAP_METHOD(Debugger, cmdExit));
 	registerCmd("mouse", WRAP_METHOD(Debugger, Cmd_Mouse));
 	registerCmd("scene", WRAP_METHOD(Debugger, Cmd_LoadScene));
 	registerCmd("show_hotspots", WRAP_METHOD(Debugger, Cmd_ShowHotSpots));
@@ -404,4 +405,6 @@ bool Debugger::Cmd_SetCamera(int argc, const char **argv) {
 		return false;
 	}
 }
+
+} // namespace Nebular
 } // namespace MADS

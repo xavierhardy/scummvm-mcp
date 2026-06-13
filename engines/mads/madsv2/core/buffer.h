@@ -69,7 +69,7 @@ extern bool buffer_free(Buffer *buf);
  * Fills an entire buffer with a single byte value.
  * @return	Returns true if successful.
  */
-extern bool buffer_fill(Buffer target, byte value);
+extern bool buffer_fill(Buffer &target, byte value);
 
 /**
  * Copies a "rectangular" buffer area from "from" to "unto".  Size
@@ -92,7 +92,7 @@ extern bool buffer_rect_copy(Buffer from, Buffer unto,
  * but "null" copies (x or y size 0) are handled correctly.
  * @return	Returns TRUE if successful; false if buffer invalid.
  */
-extern bool buffer_rect_fill(Buffer target,
+extern bool buffer_rect_fill(Buffer &target,
 	int ul_x, int ul_y, int size_x, int size_y, byte value);
 
 /**
@@ -105,7 +105,7 @@ extern bool buffer_rect_fill(Buffer target,
  *
  * @return	Returns TRUE if successful.
  */
-extern bool buffer_rect_copy_2(Buffer from, Buffer unto,
+extern bool buffer_rect_copy_2(const Buffer &from, Buffer &unto,
 	int    from_x, int    from_y,
 	int    unto_x, int    unto_y,
 	int    size_x, int    size_y);
@@ -113,49 +113,49 @@ extern bool buffer_rect_copy_2(Buffer from, Buffer unto,
 /**
  * Given X and Y, sets pixel to color C
  */
-void buffer_put_pixel(Buffer buf, word x, word y, byte c);
+void buffer_put_pixel(Buffer &buf, word x, word y, byte c);
 
 /**
  * Given X and Y, gets the pixel at that position.
  */
-byte buffer_get_pixel(Buffer buf, word x, word y);
+byte buffer_get_pixel(const Buffer &buf, word x, word y);
 
 /**
  * Given starting and ending points on the X axis, and the constant
  * Y value, draws a line in the given color on the live MCGA screen.
  */
-void buffer_hline(Buffer buf, word x1, word x2, word y, byte color);
+void buffer_hline(Buffer &buf, word x1, word x2, word y, byte color);
 
 /**
  * Given starting and ending points on the Y axis, and the constant
  * X value, draws a line in the given color on the live MCGA screen.
  */
-void buffer_vline(Buffer buf, word x, word y1, word y2, byte color);
+void buffer_vline(Buffer &buf, word x, word y1, word y2, byte color);
 
 /**
  * Draws outside edge of retangle given home and size along both axis.
  */
-void buffer_draw_box(Buffer buf, word x1, word y1, word x2, word y2, byte color);
+void buffer_draw_box(Buffer &buf, word x1, word y1, word x2, word y2, byte color);
 
 /**
  * Draws a horizontal line by xoring/inverting the existing pixels
  */
-void buffer_hline_xor(Buffer buf, int x1, int x2, int y);
+void buffer_hline_xor(Buffer &buf, int x1, int x2, int y);
 
 /**
  * Draws a vertical line by xoring/inverting the existing pixels
  */
-void buffer_vline_xor(Buffer buf, int x, int y1, int y2);
+void buffer_vline_xor(Buffer &buf, int x, int y1, int y2);
 
 /**
  * Draws a cross-hairs at the specified x, y
  */
-void buffer_draw_crosshair(Buffer buf, int x, int y);
+void buffer_draw_crosshair(Buffer &buf, int x, int y);
 
 /**
  * Draws a box using pixel xor inversion
  */
-void buffer_draw_box_xor(Buffer buf, int x1, int y1, int x2, int y2);
+void buffer_draw_box_xor(Buffer &buf, int x1, int y1, int x2, int y2);
 
 /**
  * Scans the two buffers.  Locations that are not the same on both buffers
@@ -163,7 +163,7 @@ void buffer_draw_box_xor(Buffer buf, int x1, int y1, int x2, int y2);
  * in the words pointed to by *XL,*XH,*YL,*YH.
  * @return	Returns -1 if an error occurs.
  */
-extern bool buffer_get_delta_bounds(Buffer buf1, Buffer buf2,
+extern bool buffer_get_delta_bounds(Buffer &buf1, Buffer buf2,
 	byte newcol, word *xl, word *xh, word *yl, word *yh);
 
 /**
@@ -174,6 +174,7 @@ extern bool buffer_get_delta_bounds(Buffer buf1, Buffer buf2,
  * @return		Pointer
  */
 extern byte *buffer_pointer(Buffer *buf, int x, int y);
+extern const byte *buffer_pointer(const Buffer *buf, int x, int y);
 
 extern bool buffer_conform(Buffer *buffer, int *x, int *y,
 	int *xs, int *ys);

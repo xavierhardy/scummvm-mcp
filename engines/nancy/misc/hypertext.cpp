@@ -82,6 +82,7 @@ void HypertextParser::drawAllText(const Common::Rect &textBounds, uint leftOffse
 		newlineTokens.push(0);
 		int curFontID = fontID;
 		uint numNonSpaceChars = 0;
+		bool hasMark = false;
 
 		// Token braces plus invalid characters that are known to appear in strings
 		Common::StringTokenizer tokenizer(_textLines[lineID], "<>\"");
@@ -192,6 +193,7 @@ void HypertextParser::drawAllText(const Common::Rect &textBounds, uint leftOffse
 					}
 
 					metaInfo.push({MetaInfo::kMark, numNonSpaceChars, (byte)(curToken[0] - '1')});
+					hasMark = true;
 					continue;
 				default:
 					break;
@@ -199,7 +201,7 @@ void HypertextParser::drawAllText(const Common::Rect &textBounds, uint leftOffse
 
 				// Ignore non-tokens when they're between braces. This fixes nancy6 scenes 1953 & 1954,
 				// where some sound names slipped through into the text data.
-				debugC(Nancy::kDebugHypertext, "Unrecognized hypertext tag <%s>", curToken.c_str());
+				debugC(kDebugHypertext, "Unrecognized hypertext tag <%s>", curToken.c_str());
 				continue;
 			}
 
@@ -222,7 +224,13 @@ void HypertextParser::drawAllText(const Common::Rect &textBounds, uint leftOffse
 		// Do word wrapping on the text, sans tokens. This assumes
 		// all text uses fonts of the same width
 		Array<Common::String> wrappedLines;
-		font->wordWrap(currentLine, textBounds.width(), wrappedLines, 0);
+		int maxWidth = textBounds.width();
+		if (hasMark) {
+			auto *mark = GetEngineData(MARK);
+			assert(mark);
+			maxWidth -= mark->_markSrcs[0].width();
+		}
+		font->wordWrap(currentLine, maxWidth, wrappedLines, 0);
 
 		// Setup most of the hotspot; textbox
 		if (hasHotspot) {

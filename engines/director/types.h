@@ -358,6 +358,10 @@ enum ChunkType {
 };
 
 enum FileVer {
+	kFileVer010 = 0x100,
+	kFileVer020 = 0x200,
+	kFileVer100 = 0x3ff,
+	kFileVer200 = 0x400,
 	kFileVer300 = 0x404,
 	kFileVer310 = 0x405,
 	kFileVer400 = 0x45B,

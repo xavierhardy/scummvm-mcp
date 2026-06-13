@@ -35,6 +35,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_102_init(void) {
 	int death_x = 0;
 	int death_y = 0;
@@ -301,6 +303,14 @@ void room_102_preload(void) {
 
 	section_1_walker();
 	section_1_interface();
+}
+
+
+void room_102_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(local->anim_0_running);
 }
 
 } // namespace Rooms

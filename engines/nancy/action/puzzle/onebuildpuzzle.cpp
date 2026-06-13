@@ -78,14 +78,21 @@ void OneBuildPuzzle::init() {
 		p.setTransparent(true);
 		p.setZ(_z + (uint16)i + 1);
 	}
+
+	_isInitialized = true;
 }
 
 void OneBuildPuzzle::registerGraphics() {
+	if (!_isInitialized)
+		return;
+
 	for (uint i = 0; i < _pieces.size(); ++i)
 		_pieces[i].registerGraphics();
 }
 
 void OneBuildPuzzle::readData(Common::SeekableReadStream &stream) {
+	const bool isNancy10 = g_nancy->getGameType() >= kGameTypeNancy10;
+
 	readFilename(stream, _imageName);
 
 	_numPieces = stream.readUint16LE();
@@ -93,64 +100,108 @@ void OneBuildPuzzle::readData(Common::SeekableReadStream &stream) {
 	_canRotateAll = stream.readByte();
 	stream.skip(6); // rotationMode, zoneHeight, zoneWidth, mouse-clamping flag
 	_slotTolerance = stream.readSint16LE();
+
+	if (isNancy10) {
+		// TODO: purpose of this duplicate placement-order block is unknown.
+		_legacyOrderedFlag = stream.readByte() != 0;
+		_legacyPlacementOrder.resize(20);
+		for (uint i = 0; i < 20; ++i)
+			_legacyPlacementOrder[i] = stream.readSint16LE();
+	}
+
 	_orderedPlacement = stream.readByte();
 
 	_placementOrder.resize(20);
 	for (uint i = 0; i < 20; ++i)
 		_placementOrder[i] = stream.readSint16LE();
 
+	// Nancy 10 piece records add an alternative source rect at the front.
+	const uint pieceSize = isNancy10 ? 66 : 50;
+
 	_pieces.resize(_numPieces);
 	for (uint i = 0; i < 20; ++i) {
-		if (i < _numPieces) {
-			Piece &p = _pieces[i];
-			readRect(stream, p.srcRect);
-			readRect(stream, p.slotRect);
-			readRect(stream, p.homeRect);
-			p.defaultRotation = stream.readByte();
-			p.isPreRotated = stream.readByte();
-		} else {
-			stream.skip(50);
+		if (i >= _numPieces) {
+			stream.skip(pieceSize);
+			continue;
 		}
+
+		Piece &p = _pieces[i];
+		if (isNancy10) {
+			// Fall back to the alt rect when the primary one is empty.
+			Common::Rect altSrc;
+			readRect(stream, altSrc);
+			readRect(stream, p.srcRect);
+			if (p.srcRect.isEmpty())
+				p.srcRect = altSrc;
+		} else {
+			readRect(stream, p.srcRect);
+		}
+		readRect(stream, p.slotRect);
+		readRect(stream, p.homeRect);
+		p.defaultRotation = stream.readByte();
+		p.isPreRotated = stream.readByte();
 	}
 
-	_pickupSound.readNormal(stream);  // +0x43e: played when rotating a placed piece
-	_rotateSound.readNormal(stream);  // +0x46f: played when picking up an unplaced piece
-	_dropSound.readNormal(stream);    // +0x4a0: played when dropping a piece
+	if (isNancy10) {
+		stream.skip(32); // TODO: 32 post-piece bytes, layout undecoded.
+		readFilename(stream, _extraSoundName);
+		readRect(stream, _animRectA);
+		readRect(stream, _animRectB);
+		for (uint i = 0; i < 6; ++i)
+			_animLayout[i] = stream.readSint16LE();
+		_animSound1.readNormal(stream);
+		_animSound2.readNormal(stream);
+	}
+
+	_pickupSound.readNormal(stream);
+	_rotateSound.readNormal(stream);
+	_dropSound.readNormal(stream);
 	readFilename(stream, _dropAlt1Filename);
 	readFilename(stream, _dropAlt2Filename);
 
-	_goodPlacementSound.readNormal(stream); // +0x513
+	_goodPlacementSound.readNormal(stream);
 	readFilename(stream, _goodAlt1Filename);
 	readFilename(stream, _goodAlt2Filename);
 
 	_goodTexts.resize(3);
+
+	const CVTX *autotext = (const CVTX *)g_nancy->getEngineData("AUTOTEXT");
+	assert(autotext);
+
 	Common::String unusedKey;
-	for (uint i = 0; i < 3; ++i)
-		readFilename(stream, unusedKey);
 	char textBuf[200];
+
 	for (uint i = 0; i < 3; ++i) {
 		stream.read(textBuf, 200);
 		assembleTextLine(textBuf, _goodTexts[i], 200);
+		if (!_goodTexts[i].empty() && autotext->texts.contains(_goodTexts[i]))
+			_goodTexts[i] = autotext->texts[_goodTexts[i]];
 	}
+	for (uint i = 0; i < 3; ++i)
+		readFilename(stream, unusedKey);
 
-	_badPlacementSound.readNormal(stream);  // +0x841
+	_badPlacementSound.readNormal(stream);
 	readFilename(stream, _badAlt1Filename);
 	readFilename(stream, _badAlt2Filename);
 
 	_badTexts.resize(3);
-	for (uint i = 0; i < 3; ++i)
-		readFilename(stream, unusedKey);
 	for (uint i = 0; i < 3; ++i) {
 		stream.read(textBuf, 200);
 		assembleTextLine(textBuf, _badTexts[i], 200);
+		if (!_badTexts[i].empty() && autotext->texts.contains(_badTexts[i]))
+			_badTexts[i] = autotext->texts[_badTexts[i]];
 	}
+	for (uint i = 0; i < 3; ++i)
+		readFilename(stream, unusedKey);
 
-	stream.skip(4); // unknown bytes at +0xb6f
+	stream.skip(4); // TODO: 4 bytes before solveScene, unknown.
 	_solveScene.readData(stream);
 	_completionSound.readNormal(stream);
 	readFilename(stream, unusedKey);
 	stream.read(textBuf, 200);
 	assembleTextLine(textBuf, _completionText, 200);
+	if (!_completionText.empty() && autotext->texts.contains(_completionText))
+		_completionText = autotext->texts[_completionText];
 
 	_cancelScene.readData(stream);
 	readRect(stream, _exitHotspot);
@@ -182,8 +233,9 @@ void OneBuildPuzzle::execute() {
 					// Pickup/rotate sound finished; return to idle (piece still dragging)
 					_solveState = kIdle;
 				} else if (_correctlyPlaced) {
-					playGoodPlacementSound();
 					checkAllPlaced();
+					if (!_isSolved)
+						playGoodPlacementSound();
 				} else {
 					// Wrong drop: play bad placement feedback
 					playBadPlacementSound();
@@ -206,6 +258,7 @@ void OneBuildPuzzle::execute() {
 			break;
 		case kTriggerCompletion:
 			// Play completion sound/text, then wait for it to finish
+			g_nancy->_sound->loadSound(_completionSound);
 			g_nancy->_sound->playSound(_completionSound);
 			if (!_completionText.empty()) {
 				NancySceneState.getTextbox().clear();
@@ -320,19 +373,20 @@ void OneBuildPuzzle::handleInput(NancyInput &input) {
 	}
 
 	if (topmostAny != -1) {
-		g_nancy->_cursor->setCursorType(CursorManager::kHotspot);
-
-		// Right click: rotate topmost piece under cursor
-		if (input.input & NancyInput::kRightMouseButtonUp) {
-			rotatePiece(topmostAny);
-			playPickupSound();
-			return;
-		}
+		if (topmostUnplaced != -1)
+			g_nancy->_cursor->setCursorType(CursorManager::kCustom1);
 
 		// Left click on an unplaced piece: pick it up
-		if ((input.input & NancyInput::kLeftMouseButtonUp) && topmostUnplaced != -1) {
-			Piece &pp = _pieces[topmostUnplaced];
+		// Right click: pick it up and rotate it
+		bool leftClick = (input.input & NancyInput::kLeftMouseButtonUp);
+		bool rightClick = (input.input & NancyInput::kRightMouseButtonUp);
+		if ((leftClick || rightClick) && topmostUnplaced != -1) {
 			_pickedUpPiece = topmostUnplaced;
+
+			if (rightClick)
+				rotatePiece(_pickedUpPiece);
+
+			Piece &pp = _pieces[_pickedUpPiece];
 			_isDragging = true;
 			_pickedUpWidth  = pp.rotateSurfaces[pp.curRotation].w;
 			_pickedUpHeight = pp.rotateSurfaces[pp.curRotation].h;

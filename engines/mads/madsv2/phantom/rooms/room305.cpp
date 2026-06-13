@@ -44,6 +44,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_305_init() {
 	local->unmask = false;
 	local->prevent = false;
@@ -103,22 +105,23 @@ static void handle_animation_unmask() {
 		unmask_reset_frame = -1;
 
 		switch (local->unmask_frame) {
-		case 25:  /* end of struggle with phantom masked */
+		case 25:
+			// End of struggle with phantom masked
 			if (!local->unmask) {
 				unmask_reset_frame = 0;
 			}
 			break;
 
-		case 60:  /* somewhere when we can see phantom's face */
-			global_speech(10);
-
+		case 55:
+			// Somewhere when we can see phantom's face
 			kernel_message_add(quote_string(kernel.quotes, quote_305a0),
 				176, 53, MESSAGE_COLOR, SIX_SECONDS, 0, 0);
 			kernel_message_add(quote_string(kernel.quotes, quote_305a1),
 				176, 68, MESSAGE_COLOR, SIX_SECONDS, 0, 0);
 			break;
 
-		case 95:  /* end of unmasking */
+		case 67:
+			// End of unmasking
 			new_room = 306;
 			break;
 		}
@@ -162,6 +165,20 @@ void room_305_preload() {
 
 	section_3_walker();
 	section_3_interface();
+}
+
+
+void room_305_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->anim_0_running,
+		local->anim_1_running,
+		local->unmask_frame,
+		local->unmask_action,
+		local->unmask,
+		local->prevent);
 }
 
 } // namespace Rooms

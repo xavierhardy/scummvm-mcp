@@ -28,7 +28,8 @@
 namespace MADS {
 namespace MADSV2 {
 
-constexpr int CONV_MAX_SLOTS = 40;
+// Return of the Phantom needs 40, Dragonsphere needs 70
+constexpr int CONV_MAX_SLOTS = 70;
 constexpr int CONV_MAX_DATA = 5;
 
 enum ConvStatus {
@@ -207,6 +208,7 @@ extern int16 *conv_vars0ValPtr;
 extern int conv_restore_running;
 extern ConvControl conv_control;
 extern int16 *conv_my_next_start;
+extern bool conv_show_boxes;
 
 extern void conv_system_init();
 extern void conv_system_cleanup();
@@ -226,8 +228,11 @@ extern void conv_export_value(int16 value);
 extern void conv_hold();
 extern void conv_release();
 extern void conv_flush();
+extern void conv_reset(int id);
 extern int conv_append(Common::WriteStream *handle);
 extern int conv_expand(Common::SeekableReadStream *handle);
+
+extern void init_conv();
 
 } // namespace MADSV2
 } // namespace MADS

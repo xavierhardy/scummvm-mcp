@@ -44,6 +44,8 @@ namespace MADSV2 {
 namespace Phantom {
 namespace Rooms {
 
+static Scratch scratch;
+
 void room_303_init(void) {
 	local->anim_0_running = false;
 	local->frame_guard = false;
@@ -345,6 +347,17 @@ void room_303_preload(void) {
 
 	vocab_make_active(words_chandelier_cable);
 	vocab_make_active(words_climb_down);
+}
+
+
+void room_303_synchronize(Common::Serializer &s) {
+	s.syncMultipleLE(local->sprite);
+	s.syncMultipleLE(local->sequence);
+	s.syncMultipleLE(local->animation);
+	s.syncMultipleLE(
+		local->dynamic_hemp,
+		local->anim_0_running,
+		local->frame_guard);
 }
 
 } // namespace Rooms

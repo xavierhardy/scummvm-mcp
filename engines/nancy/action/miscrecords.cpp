@@ -30,6 +30,7 @@
 
 #include "common/events.h"
 #include "common/config-manager.h"
+#include "nancy/ui/taskbar.h"
 
 namespace Nancy {
 namespace Action {
@@ -115,7 +116,7 @@ void TextBoxWrite::readData(Common::SeekableReadStream &stream) {
 		const CVTX *autotext = (const CVTX *)g_nancy->getEngineData("AUTOTEXT");
 		assert(autotext);
 
-		_text = autotext->texts[stringID];
+		_text = getTextFromCaseInsensitiveKey(autotext->texts, stringID);
 	} else {
 		char *buf = new char[size];
 		stream.read(buf, size);
@@ -141,6 +142,228 @@ void TextboxClear::readData(Common::SeekableReadStream &stream) {
 
 void TextboxClear::execute() {
 	NancySceneState.getTextbox().clear();
+	finishExecution();
+}
+
+void FrameTextBox::readData(Common::SeekableReadStream &stream) {
+	const int16 size = stream.readSint16LE();
+
+	if (size > 10000)
+		error("FrameTextBox: too many text characters: %d", size);
+
+	if (size == -1) {
+		// CVTX-keyed lookup, same as the Nancy 6+ TextBoxWrite path.
+		Common::String stringID;
+		readFilename(stream, stringID);
+
+		const CVTX *autotext = (const CVTX *)g_nancy->getEngineData("AUTOTEXT");
+		assert(autotext);
+
+		_text = getTextFromCaseInsensitiveKey(autotext->texts, stringID);
+	} else if (size > 0) {
+		char *buf = new char[size];
+		stream.read(buf, size);
+		buf[size - 1] = '\0';
+
+		assembleTextLine(buf, _text, size);
+
+		delete[] buf;
+	}
+
+	// Trailing two int16 fields: meaning differs slightly between the
+	// three opcodes that reuse this layout, but are safe to capture as a
+	// pair until UICO conversation rendering is wired up.
+	_flags = stream.readSint16LE();
+	_slot  = stream.readSint16LE();
+}
+
+void FrameTextBox::execute() {
+	auto &tb = NancySceneState.getTextbox();
+	tb.clear();
+	if (!_text.empty()) {
+		tb.addTextLine(_text);
+	}
+
+	// Variant 74 (case 0x4a in ProcessActionRecords) opens the full-width
+	// textbox overlay that covers the taskbar buttons; the original arms a
+	// 15-second timer (DAT_005a7a7d = GetTickCount + 15000) that drops it
+	// back to the closed strip. Variant 75 (case 0x4b) is the legacy
+	// closed/strip path. Variant 81 first appears in Nancy 11; tentatively
+	// route it like 74 until its real semantics are confirmed.
+	if (_variant == kVariant74 || _variant == kVariant81) {
+		tb.setFullMode(true);
+	} else {
+		tb.setFullMode(false);
+	}
+
+	finishExecution();
+}
+
+void ControlUIItems::readData(Common::SeekableReadStream &stream) {
+	_uiButton = stream.readUint16LE();
+	_autoOpenOrBadgeSound = stream.readByte();
+	_flagB  = stream.readByte();
+	_startScene = stream.readSint16LE();
+	_endScene = stream.readSint16LE();
+}
+
+void ControlUIItems::execute() {
+	// Value 1 auto-opens the popup selected by _uiButton. For the cell
+	// phone, _startScene (when set) is the scene to jump to once it opens,
+	// which places a call that starts a conversation there.
+	if (_autoOpenOrBadgeSound == 1) {
+		switch (_uiButton) {
+		case kUITypeInventory:
+			NancySceneState.getInventoryPopup().open();
+			break;
+		case kUITypeNotebook:
+			NancySceneState.getNotebookPopup().open();
+			break;
+		case kUITypeCellphone: {
+			UI::CellPhonePopup &phone = NancySceneState.getCellPhonePopup();
+
+			if (_startScene != (int16)kNoScene) {
+				SceneChangeDescription scene;
+				scene.sceneID = _startScene;
+				scene.frameID = 0;
+				scene.verticalOffset = 0;
+				// The destination scene's sound carries the conversation audio.
+				scene.continueSceneSound = kLoadSceneSound;
+				// Phone rings, picks up, and changeScenes into `scene`.
+				phone.startIncomingCall(scene);
+			} else {
+				phone.open();
+			}
+			break;
+		}
+		default:
+			break;
+		}
+	} else {
+		// Otherwise this AR toggles whether the button is disabled while the
+		// player is in scene range [_startScene, _endScene]. _flagB != 0 sets
+		// the toggle (a _startScene of 9997 means "from scene 0", with the
+		// range capped at 9997); _flagB == 0 clears it once a bound is 9999
+		// (kNoScene). The _autoOpenOrBadgeSound value selects the button's
+		// click sound in the original (not yet implemented).
+		UI::Taskbar *taskbar = NancySceneState.getTaskbar();
+		if (taskbar) {
+			if (_flagB != 0) {
+				int16 start = _startScene;
+				int16 end = _endScene;
+				if (_startScene == 9997) {
+					start = 0;
+					end = 9997;
+				}
+				taskbar->setDisabledRange(_uiButton, start, end);
+			} else if (_startScene == (int16)kNoScene || _endScene == (int16)kNoScene) {
+				taskbar->clearButtonOverride(_uiButton);
+			}
+		}
+	}
+
+	finishExecution();
+}
+
+void UIPopupPrepScene::readData(Common::SeekableReadStream &stream) {
+	_uiType      = stream.readSint32LE();
+	_signalValue = stream.readSint32LE();
+}
+
+void UIPopupPrepScene::execute() {
+	// TODO: finish this
+
+	debug("UIPopupPrepScene: UIType=%d, signalValue=%d", _uiType, _signalValue);
+
+	finishExecution();
+}
+
+void AddSearchLink::readData(Common::SeekableReadStream &stream) {
+	_mode = stream.readSint16LE();
+
+	readFilename(stream, _key);
+	readFilename(stream, _value);
+
+	_extra  = stream.readSint16LE();
+	_flag = stream.readSint16LE();
+	_eventFlag = stream.readSint16LE();
+}
+
+void AddSearchLink::execute() {
+	NancySceneState.getCellPhonePopup().addSearchLink(
+		_mode, _key, _value, _extra, _flag, _eventFlag);
+
+	// Cellphone taskbar badge: mode 0 = new email (sub-cat 1), mode != 0
+	// = new web search topic (sub-cat 2).
+	if (UI::Taskbar *taskbar = NancySceneState.getTaskbar()) {
+		taskbar->setNotification(kTaskButtonCellphone, _mode == 0 ? 1 : 2);
+	}
+
+	finishExecution();
+}
+
+void SetCellPhoneBatteryAndSignal::readData(Common::SeekableReadStream &stream) {
+	_mode = stream.readUint16LE();
+}
+
+void SetCellPhoneBatteryAndSignal::execute() {
+	UI::CellPhonePopup &popup = NancySceneState.getCellPhonePopup();
+	switch (_mode) {
+	case 0: popup.setBatteryLow(false); break;
+	case 1: popup.setBatteryLow(true);  break;
+	case 2: popup.setNoSignal(false);   break;
+	case 3: popup.setNoSignal(true);    break;
+	default:
+		warning("SetCellPhoneBatteryAndSignal: unknown mode %u", _mode);
+		break;
+	}
+	finishExecution();
+}
+
+void ChangeCellPhoneInfo::readData(Common::SeekableReadStream &stream) {
+	stream.read(_contact.unknownPrefix, sizeof(_contact.unknownPrefix));
+
+	char nameBuf[21];
+	stream.read(nameBuf, 20);
+	nameBuf[20] = '\0';
+	_contact.name = nameBuf;
+
+	stream.read(_contact.unknownSuffix, sizeof(_contact.unknownSuffix));
+}
+
+void ChangeCellPhoneInfo::execute() {
+	NancySceneState.getCellPhonePopup().upsertContact(_contact);
+
+	// Cellphone taskbar badge: a new/updated contact triggers sub-cat 0.
+	if (UI::Taskbar *taskbar = NancySceneState.getTaskbar()) {
+		taskbar->setNotification(kTaskButtonCellphone, 0);
+	}
+
+	finishExecution();
+}
+
+void CellPhonePopCellSceneFromStack::readData(Common::SeekableReadStream &stream) {
+	_sceneChange.readData(stream);
+}
+
+void CellPhonePopCellSceneFromStack::execute() {
+	UI::CellPhonePopup &phone = NancySceneState.getCellPhonePopup();
+
+	if (_sceneChange.sceneID != kNoScene) {
+		NancySceneState.changeScene(_sceneChange);
+	} else {
+		// Restore the pre-call scene if one was saved. If there's no saved
+		// scene (e.g. the conversation was entered without a phone call),
+		// do nothing — popping the global scene stack here would clobber
+		// closeup / inventory pushes that have nothing to do with the phone.
+		SceneChangeDescription returnScene;
+		if (phone.consumeReturnScene(returnScene))
+			NancySceneState.changeScene(returnScene);
+	}
+
+	// Conversation is over; take the phone down.
+	phone.close();
+
 	finishExecution();
 }
 

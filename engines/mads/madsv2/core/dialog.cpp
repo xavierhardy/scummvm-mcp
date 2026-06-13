@@ -47,7 +47,6 @@ static int mouse_orig_stroke_type;      /* First radio button pressed     */
 static int mouse_override;              /* Override repeat damper         */
 static int stroke_going;                /* Currently processing a stroke  */
 static int resolved_mouse;              /* Have resolved stroke this pass */
-static long mouse_timing_clock;         /* Stroke timer for logitech      */
 static ItemPtr mouse_scroll_item;       /* Recent mouse item              */
 static ListPtr mouse_scroll_list;       /* Recent mouse list              */
 static char temp_buf[80];               /* A convenient buffer            */
@@ -95,14 +94,6 @@ static char say_dialog_work[SAY_DIALOG_SIZE];
 #define retry_option    0x01
 #define abort_option    0x02
 #define fail_option     0x03
-
-Dialog crit_dialog;
-char crit_work[256];
-
-extern void dialog_24_server(void);
-
-static int   dialog_server_installed = false;
-static dword dialog_old_24_server;
 
 
 int dialog_read_dir_to_list(ListPtr target, const char *wild, int dirflag) {
@@ -651,126 +642,6 @@ ItemPtr dialog_append_list(DialogPtr dialog, int x, int y, ItemPtr base_string,
 	return listitem;
 }
 
-ItemPtr dialog_add_filename(DialogPtr dialog, int x, int y, const char *prompt,
-		const char *default_val, const char *path, int rows,
-		char *filebuf, int max_file_elements,
-		char *dirsbuf, int max_dirs_elements) {
-	ItemPtr item, listitem, dirsitem;
-	ListPtr list, dirs;
-	int list_num, dirs_num;
-	int base_item;
-	int message_line;
-	int savedpath;
-	int savedrive;
-	char savepath[80];
-	char mypath[80];
-	char mypath2[80];
-	int mydrive;
-
-	dialog->status |= DD_FILEMENU;  // Note that we do in fact use files
-
-	base_item = dialog->num_items;
-
-	item = dialog_add_string(dialog, x, y, prompt, default_val, DIALOG_FILE_BUFFER);
-
-	if (item != NULL) {
-
-		listitem = item_allocate(dialog, DD_I_FILELIST);
-		dirsitem = item_allocate(dialog, DD_I_DIRSLIST);
-
-		if ((listitem == NULL) || (dirsitem == NULL) || (dialog->lists_allocated > 0)) {
-			item = NULL;
-		} else {
-
-			savedpath = (mads_getcwd(savepath, 80) != NULL);
-			savedrive = mads_getdrive();
-
-			list_num = list_allocate(dialog);
-			dirs_num = list_allocate(dialog);
-
-			list = &dialog->lists[list_num];
-			dirs = &dialog->lists[dirs_num];
-
-			item->type = DD_I_FILENAME;
-			listitem->type = DD_I_FILELIST;
-			dirsitem->type = DD_I_DIRSLIST;
-
-			listitem->keystroke = (int)'L';
-			dirsitem->keystroke = (int)'D';
-
-			dialog_add_blank(dialog);
-			dialog->path_item = dialog_add_message(dialog, DD_IX_LEFT, DD_IY_AUTOFILL, path);
-			dialog->string_marker += (80 - strlen(path));
-			dialog_add_blank(dialog);
-
-			message_line = dialog->fill_marker;
-			dialog_add_message(dialog, DD_IX_LEFT, message_line, "File ~List:");
-			dialog_add_message(dialog, 44, message_line, "~Drives / Dirs:");
-
-			list->rows = rows;
-			list->columns = 3;
-			dirs->rows = rows;
-			dirs->columns = 1;
-
-			dialog->width = MAX<short>(dialog->width, DIALOG_FILE_WIDTH);
-
-			list->entry_width = 12;
-			list->element_offset = 13;
-			list->max_elements = max_file_elements;
-			list->base_entry = 0;
-			list->picked_entry = -1;
-			list->thumb = -1;
-
-			dirs->entry_width = 12;
-			dirs->element_offset = 13;
-			dirs->max_elements = max_dirs_elements;
-			dirs->base_entry = 0;
-			dirs->picked_entry = -1;
-			dirs->thumb = -1;
-
-			list->window.ul_x = 0;
-			dirs->window.ul_x = 43;
-
-			list->window.ul_y = dialog->fill_marker;
-			dirs->window.ul_y = dialog->fill_marker;
-
-			item->status = listitem->id;
-			listitem->status = item->id;
-			dirsitem->status = item->id;
-
-			listitem->buf_id = list_num;
-			dirsitem->buf_id = dirs_num;
-
-			list->list = filebuf;
-			dirs->list = dirsbuf;
-
-			dialog->fill_marker += (rows + 2);
-
-			if (savedpath) {
-				Common::strcpy_s(mypath, path);
-				mads_strupr(mypath);
-				mads_fullpath(mypath2, mypath, 80);
-				mydrive = ((int)mypath2[0]) - '@';
-				mads_chdir(mypath2);
-				mads_chdrive(mydrive);
-			}
-
-			dialog_load_directory(dialog, item);
-
-			if (savedpath) {
-				mads_chdir(savepath);
-				mads_chdrive(savedrive);
-			}
-		}
-	}
-
-	if (item == NULL) {
-		dialog->num_items = base_item;
-	}
-
-	return item;
-}
-
 void dialog_set_colors(int normal, int select, int hilite, int greyed) {
 	dialog_default_normal = normal;
 	dialog_default_select = select;
@@ -907,26 +778,6 @@ void dialog_destroy_persist(DialogPtr dialog) {
 	}
 }
 
-DialogPtr dialog_file_create(DialogPtr dialog, int ul_x, int ul_y,
-		int normal_color, int select_color, int hilite_color,
-		ItemPtr *ok_item, ItemPtr *first_item, const char *default_val,
-		const char *path, int rows, char *filebuf, int maxfiles,
-		char *dirsbuf, int maxdirs, const char *prompt) {
-	dialog = dialog_create(dialog, ul_x, ul_y, DIALOG_FILE_WIDTH,
-		normal_color, select_color, hilite_color);
-
-	dialog_add_message(dialog, DD_IX_CENTER, DD_IY_AUTOFILL, prompt);
-
-	*ok_item = dialog_add_button(dialog, DD_IX_LEFT, DD_IY_BUTTON, "  OK  ");
-	dialog_add_button(dialog, DD_IX_RIGHT, DD_IY_BUTTON, CANCEL_BUTTON);
-	*first_item = dialog_add_filename(dialog, DD_IX_LEFT, DD_IY_AUTOFILL, "~File Name: ",
-		default_val, path, rows,
-		filebuf, maxfiles,
-		dirsbuf, maxdirs);
-
-	return dialog;
-}
-
 void dialog_set_list_callback(DialogPtr dialog, void (*(callback))()) {
 	dialog->callback = callback;
 }
@@ -1056,27 +907,8 @@ char *dialog_read_list(DialogPtr dialog, ItemPtr item) {
 	return dialog->buffer[item->buf_id];
 }
 
-char *dialog_read_pathname(DialogPtr dialog, ItemPtr item) {
-	return (dialog->path_item)->prompt;
-}
-
 char *dialog_read_filename(DialogPtr dialog, ItemPtr item) {
 	return dialog->buffer[item->buf_id];
-}
-
-char *dialog_read_filepath(DialogPtr dialog, ItemPtr item) {
-	int mylen;
-
-	Common::strcpy_s(temp_buf, (dialog->path_item)->prompt);
-	mylen = strlen(temp_buf);
-
-	if (temp_buf[mylen - 1] != '\\') {
-		Common::strcat_s(temp_buf, "\\");
-	}
-
-	Common::strcat_s(temp_buf, dialog->buffer[item->buf_id]);
-
-	return (temp_buf);
 }
 
 /**
@@ -1209,13 +1041,17 @@ static void dialog_update_window(DialogPtr dialog, ItemPtr item) {
 			} else {
 				my_color = dialog->select_color;
 			}
-			*screenptr++;
+
+			screenptr++;
+
 			if (*screenptr != (char)dialog->select_color) {
 				*(screenptr++) = (char)my_color;
 			} else {
 				screenptr++;
 			}
+
 			out_count = 0;
+
 			if (id < list->elements) {
 				while ((out_count < list->entry_width) && (*textptr != 0)) {
 					*(screenptr++) = *(textptr++);
@@ -1228,7 +1064,9 @@ static void dialog_update_window(DialogPtr dialog, ItemPtr item) {
 				*(screenptr++) = (char)my_color;
 				out_count++;
 			}
-			*screenptr++;
+
+			screenptr++;
+
 			if (*screenptr != (char)dialog->select_color) {
 				*(screenptr++) = (char)my_color;
 			}
@@ -1350,32 +1188,6 @@ static void dialog_show_message(DialogPtr dialog, ItemPtr item) {
 			item->x + dialog->base_x, item->y + dialog->base_y);
 	} else {
 		window_line_across(&(dialog->window), item->y + dialog->base_y);
-	}
-
-	mouse_show();
-}
-
-/**
- * Clears a message previously output with dialog_show_message ().
- * Currently, the only kind of message that could change (and thus
- * need to be cleared) is the pathname for file items, which is
- * handled internally.
- *
- * @param dialog	Dialog
- * @param item		Message item
- */
-static void dialog_clear_message(DialogPtr dialog, ItemPtr item) {
-	int cx, cy;
-	int count, bound;
-
-	mouse_hide();
-
-	cx = item->x + dialog->base_x;
-	cy = item->y + dialog->base_y;
-	bound = strlen(item->prompt);
-
-	for (count = 0; count < bound; count++) {
-		cx = screen_put(" ", dialog->normal_color, dialog->normal_color, cx, cy);
 	}
 
 	mouse_show();
@@ -2189,70 +2001,6 @@ static void dialog_do_search(DialogPtr dialog, ItemPtr item) {
 }
 
 /**
- * Routine to change the directory of the filename window
- *
- * @param dialog	Dialog
- * @param item		Item
- */
-static void dialog_set_new_directory(DialogPtr dialog, ItemPtr item) {
-	int buf;
-	//int newdrive;
-	ItemPtr baseitem, fileitem, pathitem;
-
-	baseitem = &dialog->item[item->status];
-	fileitem = &dialog->item[baseitem->status];
-	buf = baseitem->buf_id;
-
-	Common::strcpy_s(temp_buf, dialog->buffer[buf]);
-	pathitem = dialog->path_item;
-#ifdef TODO
-	if (temp_buf[1] == ':') {
-		// Change to a new drive, if requested
-		newdrive = ((int)temp_buf[0]) - 64;
-		mads_chdrive(newdrive);
-
-		dialog_clear_message(dialog, pathitem);
-		//mads_getcwd(temp_buf, DIALOG_MAX_PROMPT_CHARS);
-		Common::strcpy_s(temp_buf, "");
-		Common::strcpy_s(pathitem->prompt, 65536, temp_buf);
-
-	} else {
-		// otherwise, change to a new directory
-		mads_chdir(temp_buf);
-
-		dialog_clear_message(dialog, pathitem);
-
-		if (mads_getcwd(temp_buf, DIALOG_MAX_PROMPT_CHARS) != NULL) {
-			Common::strcpy_s(pathitem->prompt, temp_buf);
-		} else {
-			Common::strcpy_s(temp_buf, pathitem->prompt);
-			mads_chdir(temp_buf);
-		}
-	}
-
-	// Load a wildcard into the entry area
-	if ((strchr(dialog->buffer[buf], '*') == NULL) &&
-		(strchr(dialog->buffer[buf], '?') == NULL)) {
-		Common::strcpy_s(dialog->buffer[buf], "*.*");
-		dialog->buf_select[buf] = true;
-		dialog->buf_cursor[buf] = 0;
-		dialog->buf_selbase[buf] = 0;
-		dialog->buf_seltarget[buf] = 3;
-	}
-
-	// Load up the new directory and display
-	dialog_load_directory(dialog, baseitem);
-	dialog_show_any(dialog, pathitem);
-	dialog_update_any(dialog, baseitem, false);
-	dialog_update_any(dialog, fileitem, false);
-	dialog_update_any(dialog, item, false);
-	dialog_update_active(dialog, 0, false, false);
-#else
-	warning("TODO: dialog_set_new_directory");
-#endif
-}
-
-/**
  * Routine to handle scrolling around in a list window.  Used to
  * drive both mouse and cursor scroll routines.
  *
@@ -2658,13 +2406,8 @@ static void dialog_exec_mouse_list(DialogPtr dialog, ItemPtr item) {
 					// Handle double-click if any
 					if (mouse_start_stroke && (old_pick == list->picked_entry)) {
 						if ((long)timer_read_dos() <= mouse_list_timing + MOUSE_DOUBLE_TIMING) {
-							if (item->type == DD_I_DIRSLIST) {
-								dialog_set_new_directory(dialog, item);
-								abort = true;
-							} else {
-								dialog->active_item = (dialog->default_item)->id;
-								dialog->status |= DD_EXITFLAG;
-							}
+							dialog->active_item = (dialog->default_item)->id;
+							dialog->status |= DD_EXITFLAG;
 						}
 					}
 					if (mouse_start_stroke) mouse_list_timing = timer_read_dos();
@@ -2955,17 +2698,11 @@ ItemPtr dialog_execute(DialogPtr dialog, ItemPtr active_item, ItemPtr default_bu
 	int mykey;
 	int count;
 	int buf;
-	int savedpath;
-	int savedrive = 0;
 	int return_code;
-	char savepath[80];
-	char mypath[80];
-	char mypath2[80];
 	long base_time;
 	long now_time;
 	long my_timeout;
 	long diff;
-	int mydrive;
 	ItemPtr item;
 	struct KeyBuffer tempkey;
 
@@ -2974,19 +2711,6 @@ ItemPtr dialog_execute(DialogPtr dialog, ItemPtr active_item, ItemPtr default_bu
 	if (key_buffer == NULL) {
 		key_buffer = &tempkey;
 		tempkey.len = 0;
-	}
-
-	if (dialog->status & DD_FILEMENU) {
-		savedpath = (mads_getcwd(savepath, 80) != NULL);
-		savedrive = mads_getdrive();
-
-		if (dialog->path_item != NULL) {
-			Common::strcpy_s(mypath, (dialog->path_item)->prompt);
-			mads_fullpath(mypath2, mypath, 80);
-			mydrive = ((int)mypath2[0]) - '@';
-			mads_chdrive(mydrive);
-			mads_chdir(mypath2);
-		}
 	}
 
 	return_code = false;
@@ -3097,10 +2821,6 @@ ItemPtr dialog_execute(DialogPtr dialog, ItemPtr active_item, ItemPtr default_bu
 
 			case enter_key:
 				switch (item->type) {
-				case DD_I_DIRSLIST:
-					dialog_set_new_directory(dialog, item);
-					break;
-
 				case DD_I_BUTTON:
 					dialog->status |= DD_EXITFLAG;
 					break;
@@ -3289,11 +3009,6 @@ ItemPtr dialog_execute(DialogPtr dialog, ItemPtr active_item, ItemPtr default_bu
 		mouse_end_cycle((!(dialog->status & DD_EXITFLAG)) && !mouse_stroke_going, true);
 	}
 
-	if (dialog->status & DD_FILEMENU) {
-		mads_chdir(savepath);
-		mads_chdrive(savedrive);
-	}
-
 	if (!return_code) {
 		item = &dialog->item[dialog->active_item];
 	} else {
@@ -3301,97 +3016,6 @@ ItemPtr dialog_execute(DialogPtr dialog, ItemPtr active_item, ItemPtr default_bu
 	}
 
 	return item;
-}
-
-char *dialog_select_file(const char *prompt, const char *path, const char *filespec, char *output) {
-	DialogPtr dialog;
-	ItemPtr ok, first_item, result;
-	char *filebuf;
-	char *dirbuf;
-
-	filebuf = (char *)mem_get(3000);
-	if (filebuf == NULL) return NULL;
-
-	dirbuf = (char *)mem_get(1500);
-	if (dirbuf == NULL) {
-		mem_free(filebuf);
-		return NULL;
-	}
-
-	dialog = dialog_file_create(NULL, DD_CENTER, DD_CENTER,
-		DD_DEFAULT, DD_DEFAULT, DD_DEFAULT,
-		&ok, &first_item,
-		filespec, path, screen_max_y - 18,
-		filebuf, 200, dirbuf, 100, prompt);
-
-	result = dialog_execute(dialog, first_item, ok, NULL);
-
-	if (result != dialog->cancel_item) {
-		Common::strcpy_s(output, 65536, dialog_read_filepath(dialog, first_item));
-	} else {
-		output = NULL;
-	}
-
-	dialog_destroy(dialog);
-
-	mem_free(filebuf);
-	mem_free(dirbuf);
-
-	return output;
-}
-
-char *dialog_enter_string(char *reply, const char *top_prompt, const char *left_prompt,
-		char *my_default, int maxlen) {
-	char work[100];
-
-	DialogPtr dialog;
-	ItemPtr string, ok, cancel, result;
-
-	if (strlen(my_default) > (size_t)maxlen)
-		my_default[maxlen - 1] = 0;  // Trim default
-
-	if (left_prompt == NULL)
-		Common::strcpy_s(work, "~Reply: ");
-	else
-		Common::strcpy_s(work, left_prompt);
-
-	dialog = dialog_create(NULL, DD_CENTER, DD_CENTER, DD_AUTO,
-		DD_DEFAULT, DD_DEFAULT, DD_DEFAULT);
-
-	dialog_add_blank(dialog);
-	dialog_add_message(dialog, DD_IX_CENTER, DD_IY_AUTOFILL, top_prompt);
-	dialog_add_blank(dialog);
-	string = dialog_add_string(dialog, DD_IX_LEFT, DD_IY_AUTOFILL, work,
-		my_default, maxlen);
-	dialog_add_blank(dialog);
-	ok = dialog_add_button(dialog, DD_IX_LEFT, DD_IY_BUTTON, "  OK  ");
-	cancel = dialog_add_button(dialog, DD_IX_RIGHT, DD_IY_BUTTON, "Cancel");
-
-	result = dialog_execute(dialog, string, ok, NULL);
-
-	Common::strcpy_s(work, dialog_read_string(dialog, string));
-
-	dialog_destroy(dialog);
-
-	if (result == cancel)
-		return(NULL);
-
-	Common::strcpy_s(reply, 65536, work);
-	return(reply);
-}
-
-int dialog_enter_int(char *top_prompt, int my_default) {
-	char work[20], work1[20];
-
-	if (my_default != 0)
-		mads_itoa(my_default, work, 10);
-	else
-		Common::strcpy_s(work, "");
-
-	if (dialog_enter_string(work1, top_prompt, "~Value:", work, 12) == NULL)
-		return(0);
-
-	return atoi(work1);
 }
 
 DialogPtr dialog_create_default(void) {
@@ -3705,16 +3329,21 @@ int dialog_get_number(DialogPtr dialog, ItemPtr item) {
 	return atoi(buf);
 }
 
-static void dialog_critical_error_handler() {
-	// No implementation in ScummVM
-}
-
 void dialog_trap_critical() {
-	dialog_server_installed = true;
 }
 
 void dialog_restore_critical(void) {
-	dialog_server_installed = false;
+}
+
+void init_dialog() {
+	dialog_error = 0;
+	dialog_quicksearch_flag = true;
+	dialog_wildcard_exits = false;
+	dialog_timeout = 0;
+	dialog_language = DIALOG_ENGLISH;
+	alert_normal_color = DD_DEFAULT_NORMAL_COLOR;
+	alert_select_color = DD_DEFAULT_SELECT_COLOR;
+	alert_hilite_color = DD_DEFAULT_HILITE_COLOR;
 }
 
 } // namespace MADSV2

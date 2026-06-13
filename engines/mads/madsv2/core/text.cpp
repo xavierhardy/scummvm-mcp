@@ -416,7 +416,6 @@ int text_show(long id) {
 	int error_flag = true;
 	int center = false;
 	int cr;
-	int tab;
 	int brackets_on = false;
 	int popup_created = false;
 	int underline = false;
@@ -453,8 +452,8 @@ int text_show(long id) {
 		cmd = command_buf;
 		center = false;
 		cr = false;
-		tab = false;
 		underline = false;
+
 		while (*scan) {
 			if (*scan == TEXT_COMMAND) {
 				brackets_on = true;

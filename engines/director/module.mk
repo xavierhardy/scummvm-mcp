@@ -135,6 +135,8 @@ MODULE_OBJS = \
 	lingo/xlibs/m/mystisle.o \
 	lingo/xlibs/b/blockthedrawingxobj.o \
 	lingo/xlibs/m/mazexobj.o \
+	lingo/xlibs/m/myfolder.o \
+	lingo/xlibs/g/getuinfo.o \
 	lingo/xlibs/o/openbleedwindowxcmd.o \
  	lingo/xlibs/p/playsoundmoviexobj.o \
  	lingo/xlibs/s/savenrestorexobj.o \
@@ -188,6 +190,7 @@ MODULE_OBJS = \
 	lingo/xtras/d/directsound.o \
 	lingo/xtras/d/displayres.o \
 	lingo/xtras/f/filextra.o \
+	lingo/xtras/g/getdir.o \
 	lingo/xtras/k/keypoll.o \
 	lingo/xtras/m/masterapp.o \
 	lingo/xtras/m/mui.o \

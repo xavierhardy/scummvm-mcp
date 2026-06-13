@@ -101,12 +101,13 @@ char *quote_load(int quote_id, ...) {
 		now_reading++;
 	}
 
+	*pointer = 0;
+
 	if (mem_adjust(buffer, total_mem_needed)) {
 		quote_error = 6;
 		goto done;
 	}
 
-	*pointer = 0;
 	result = buffer;
 
 done:
@@ -165,6 +166,10 @@ void quote_split_string(const char *source, char *target1, char *target2) {
 	do {
 		*(target2++) = *mark;
 	} while (*(mark++));
+}
+
+void init_quote() {
+	quote_emergency = false;
 }
 
 } // namespace MADSV2
