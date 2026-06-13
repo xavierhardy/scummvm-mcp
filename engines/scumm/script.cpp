@@ -1142,6 +1142,8 @@ void ScummEngine::killAllScriptsExceptCurrent() {
 void ScummEngine::doSentence(int verb, int objectA, int objectB) {
 	SentenceTab *st;
 
+	debug(1, "doSentence(verb=%d, objectA=%d, objectB=%d)", verb, objectA, objectB);
+
 	if (_game.version >= 7) {
 
 		if (objectA == objectB)
