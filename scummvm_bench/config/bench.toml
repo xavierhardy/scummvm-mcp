@@ -1,0 +1,31 @@
+# Default configuration for scummvm_bench.
+# CLI flags override anything set here.
+
+# Path to the built ScummVM binary (relative paths resolved from the repo root).
+scummvm_binary = "../scummvm"
+
+# Directory holding the vendored per-game scummvm.ini templates.
+# (Defaults to scummvm_bench/config/ini_templates when unset.)
+# ini_templates_dir = "config/ini_templates"
+
+# Where save-state folders live (one subfolder per game id), unless --save-folder
+# is passed. The launcher looks for <save_folder>/<game_id>/<game_id>.sNN.
+# save_folder = "../test/mcp/save_slots"
+
+[[games]]
+# ScummVM target id + the path to the game data files + default save slot.
+id = "monkey-ega-demo"
+path = "/home/pi/games/MonkeyDemo"
+save_slot = 1
+
+# Local LM Studio models, only used with --local. The `key` is the lms download
+# key; params mirror `lms load` flags. `provider`/`model` are how the model is
+# registered in pi's models.json and selected by the harness.
+[[local_models]]
+key = "google/gemma-3-4b"
+provider = "local"
+model = "gemma-3-4b"
+context_length = 8192
+gpu = "max"
+ttl = 3600
+base_url = "http://localhost:1234/v1"

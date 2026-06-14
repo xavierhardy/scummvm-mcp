@@ -1,0 +1,6 @@
+# Local uv config: the machine's global UV_CONFIG_FILE points at a private index
+# that 403s for public packages. Route this project through public PyPI instead.
+# Use with: UV_CONFIG_FILE=$PWD/uv.toml uv <cmd>   (see ./uvx.sh helper).
+[[index]]
+url = "https://pypi.org/simple"
+default = true
