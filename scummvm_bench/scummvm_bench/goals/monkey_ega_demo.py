@@ -1,16 +1,19 @@
 """Goal set for the Monkey Island 1 EGA demo, save slot 1 (troll bridge).
 
-The scenario follows the user's walkthrough: reach the troll, learn a magic
-phrase is needed, work through the SCUMM Bar / back room / dock, the city, the
-jail (give the prisoner a breath mint), the fortune teller, and finally tell the
-troll the magic phrase (the stopping goal).
+Every predicate here was reconciled against a live capture of the actual demo
+(English build), so the full walkthrough reaches 100% of the goals:
 
-Room ids and item/object tokens for the early steps (55/52/51, ``breath_mint``,
-``door``, ``prisoner``) come from ``test/mcp/test_monkey.py``. The dock/city/shop
-room ids (56/53/50/57/58) are best-effort for *real* runs; the late dialogue
-goals are matched on the user's exact quoted lines (room-agnostic), which is
-robust. The mock backend scripts these exact transitions/messages so the
-mock-harness benchmark is deterministic.
+  troll bridge (55) -> SCUMM Bar (52) -> kitchen/dock (51) -> red herring puzzle
+  -> city (57) -> jail (54, give the prisoner a breath mint and ask about the
+  magic phrase) -> fortune teller (53, give the fish, ask about magic phrases ->
+  she reveals "Dear, maybe you should get a new faculty advisor.") -> back to the
+  troll -> choose "Ah, but a new faculty Shadow is nigh." -> the troll says
+  "I don't know how you did it, but you did it" and lets you pass (stopping goal).
+
+The red-herring dock is inside room 51 (no separate rooms); the loose plank is
+object 307 and must be walked three times — those bounces are indistinguishable
+in state, so the three plank goals share one call predicate and latch on the
+1st/2nd/3rd occurrence via ``times``.
 """
 
 from .engine import (
@@ -24,20 +27,16 @@ from .engine import (
     on_inventory_removed,
     on_message_contains,
     on_object_changed,
-    on_question_appeared,
     on_room_changed,
 )
 
-# Room ids used along the journey.
-ROOM_FIRST_SCENE = 55
+ROOM_FIRST_SCENE = 55  # troll bridge / dock
 ROOM_SCUMMBAR = 52
-ROOM_BACKROOM = 51
-ROOM_DOCK_1 = 56
-ROOM_DOCK_2 = 53
-ROOM_DOCK_3 = 50
-ROOM_CITY = 57
+ROOM_KITCHEN = 51  # back room + (scrolled) red-herring dock
+ROOM_CITY = 57  # Mêlée Island streets
 ROOM_JAIL = 54
-ROOM_FORTUNE_SHOP = 58
+ROOM_FORTUNE = 53  # fortune teller
+PLANK = 307  # loose plank object on the dock
 
 
 def _ordered(*goals: Goal) -> dict[str, Goal]:
@@ -55,6 +54,7 @@ def _goal(
     predicate: Predicate,
     kind: str = "result",
     stopping: bool = False,
+    times: int = 1,
 ) -> Goal:
     return Goal(
         goal_id=goal_id,
@@ -62,6 +62,7 @@ def _goal(
         predicate=predicate,
         stopping=stopping,
         kind=kind,
+        times=times,
     )
 
 
@@ -69,7 +70,7 @@ GOALS = _ordered(
     _goal(
         "state_first_scene",
         "Check state in the first scene",
-        on_call("state"),
+        all_of(in_room(ROOM_FIRST_SCENE), on_call("state")),
         kind="call",
     ),
     _goal(
@@ -80,7 +81,8 @@ GOALS = _ordered(
     _goal(
         "talk_to_troll",
         "Talk to the troll (learn a magic phrase is needed)",
-        on_question_appeared(),
+        on_call("act", verb="talk_to", target1="Troll"),
+        kind="call",
     ),
     _goal(
         "open_scummbar_door",
@@ -111,33 +113,39 @@ GOALS = _ordered(
     _goal(
         "enter_backroom",
         "Walk to the SCUMM Bar back room",
-        on_room_changed(ROOM_BACKROOM),
+        on_room_changed(ROOM_KITCHEN),
     ),
     _goal(
         "state_backroom",
         "Check state in the SCUMM Bar back room",
-        all_of(in_room(ROOM_BACKROOM), on_call("state")),
+        all_of(in_room(ROOM_KITCHEN), on_call("state")),
         kind="call",
     ),
     _goal(
         "open_backroom_exit",
-        "Open the door in the back room",
-        all_of(in_room(ROOM_BACKROOM), on_object_changed("door")),
+        "Open the door onto the dock",
+        all_of(in_room(ROOM_KITCHEN), on_object_changed("door")),
     ),
     _goal(
         "plank_1",
         "Walk on the plank on the right (1st time)",
-        all_of(in_room(ROOM_BACKROOM), on_room_changed(ROOM_DOCK_1)),
+        on_call("act", verb="walk_to", target1=PLANK),
+        kind="call",
+        times=1,
     ),
     _goal(
         "plank_2",
         "Walk on the plank on the right (2nd time)",
-        all_of(in_room(ROOM_DOCK_1), on_room_changed(ROOM_DOCK_2)),
+        on_call("act", verb="walk_to", target1=PLANK),
+        kind="call",
+        times=2,
     ),
     _goal(
         "plank_3",
         "Walk on the plank on the right (3rd time)",
-        all_of(in_room(ROOM_DOCK_2), on_room_changed(ROOM_DOCK_3)),
+        on_call("act", verb="walk_to", target1=PLANK),
+        kind="call",
+        times=3,
     ),
     _goal(
         "pick_red_herring",
@@ -147,7 +155,7 @@ GOALS = _ordered(
     _goal(
         "reach_city",
         "Walk to the archway (reach the city)",
-        all_of(in_room(ROOM_DOCK_3), on_room_changed(ROOM_CITY)),
+        all_of(in_room(ROOM_FIRST_SCENE), on_room_changed(ROOM_CITY)),
     ),
     _goal(
         "state_city",
@@ -178,8 +186,7 @@ GOALS = _ordered(
     _goal(
         "ask_magic_phrase",
         "Ask the prisoner about a magic phrase",
-        all_of(in_room(ROOM_JAIL), on_call("answer", id=3)),
-        kind="call",
+        on_message_contains("Do you know anything about a magic phrase"),
     ),
     _goal(
         "open_fortune_door",
@@ -189,23 +196,18 @@ GOALS = _ordered(
     _goal(
         "enter_fortune_shop",
         "Walk to the fortune teller's shop",
-        on_room_changed(ROOM_FORTUNE_SHOP),
+        on_room_changed(ROOM_FORTUNE),
     ),
     _goal(
         "state_fortune_shop",
         "Check state in the fortune teller's shop",
-        all_of(in_room(ROOM_FORTUNE_SHOP), on_call("state")),
+        all_of(in_room(ROOM_FORTUNE), on_call("state")),
         kind="call",
     ),
     _goal(
         "give_fish_to_teller",
         "Put part of the fish into the cauldron",
         on_message_contains("Put part of the fish into the cauldron"),
-    ),
-    _goal(
-        "ask_teller_phrase",
-        "Ask the fortune teller about magic phrases",
-        on_message_contains("What do you know about magic phrases"),
     ),
     _goal(
         "teller_game_1",
@@ -216,6 +218,11 @@ GOALS = _ordered(
         "teller_game_2",
         "Get past the fortune teller game (2)",
         on_message_contains("Yes, I was"),
+    ),
+    _goal(
+        "ask_teller_phrase",
+        "Ask the fortune teller about magic phrases",
+        on_message_contains("What do you know about magic phrases"),
     ),
     _goal(
         "tell_troll_phrase",

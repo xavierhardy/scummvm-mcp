@@ -20,23 +20,18 @@ def test_walk_returns_troll_message_without_changing_room() -> None:
 
 def test_sequential_consumption_of_same_key() -> None:
     backend = monkey_backend()
+    # The first walk_to the bar door only positions Guybrush; the second goes
+    # through into the SCUMM Bar (room 52). Both share the same (tool, args).
+    assert backend.call("act", {"verb": "walk_to", "target1": "door"}) == {}
     assert (
         backend.call("act", {"verb": "walk_to", "target1": "door"})["room_changed"]
         == 52
     )
     assert backend.state()["room"] == {"id": 52}
-    assert (
-        backend.call("act", {"verb": "walk_to", "target1": "door"})["room_changed"]
-        == 51
-    )
-    assert (
-        backend.call("act", {"verb": "walk_to", "target1": "door"})["room_changed"]
-        == 58
-    )
     # exhausted -> last matching step is replayed
     assert (
         backend.call("act", {"verb": "walk_to", "target1": "door"})["room_changed"]
-        == 58
+        == 52
     )
 
 

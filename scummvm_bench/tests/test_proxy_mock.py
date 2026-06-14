@@ -37,16 +37,16 @@ def test_dispatch_classifies_invalid_request() -> None:
 
 def test_dispatch_updates_room_cache_from_room_changed() -> None:
     proxy, _ = _proxy(monkey_backend())
-    proxy.dispatch("act", {"verb": "walk_to", "target1": "door"})  # -> room 52
-    assert proxy._state_cache["room"] == {"id": 52}
+    proxy.dispatch("act", {"verb": "walk_to", "target1": 354})  # -> room 51
+    assert proxy._state_cache["room"] == {"id": 51}
 
 
 def test_dispatch_updates_cache_from_state_call() -> None:
     proxy, _ = _proxy(monkey_backend())
-    proxy.dispatch("act", {"verb": "walk_to", "target1": "door"})  # -> 52
+    proxy.dispatch("act", {"verb": "walk_to", "target1": 354})  # -> 51
     snapshot = proxy.dispatch("state", {})
-    assert snapshot["room"] == {"id": 52}
-    assert proxy._state_cache["room"] == {"id": 52}
+    assert snapshot["room"] == {"id": 51}
+    assert proxy._state_cache["room"] == {"id": 51}
 
 
 def test_record_invalid_request_helper() -> None:

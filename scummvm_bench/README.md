@@ -29,7 +29,20 @@ cd scummvm_bench
 uv sync
 uv run ruff format . && uv run ruff check . && uv run ty check
 uv run pytest            # unit tests + mock full-run (no ScummVM binary needed)
+
+# Opt-in: the real end-to-end test that launches an actual ScummVM and drives the
+# captured Monkey Island demo walkthrough to 100% of its goals (~3 min, opens a
+# window). Point MONKEY_DEMO_PATH at the game data if it isn't auto-found.
+MONKEY_DEMO_PATH=/path/to/monkey uv run pytest --run-real \
+    tests/test_full_run_real_monkey.py
 ```
+
+Both full-run tests exercise the same goal set (`scummvm_bench/goals/monkey_ega_demo.py`)
+and the same 42-call walkthrough (`tests/mock_harness.py:MONKEY_CALLS`): the mocked
+one replays scripted backend responses, the real one drives a live ScummVM. Goals
+latch on a tool **call** (e.g. walking the plank, captured via `Goal.times` for the
+three indistinguishable bounces) or on what a call **returned** (a new room,
+inventory item, or dialogue line).
 
 ## Run
 

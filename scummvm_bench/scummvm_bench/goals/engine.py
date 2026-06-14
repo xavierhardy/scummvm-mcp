@@ -26,13 +26,19 @@ Predicate = Callable[[GoalEvent], bool]
 
 @dataclass(frozen=True)
 class Goal:
-    """A single latching objective."""
+    """A single latching objective.
+
+    ``times`` is how many times the predicate must match before the goal
+    latches; it lets several goals share one predicate yet latch on successive
+    occurrences (e.g. walking the same plank three times).
+    """
 
     goal_id: str
     label: str
     predicate: Predicate
     stopping: bool = False
     kind: str = "result"  # "call" | "result", documentation only
+    times: int = 1
 
 
 @dataclass

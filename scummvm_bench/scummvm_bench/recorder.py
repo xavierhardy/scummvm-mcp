@@ -45,6 +45,7 @@ class Recorder:
         self._seq = 0
         self._calls: list[ToolCall] = []
         self._reached: dict[str, int] = {}
+        self._match_counts: dict[str, int] = {}
         self._stop_reason: str | None = None
 
     def begin(self) -> None:
@@ -84,7 +85,11 @@ class Recorder:
         for goal_id, goal in self.goal_set.goals.items():
             if goal_id in self._reached:
                 continue
-            if self._safe_predicate(goal.predicate, event):
+            if not self._safe_predicate(goal.predicate, event):
+                continue
+            count = self._match_counts.get(goal_id, 0) + 1
+            self._match_counts[goal_id] = count
+            if count >= goal.times:
                 self._reached[goal_id] = seq
                 if goal.stopping:
                     newly_stopping = True

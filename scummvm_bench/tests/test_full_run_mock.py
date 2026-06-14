@@ -64,6 +64,6 @@ def test_full_mock_run_per_goal_booleans() -> None:
 
 def test_full_mock_run_call_count_matches_sequence_length() -> None:
     _spec, result = _run()
-    # 29 goals, reached by a 31-call scripted walkthrough.
-    assert result.call_count == 31
+    # 29 goals, reached by the 42-call walkthrough captured from the real demo.
+    assert result.call_count == 42
     assert result.total_goals == 29

@@ -86,6 +86,29 @@ def test_score_is_percentage_of_reached_goals() -> None:
     assert result.score_pct == 50.0
 
 
+def test_goal_times_latches_on_nth_occurrence() -> None:
+    goal_set = GoalSet(
+        "game",
+        None,
+        {
+            "first": Goal("first", "First", on_call("walk"), kind="call", times=1),
+            "third": Goal("third", "Third", on_call("walk"), kind="call", times=3),
+            "done": Goal("done", "Done", on_call("done"), stopping=True),
+        },
+    )
+    rec = Recorder(goal_set, LimitConfig())
+    rec.record(_event("walk"), None)  # 1st
+    result = rec.result(SPEC)
+    assert result.goals_by_id["first"].reached is True
+    assert result.goals_by_id["third"].reached is False
+
+    rec.record(_event("walk"), None)  # 2nd
+    rec.record(_event("walk"), None)  # 3rd
+    result = rec.result(SPEC)
+    assert result.goals_by_id["third"].reached is True
+    assert result.goals_by_id["third"].reached_at_call == 3
+
+
 def test_no_calls_means_zero_elapsed() -> None:
     rec = Recorder(small_goalset(), LimitConfig())
     result = rec.result(SPEC)
