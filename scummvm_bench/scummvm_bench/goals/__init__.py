@@ -4,12 +4,20 @@ Add a game by writing a module that builds a :class:`GoalSet` and registering it
 in ``GOAL_SETS`` keyed by ``(game_id, save_slot)``.
 """
 
+from .comi_demo import COMI_DEMO_GOALSET
 from .engine import Goal, GoalEvent, GoalSet
+from .maniac_mansion_c64_demo import MANIAC_C64_DEMO_GOALSET
 from .monkey_ega_demo import MONKEY_EGA_DEMO_GOALSET
+from .samnmax_demo import SAMNMAX_DEMO_GOALSET
+from .the_dig_demo import THE_DIG_DEMO_GOALSET
 
 # (game_id, save_slot) -> GoalSet. save_slot None means "any slot".
 GOAL_SETS: dict[tuple[str, int | None], GoalSet] = {
     ("monkey-ega-demo", 1): MONKEY_EGA_DEMO_GOALSET,
+    ("maniac-c64", 1): MANIAC_C64_DEMO_GOALSET,
+    ("comi-demo", 1): COMI_DEMO_GOALSET,
+    ("samnmax", 1): SAMNMAX_DEMO_GOALSET,
+    ("dig-demo", 1): THE_DIG_DEMO_GOALSET,
 }
 
 
