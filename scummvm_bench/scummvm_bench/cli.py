@@ -22,14 +22,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Harness to drive the run (repeatable; default: none).",
     )
     parser.add_argument(
-        "--provider",
-        action="append",
-        help="Provider id (repeatable; paired with --model).",
-    )
-    parser.add_argument(
         "--model",
         action="append",
-        help="Model id (repeatable; paired with --provider).",
+        metavar="PROVIDER/MODEL",
+        help="Provider and model as one token, e.g. openai/gpt-4o (repeatable).",
     )
     parser.add_argument(
         "--game",
@@ -69,6 +65,18 @@ def parse_game(spec: str) -> tuple[str, int | None]:
     return spec, None
 
 
+def parse_model(token: str) -> tuple[str, str]:
+    """Parse a ``provider/model`` token into ``(provider, model)``.
+
+    Splits on the first ``/`` so model ids may themselves contain slashes
+    (e.g. ``local/google/gemma-3-4b`` -> ``("local", "google/gemma-3-4b")``).
+    """
+    provider, sep, model = token.partition("/")
+    if not sep or not provider or not model:
+        raise ValueError(f"--model must be 'provider/model', got {token!r}")
+    return provider, model
+
+
 def resolve_games(
     game_args: list[str], config: BenchConfig
 ) -> list[tuple[str, int | None]]:
@@ -88,20 +96,14 @@ def selection_from_args(
     args: argparse.Namespace, config: BenchConfig
 ) -> MatrixSelection:
     """Build a :class:`MatrixSelection` from parsed args + config (pure)."""
-    providers = args.provider or []
-    models = args.model or []
-    if len(providers) != len(models):
-        raise ValueError(
-            "--provider and --model must be given the same number of times"
-        )
-    model_pairs: list[tuple[str | None, str | None]] = list(
-        zip(providers, models, strict=True)
-    )
+    model_pairs: list[tuple[str | None, str | None]] = [
+        parse_model(token) for token in (args.model or [])
+    ]
 
     harnesses = args.harness or ["none"]
     if "pi" in harnesses and not model_pairs:
         raise ValueError(
-            "the 'pi' harness requires at least one --provider/--model pair"
+            "the 'pi' harness requires at least one --model provider/model"
         )
 
     return MatrixSelection(

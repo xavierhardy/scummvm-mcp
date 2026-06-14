@@ -35,17 +35,24 @@ uv run pytest            # unit tests + mock full-run (no ScummVM binary needed)
 
 ```bash
 # Real run: launch pi against the Monkey Island demo, slot 1, cap 80 MCP calls.
+# Provider and model are one combined token: provider/model.
 uv run python -m scummvm_bench \
-    --harness pi --provider openai --model gpt-4o \
+    --harness pi --model openai/gpt-4o \
     --game monkey-ega-demo:1 --max-calls 80 \
     --workers 1 --work-type thread --out results.tsv
+
+# Sweep several models, harnesses and games (the matrix loops model->harness->game->save).
+uv run python -m scummvm_bench \
+    --harness pi --harness none \
+    --model openai/gpt-4o --model anthropic/claude-opus-4-8 \
+    --game monkey-ega-demo:1 --workers 2 --work-type thread
 
 # Attach mode: bring up the game + proxy and let an already-running agent drive.
 uv run python -m scummvm_bench --harness none --game monkey-ega-demo:1
 
 # Local model: download/load via LM Studio, register in pi, run, then unload+delete.
 uv run python -m scummvm_bench --local --harness pi \
-    --provider local --model gemma-3-4b --game monkey-ega-demo:1
+    --model local/gemma-3-4b --game monkey-ega-demo:1
 ```
 
 The agent reaches the proxy through the
@@ -58,7 +65,7 @@ into pi's working directory.
 | Flag | Meaning |
 |------|---------|
 | `--harness {pi,none}` | Harness to drive the run (repeatable). `none` = attach after the fact. |
-| `--provider` / `--model` | Provider/model id (repeatable; paired). Required for `pi`. |
+| `--model PROVIDER/MODEL` | Provider+model as one token, e.g. `openai/gpt-4o` (repeatable; split on the first `/`). Required for `pi`. |
 | `--game GAME[:SLOT]` | ScummVM target id + optional save slot (repeatable). |
 | `--save-folder PATH` | Override the folder holding `<game>/<game>.sNN`. |
 | `--time-limit SEC` | Optional wall-clock budget (timer starts on the first MCP call). |
