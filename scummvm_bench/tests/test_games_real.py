@@ -49,12 +49,9 @@ def test_real_full_run(game_id: str) -> None:
     assert result.reached_count == goal_set.total()
     assert result.score_pct == 100.0
     assert result.stopped_by_goal is True
-    # Fixed walkthroughs make exactly one successful call per step; games with
-    # non-deterministic dialog navigate dynamically, so only floor-check there.
-    ok_calls = sum(1 for c in result.calls if c.ok)
-    if wt.dynamic_real:
-        assert ok_calls >= wt.expected_goals
-    else:
-        assert ok_calls == wt.expected_calls
+    # Real runs retry transient "not accepting input" errors and some call-based
+    # goals latch on a rejected call, so floor-check the count (the mock test
+    # asserts the exact deterministic call count).
+    assert result.call_count >= wt.expected_goals
     assert isinstance(result.elapsed_s, float)
     assert result.elapsed_s > 0.0

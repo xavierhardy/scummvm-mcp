@@ -64,7 +64,9 @@ GOALS = {
         _goal(
             "interact_wreck",
             "Interact with the wreck",
-            all_of(in_room(ROOM_WRECK), on_call("act", verb="interact", target1=WRECK_OBJ)),
+            all_of(
+                in_room(ROOM_WRECK), on_call("act", verb="interact", target1=WRECK_OBJ)
+            ),
             kind="call",
         ),
         _goal(

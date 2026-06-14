@@ -447,33 +447,101 @@ SAMNMAX = Walkthrough(
         ("act", {"verb": "use", "target1": 82}),  # reach_street (->9)
         ("state", {}),  # state_street
         ("act", {"verb": "pick_up", "target1": "max"}),
-        ("act", {"verb": "use", "target1": "max_the_object", "target2": 4}),  # talk_to_cat
+        (
+            "act",
+            {"verb": "use", "target1": "max_the_object", "target2": 4},
+        ),  # talk_to_cat
         ("answer", {"id": 1}),  # ask_cat_commissioner
         ("act", {"verb": "use", "target1": "beat_up_desoto"}),  # use_desoto (->10)
     ],
     steps=[
         ScriptStep("act", {"verb": "use", "target1": 62}, {"room_changed": 8}),
         ScriptStep("act", {"verb": "use", "target1": 82}, {"room_changed": 9}),
-        ScriptStep("walk", {"x": 50, "y": 180}, _msgs(
-            ("sam", "So, you want a piece of me, huh? Well, take a piece of this!"),
-        )),
+        ScriptStep(
+            "walk",
+            {"x": 50, "y": 180},
+            _msgs(
+                ("sam", "So, you want a piece of me, huh? Well, take a piece of this!"),
+            ),
+        ),
         ScriptStep("act", {"verb": "pick_up", "target1": "max"}, {}),
-        ScriptStep("act", {"verb": "use", "target1": "max_the_object", "target2": 4}, {
-            **_msgs(("max", "Hey there, lil' fella.")),
-            "question": {
-                "choices": [
-                    {"id": 1, "label": "question"},
-                    {"id": 2, "label": "exclamation"},
-                    {"id": 3, "label": "tease"},
-                    {"id": 4, "label": "bye"},
-                ]
+        ScriptStep(
+            "act",
+            {"verb": "use", "target1": "max_the_object", "target2": 4},
+            {
+                **_msgs(("max", "Hey there, lil' fella.")),
+                "question": {
+                    "choices": [
+                        {"id": 1, "label": "question"},
+                        {"id": 2, "label": "exclamation"},
+                        {"id": 3, "label": "tease"},
+                        {"id": 4, "label": "bye"},
+                    ]
+                },
             },
-        }),
-        ScriptStep("answer", {"id": 1}, _msgs(
-            ("sam", "we've got a message from the Commissioner to collect."),
-            ("kitten", "I swallowed your orders for safekeeping,"),
-        )),
-        ScriptStep("act", {"verb": "use", "target1": "beat_up_desoto"}, {"room_changed": 10}),
+        ),
+        ScriptStep(
+            "answer",
+            {"id": 1},
+            _msgs(
+                ("sam", "we've got a message from the Commissioner to collect."),
+                ("kitten", "I swallowed your orders for safekeeping,"),
+            ),
+        ),
+        ScriptStep(
+            "act", {"verb": "use", "target1": "beat_up_desoto"}, {"room_changed": 10}
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
+# The Dig demo (save slot 1) — canyon -> dias -> wreck -> bone field -> dig
+# ---------------------------------------------------------------------------
+
+DIG = Walkthrough(
+    game_id="dig-demo",
+    save_slot=1,
+    initial_room=15,
+    expected_goals=8,
+    game_path_env="DIG_DEMO_PATH",
+    game_path_default=str(GAMES_DIR / "Dig"),
+    initial_inventory=["look_at", "trowel"],
+    calls=[
+        ("state", {}),  # state_canyon
+        ("act", {"verb": "interact", "target1": 53}),  # leave_to_dias (->16)
+        ("state", {}),  # state_dias
+        ("act", {"verb": "interact", "target1": 67}),  # reach_wreck (->18)
+        ("act", {"verb": "interact", "target1": 81}),  # interact_wreck
+        ("act", {"verb": "interact", "target1": 80}),  # back to the dias (->16)
+        ("act", {"verb": "interact", "target1": 68}),  # reach_bone_field (->20)
+        ("state", {}),  # state_bone_field
+        ("act", {"verb": "use", "target1": "trowel", "target2": 96}),  # dig_bones
+    ],
+    steps=[
+        ScriptStep(
+            "act",
+            {"verb": "interact", "target1": 53},
+            {
+                "room_changed": 16,
+                **_msgs(("brink", "Where are you going, Low?")),
+            },
+        ),
+        ScriptStep("act", {"verb": "interact", "target1": 67}, {"room_changed": 18}),
+        ScriptStep("act", {"verb": "interact", "target1": 81}, {}),
+        ScriptStep("act", {"verb": "interact", "target1": 80}, {"room_changed": 16}),
+        ScriptStep("act", {"verb": "interact", "target1": 68}, {"room_changed": 20}),
+        ScriptStep(
+            "act",
+            {"verb": "use", "target1": "trowel", "target2": 96},
+            _msgs(
+                (
+                    "low",
+                    "I wish I had something a little less clumsy than a shovel "
+                    "for digging around these ancient bones.",
+                ),
+            ),
+        ),
     ],
 )
 
@@ -482,4 +550,5 @@ WALKTHROUGHS: dict[str, Walkthrough] = {
     MANIAC.game_id: MANIAC,
     COMI.game_id: COMI,
     SAMNMAX.game_id: SAMNMAX,
+    DIG.game_id: DIG,
 }
