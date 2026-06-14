@@ -172,6 +172,11 @@ class BenchProxy:
             """Aim and fire the cannon at a coordinate (Curse of Monkey Island)."""
             return dispatch("shoot_cannon", {"x": x, "y": y})
 
+        @app.tool
+        def keystroke(key: str) -> dict[str, object]:
+            """Send a raw keypress (numpad 1-9 drives the Indy3 boxing fight)."""
+            return dispatch("keystroke", {"key": key})
+
         return app
 
 

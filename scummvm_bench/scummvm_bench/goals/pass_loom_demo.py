@@ -1,26 +1,97 @@
-# Goals
-# state in first room
-# get to another room (walk left several times)
-# state in second room
-# walk to tents (room transition)
-# state in third room
-# go to tent on the left
-# state in tent
-# walk to elders on the right
-# pick up distaff
-# interact with egg: (message: "It's trying to open!")
-# play eced on egg ( messa;ge: "Thanks goodness you're still here!")
-# go to forest (room: 40)
-# "There's an owl in there!"
-# "This has an owl too!"
-# "Another owl!"
-# "Looks as if all holes are full"
-# Go to other tent (room: 38)
-# state in tent
-# play cccc on darkness (changes to room: 42)
-# interact with book
-# interact with dye pot
-# dye something in green
-# play eced on sky (open the sky) in the first room
-# go to the dock
-# use tree to leave the island (room change 36), end of demo
+"""Goal set for the Loom segment of Passport to Adventure, save slot 2.
+
+Save slot 2 (``pass.s02``) drops Bobbin in the tree clearing (room 36) with the
+last leaf of the year still on the branch. The distaff is not yet in Bobbin's
+hands in this save (``play_note`` is inert), so the goals here exercise the
+single-cursor *navigation* model rather than spellcasting. Reconciled against a
+live capture: knock the last leaf down ("Last leaf of the year."), then follow
+the westward pathways through the village (room 39) and the crossroads (room 41)
+to the dark clearing (room 38).
+
+Bobbin's walk is interrupted at intermediate stand points, so each pathway needs
+several ``interact`` clicks before the room changes; the live harness retries
+until the transition fires, while the mock script returns each transition once.
+"""
+
+from .engine import (
+    Goal,
+    GoalSet,
+    Predicate,
+    all_of,
+    in_room,
+    on_call,
+    on_message_contains,
+    on_room_changed,
+)
+
+ROOM_CLEARING = 36
+ROOM_VILLAGE = 39
+ROOM_CROSSROADS = 41
+ROOM_DARK = 38
+LEAF_OBJ = 461
+PATH_TO_VILLAGE = 460
+PATH_TO_CROSSROADS = 510
+PATH_TO_DARK = 539
+
+
+def _goal(
+    goal_id: str,
+    label: str,
+    predicate: Predicate,
+    kind: str = "result",
+    stopping: bool = False,
+) -> Goal:
+    return Goal(goal_id, label, predicate, stopping=stopping, kind=kind)
+
+
+GOALS = {
+    g.goal_id: g
+    for g in (
+        _goal(
+            "state_clearing",
+            "Check state in the tree clearing",
+            all_of(in_room(ROOM_CLEARING), on_call("state")),
+            kind="call",
+        ),
+        _goal(
+            "fell_last_leaf",
+            "Knock the last leaf off the tree",
+            on_message_contains("Last leaf of the year"),
+        ),
+        _goal(
+            "reach_village",
+            "Follow the pathway west to the village",
+            on_room_changed(ROOM_VILLAGE),
+        ),
+        _goal(
+            "state_village",
+            "Check state in the village",
+            all_of(in_room(ROOM_VILLAGE), on_call("state")),
+            kind="call",
+        ),
+        _goal(
+            "reach_crossroads",
+            "Continue west to the crossroads",
+            on_room_changed(ROOM_CROSSROADS),
+        ),
+        _goal(
+            "state_crossroads",
+            "Check state at the crossroads",
+            all_of(in_room(ROOM_CROSSROADS), on_call("state")),
+            kind="call",
+        ),
+        _goal(
+            "reach_dark_clearing",
+            "Reach the dark clearing",
+            on_room_changed(ROOM_DARK),
+            stopping=True,
+        ),
+    )
+}
+
+
+PASS_LOOM_DEMO_GOALSET = GoalSet(
+    game_id="pass",
+    save_slot=2,
+    goals=GOALS,
+)

@@ -18,6 +18,33 @@ id = "monkey-ega-demo"
 path = "/home/pi/games/MonkeyDemo"
 save_slot = 1
 
+[[games]]
+id = "maniac-c64"
+path = "/home/pi/games/ManiacMansion"
+save_slot = 1
+
+[[games]]
+id = "comi-demo"
+path = "/home/pi/games/COMIDEMO"
+save_slot = 1
+
+[[games]]
+id = "samnmax"
+path = "/home/pi/games/SamMaxDemo"
+save_slot = 1
+
+[[games]]
+id = "dig-demo"
+path = "/home/pi/games/Dig"
+save_slot = 1
+
+# Passport to Adventure carries both the Loom (save slot 2) and Indy3 (save slot
+# 3) demo segments; pass the slot with --game pass:2 / pass:3.
+[[games]]
+id = "pass"
+path = "/home/pi/games/pass"
+save_slot = 2
+
 # Local LM Studio models, only used with --local. The `key` is the lms download
 # key; params mirror `lms load` flags. `provider`/`model` are how the model is
 # registered in pi's models.json and selected by the harness.

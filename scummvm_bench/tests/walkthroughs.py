@@ -546,9 +546,209 @@ DIG = Walkthrough(
 )
 
 
+# ---------------------------------------------------------------------------
+# Loom segment of Passport to Adventure (save slot 2) — clearing -> dark tent
+# ---------------------------------------------------------------------------
+
+
+class LoomRealHarness:
+    """Drives Loom's pathway navigation: Bobbin's walk is interrupted at
+    intermediate stand points, so each pathway needs several ``interact`` clicks
+    before the room changes. Retry each transition until the room actually
+    flips, then poll state in the new room so the call-based goals latch."""
+
+    def __init__(self, walkthrough: "Walkthrough") -> None:
+        self.walkthrough = walkthrough
+
+    def run(self, ctx: RunContext) -> str | None:
+        asyncio.run(self._play(ctx))
+        return None
+
+    async def _play(self, ctx: RunContext) -> None:
+        async with Client(ctx.proxy.app) as client:
+
+            async def call(tool: str, args: dict, tries: int = 12) -> dict:
+                data: dict = {}
+                for _ in range(tries):
+                    res = await client.call_tool(tool, args)
+                    data = res.data if isinstance(res.data, dict) else {}
+                    if data.get("error"):
+                        await asyncio.sleep(0.8)
+                        continue
+                    return data
+                return data
+
+            async def room() -> object:
+                s = await call("state", {})
+                r = s.get("room") if isinstance(s, dict) else None
+                return r.get("id") if isinstance(r, dict) else None
+
+            async def go_pathway(pid: int, target: int, tries: int = 8) -> bool:
+                for _ in range(tries):
+                    if await room() == target:
+                        return True
+                    await call("act", {"verb": "interact", "target1": pid})
+                    await asyncio.sleep(2.2)
+                return await room() == target
+
+            stop = ctx.stop_event
+            await call("state", {})  # state_clearing (room 36)
+            await call("act", {"verb": "interact", "target1": 461})  # fell_last_leaf
+            await asyncio.sleep(1.5)
+            await go_pathway(460, 39)  # reach_village
+            await call("state", {})  # state_village (room 39)
+            if stop.is_set():
+                return
+            await go_pathway(510, 41)  # reach_crossroads
+            await call("state", {})  # state_crossroads (room 41)
+            await go_pathway(539, 38)  # reach_dark_clearing (STOP)
+
+
+LOOM = Walkthrough(
+    game_id="pass",
+    save_slot=2,
+    initial_room=36,
+    expected_goals=7,
+    game_path_env="PASS_PATH",
+    game_path_default=str(GAMES_DIR / "pass"),
+    dynamic_real=True,
+    real_harness_factory=lambda wt: LoomRealHarness(wt),
+    calls=[
+        ("state", {}),  # state_clearing (room 36)
+        ("act", {"verb": "interact", "target1": 461}),  # fell_last_leaf
+        ("act", {"verb": "interact", "target1": 460}),  # reach_village (->39)
+        ("state", {}),  # state_village (room 39)
+        ("act", {"verb": "interact", "target1": 510}),  # reach_crossroads (->41)
+        ("state", {}),  # state_crossroads (room 41)
+        ("act", {"verb": "interact", "target1": 539}),  # reach_dark_clearing (->38)
+    ],
+    steps=[
+        ScriptStep(
+            "act",
+            {"verb": "interact", "target1": 461},
+            _msgs(("bobbin", "leaf"), ("bobbin", "Last leaf of the year.")),
+        ),
+        ScriptStep("act", {"verb": "interact", "target1": 460}, {"room_changed": 39}),
+        ScriptStep("act", {"verb": "interact", "target1": 510}, {"room_changed": 41}),
+        ScriptStep("act", {"verb": "interact", "target1": 539}, {"room_changed": 38}),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
+# Indy3 segment of Passport to Adventure (save slot 3) — the boxing gym fight
+# ---------------------------------------------------------------------------
+
+
+class IndyRealHarness:
+    """Drives the Indy3 boxing gym: walk to the locker room to open the spar
+    dialog, accept the match, then throw high punches (numpad 9) until the
+    three-punch combo goal stops the run. Whether a punch lands is up to the
+    coach's blocking, so it just keeps swinging."""
+
+    def __init__(self, walkthrough: "Walkthrough") -> None:
+        self.walkthrough = walkthrough
+
+    def run(self, ctx: RunContext) -> str | None:
+        asyncio.run(self._play(ctx))
+        return None
+
+    async def _play(self, ctx: RunContext) -> None:
+        async with Client(ctx.proxy.app) as client:
+
+            async def call(tool: str, args: dict, tries: int = 12) -> dict:
+                data: dict = {}
+                for _ in range(tries):
+                    res = await client.call_tool(tool, args)
+                    data = res.data if isinstance(res.data, dict) else {}
+                    if data.get("error"):
+                        await asyncio.sleep(0.8)
+                        continue
+                    return data
+                return data
+
+            async def state() -> dict:
+                s = await call("state", {})
+                return s if isinstance(s, dict) else {}
+
+            stop = ctx.stop_event
+            await state()  # state_gym (room 25)
+            # Walk to the locker room until the coach's spar dialog opens.
+            for _ in range(10):
+                await call("act", {"verb": "walk to", "target1": "locker_room"})
+                await asyncio.sleep(1.0)
+                if (await state()).get("question"):
+                    break
+            await call("answer", {"id": 1})  # accept_go_easy + fight_begins
+            for _ in range(10):  # let the fight HUD come up
+                if (await state()).get("fight"):
+                    break
+                await asyncio.sleep(0.8)
+            for _ in range(6):  # throw_high_punch + land_three_punch_combo (STOP)
+                if stop.is_set():
+                    return
+                await call("keystroke", {"key": "9"})
+                await asyncio.sleep(1.5)
+
+
+INDY3 = Walkthrough(
+    game_id="pass",
+    save_slot=3,
+    initial_room=25,
+    expected_goals=7,
+    game_path_env="PASS_PATH",
+    game_path_default=str(GAMES_DIR / "pass"),
+    dynamic_real=True,
+    real_harness_factory=lambda wt: IndyRealHarness(wt),
+    calls=[
+        ("state", {}),  # state_gym (room 25)
+        ("act", {"verb": "walk to", "target1": "locker_room"}),  # approach + spar
+        ("answer", {"id": 1}),  # accept_go_easy + fight_begins
+        ("keystroke", {"key": "9"}),  # throw_high_punch
+        ("keystroke", {"key": "9"}),
+        ("keystroke", {"key": "9"}),  # land_three_punch_combo (STOP)
+    ],
+    steps=[
+        ScriptStep(
+            "act",
+            {"verb": "walk to", "target1": "locker_room"},
+            {
+                "question": {
+                    "choices": [
+                        {"id": 1, "label": "Go easy on me. I'm a bit out of shape!"},
+                        {"id": 2, "label": "Let's have a good workout."},
+                        {
+                            "id": 3,
+                            "label": "Let me have it with everything you've got!",
+                        },
+                        {"id": 4, "label": "I think I'll pass for now."},
+                        {"id": 5, "label": "I'd like to learn how to box."},
+                    ]
+                },
+                **_msgs(
+                    ("coach", "Hi, Dr. Jones. How would you like me to spar with you?")
+                ),
+            },
+        ),
+        ScriptStep(
+            "answer",
+            {"id": 1},
+            _msgs(
+                ("indy", "Go easy on me. I'm a bit out of shape!"),
+                ("hud", "Indiana Jones' Health"),
+                ("hud", "Boxing Coach's Health"),
+            ),
+        ),
+        ScriptStep("keystroke", {"key": "9"}, {}),
+    ],
+)
+
+
 WALKTHROUGHS: dict[str, Walkthrough] = {
-    MANIAC.game_id: MANIAC,
-    COMI.game_id: COMI,
-    SAMNMAX.game_id: SAMNMAX,
-    DIG.game_id: DIG,
+    "maniac-c64": MANIAC,
+    "comi-demo": COMI,
+    "samnmax": SAMNMAX,
+    "dig-demo": DIG,
+    "loom": LOOM,
+    "indy3": INDY3,
 }

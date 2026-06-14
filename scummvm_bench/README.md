@@ -28,21 +28,26 @@ The nested run matrix is: **model → harness → game → save-state**.
 cd scummvm_bench
 uv sync
 uv run ruff format . && uv run ruff check . && uv run ty check
-uv run pytest            # unit tests + mock full-run (no ScummVM binary needed)
+uv run pytest            # unit tests + mock full-run for every game (no binary needed)
 
-# Opt-in: the real end-to-end test that launches an actual ScummVM and drives the
-# captured Monkey Island demo walkthrough to 100% of its goals (~3 min, opens a
-# window). Point MONKEY_DEMO_PATH at the game data if it isn't auto-found.
+# Opt-in: the real end-to-end tests launch an actual ScummVM and drive each
+# game's captured walkthrough to 100% of its goals (each opens a window). A game
+# is skipped individually if its data/save is absent; point the per-game env var
+# at the data folder if it isn't auto-found.
+uv run pytest --run-real tests/test_games_real.py            # all games
 MONKEY_DEMO_PATH=/path/to/monkey uv run pytest --run-real \
-    tests/test_full_run_real_monkey.py
+    tests/test_full_run_real_monkey.py                       # Monkey Island
 ```
 
-Both full-run tests exercise the same goal set (`scummvm_bench/goals/monkey_ega_demo.py`)
-and the same 42-call walkthrough (`tests/mock_harness.py:MONKEY_CALLS`): the mocked
-one replays scripted backend responses, the real one drives a live ScummVM. Goals
-latch on a tool **call** (e.g. walking the plank, captured via `Goal.times` for the
-three indistinguishable bounces) or on what a call **returned** (a new room,
-inventory item, or dialogue line).
+Every registered game has both a **mock** full-run (`tests/test_games_mock.py`,
+replaying scripted backend responses) and a **real** full-run
+(`tests/test_games_real.py`, driving a live ScummVM); both replay the same
+captured walkthrough from `tests/walkthroughs.py` and must reach 100% of the
+game's goals. Monkey Island keeps its own dedicated pair
+(`tests/mock_harness.py:MONKEY_CALLS` + `tests/test_full_run_real_monkey.py`).
+Goals latch on a tool **call** (e.g. walking the plank, captured via `Goal.times`
+for the three indistinguishable bounces; or Indy3's three-punch combo) or on what
+a call **returned** (a new room, inventory item, or dialogue line).
 
 ## Run
 
@@ -101,3 +106,19 @@ Goals are a `dict[goal_id -> Goal]`; each goal has a human-readable label and a
 predicate that fires either on a tool **call** (in a given state) or on what a
 call **returned**. Goals latch (reached once = reached forever); exactly one is a
 **stopping** goal that ends the run. Score = % of goals reached.
+
+## Games
+
+Six demo goal sets ship in `scummvm_bench/goals/`, each with a mock + real
+full-run that reaches 100%. The `pass` target (Passport to Adventure) carries two
+of them, disambiguated by save slot.
+
+| `--game` | Game | Segment | Goals |
+|----------|------|---------|-------|
+| `monkey-ega-demo:1` | The Secret of Monkey Island | Mêlée Island → troll / fortune teller | 29 |
+| `maniac-c64:1` | Maniac Mansion | Get into the mansion | 6 |
+| `comi-demo:1` | The Curse of Monkey Island | Cannon-room pirate dialog | 6 |
+| `samnmax:1` | Sam & Max Hit the Road | Office → street → DeSoto | 9 |
+| `dig-demo:1` | The Dig | Canyon → dias → wreck → bone field | 8 |
+| `pass:2` | Loom | Tree clearing → village → dark clearing | 7 |
+| `pass:3` | Indiana Jones and the Last Crusade | Boxing gym sparring match | 7 |

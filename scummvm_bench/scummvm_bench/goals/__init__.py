@@ -8,6 +8,8 @@ from .comi_demo import COMI_DEMO_GOALSET
 from .engine import Goal, GoalEvent, GoalSet
 from .maniac_mansion_c64_demo import MANIAC_C64_DEMO_GOALSET
 from .monkey_ega_demo import MONKEY_EGA_DEMO_GOALSET
+from .pass_indy3_demo import PASS_INDY3_DEMO_GOALSET
+from .pass_loom_demo import PASS_LOOM_DEMO_GOALSET
 from .samnmax_demo import SAMNMAX_DEMO_GOALSET
 from .the_dig_demo import THE_DIG_DEMO_GOALSET
 
@@ -18,6 +20,8 @@ GOAL_SETS: dict[tuple[str, int | None], GoalSet] = {
     ("comi-demo", 1): COMI_DEMO_GOALSET,
     ("samnmax", 1): SAMNMAX_DEMO_GOALSET,
     ("dig-demo", 1): THE_DIG_DEMO_GOALSET,
+    ("pass", 2): PASS_LOOM_DEMO_GOALSET,
+    ("pass", 3): PASS_INDY3_DEMO_GOALSET,
 }
 
 
