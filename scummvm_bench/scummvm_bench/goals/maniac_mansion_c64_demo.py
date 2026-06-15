@@ -1,8 +1,11 @@
 """Goal set for the Maniac Mansion C64 demo, save slot 1 (outside the mansion).
 
-Objective: get into the mansion through the front door. Reconciled against a live
-capture: pull the door mat (state 0->8) to reveal the key, pick up the key, use it
-on the front door (state 4->8), then walk through into the entrance hall (room 10).
+Objective: get into the mansion through the front door -- the demo lets you no
+further (you can't go upstairs), so walking in is the stopping goal. Scored as
+its minimum actions and reconciled against the repo's live MCP capture
+(``test/mcp/test_maniac_c64.py``): pull the door mat (state 0->8) to reveal the
+key, pick up the key, use it on the front door (state 4->8), then walk through
+into the entrance hall (room 10).
 """
 
 from .engine import (
@@ -63,12 +66,6 @@ GOALS = {
             "enter_mansion",
             "Walk through the front door into the mansion",
             on_room_changed(ROOM_INSIDE),
-        ),
-        _goal(
-            "state_inside",
-            "Check state inside the mansion",
-            all_of(in_room(ROOM_INSIDE), on_call("state")),
-            kind="call",
             stopping=True,
         ),
     )

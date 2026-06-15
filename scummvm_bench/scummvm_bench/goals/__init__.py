@@ -4,9 +4,12 @@ Add a game by writing a module that builds a :class:`GoalSet` and registering it
 in ``GOAL_SETS`` keyed by ``(game_id, save_slot)``.
 """
 
+from .atlantis_demo import ATLANTIS_DEMO_GOALSET
 from .comi_demo import COMI_DEMO_GOALSET
 from .engine import Goal, GoalEvent, GoalSet
+from .full_throttle_demo import FT_DEMO_GOALSET
 from .maniac_mansion_c64_demo import MANIAC_C64_DEMO_GOALSET
+from .monkey2_demo import MONKEY2_DEMO_GOALSET
 from .monkey_ega_demo import MONKEY_EGA_DEMO_GOALSET
 from .pass_indy3_demo import PASS_INDY3_DEMO_GOALSET
 from .pass_loom_demo import PASS_LOOM_DEMO_GOALSET
@@ -22,6 +25,10 @@ GOAL_SETS: dict[tuple[str, int | None], GoalSet] = {
     ("dig-demo", 1): THE_DIG_DEMO_GOALSET,
     ("pass", 2): PASS_LOOM_DEMO_GOALSET,
     ("pass", 3): PASS_INDY3_DEMO_GOALSET,
+    # Intro-skip demos with no save state (start from scratch); slot-agnostic.
+    ("ft-demo", None): FT_DEMO_GOALSET,
+    ("atlantis", None): ATLANTIS_DEMO_GOALSET,
+    ("monkey2-demo", None): MONKEY2_DEMO_GOALSET,
 }
 
 

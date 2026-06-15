@@ -138,7 +138,7 @@ MANIAC = Walkthrough(
     game_id="maniac-c64",
     save_slot=1,
     initial_room=1,
-    expected_goals=6,
+    expected_goals=5,
     game_path_env="MANIAC_C64_PATH",
     game_path_default=str(GAMES_DIR / "ManiacMansionDemo/Games/ManiacMansion"),
     calls=[
@@ -147,8 +147,8 @@ MANIAC = Walkthrough(
         ("act", {"verb": "pull", "target1": "door mat"}),  # 3 pull_door_mat
         ("act", {"verb": "pick_up", "target1": "key"}),  # 4 pick_up_key
         ("act", {"verb": "use", "target1": "key", "target2": "front_door"}),  # 5
-        ("act", {"verb": "walk_to", "target1": "front_door"}),  # 6 enter_mansion (->10)
-        ("state", {}),  # 7 state_inside (STOPPING)
+        # 6 enter_mansion (->10) — the demo goes no further (no upstairs), STOPPING
+        ("act", {"verb": "walk_to", "target1": "front_door"}),
     ],
     steps=[
         # first walk_to positions the kid; the second (after unlocking) enters.
@@ -268,9 +268,9 @@ class ComiRealHarness:
                     continue
                 fail = pick(q, "failure")
                 if fail is not None:
-                    # Calling him a failure makes the pirate threaten ("...do ya in!").
+                    # Calling him a failure rattles Wally into dropping his hook.
                     await call("answer", {"id": fail})
-                    return
+                    break
                 sid = (
                     pick(
                         q,
@@ -285,12 +285,45 @@ class ComiRealHarness:
                 )
                 await call("answer", {"id": sid})
 
+            # Escape phase. NOTE: best-effort — the cut-rope / backfire-escape
+            # chain is not yet reconciled against a live capture, so the cannon
+            # coordinates and the resulting room may need tuning before a real
+            # run reaches the stopping goal.
+            if stop.is_set():
+                return
+            await call("act", {"verb": "pick_up", "target1": "plastic_hook"})
+            await call("act", {"verb": "pick_up", "target1": "ramrod"})
+            # Fire the cannon to sink the four skeleton boats.
+            for _ in range(8):
+                if stop.is_set():
+                    return
+                await call("shoot_cannon", {"x": 200, "y": 300})
+                await asyncio.sleep(0.4)
+            await call(
+                "act", {"verb": "use", "target1": "ramrod", "target2": "plastic_hook"}
+            )
+            await call("act", {"verb": "use", "target1": "gaff", "target2": "debris"})
+            await call(
+                "act",
+                {
+                    "verb": "use",
+                    "target1": "cutlass",
+                    "target2": "cannon_restraint_rope",
+                },
+            )
+            # Fire again — with nothing to hold it down the cannon backfires.
+            for _ in range(6):
+                if stop.is_set():
+                    return
+                await call("shoot_cannon", {"x": 320, "y": 215})
+                await asyncio.sleep(0.6)
+
 
 COMI = Walkthrough(
     game_id="comi-demo",
     save_slot=1,
     initial_room=3,
-    expected_goals=6,
+    expected_goals=12,
     game_path_env="COMI_DEMO_PATH",
     game_path_default=str(GAMES_DIR / "COMIDEMO"),
     initial_inventory=["helium_balloons"],
@@ -301,7 +334,21 @@ COMI = Walkthrough(
         ("act", {"verb": "talk_to", "target1": "small_pirate"}),  # talk_to_pirate
         ("answer", {"id": 2}),  # recognize_wally
         ("answer", {"id": 4}),  # get_leaflet
-        ("answer", {"id": 5}),  # call_pirate_failure + pirate_threatens (STOP)
+        ("answer", {"id": 5}),  # provoke_failure (Wally drops the hook)
+        ("act", {"verb": "pick_up", "target1": "plastic_hook"}),  # get_plastic_hook
+        ("act", {"verb": "pick_up", "target1": "ramrod"}),  # get_ramrod
+        ("shoot_cannon", {"x": 200, "y": 300}),  # fire_at_boats
+        (
+            "act",
+            {"verb": "use", "target1": "ramrod", "target2": "plastic_hook"},
+        ),  # gaff
+        ("act", {"verb": "use", "target1": "gaff", "target2": "debris"}),  # cutlass
+        # cut_restraint_rope
+        (
+            "act",
+            {"verb": "use", "target1": "cutlass", "target2": "cannon_restraint_rope"},
+        ),
+        ("shoot_cannon", {"x": 320, "y": 215}),  # escape_to_treasure_room (STOP)
     ],
     steps=[
         ScriptStep(
@@ -338,11 +385,69 @@ COMI = Walkthrough(
         ScriptStep(
             "answer",
             {"id": 5},
-            _msgs(
-                ("guybrush", "You're a failure as a pirate."),
-                ("pirate", "Shut yer trap, ya yellow-bellied blowfish!"),
-                ("pirate", "One more peep out of you and I'll do ya in!"),
-            ),
+            {
+                **_msgs(
+                    ("guybrush", "You're a failure as a pirate."),
+                    ("pirate", "One more peep out of you and I'll do ya in!"),
+                ),
+                # The outburst makes Wally drop his plastic hook to the floor.
+                "objects_changed": [
+                    {"name": "plastic_hook", "old_state": 0, "new_state": 1}
+                ],
+            },
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "pick_up", "target1": "plastic_hook"},
+            {"inventory_added": ["plastic_hook"]},
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "pick_up", "target1": "ramrod"},
+            {"inventory_added": ["ramrod"]},
+        ),
+        ScriptStep(
+            "shoot_cannon",
+            {},
+            {
+                "objects_changed": [
+                    {"name": "skeleton_boat", "old_state": 0, "new_state": 1}
+                ],
+                **_msgs(("guybrush", "Got one!")),
+            },
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "use", "target1": "ramrod", "target2": "plastic_hook"},
+            {
+                "inventory_added": ["gaff"],
+                "inventory_removed": ["ramrod", "plastic_hook"],
+            },
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "use", "target1": "gaff", "target2": "debris"},
+            {
+                "inventory_added": ["cutlass", "skeleton_arm"],
+                "objects_changed": [{"name": "debris", "old_state": 0, "new_state": 1}],
+            },
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "use", "target1": "cutlass", "target2": "cannon_restraint_rope"},
+            {
+                "objects_changed": [
+                    {"name": "cannon_restraint_rope", "old_state": 0, "new_state": 1}
+                ],
+                **_msgs(("guybrush", "Snip.")),
+            },
+        ),
+        # Second shot: nothing restrains the cannon, so it backfires Guybrush
+        # through the door into the treasure room (room 4).
+        ScriptStep(
+            "shoot_cannon",
+            {},
+            {"room_changed": 4, **_msgs(("guybrush", "Yaaaah!"))},
         ),
     ],
 )
