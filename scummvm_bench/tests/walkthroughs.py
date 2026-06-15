@@ -138,7 +138,7 @@ MANIAC = Walkthrough(
     game_id="maniac-c64",
     save_slot=1,
     initial_room=1,
-    expected_goals=6,
+    expected_goals=10,
     game_path_env="MANIAC_C64_PATH",
     game_path_default=str(GAMES_DIR / "ManiacMansionDemo/Games/ManiacMansion"),
     calls=[
@@ -148,7 +148,20 @@ MANIAC = Walkthrough(
         ("act", {"verb": "pick_up", "target1": "key"}),  # 4 pick_up_key
         ("act", {"verb": "use", "target1": "key", "target2": "front_door"}),  # 5
         ("act", {"verb": "walk_to", "target1": "front_door"}),  # 6 enter_mansion (->10)
-        ("act", {"verb": "walk_to", "target1": "stairs"}),  # 7 reach_demo_wall (STOP)
+        # Tour the whole ground floor; interior doors are addressed by object id.
+        ("act", {"verb": "open", "target1": 35}),  # kitchen door
+        ("act", {"verb": "walk_to", "target1": 35}),  # 7 reach_kitchen (->7)
+        ("act", {"verb": "open", "target1": 49}),  # dining door
+        ("act", {"verb": "walk_to", "target1": 49}),  # 8 reach_dining_room (->37)
+        ("act", {"verb": "open", "target1": 65}),  # pantry door
+        ("act", {"verb": "walk_to", "target1": 65}),  # 9 reach_pantry (->36)
+        ("act", {"verb": "walk_to", "target1": 91}),  # back to dining (->37)
+        ("act", {"verb": "walk_to", "target1": 62}),  # back to kitchen (->7)
+        ("act", {"verb": "walk_to", "target1": 48}),  # back to hall (->10)
+        ("act", {"verb": "open", "target1": 37}),  # living-room door
+        ("act", {"verb": "walk_to", "target1": 37}),  # 10 reach_living_room (->3)
+        ("act", {"verb": "open", "target1": 93}),  # library door
+        ("act", {"verb": "walk_to", "target1": 93}),  # 11 reach_library (->5) STOP
     ],
     steps=[
         # first walk_to positions the kid; the second (after unlocking) enters.
@@ -176,11 +189,20 @@ MANIAC = Walkthrough(
             },
             _door("front door", 4, 8),
         ),
-        ScriptStep(
-            "act",
-            {"verb": "walk_to", "target1": "stairs"},
-            _msgs(("dave", "I can't go up until you buy the game.")),
-        ),
+        # Opening interior doors has no observable change; the walk-through enters.
+        ScriptStep("act", {"verb": "open", "target1": 35}, {}),
+        ScriptStep("act", {"verb": "open", "target1": 49}, {}),
+        ScriptStep("act", {"verb": "open", "target1": 65}, {}),
+        ScriptStep("act", {"verb": "open", "target1": 37}, {}),
+        ScriptStep("act", {"verb": "open", "target1": 93}, {}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 35}, {"room_changed": 7}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 49}, {"room_changed": 37}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 65}, {"room_changed": 36}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 91}, {"room_changed": 37}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 62}, {"room_changed": 7}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 48}, {"room_changed": 10}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 37}, {"room_changed": 3}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 93}, {"room_changed": 5}),
     ],
 )
 

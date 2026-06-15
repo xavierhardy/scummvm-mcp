@@ -15,8 +15,13 @@ dock (49), the canyon (63), the opening "look around" / Kerner lines and the
 ``tire_repair_kit`` pickup are all observed there. The jeep is hidden behind one
 of the three mountain openings AT RANDOM each playthrough, so the room it sits in
 varies -- the goal therefore keys on the tire-kit pickup (constant) rather than a
-fixed room id. Reaching the dock back (the captain's salvage boat) does not open
-a simple leave path in the demo, so the tire kit is the playable end.
+fixed room id.
+
+NOTE: the tire kit is NOT the demo's true end -- the demo keeps going past it,
+but the continuation could not be reached over the MCP (the dig interior, room 72
+``th-dig-i``, is behind a collapsed entrance that stays blocked; the salvage-boat
+captain only ever opens Sophia's "where are you going?" dialog and never sails).
+The stopping goal is provisional, pending a live run that finds how the demo ends.
 """
 
 from .engine import (
