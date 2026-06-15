@@ -1,11 +1,13 @@
 """Goal set for the Maniac Mansion C64 demo, save slot 1 (outside the mansion).
 
-Objective: get into the mansion through the front door -- the demo lets you no
-further (you can't go upstairs), so walking in is the stopping goal. Scored as
-its minimum actions and reconciled against the repo's live MCP capture
-(``test/mcp/test_maniac_c64.py``): pull the door mat (state 0->8) to reveal the
-key, pick up the key, use it on the front door (state 4->8), then walk through
-into the entrance hall (room 10).
+Objective: get into the mansion and reach the demo's wall. Scored as its minimum
+actions and reconciled against a live playthrough (and
+``test/mcp/test_maniac_c64.py``): pull the door mat (state 0->8) to reveal the
+key, pick up the key, use it on the front door (state 4->8), and walk through
+into the entrance hall (room 10). Getting inside is NOT the end -- you can roam
+the ground floor (a door off the hall opens onto the kitchen, room 7), but the
+staircase is walled off: walking to it ends the demo with the kid saying
+"I can't go up until you buy the game." That message is the stopping goal.
 """
 
 from .engine import (
@@ -16,6 +18,7 @@ from .engine import (
     in_room,
     on_call,
     on_inventory_added,
+    on_message_contains,
     on_object_changed,
     on_room_changed,
 )
@@ -66,6 +69,11 @@ GOALS = {
             "enter_mansion",
             "Walk through the front door into the mansion",
             on_room_changed(ROOM_INSIDE),
+        ),
+        _goal(
+            "reach_demo_wall",
+            "Walk to the stairs and hit the demo wall (buy the game)",
+            on_message_contains("buy the game"),
             stopping=True,
         ),
     )

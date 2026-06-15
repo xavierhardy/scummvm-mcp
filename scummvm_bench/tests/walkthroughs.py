@@ -138,7 +138,7 @@ MANIAC = Walkthrough(
     game_id="maniac-c64",
     save_slot=1,
     initial_room=1,
-    expected_goals=5,
+    expected_goals=6,
     game_path_env="MANIAC_C64_PATH",
     game_path_default=str(GAMES_DIR / "ManiacMansionDemo/Games/ManiacMansion"),
     calls=[
@@ -147,8 +147,8 @@ MANIAC = Walkthrough(
         ("act", {"verb": "pull", "target1": "door mat"}),  # 3 pull_door_mat
         ("act", {"verb": "pick_up", "target1": "key"}),  # 4 pick_up_key
         ("act", {"verb": "use", "target1": "key", "target2": "front_door"}),  # 5
-        # 6 enter_mansion (->10) — the demo goes no further (no upstairs), STOPPING
-        ("act", {"verb": "walk_to", "target1": "front_door"}),
+        ("act", {"verb": "walk_to", "target1": "front_door"}),  # 6 enter_mansion (->10)
+        ("act", {"verb": "walk_to", "target1": "stairs"}),  # 7 reach_demo_wall (STOP)
     ],
     steps=[
         # first walk_to positions the kid; the second (after unlocking) enters.
@@ -175,6 +175,11 @@ MANIAC = Walkthrough(
                 "target2": "front_door",
             },
             _door("front door", 4, 8),
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "walk_to", "target1": "stairs"},
+            _msgs(("dave", "I can't go up until you buy the game.")),
         ),
     ],
 )
