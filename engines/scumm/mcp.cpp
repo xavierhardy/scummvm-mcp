@@ -1917,7 +1917,14 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// For V0: track the primary target so isActionDone() can wait for its script to finish.
 	// V0 scripts do not lock _userPut during execution, unlike V5, so script-slot polling
 	// is the only reliable signal that the verb script has completed.
-	_sseTargetObject = (_vm->_game.version == 0) ? targetA : 0;
+	// For The Dig (V7): some scenery objects are "walk there, then run a multi-frame
+	// entry sequence" exits — e.g. clicking the wreck (obj 81) in room 18 walks Low
+	// over and the object script then climbs the team inside and calls startScene
+	// (room 19). Ego stops the instant it arrives, so the settle logic would
+	// otherwise close the stream with an empty result before that entry script
+	// fires the room change. Tracking the clicked object lets the settle logic wait
+	// for its script to finish (capped) so a single act() reaches the new room.
+	_sseTargetObject = (_vm->_game.version == 0 || _vm->_game.id == GID_DIG) ? targetA : 0;
 	if (_vm->_game.id == GID_SAMNMAX && verbId == kSnmTalkSentinel &&
 	    targetA != 0 && _vm->objIsActor(targetA)) {
 		// Sam & Max talk_to: there is no talk verb to dispatch — instead drive
@@ -2046,7 +2053,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// objects in V3/V4 so the click actually lands inside the object.
 		int objX = _vm->getObjX(targetA);
 		int objY = _vm->getObjY(targetA);
-		if (_vm->_game.version <= 4 && targetA != 0 && !_vm->objIsActor(targetA)) {
+		// getObjX/Y returns the object's hotspot/walk-to reference point, which for
+		// tall scenery (e.g. The Dig's wreck, obj 81) sits at the base — outside the
+		// visible bounding box. The engine's findObject() runs at the click coordinate,
+		// so clicking the hotspot misses the bbox and no sentence is set up (ego just
+		// walks toward the point and stops). Use the bbox center so the click lands
+		// inside the object. V3/V4 (Loom) needs this for leaves/eggs; The Dig (V7)
+		// needs it for scenery exits like the wreck. bbox center is always inside the
+		// bbox, so this is strictly safer for findObject than the hotspot.
+		if ((_vm->_game.version <= 4 || _vm->_game.id == GID_DIG) &&
+		    targetA != 0 && !_vm->objIsActor(targetA)) {
 			int idx = _vm->getObjectIndex(targetA);
 			if (idx >= 0 && _vm->_objs) {
 				const ObjectData &od = _vm->_objs[idx];
@@ -3920,6 +3936,10 @@ void ScummMcpBridge::pumpStream() {
 		// Full Throttle (also V7) does not need this floor: it detects dialog via a
 		// VAR_VERB_SCRIPT change (which resets the settle window) and v7DialogReady,
 		// so the extra wait only adds dead time after every action. Keep FT snappy.
+		// Scenery exits that run a multi-frame entry sequence (e.g. the wreck, obj
+		// 81 -> room 19) are held open by digEnterScriptRunning below while their
+		// object script runs, then closed by the room-changed early-close — so the
+		// settle floor here stays modest and does not slow down ordinary actions.
 		if (_vm->_game.id == GID_DIG && !questionReady)
 			settleFrames = MAX(settleFrames, (uint32)45);
 		// V8 (CMI): isActionDone() now waits for the sentence/verb script to finish,
@@ -3935,6 +3955,20 @@ void ScummMcpBridge::pumpStream() {
 		                       (_sseTargetObject != 0) &&
 		                       _vm->isScriptInUse(_sseTargetObject) &&
 		                       (_frameCounter - _sseDoneAtFrame < 30);
+
+		// The Dig: a clicked exit/scenery object can run a multi-frame entry
+		// sequence (walk-in + climb-inside + startScene) that only begins once
+		// ego has arrived and stopped — e.g. entering the wreck (obj 81 -> room
+		// 19). Keep the stream open while that object script is still in use so
+		// the room transition is captured, rather than closing with an empty
+		// result the instant ego stops. Capped so an object whose script never
+		// resolves (ego cannot reach it) still settles instead of hanging; a real
+		// transition trips the room-changed early-close well before the cap. The
+		// dialog-ready paths below are independent, so talk_to is unaffected.
+		bool digEnterScriptRunning = (_vm->_game.id == GID_DIG) &&
+		                             (_sseTargetObject != 0) &&
+		                             _vm->isScriptInUse(_sseTargetObject) &&
+		                             (_frameCounter - _sseDoneAtFrame < 300);
 
 		// V7: if the verb script changed toward dialog mode (not away from it),
 		// AND the ego has stopped moving (reached the target), the dialog choices
@@ -3955,7 +3989,7 @@ void ScummMcpBridge::pumpStream() {
 		// settle-based close while ego is still moving — wait for v7DialogReady.
 		bool inV7DialogWait = _sseVerbScriptChanged && !startedInDialogMode &&
 		                      (_vm->_game.version == 7) && egoNowMoving;
-		bool settled = !v0ScriptRunning && !inV7DialogWait &&
+		bool settled = !v0ScriptRunning && !inV7DialogWait && !digEnterScriptRunning &&
 		               (_frameCounter - _sseDoneAtFrame >= settleFrames);
 		if (questionReady || v7DialogReady || settled) {
 			if (v7DialogReady)

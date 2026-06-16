@@ -19,6 +19,7 @@ scummvm-bench = "scummvm_bench.cli:main"
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 # Pin public PyPI: the machine's global pip/uv config points at a private index
