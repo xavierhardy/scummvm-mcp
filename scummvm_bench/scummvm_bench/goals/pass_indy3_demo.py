@@ -11,21 +11,32 @@ Room ids reconciled against a live capture of the SCUMM V3 demo:
   * corridor               = 20   (gym door 213 -> here; doors 100/101/102/103)
   * outside / travel hub   = 24   (corridor door 100 -> here; has the 'travel' verb)
   * Henry's house          = 27   (travel destination)
-  * gym (re-entered)       = 25   (corridor door 103, "next to gym")
-Office (room 22, the student mob) and Indy's office (room 21) sit behind the
-corridor's "class in session" doors (100..103) and were provided directly.
+  * office (student mob)    = 22   (corridor door 103, the one "next to the gym")
+  * Indy's office          = 21   (entered after the student mob disperses)
+The corridor's other doors (101/102) are locked classrooms ("class in session").
 
-Goals score the whole demo arc: leave the gym, cross the corridor and head
-outside, travel to Henry's house, ransack it (plant / cloth / bookcase / sticky
-tape and, with the small key, the chest -> old book), handle the student mob in
-the office and the mail in Indy's office, and finally travel on to Venice.
+Full solve (reconciled live): leave the gym, cross the corridor, go outside
+(sit through the Donovan cutscene), travel to Henry's house and ransack it
+(plant / pull cloth -> chest / pull bookcase -> sticky tape); back through the
+corridor's door 103 into the office, calm the student mob (work-something-out ->
+please-relax -> Irene-take-down-names) which opens Indy's office; there open the
+window, take the mail and open the package (grail diary), and use the sticky
+tape on the solvent jar to fish out the small key; travel back to Henry's, use
+the key on the chest for the old book and pick up the painting -- Indy then says
+he "has everything he needs" for the Grail quest, which adds "To the Plane to
+Venice" to the travel menu back outside; travel there to end the demo.
 
-NOTE: reaching Venice needs the full grail-diary puzzle, which is too deep to
-capture here, so ``ROOM_VENICE`` below is a best-effort placeholder. The final
-goal matches on the room change into Venice (not on a "Venice" *message* — the
-intro's Donovan cutscene says "...it is in Venice, Italy..." and would otherwise
-latch the goal during the intro). Reconcile ``ROOM_VENICE`` against a live
-capture once the demo is driven all the way to Venice.
+The student dialog in this build runs work-something-out -> please-relax ->
+take-down-names; the "talk about this calmly" line is never offered, so it is
+intentionally not a goal here.
+
+NOTE:
+ * Venice is room 28. Travel to it only unlocks once Indy holds the grail diary,
+   the old book AND the painting (any one of them, picked up last, triggers the
+   "everything I need" line and the menu entry). ``travel_venice`` matches the
+   room change into Venice (not a "Venice" *message* -- the intro's Donovan
+   cutscene says "...it is in Venice, Italy..." and would otherwise latch during
+   the intro).
 """
 
 from .engine import (
@@ -47,10 +58,10 @@ ROOM_OUTSIDE = 24   # the travel hub
 ROOM_OFFICE = 22    # the student-mob office
 ROOM_INDY_OFFICE = 21
 ROOM_HENRY = 27
-ROOM_VENICE = 28    # BEST-EFFORT placeholder — reconcile against a live capture
+ROOM_VENICE = 28    # confirmed live (reached after picking up the painting)
 
 DOOR_LEFT = 100     # corridor -> outside
-DOOR_GYM = 103      # corridor -> gym ("next to gym")
+DOOR_GYM = 103      # corridor door "next to the gym" -> the office (room 22)
 
 
 def _goal(
@@ -114,7 +125,7 @@ GOALS = {
         _goal(
             "cloth_pulled",
             "Pull the table cloth (its state changes to 1)",
-            on_object_changed("table_cloth"),
+            on_object_changed("table cloth"),  # objects_changed reports a space, not "_"
         ),
         _goal(
             "bookcase_pulled",
@@ -133,9 +144,9 @@ GOALS = {
             kind="call",
         ),
         _goal(
-            "reach_gym_via_103",
-            "In the corridor, go through the door (103) next to the gym",
-            on_room_changed(ROOM_FIRST),
+            "reach_office_via_103",
+            "In the corridor, go through the door (103) next to the gym (into the office)",
+            on_room_changed(ROOM_OFFICE),
         ),
         _goal(
             "state_office",
@@ -148,11 +159,6 @@ GOALS = {
             "In the office, talk to the students",
             all_of(in_room(ROOM_OFFICE), on_call("act", verb="talk to")),
             kind="call",
-        ),
-        _goal(
-            "office_line_calmly",
-            'Office line: "Hey, take it easy, let\'s talk about this calmly."',
-            on_message_contains("let's talk about this calmly"),
         ),
         _goal(
             "office_line_moment",
@@ -207,8 +213,10 @@ GOALS = {
         ),
         _goal(
             "obtain_small_key",
-            "In Indy's office, obtain the small key",
-            on_inventory_added("small_key"),
+            "In Indy's office, use the sticky tape on the solvent jar to get the key",
+            # The key is added asynchronously (no inventory_added in the act
+            # result), so match the "There's a key in here!" line instead.
+            on_message_contains("key in here"),
         ),
         _goal(
             "state_henry",
@@ -225,6 +233,14 @@ GOALS = {
             "pick_up_old_book",
             "In Henry's house, pick up the old book",
             on_inventory_added("old_book"),
+        ),
+        _goal(
+            "pick_up_painting",
+            "In Henry's house, pick up the painting (unlocks the trip to Venice)",
+            # Picking this up makes Indy say he now has everything he needs for
+            # the Grail quest, which is what adds "To the Plane to Venice" to the
+            # travel menu back outside.
+            on_inventory_added("painting"),
         ),
         _goal(
             "travel_venice",

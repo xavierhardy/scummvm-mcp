@@ -1,0 +1,137 @@
+[2026-06-17 18:34:50] ScummVM 2026.2.1gitdirty (Jun 17 2026 09:19:11)
+[2026-06-17 18:34:50] Vorbis FLAC MP3 TiMidity RGB zLib FluidSynth AAC A/52 FreeType2 FriBiDi JPEG PNG taskbar TTS cloud libcurl SDL_net SDL2 OpenGL (with shaders) OpenGL desktop only 
+[2026-06-17 18:34:50] --- Log opened.
+[2026-06-17 18:34:50] Using SDL Video Driver "cocoa"
+[2026-06-17 18:34:50] SDL Video Detecting OpenGL Features...
+[2026-06-17 18:34:50] OpenGL: GL context initialized
+[2026-06-17 18:34:50] OpenGL version: 2.1 Metal - 90.5
+[2026-06-17 18:34:50] OpenGL vendor: Apple
+[2026-06-17 18:34:50] OpenGL renderer: Apple M1 Pro
+[2026-06-17 18:34:50] OpenGL: version 2.1
+[2026-06-17 18:34:50] OpenGL: GLSL version string: 1.20
+[2026-06-17 18:34:50] OpenGL: GLSL version: 120
+[2026-06-17 18:34:50] OpenGL: Max texture size: 16384
+[2026-06-17 18:34:50] OpenGL: NPOT texture support: 1
+[2026-06-17 18:34:50] OpenGL: Imaging support: 1
+[2026-06-17 18:34:50] OpenGL: Shader support: 1
+[2026-06-17 18:34:50] OpenGL: Shader support for engines: 1
+[2026-06-17 18:34:50] OpenGL: Multitexture support: 1
+[2026-06-17 18:34:50] OpenGL: FBO support: 1
+[2026-06-17 18:34:50] OpenGL: Multisample FBO support: 1
+[2026-06-17 18:34:50] OpenGL: Multisample max number: 4
+[2026-06-17 18:34:50] OpenGL: BGRA support: 1
+[2026-06-17 18:34:50] OpenGL: Packed pixels support: 1
+[2026-06-17 18:34:50] OpenGL: Packed depth stencil support: 1
+[2026-06-17 18:34:50] OpenGL: Unpack subimage support: 1
+[2026-06-17 18:34:50] OpenGL: OpenGL ES depth 24 support: 0
+[2026-06-17 18:34:50] OpenGL: Texture edge clamping support: 1
+[2026-06-17 18:34:50] OpenGL: Texture border clamping support: 1
+[2026-06-17 18:34:50] OpenGL: Texture mirror repeat support: 1
+[2026-06-17 18:34:50] OpenGL: Texture max level support: 1
+[2026-06-17 18:34:50] OpenGL: Texture lookup precision: -1
+[2026-06-17 18:34:50] SDL Video Detecting Anti-aliasing Support...
+[2026-06-17 18:34:50] Checking SDL Antialiasing Support With 2 Samples... Yes
+[2026-06-17 18:34:50] Checking SDL Antialiasing Support With 4 Samples... Yes
+[2026-06-17 18:34:50] Checking SDL Antialiasing Support With 8 Samples... No
+[2026-06-17 18:34:50] Checking SDL Antialiasing Support With 16 Samples... No
+[2026-06-17 18:34:50] Checking SDL Antialiasing Support With 32 Samples... No
+[2026-06-17 18:34:50] SDL Video OpenGL Feature Detection Complete
+[2026-06-17 18:34:50] Invalid joystick: 0
+[2026-06-17 18:34:50] creating SurfaceSDL graphics manager
+[2026-06-17 18:34:50] creating OpenGL graphics manager
+[2026-06-17 18:34:50] creating OpenGL graphics manager
+[2026-06-17 18:34:50] Using SDL Audio Driver "coreaudio"
+[2026-06-17 18:34:50] Output sample rate: 44100 Hz
+[2026-06-17 18:34:50] Output buffer size: 1024 samples
+[2026-06-17 18:34:50] Output channels: 2
+[2026-06-17 18:34:50] OpenGL: GL context initialized
+[2026-06-17 18:34:50] OpenGL version: 2.1 Metal - 90.5
+[2026-06-17 18:34:50] OpenGL vendor: Apple
+[2026-06-17 18:34:50] OpenGL renderer: Apple M1 Pro
+[2026-06-17 18:34:50] OpenGL: version 2.1
+[2026-06-17 18:34:50] OpenGL: GLSL version string: 1.20
+[2026-06-17 18:34:50] OpenGL: GLSL version: 120
+[2026-06-17 18:34:50] OpenGL: Max texture size: 16384
+[2026-06-17 18:34:50] OpenGL: NPOT texture support: 1
+[2026-06-17 18:34:50] OpenGL: Imaging support: 1
+[2026-06-17 18:34:50] OpenGL: Shader support: 1
+[2026-06-17 18:34:50] OpenGL: Shader support for engines: 1
+[2026-06-17 18:34:50] OpenGL: Multitexture support: 1
+[2026-06-17 18:34:50] OpenGL: FBO support: 1
+[2026-06-17 18:34:50] OpenGL: Multisample FBO support: 1
+[2026-06-17 18:34:50] OpenGL: Multisample max number: 4
+[2026-06-17 18:34:50] OpenGL: BGRA support: 1
+[2026-06-17 18:34:50] OpenGL: Packed pixels support: 1
+[2026-06-17 18:34:50] OpenGL: Packed depth stencil support: 1
+[2026-06-17 18:34:50] OpenGL: Unpack subimage support: 1
+[2026-06-17 18:34:50] OpenGL: OpenGL ES depth 24 support: 0
+[2026-06-17 18:34:50] OpenGL: Texture edge clamping support: 1
+[2026-06-17 18:34:50] OpenGL: Texture border clamping support: 1
+[2026-06-17 18:34:50] OpenGL: Texture mirror repeat support: 1
+[2026-06-17 18:34:50] OpenGL: Texture max level support: 1
+[2026-06-17 18:34:50] OpenGL: Texture lookup precision: -1
+[2026-06-17 18:34:50] generateZipSet: Loaded pack file: shaders.dat
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_START' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_LEFT_STICK_Y-' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_LEFT_STICK_Y+' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_LEFT_STICK_X-' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_LEFT_STICK_X+' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_RIGHT_SHOULDER' not known
+[2026-06-17 18:34:50] CPU extensions:
+[2026-06-17 18:34:50] SSE2(not supported) AVX2(not supported) NEON(enabled)
+[2026-06-17 18:34:50] generateZipSet: Loaded pack file: shaders.dat
+[2026-06-17 18:34:50] WARNING: scumm failed to instantiate engine: Path does not exist (target 'pass', path '%(game_path)s')!
+[2026-06-17 18:34:50] Reported DPI ratio: 2
+[2026-06-17 18:34:50] Setting 1512 x 1134 -> 756 x 567 -- 2
+[2026-06-17 18:34:50] generateZipSet: Loaded pack file: gui-icons.dat
+[2026-06-17 18:34:50] Opening hashed: THEMERC
+[2026-06-17 18:34:50] Opening hashed: THEMERC
+[2026-06-17 18:34:50] Opening hashed: THEMERC
+[2026-06-17 18:34:50] Opening hashed: THEMERC
+[2026-06-17 18:34:50] Loading theme gui/themes/scummremastered.zip
+[2026-06-17 18:34:50] Opening hashed: THEMERC
+[2026-06-17 18:34:50] FSDirectory::createReadStreamForMember('fonts.dat') -> 'dists/engine-data/fonts.dat'
+[2026-06-17 18:34:50] Opening hashed: LiberationSans-Bold.ttf
+[2026-06-17 18:34:50] FSDirectory::createReadStreamForMember('fonts.dat') -> 'dists/engine-data/fonts.dat'
+[2026-06-17 18:34:50] Opening hashed: LiberationSans-Regular.ttf
+[2026-06-17 18:34:50] FSDirectory::createReadStreamForMember('fonts.dat') -> 'dists/engine-data/fonts.dat'
+[2026-06-17 18:34:50] Opening hashed: LiberationSans-Regular.ttf
+[2026-06-17 18:34:50] FSDirectory::createReadStreamForMember('fonts.dat') -> 'dists/engine-data/fonts.dat'
+[2026-06-17 18:34:50] Opening hashed: SourceCodeVariable-Roman.ttf
+[2026-06-17 18:34:50] Finished loading theme gui/themes/scummremastered.zip
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_A' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_Y' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_UP' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_DOWN' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_LEFT' not known
+[2026-06-17 18:34:50] HardwareInput with ID 'JOY_RIGHT' not known
+[2026-06-17 18:34:50] Reported DPI ratio: 2
+[2026-06-17 18:34:50] Setting 1512 x 1134 -> 756 x 567 -- 2
+[2026-06-17 18:34:50] Loading theme gui/themes/scummremastered.zip
+[2026-06-17 18:34:50] Opening hashed: THEMERC
+[2026-06-17 18:34:51] Finished loading theme gui/themes/scummremastered.zip
+[2026-06-17 18:35:37] Replaced the duplicated plugin: 'scumm'
+[2026-06-17 18:35:37] generateZipSet: Loaded pack file: shaders.dat
+[2026-06-17 18:35:37] Reported DPI ratio: 2
+[2026-06-17 18:35:37] Setting 1512 x 1134 -> 756 x 567 -- 2
+[2026-06-17 18:35:37] Loading theme gui/themes/scummremastered.zip
+[2026-06-17 18:35:37] Opening hashed: THEMERC
+[2026-06-17 18:35:37] Finished loading theme gui/themes/scummremastered.zip
+[2026-06-17 18:35:37] Adding Gui Object 0x9d6e5bc00 to trash
+[2026-06-17 18:35:37] Adding Gui Object 0x9d6b28900 to trash
+[2026-06-17 18:35:37] Adding Gui Object 0x9d6b28600 to trash
+[2026-06-17 18:35:37] Reported DPI ratio: 2
+[2026-06-17 18:35:37] Setting 1512 x 1134 -> 756 x 567 -- 2
+[2026-06-17 18:35:37] Loading theme gui/themes/scummremastered.zip
+[2026-06-17 18:35:37] Opening hashed: THEMERC
+[2026-06-17 18:35:37] Finished loading theme gui/themes/scummremastered.zip
+[2026-06-17 18:35:37] Adding Gui Object 0x9d6e5b900 to trash
+[2026-06-17 18:35:37] Adding Gui Object 0x9d6b28c00 to trash
+[2026-06-17 18:35:37] Adding Gui Object 0x9d6b28f00 to trash
+[2026-06-17 18:35:37] Delayed deletion of Gui Object 0x9d6e5bc00
+[2026-06-17 18:35:37] Delayed deletion of Gui Object 0x9d6b28900
+[2026-06-17 18:35:37] Delayed deletion of Gui Object 0x9d6b28600
+[2026-06-17 18:35:37] Delayed deletion of Gui Object 0x9d6e5b900
+[2026-06-17 18:35:37] Delayed deletion of Gui Object 0x9d6b28c00
+[2026-06-17 18:35:37] Delayed deletion of Gui Object 0x9d6b28f00
+[2026-06-17 18:35:38] --- Log closed successfully.

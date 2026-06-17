@@ -114,7 +114,150 @@ def capture_monkey(port: int = 23991) -> None:
         proc.kill()
 
 
-CAPTURERS = {"monkey": capture_monkey}
+def capture_pass(port: int = 23992) -> None:
+    """Drive the Indiana Jones (Last Crusade) demo and park a save at the very
+    last step, so the Venice travel goal can be tested by hand.
+
+    Loads the Indy3 start (slot 3) and replays the full solve from
+    ``IndyRealHarness`` (gym -> corridor -> outside -> Henry's ransack ->
+    office mob -> Indy's office mail/grail-diary + sticky-tape->small-key ->
+    back to Henry's chest for the old book + the painting), then stops at the
+    outside travel hub (room 24) holding ``grail_diary`` + ``old_book`` +
+    ``small_key`` + ``painting`` and saves to slot 5. The painting is the
+    Grail-quest trigger, so from this save the ``travel`` verb already offers
+    "To the Plane to Venice" -- load ``pass.s05`` and travel there to end the
+    demo.
+    """
+    proc = launch_scummvm(
+        "pass",
+        GAME_PATHS["pass"],
+        port=port,
+        scummvm_binary=BINARY,
+        save_slot=3,             # the Indy3 interactive start
+        isolate_saves=False,     # write pass.s05 into the repo save_slots dir
+    )
+
+    def act(verb, t1=None, t2=None, tries=15):
+        # Retries cover transient "not accepting input" while scripts / the
+        # mob-banging cutscene hold input.
+        data: dict = {}
+        for _ in range(tries):
+            try:
+                data = client.act(verb, t1, t2)
+            except RuntimeError:
+                time.sleep(0.8)
+                continue
+            if isinstance(data, dict) and data.get("error"):
+                time.sleep(0.8)
+                continue
+            return data if isinstance(data, dict) else {}
+        return data if isinstance(data, dict) else {}
+
+    def go(target, dest, opens=False, tries=14):
+        if opens:
+            act("open", target)
+        for _ in range(tries):
+            r = act("walk to", target)
+            if (isinstance(r, dict) and r.get("room_changed") == dest) or _room(client) == dest:
+                return True
+            time.sleep(0.5)
+        return _room(client) == dest
+
+    def travel_to(keyword, dest, tries=8):
+        for _ in range(tries):
+            r = act("travel")
+            q = (r.get("question") if isinstance(r, dict) else None) or client.state().get("question")
+            if isinstance(q, dict):
+                cid = next((c["id"] for c in q["choices"] if keyword in c["label"].lower()), None)
+                if cid is None:
+                    return False  # destination not offered
+                client.answer(cid)
+            if _wait_room(client, dest, tries=8):
+                return True
+        return _room(client) == dest
+
+    try:
+        client = wait_for_mcp(MCP_HOST, port, timeout=30)
+        assert _wait_room(client, 25), f"expected the gym (room 25), got {_room(client)}"
+
+        go(213, 20)                  # gym -> corridor
+        go(100, 24, opens=True)      # left door -> outside
+        # Going outside plays a ~30s Donovan cutscene (room 29, input locked);
+        # wait until it has been seen and control returns to room 24.
+        saw = False
+        for _ in range(80):
+            s = client.state()
+            rid = (s.get("room") or {}).get("id")
+            if rid == 29:
+                saw = True
+            elif saw and rid == 24 and "travel" in (s.get("verbs") or []):
+                break
+            time.sleep(1.0)
+
+        assert travel_to("henry", 27), "could not travel to Henry's house"
+        # Ransack Henry's house: plant -> chest via cloth -> bookcase -> tape.
+        act("pick_up", "plant")
+        act("pull", "table_cloth")
+        act("pull", "bookcase")
+        act("pick_up", "sticky_tape")
+
+        go(231, 24)                  # Henry's door -> outside
+        go(203, 20, opens=True)      # outside -> corridor
+        act("open", 103)
+        go(103, 22)                  # corridor door 103 -> office
+        # Calm the student mob (the "take down names" line opens Indy's office).
+        prefer = ("work something out", "calmly", "take it easy", "fair for everyone")
+        resolve = "take down names"
+        act("talk to", "students")
+        for _ in range(8):
+            q = client.state().get("question")
+            if not isinstance(q, dict):
+                break
+            cid = next(
+                (c["id"] for c in q["choices"] if any(k in c["label"].lower() for k in prefer)),
+                None,
+            ) or next((c["id"] for c in q["choices"] if resolve in c["label"].lower()), None)
+            if cid is None:
+                break
+            client.answer(cid)
+            time.sleep(0.6)
+        assert _wait_room(client, 21, tries=8), f"expected Indy's office (21), got {_room(client)}"
+
+        # Mail chain -> grail diary; sticky tape on the solvent jar -> small key.
+        act("open", "window")
+        for item in ("junk_mail", "letters", "papers", "package"):
+            act("pick_up", item)
+        act("open", "package")                     # grail_diary
+        act("use", "sticky_tape", "jar")           # small_key (added async)
+        go("window", 24)                           # escape outside
+
+        assert travel_to("henry", 27), "could not travel back to Henry's house"
+        act("use", "small_key", "chest")
+        act("pick_up", "old_book")
+        act("pick_up", "painting")                 # Grail-quest trigger -> unlocks Venice
+        go(231, 24)                                # out to the travel hub
+
+        assert _room(client) == 24, f"expected the travel hub (room 24), got {_room(client)}"
+        inv = client.state().get("inventory")
+        print(f"  inventory before save: {inv}")
+        _save(client, 5, "indy3 pre-venice: outside (24), grail_diary+old_book+small_key+painting")
+
+        # Probe the travel menu so we can see what destinations it offers here.
+        r = act("travel")
+        q = (r.get("question") if isinstance(r, dict) else None) or client.state().get("question")
+        if isinstance(q, dict):
+            print(f"  travel menu offers: {[c['label'] for c in q['choices']]}")
+            cancel = next((c["id"] for c in q["choices"] if "cancel" in c["label"].lower()), None)
+            if cancel is not None:
+                client.answer(cancel)
+
+        client.close()
+        print("pass (Indy3) checkpoint captured: slot 5 (load pass.s05 and use 'travel')")
+    finally:
+        proc.kill()
+
+
+CAPTURERS = {"monkey": capture_monkey, "pass": capture_pass}
 
 
 def main() -> None:
