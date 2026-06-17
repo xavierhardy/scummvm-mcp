@@ -68,6 +68,14 @@ def capture_monkey(port: int = 23991) -> None:
         client = wait_for_mcp(MCP_HOST, port, timeout=30)
         assert _wait_room(client, 55), f"expected room 55, got {_room(client)}"
 
+        # Talk to the troll first so Guybrush learns of the "magic words"; this
+        # unlocks the prisoner's "magic phrase" topic in the prison checkpoint.
+        # Answering once closes the dialog so the following walks aren't blocked.
+        client.walk(120, 132)
+        client.act("talk_to", "Troll")
+        client.answer(3)
+        time.sleep(1.0)
+
         # 55 -> SCUMM bar (room 52).
         client.act("walk_to", "door")
         client.act("open", "door")

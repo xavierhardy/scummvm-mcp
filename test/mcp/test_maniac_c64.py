@@ -11,6 +11,23 @@ from assertions import assert_inventory_contains
 from utils import McpClient
 
 
+def _take_key(client: McpClient) -> None:
+    """Pull the door mat (revealing the key) and pick the key up.
+
+    Self-contained setup: the key only exists once the mat is pulled, so tests
+    that need the key run this first instead of relying on a sibling test.
+    """
+    if "key" not in client.state().get("inventory", []):
+        client.act("pull", "door mat")
+        client.act("pick_up", "key")
+
+
+def _unlock_front_door(client: McpClient) -> None:
+    """Take the key and use it on the front door (unlocks it)."""
+    _take_key(client)
+    client.act("use", "key", "front_door")
+
+
 def test_01_maniac_initial_state(maniac_client: McpClient) -> None:
     """Verify initial game state."""
     state = maniac_client.state()
@@ -36,22 +53,29 @@ def test_03_maniac_pull_door_mat(maniac_client: McpClient) -> None:
 
 
 def test_04_maniac_pickup_key(maniac_client: McpClient) -> None:
-    """Pick up key."""
+    """Pick up the key from under the door mat."""
+    # Reveal the key first so this test stands alone.
+    maniac_client.act("pull", "door mat")
     result = maniac_client.act("pick_up", "key")
     assert_inventory_contains(result, "key")
 
 
 def test_05_maniac_use_key_on_door(maniac_client: McpClient) -> None:
     """Unlock front door with key."""
-    # for some reason, re-using the same client fails here
+    _take_key(maniac_client)
     result = maniac_client.act("use", "key", "front_door")
-    assert result["objects_changed"][0]["name"] == "front door"
+    assert result["objects_changed"][0]["name"] == "front door", (
+        f"using the key should change the front door state, got: {result.get('objects_changed')}"
+    )
 
 
 def test_06_maniac_walk_through_front_door(maniac_client: McpClient) -> None:
-    """Walk to front door (should enter new room)."""
+    """Walk through the unlocked front door into the mansion (room change)."""
+    _unlock_front_door(maniac_client)
     result = maniac_client.act("walk_to", "front_door")
-    assert result.get("room_changed")
+    assert result.get("room_changed"), (
+        f"walking through the unlocked door should change rooms, got: {result}"
+    )
 
 
 def test_07_maniac_state_lists_characters(maniac_client: McpClient) -> None:
