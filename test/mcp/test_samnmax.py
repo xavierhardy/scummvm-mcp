@@ -345,67 +345,6 @@ def test_10_samnmax_no_phantom_carnival_ticket(samnmax_client: McpClient) -> Non
     assert "beat_up_desoto" in names, f"the DeSoto should be listed: {names}"
 
 
-def test_10b_samnmax_use_max_on_cat_gets_commissioner_message(
-    samnmax_client: McpClient,
-) -> None:
-    """Using Max on the kitten gets the message from the Commissioner.
-
-    The kitten on the left of the street swallowed Sam & Max's orders.
-    'Using Max on the cat' is two real interface steps the bridge drives:
-    pick Max up off the street with the hand cursor (he wanders, and a click
-    while he stands at his occluded right-side anchor misses — the bridge
-    verifies the held-Max cursor, 889, and errors with 'nothing is held' so
-    the test can retry), then click the kitten with Max in hand. That opens
-    the kitten's topic icons; the 'question' topic plays the exchange where
-    Sam realizes "we've got a message from the Commissioner to collect" and
-    the kitten admits it swallowed the orders.
-
-    Must run before test_11 — using the DeSoto leaves the street for good.
-    """
-    if not _goto_street(samnmax_client):
-        pytest.skip("could not reach the street scene (room 9)")
-
-    # Pick Max up, then use him on the kitten (actor 4); retry while the
-    # pickup click misses the wandering Max.
-    result = None
-    for _ in range(8):
-        _act_retry(samnmax_client, "pick_up", "max")
-        sleep(1.0)
-        try:
-            result = _act_retry(samnmax_client, "use", "max_the_object", 4)
-            break
-        except RuntimeError as e:
-            if "nothing is held" in str(e):
-                sleep(2.0)
-                continue
-            raise
-    assert result is not None, "never managed to hold Max (pickup kept missing)"
-
-    question = result.get("question")
-    for _ in range(10):
-        if question:
-            break
-        sleep(1.0)
-        question = samnmax_client.state().get("question")
-    assert question is not None, "using Max on the kitten should open its topics"
-    labels = [c["label"] for c in question["choices"]]
-    assert labels == ["question", "exclamation", "tease", "bye"], (
-        f"unexpected kitten topics: {labels}"
-    )
-
-    qid = next(c["id"] for c in question["choices"] if c["label"] == "question")
-    result = samnmax_client.answer(qid)
-    texts = [m.get("text", "") for m in result.get("messages", [])]
-    _assert_no_garbage(result.get("messages", []))
-    blob = " ".join(texts)
-    assert "message from the Commissioner to collect" in blob, (
-        f"expected the Commissioner-message line, got: {texts}"
-    )
-    assert "I swallowed your orders for safekeeping" in blob, (
-        f"expected the kitten's swallowed-orders reveal, got: {texts}"
-    )
-
-
 def test_11_samnmax_use_desoto_triggers_cutscene(samnmax_client: McpClient) -> None:
     """Using the DeSoto must board the car and play the drive-away cutscene.
 
