@@ -6,7 +6,6 @@ The phone/dial tests live in test_maniac_phone.py (save slot 2).
 """
 
 import pytest
-
 from assertions import assert_inventory_contains
 from utils import McpClient
 
@@ -64,18 +63,18 @@ def test_05_maniac_use_key_on_door(maniac_client: McpClient) -> None:
     """Unlock front door with key."""
     _take_key(maniac_client)
     result = maniac_client.act("use", "key", "front_door")
-    assert result["objects_changed"][0]["name"] == "front door", (
-        f"using the key should change the front door state, got: {result.get('objects_changed')}"
-    )
+    assert (
+        result["objects_changed"][0]["name"] == "front door"
+    ), f"using the key should change the front door state, got: {result.get('objects_changed')}"
 
 
 def test_06_maniac_walk_through_front_door(maniac_client: McpClient) -> None:
     """Walk through the unlocked front door into the mansion (room change)."""
     _unlock_front_door(maniac_client)
     result = maniac_client.act("walk_to", "front_door")
-    assert result.get("room_changed"), (
-        f"walking through the unlocked door should change rooms, got: {result}"
-    )
+    assert result.get(
+        "room_changed"
+    ), f"walking through the unlocked door should change rooms, got: {result}"
 
 
 def test_07_maniac_state_lists_characters(maniac_client: McpClient) -> None:

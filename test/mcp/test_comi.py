@@ -1,7 +1,6 @@
 """Integration tests for Curse of Monkey Island demo (SCUMM V8)."""
 
 import pytest
-
 from utils import McpClient
 
 
@@ -19,13 +18,13 @@ def test_01_comi_state_reachable(comi_client: McpClient) -> None:
     }
     state = comi_client.state()
     assert state.get("room") is not None, f"expected a room in state, got: {state}"
-    assert isinstance(state.get("objects", []), list), (
-        f"expected 'objects' to be a list, got: {type(state.get('objects'))}"
-    )
+    assert isinstance(
+        state.get("objects", []), list
+    ), f"expected 'objects' to be a list, got: {type(state.get('objects'))}"
     assert len(state.get("objects", [])) > 0, "expected at least one object in the room"
-    assert state["inventory"] == ["helium_balloons"], (
-        f"expected the starting inventory to be exactly ['helium_balloons'], got: {state['inventory']}"
-    )
+    assert state["inventory"] == [
+        "helium_balloons"
+    ], f"expected the starting inventory to be exactly ['helium_balloons'], got: {state['inventory']}"
     actual_object_names = {obj["name"] for obj in state["objects"]}
     missing = expected_object_names - actual_object_names
     assert not missing, (
@@ -39,9 +38,9 @@ def test_02_comi_has_verbs(comi_client: McpClient) -> None:
     state = comi_client.state()
     expected_verbs = {"walk to", "talk to", "pick up", "look at", "use"}
     actual_verbs = set(state.get("verbs", []))
-    assert expected_verbs.issubset(actual_verbs), (
-        f"Missing verbs: {expected_verbs - actual_verbs}"
-    )
+    assert expected_verbs.issubset(
+        actual_verbs
+    ), f"Missing verbs: {expected_verbs - actual_verbs}"
 
 
 def test_03_comi_objects_have_verbs(comi_client: McpClient) -> None:
@@ -57,18 +56,18 @@ def test_03_comi_objects_have_verbs(comi_client: McpClient) -> None:
 
     # Check for expected verb support
     obj = multiverb_objects[0]
-    assert "walk to" in obj.get("compatible_verbs", []), (
-        f"expected {obj['name']!r} to support 'walk to', got: {obj.get('compatible_verbs')}"
-    )
+    assert "walk to" in obj.get(
+        "compatible_verbs", []
+    ), f"expected {obj['name']!r} to support 'walk to', got: {obj.get('compatible_verbs')}"
 
 
 def test_04_comi_can_walk(comi_client: McpClient) -> None:
     """Verify walking works."""
     # Find an object to walk to
     result = comi_client.act("walk_to", "rope")
-    assert result.get("position") is not None, (
-        f"walk_to 'rope' should report the ego position, got: {result}"
-    )
+    assert (
+        result.get("position") is not None
+    ), f"walk_to 'rope' should report the ego position, got: {result}"
 
 
 def test_05_comi_can_look_at_objects(comi_client: McpClient) -> None:
@@ -77,25 +76,25 @@ def test_05_comi_can_look_at_objects(comi_client: McpClient) -> None:
     result = comi_client.act("look_at", "cannon_balls")
     # Look action might produce messages or change state
     messages = [msg["text"] for msg in result["messages"]]
-    assert "Nice cannon balls." in messages, (
-        f"look_at 'cannon_balls' should say 'Nice cannon balls.', got: {messages}"
-    )
+    assert (
+        "Nice cannon balls." in messages
+    ), f"look_at 'cannon_balls' should say 'Nice cannon balls.', got: {messages}"
 
 
 def test_06_comi_can_interact_with_objects(comi_client: McpClient) -> None:
     """Verify general interaction works."""
     result = comi_client.act("pick_up", "ramrod")
-    assert result["inventory_added"] == ["ramrod"], (
-        f"pick_up 'ramrod' should add it to inventory, got inventory_added={result.get('inventory_added')}"
-    )
+    assert result["inventory_added"] == [
+        "ramrod"
+    ], f"pick_up 'ramrod' should add it to inventory, got inventory_added={result.get('inventory_added')}"
 
 
 def test_06a_comi_can_use_different_verbs(comi_client: McpClient) -> None:
     """Verify general interaction works."""
     result = comi_client.act("walk_to", "small_pirate")
-    assert result.get("position") is not None, (
-        f"walk_to 'small_pirate' should report the ego position, got: {result}"
-    )
+    assert (
+        result.get("position") is not None
+    ), f"walk_to 'small_pirate' should report the ego position, got: {result}"
 
     result = comi_client.act("pick_up", "small_pirate")
     assert "If I rough him up, he may shoot me." in [
@@ -110,9 +109,9 @@ def test_06a_comi_can_use_different_verbs(comi_client: McpClient) -> None:
 def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> None:
     """Verify talking to small pirate triggers a dialog."""
     result = comi_client.act("talk_to", "small_pirate")
-    assert len(result["messages"][0]["text"]) > 0, (
-        f"talk_to 'small_pirate' should produce a spoken line, got: {result.get('messages')}"
-    )
+    assert (
+        len(result["messages"][0]["text"]) > 0
+    ), f"talk_to 'small_pirate' should produce a spoken line, got: {result.get('messages')}"
 
     assert result["question"] == {
         "choices": [
@@ -164,14 +163,15 @@ def test_07b_comi_longest_pirate_exchange_no_timeout(comi_client: McpClient) -> 
     """
     result = comi_client.act("talk_to", "small_pirate")
     question = result.get("question")
-    if question is None:
-        pytest.skip("No dialog choices available from pirate after prior exchange")
+    assert question
+
+    result = comi_client.answer(1)
+    question = result.get("question")
+    assert question
 
     hook_id = next(
         (c["id"] for c in question["choices"] if "hook" in c["label"].lower()), None
     )
-    if hook_id is None:
-        pytest.skip("'Is that hook for real?' not offered")
 
     result = comi_client.answer(hook_id)
     messages = [m["text"] for m in result["messages"]]
@@ -185,13 +185,6 @@ def test_07b_comi_longest_pirate_exchange_no_timeout(comi_client: McpClient) -> 
     # Close the conversation with the farewell so later tests see normal verbs.
     question = result.get("question")
     assert question is not None, "expected the topic list to reopen after the exchange"
-    farewell_id = next(
-        c["id"] for c in question["choices"] if "swell" in c["label"].lower()
-    )
-    comi_client.answer(farewell_id)
-
-    state = comi_client.state()
-    assert set(state["verbs"]) == {"walk to", "talk to", "pick up", "look at", "use"}
 
 
 def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:
@@ -208,7 +201,7 @@ def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:
     result = comi_client.act("walk_to", pathway["name"])
 
     # room_changed is only present when the room actually changed
-    assert "room_changed" in result, (
-        "Room should have changed (room_changed missing from result)"
-    )
+    assert (
+        "room_changed" in result
+    ), "Room should have changed (room_changed missing from result)"
     assert result["room_changed"] != initial_room

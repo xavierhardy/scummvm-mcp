@@ -67,9 +67,21 @@ def main():
         # --- probe past the tire kit for the demo end ---
         # Head back toward the dock, taking whatever exit each room exposes and
         # dumping the layout so the dock's "leave Thera" hotspot is discoverable.
-        EXITS = ("path_back_to_the_dock", "path_to_dock", "path_to_landscape",
-                 "path away from dock", "path to dock", "dock", "path", "down",
-                 "exit", "boat", "balloon", "raft", "ship")
+        EXITS = (
+            "path_back_to_the_dock",
+            "path_to_dock",
+            "path_to_landscape",
+            "path away from dock",
+            "path to dock",
+            "dock",
+            "path",
+            "down",
+            "exit",
+            "boat",
+            "balloon",
+            "raft",
+            "ship",
+        )
         seen = []
         for step in range(12):
             s = st(c)

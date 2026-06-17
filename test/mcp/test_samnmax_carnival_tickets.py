@@ -18,7 +18,6 @@ from time import sleep
 
 from utils import McpClient, find_object_by_name
 
-
 SETTLE_SECS = 0.5
 STREET_ROOM = 9
 
@@ -64,10 +63,12 @@ def test_samnmax_s02_cat_courier_gives_carnival_tickets(
         sleep(SETTLE_SECS)
 
     state = client.state()
-    assert state["room"]["id"] == STREET_ROOM, f"Expected street room 9, got {state['room']}"
-    assert "max_the_object" in state.get("inventory", []), (
-        f"Max must be in inventory for the two-target action, got: {state.get('inventory')}"
-    )
+    assert (
+        state["room"]["id"] == STREET_ROOM
+    ), f"Expected street room 9, got {state['room']}"
+    assert "max_the_object" in state.get(
+        "inventory", []
+    ), f"Max must be in inventory for the two-target action, got: {state.get('inventory')}"
 
     # Find actor_4 (the kitten / cat courier on the left).
     actor_4 = find_object_by_name(state, "actor_4")
@@ -109,7 +110,9 @@ def test_samnmax_s02_cat_courier_gives_carnival_tickets(
     _assert_no_garbage(messages)
     texts = [m.get("text", "") for m in messages]
     combined = " ".join(texts).lower()
-    assert len(texts) > 0, "Expected dialog messages from using Max on the kitten, got none"
+    assert (
+        len(texts) > 0
+    ), "Expected dialog messages from using Max on the kitten, got none"
     # The interaction produces Sam/Max's reaction lines, e.g.
     # "Ooh, that gives me an idea!" / "...something bizarre is happening at the carnival."
     assert (
@@ -125,12 +128,17 @@ def test_samnmax_s02_cat_courier_gives_carnival_tickets(
     inventory_added = result.get("inventory_added", [])
     current_inventory = client.state().get("inventory", [])
     for _ in range(20):
-        if "carnival_tickets" in inventory_added or "carnival_tickets" in current_inventory:
+        if (
+            "carnival_tickets" in inventory_added
+            or "carnival_tickets" in current_inventory
+        ):
             break
         sleep(SETTLE_SECS)
         current_inventory = client.state().get("inventory", [])
 
-    assert "carnival_tickets" in inventory_added or "carnival_tickets" in current_inventory, (
+    assert (
+        "carnival_tickets" in inventory_added or "carnival_tickets" in current_inventory
+    ), (
         f"carnival_tickets not acquired; inventory_added={inventory_added}, "
         f"current={current_inventory}"
     )
@@ -142,9 +150,9 @@ def test_samnmax_s02_cat_courier_gives_carnival_tickets(
         None,
     )
     if carnival_obj_change:
-        assert carnival_obj_change["old_state"] == 0, (
-            f"carnival_tickets old_state should be 0, got {carnival_obj_change}"
-        )
-        assert carnival_obj_change["new_state"] == 1, (
-            f"carnival_tickets new_state should be 1, got {carnival_obj_change}"
-        )
+        assert (
+            carnival_obj_change["old_state"] == 0
+        ), f"carnival_tickets old_state should be 0, got {carnival_obj_change}"
+        assert (
+            carnival_obj_change["new_state"] == 1
+        ), f"carnival_tickets new_state should be 1, got {carnival_obj_change}"

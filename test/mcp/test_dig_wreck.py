@@ -25,7 +25,9 @@ def test_11_dig_pickup_deposits_item(dig_wreck_client: McpClient) -> None:
     assert state["room"]["id"] == 19, f"Expected wreck room 19, got {state['room']}"
 
     wire = next((o for o in state["objects"] if o["name"] == "wire"), None)
-    assert wire is not None, f"No 'wire' object in scene: {[o['name'] for o in state['objects']]}"
+    assert (
+        wire is not None
+    ), f"No 'wire' object in scene: {[o['name'] for o in state['objects']]}"
 
     result = client.act("interact", wire["id"])
     inv = client.state().get("inventory", [])
@@ -37,15 +39,15 @@ def test_11_dig_pickup_deposits_item(dig_wreck_client: McpClient) -> None:
     # dialog.
     talk = client.act("interact", "brink")
     talk_text = " ".join(m["text"].lower() for m in talk.get("messages", []))
-    assert "these things together" not in talk_text, (
-        f"Cursor still stuck holding the wire: {talk.get('messages')}"
-    )
-    assert "want that" not in talk_text, (
-        f"Cursor still stuck holding the wire: {talk.get('messages')}"
-    )
-    assert client.state().get("question") is not None, (
-        "Expected talking to Brink to open a dialog once the cursor was freed"
-    )
+    assert (
+        "these things together" not in talk_text
+    ), f"Cursor still stuck holding the wire: {talk.get('messages')}"
+    assert (
+        "want that" not in talk_text
+    ), f"Cursor still stuck holding the wire: {talk.get('messages')}"
+    assert (
+        client.state().get("question") is not None
+    ), "Expected talking to Brink to open a dialog once the cursor was freed"
 
     # Clean up: leave the conversation so the session fixture ends cleanly.
     for _ in range(10):

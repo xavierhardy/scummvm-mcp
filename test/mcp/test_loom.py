@@ -10,13 +10,13 @@ The fixture loads --save-slot=1 (pass.s01) which is positioned right before
 the player picks up the staff in the Loom mini-game.
 """
 
-import pytest
 from time import sleep
 
+import pytest
 from utils import (
     McpClient,
-    wait_for_interactive,
     get_state_with_retry,
+    wait_for_interactive,
 )
 
 
@@ -88,12 +88,16 @@ def test_04_loom_egg_listen(loom_client: McpClient) -> None:
         pytest.skip("Save did not reach interactive state")
 
     state = get_state_with_retry(loom_client)
-    assert _find_id(state, "egg") is not None, f"egg not in room: {state.get('objects')}"
+    assert (
+        _find_id(state, "egg") is not None
+    ), f"egg not in room: {state.get('objects')}"
 
     notes, messages = _listen_to_egg(loom_client)
     assert notes == ["e", "c", "e", "d"], f"expected the Opening draft, got {notes}"
     texts = [m.get("text") for m in messages]
-    assert "It's trying to open!" in texts, f"expected Bobbin's listen line, got {texts}"
+    assert (
+        "It's trying to open!" in texts
+    ), f"expected Bobbin's listen line, got {texts}"
 
 
 def test_05_loom_egg_replay_hatches(loom_client: McpClient) -> None:
@@ -122,9 +126,9 @@ def test_05_loom_egg_replay_hatches(loom_client: McpClient) -> None:
     assert replay_notes == notes, f"watcher re-emitted {replay_notes} for {notes}"
 
     texts = [m.get("text") for m in messages]
-    assert "To follow the swans!" in texts, (
-        f"expected the hatching cutscene dialogue, got: {texts}"
-    )
+    assert (
+        "To follow the swans!" in texts
+    ), f"expected the hatching cutscene dialogue, got: {texts}"
 
     state = get_state_with_retry(loom_client)
     assert _find_id(state, "egg") is None, "egg should be consumed after hatching"
@@ -179,9 +183,9 @@ def test_08_loom_interact_object(loom_client: McpClient) -> None:
 
     result = loom_client.act("interact", loom_id)
     moved = result.get("position", initial_pos) != initial_pos
-    assert moved or result.get("messages"), (
-        f"interacting with the loom produced no observable change: {result}"
-    )
+    assert moved or result.get(
+        "messages"
+    ), f"interacting with the loom produced no observable change: {result}"
 
 
 def _find_id(state: dict, name: str) -> int | None:

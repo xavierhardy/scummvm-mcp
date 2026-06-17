@@ -35,8 +35,12 @@ def test_08a_comi_s3_use_combines_inventory_items(
     state = comi_s3_client.state()
     inv = state.get("inventory", [])
     assert "ramrod" in inv, f"setup: 'ramrod' should start in inventory, got: {inv}"
-    assert "plastic_hook" in inv, f"setup: 'plastic_hook' should start in inventory, got: {inv}"
-    assert "gaff" not in inv, f"setup: 'gaff' should not exist before combining, got: {inv}"
+    assert (
+        "plastic_hook" in inv
+    ), f"setup: 'plastic_hook' should start in inventory, got: {inv}"
+    assert (
+        "gaff" not in inv
+    ), f"setup: 'gaff' should not exist before combining, got: {inv}"
 
     result = comi_s3_client.act("use", "ramrod", "plastic_hook")
     assert sorted(result.get("inventory_added", [])) == ["gaff"], (
@@ -49,9 +53,15 @@ def test_08a_comi_s3_use_combines_inventory_items(
     )
 
     after = comi_s3_client.state().get("inventory", [])
-    assert "gaff" in after, f"'gaff' should be in inventory after combining, got: {after}"
-    assert "ramrod" not in after, f"'ramrod' should be consumed by the combine, got: {after}"
-    assert "plastic_hook" not in after, f"'plastic_hook' should be consumed by the combine, got: {after}"
+    assert (
+        "gaff" in after
+    ), f"'gaff' should be in inventory after combining, got: {after}"
+    assert (
+        "ramrod" not in after
+    ), f"'ramrod' should be consumed by the combine, got: {after}"
+    assert (
+        "plastic_hook" not in after
+    ), f"'plastic_hook' should be consumed by the combine, got: {after}"
 
 
 def test_08b_comi_s3_use_gaff_on_debris(comi_s3_client: McpClient) -> None:
@@ -66,8 +76,12 @@ def test_08b_comi_s3_use_gaff_on_debris(comi_s3_client: McpClient) -> None:
     state = comi_s3_client.state()
     inv = state.get("inventory", [])
     room_names = {obj["name"] for obj in state.get("objects", [])}
-    assert "gaff" in inv, f"setup: 'gaff' should be in inventory before fishing, got: {inv}"
-    assert "debris" in room_names, f"setup: 'debris' should be in the room, got: {sorted(room_names)}"
+    assert (
+        "gaff" in inv
+    ), f"setup: 'gaff' should be in inventory before fishing, got: {inv}"
+    assert (
+        "debris" in room_names
+    ), f"setup: 'debris' should be in the room, got: {sorted(room_names)}"
 
     result = comi_s3_client.act("use", "gaff", "debris")
     assert sorted(result.get("inventory_added", [])) == ["cutlass", "skeleton_arm"], (
@@ -77,11 +91,11 @@ def test_08b_comi_s3_use_gaff_on_debris(comi_s3_client: McpClient) -> None:
 
     after = comi_s3_client.state()
     inv = set(after.get("inventory", []))
-    assert {"cutlass", "skeleton_arm", "gaff"}.issubset(inv), (
-        f"after fishing, inventory should hold cutlass, skeleton_arm and gaff, got: {sorted(inv)}"
-    )
+    assert {"cutlass", "skeleton_arm", "gaff"}.issubset(
+        inv
+    ), f"after fishing, inventory should hold cutlass, skeleton_arm and gaff, got: {sorted(inv)}"
     # Debris is consumed by the action and disappears from the room.
     after_names = {obj["name"] for obj in after.get("objects", [])}
-    assert "debris" not in after_names, (
-        f"'debris' should be removed from the room after fishing, got: {sorted(after_names)}"
-    )
+    assert (
+        "debris" not in after_names
+    ), f"'debris' should be removed from the room after fishing, got: {sorted(after_names)}"

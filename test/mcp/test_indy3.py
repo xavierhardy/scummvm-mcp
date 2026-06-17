@@ -9,11 +9,10 @@ keystrokes (1-9) drive Indy's punches/blocks/step-backs.
 
 from __future__ import annotations
 
-import pytest
 from time import sleep
 
-from utils import McpClient, _wait_until, _state_or_skip, _find_object
-
+import pytest
+from utils import McpClient, _find_object, _state_or_skip, _wait_until
 
 INTERACTIVE_TIMEOUT_SECS = 30
 
@@ -54,9 +53,9 @@ def test_01_indy3_initial_state(indy3_client: McpClient) -> None:
     assert state.get("room") is not None
     # Gym scene exposes the standard V3 verb bar.
     verbs = set(state.get("verbs", []))
-    assert {"walk to", "look", "use", "push", "pull"}.issubset(verbs), (
-        f"expected V3 verb bar, got: {sorted(verbs)}"
-    )
+    assert {"walk to", "look", "use", "push", "pull"}.issubset(
+        verbs
+    ), f"expected V3 verb bar, got: {sorted(verbs)}"
 
 
 def test_02_indy3_locker_room_visible(indy3_client: McpClient) -> None:
@@ -93,15 +92,15 @@ def test_04_indy3_answer_starts_fight(indy3_client: McpClient) -> None:
     assert "indy" in fight and "opponent" in fight, f"fight HUD missing sides: {fight}"
     for who in ("indy", "opponent"):
         side = fight[who]
-        assert "health" in side and "punch_power" in side, (
-            f"{who} side missing health/punch_power: {side}"
-        )
-        assert isinstance(side["health"], int) and side["health"] > 0, (
-            f"{who} should start with positive health, got: {side}"
-        )
-        assert isinstance(side["punch_power"], int) and side["punch_power"] >= 0, (
-            f"{who} punch_power should be a non-negative int, got: {side}"
-        )
+        assert (
+            "health" in side and "punch_power" in side
+        ), f"{who} side missing health/punch_power: {side}"
+        assert (
+            isinstance(side["health"], int) and side["health"] > 0
+        ), f"{who} should start with positive health, got: {side}"
+        assert (
+            isinstance(side["punch_power"], int) and side["punch_power"] >= 0
+        ), f"{who} punch_power should be a non-negative int, got: {side}"
 
 
 def test_05_indy3_punch_high_lands(indy3_client: McpClient) -> None:
@@ -125,9 +124,9 @@ def test_05_indy3_punch_high_lands(indy3_client: McpClient) -> None:
         after["indy"]["health"] != before["indy"]["health"]
         or after["indy"]["punch_power"] != before["indy"]["punch_power"]
     )
-    assert opponent_changed or indy_changed, (
-        f"high-punch had no effect: before={before}, after={after}"
-    )
+    assert (
+        opponent_changed or indy_changed
+    ), f"high-punch had no effect: before={before}, after={after}"
 
 
 def test_06_indy3_block_then_step_back(indy3_client: McpClient) -> None:

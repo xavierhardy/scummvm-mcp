@@ -19,7 +19,7 @@ and the dialog answer with the eszett-bearing troll line — round-trip ß and �
 
 from time import sleep
 
-from assertions import assert_inventory_does_not_contain, assert_inventory_contains
+from assertions import assert_inventory_contains, assert_inventory_does_not_contain
 from utils import McpClient
 
 
@@ -85,9 +85,9 @@ def test_02_de_walk_to_troll(monkey_de_client: McpClient) -> None:
     monkey_de_client.act("geh zu", "troll")
 
     state = monkey_de_client.state()
-    assert state["position"]["x"] < 200, (
-        f"Expected Guybrush near troll, got {state['position']}"
-    )
+    assert (
+        state["position"]["x"] < 200
+    ), f"Expected Guybrush near troll, got {state['position']}"
 
 
 def test_03_de_talk_to_troll(monkey_de_client: McpClient) -> None:
@@ -256,12 +256,12 @@ def test_09_de_seagull_blocks_red_herring(monkey_de_client: McpClient) -> None:
     _navigate_to_dock(monkey_de_client)
 
     result = monkey_de_client.act("nimm", "roter_hering")
-    assert "roter_hering" not in monkey_de_client.state()["inventory"], (
-        "grabbing the herring while the seagull guards it must fail"
-    )
-    assert result.get("messages"), (
-        f"expected Guybrush to comment on the seagull, got {result}"
-    )
+    assert (
+        "roter_hering" not in monkey_de_client.state()["inventory"]
+    ), "grabbing the herring while the seagull guards it must fail"
+    assert result.get(
+        "messages"
+    ), f"expected Guybrush to comment on the seagull, got {result}"
 
 
 def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> None:
@@ -281,6 +281,6 @@ def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> No
         client.act("geh zu", 307)
         sleep(1.5)  # let the plank-bounce script finish before the next step
     client.act("nimm", "roter_hering")
-    assert "roter_hering" in client.state()["inventory"], (
-        "red herring should be in inventory after 3 plank bounces + quick grab"
-    )
+    assert (
+        "roter_hering" in client.state()["inventory"]
+    ), "red herring should be in inventory after 3 plank bounces + quick grab"

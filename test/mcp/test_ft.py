@@ -15,9 +15,9 @@ The tests follow the demo's storyline in order, on one session:
      to Ben's bike in a long cutscene.
 """
 
-import pytest
 from time import sleep
 
+import pytest
 from utils import McpClient, get_state_with_retry
 
 # Full Throttle cannot save/load: the demo is one strictly-ordered storyline run
@@ -28,9 +28,9 @@ pytestmark = pytest.mark.xdist_group("ft")
 
 FT_VERBS = {"fist", "kick", "mouth", "walk to", "interact", "use item"}
 
-ALLEY_ROOM = 10      # Ben wakes inside the dumpster here
-BAR_FRONT_ROOM = 6   # the Kickstand front, with the bike and the door
-BAR_ROOM = 7         # inside the bar
+ALLEY_ROOM = 10  # Ben wakes inside the dumpster here
+BAR_FRONT_ROOM = 6  # the Kickstand front, with the bike and the door
+BAR_ROOM = 7  # inside the bar
 
 
 def _room(client: McpClient) -> int:
@@ -81,9 +81,9 @@ def test_ft_walkthrough(ft_client: McpClient) -> None:
             ft_client.skip()
         except Exception:
             pass
-    assert _room(ft_client) == ALLEY_ROOM, (
-        f"did not reach the dumpster alley (room {ALLEY_ROOM}), got {_room(ft_client)}"
-    )
+    assert (
+        _room(ft_client) == ALLEY_ROOM
+    ), f"did not reach the dumpster alley (room {ALLEY_ROOM}), got {_room(ft_client)}"
 
     sleep(2)  # let the wake-up script start before the first click
     for _ in range(10):
@@ -92,9 +92,9 @@ def test_ft_walkthrough(ft_client: McpClient) -> None:
             sleep(0.5)
         if _room(ft_client) == BAR_FRONT_ROOM:
             break
-    assert _room(ft_client) == BAR_FRONT_ROOM, (
-        f"never left the alley, still in room {_room(ft_client)}"
-    )
+    assert (
+        _room(ft_client) == BAR_FRONT_ROOM
+    ), f"never left the alley, still in room {_room(ft_client)}"
 
     # Bar front sanity: coin verbs exposed, exits flagged, sign is mouth-only.
     state = get_state_with_retry(ft_client)
@@ -111,20 +111,25 @@ def test_ft_walkthrough(ft_client: McpClient) -> None:
     assert pathways, f"no pathways flagged in room {state.get('room')}"
     for p in pathways:
         cv = set(p.get("compatible_verbs", []))
-        assert not cv & {"fist", "kick", "mouth"}, (
-            f"pathway {p['name']!r} should not advertise coin verbs, got {cv}"
-        )
+        assert not cv & {
+            "fist",
+            "kick",
+            "mouth",
+        }, f"pathway {p['name']!r} should not advertise coin verbs, got {cv}"
     for o in state.get("objects", []):
         if set(o.get("compatible_verbs", [])) & {"fist", "kick", "mouth"}:
-            assert not o.get("pathway"), f"{o['name']!r} scripts a coin verb, not a pathway"
+            assert not o.get(
+                "pathway"
+            ), f"{o['name']!r} scripts a coin verb, not a pathway"
 
     # Per-object verbs mirror real entrypoints: the sign can only be examined.
     sign = _find(state, "sign")
     assert sign is not None, "no sign at the bar front"
     cv = set(sign.get("compatible_verbs", []))
-    assert "mouth" in cv and not cv & {"fist", "kick"}, (
-        f"sign should be mouth-only among coin verbs, got {cv}"
-    )
+    assert "mouth" in cv and not cv & {
+        "fist",
+        "kick",
+    }, f"sign should be mouth-only among coin verbs, got {cv}"
 
     # Punching the locked bar door: Ben pounds it shouting 'Open up!'.
     result = _act_retry(ft_client, "fist", "door")
@@ -139,14 +144,14 @@ def test_ft_walkthrough(ft_client: McpClient) -> None:
 
     # Once kicked open, punching cannot affect the door any further.
     result = _act_retry(ft_client, "fist", "door")
-    assert not result.get("objects_changed"), (
-        f"punching the kicked-open door must not change it: {result}"
-    )
+    assert not result.get(
+        "objects_changed"
+    ), f"punching the kicked-open door must not change it: {result}"
     state = get_state_with_retry(ft_client)
     door = _find(state, "door")
-    assert door is not None and door["state"] == 1, (
-        f"door must remain open after the punch, got {door}"
-    )
+    assert (
+        door is not None and door["state"] == 1
+    ), f"door must remain open after the punch, got {door}"
 
     # Walk through the kicked-open doorway into the bar (room 6 -> 7).
     for _ in range(10):
@@ -154,20 +159,20 @@ def test_ft_walkthrough(ft_client: McpClient) -> None:
         sleep(1.5)
         if _room(ft_client) == BAR_ROOM:
             break
-    assert _room(ft_client) == BAR_ROOM, (
-        f"did not enter the bar, still in room {_room(ft_client)}"
-    )
+    assert (
+        _room(ft_client) == BAR_ROOM
+    ), f"did not enter the bar, still in room {_room(ft_client)}"
 
     # 'mouth' on the antlers makes Ben comment, with clean text output.
     result = _act_retry(ft_client, "mouth", "antlers")
     texts = [m.get("text", "") for m in result.get("messages", [])]
-    assert any("mounted on my handlebars" in t for t in texts), (
-        f"expected Ben's antlers line, got {texts}"
-    )
+    assert any(
+        "mounted on my handlebars" in t for t in texts
+    ), f"expected Ben's antlers line, got {texts}"
     for t in texts:
-        assert any(c.isalnum() and ord(c) < 128 for c in t), (
-            f"garbage message with no ASCII alnum content: {t!r}"
-        )
+        assert any(
+            c.isalnum() and ord(c) < 128 for c in t
+        ), f"garbage message with no ASCII alnum content: {t!r}"
 
     # Punching the bartender makes him hand over the keys to Ben's bike.
     result = _act_retry(ft_client, "fist", "bartender")

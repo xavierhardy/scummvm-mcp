@@ -5,12 +5,12 @@ pathway. Runs against its own fixture/instance so it can execute in parallel
 with the distaff tests in test_loom.py (pytest-xdist --dist=loadgroup).
 """
 
-import pytest
 from time import sleep
 
+import pytest
 from utils import (
-    wait_for_interactive,
     get_state_with_retry,
+    wait_for_interactive,
 )
 
 
@@ -48,17 +48,17 @@ def test_08_loom_leaf_fall(loom_leaf_client) -> None:
     )
 
     texts = [m.get("text") for m in messages]
-    assert "Last leaf of the year." in texts, (
-        f"Expected Bobbin's leaf line, got messages: {messages}"
-    )
+    assert (
+        "Last leaf of the year." in texts
+    ), f"Expected Bobbin's leaf line, got messages: {messages}"
 
     # Wait for the falling animation to complete and the leaf to be removed.
     sleep(2)
     new_state = get_state_with_retry(loom_leaf_client)
     names_after = [o["name"] for o in new_state.get("objects", [])]
-    assert "leaf" not in names_after, (
-        f"leaf should have fallen and left the room object list, got: {names_after}"
-    )
+    assert (
+        "leaf" not in names_after
+    ), f"leaf should have fallen and left the room object list, got: {names_after}"
 
 
 def test_09_loom_pathway_named(loom_leaf_client) -> None:
@@ -67,12 +67,12 @@ def test_09_loom_pathway_named(loom_leaf_client) -> None:
     """
     state = get_state_with_retry(loom_leaf_client)
     names = {o["name"]: o["id"] for o in state.get("objects", [])}
-    assert "pathway_460" in names, (
-        f"Expected `pathway_460` (renamed from unnamed obj 460) in room 36, got: {list(names)}"
-    )
-    assert names["pathway_460"] == 460, (
-        f"`pathway_460` should map to object id 460, got: {names['pathway_460']}"
-    )
+    assert (
+        "pathway_460" in names
+    ), f"Expected `pathway_460` (renamed from unnamed obj 460) in room 36, got: {list(names)}"
+    assert (
+        names["pathway_460"] == 460
+    ), f"`pathway_460` should map to object id 460, got: {names['pathway_460']}"
 
 
 def test_10_loom_pathway_room_change(loom_leaf_client) -> None:
@@ -110,6 +110,6 @@ def test_10_loom_pathway_room_change(loom_leaf_client) -> None:
         if cur["room"]["id"] != initial_room:
             changed_to = cur["room"]["id"]
 
-    assert changed_to == 39, (
-        f"Expected pathway to lead to room 39, got room {changed_to} from {initial_room}"
-    )
+    assert (
+        changed_to == 39
+    ), f"Expected pathway to lead to room 39, got room {changed_to} from {initial_room}"

@@ -18,17 +18,16 @@ many concurrent instances never collide.
 import os
 
 import pytest
-
 from utils import (
+    GAME_PATHS,
+    MCP_CONNECT_TIMEOUT_SECS,
+    MCP_HOST,
     McpClient,
+    get_mcp_port,
     launch_scummvm,
-    wait_for_mcp,
     require_game_path,
     require_save_slot,
-    get_mcp_port,
-    GAME_PATHS,
-    MCP_HOST,
-    MCP_CONNECT_TIMEOUT_SECS,
+    wait_for_mcp,
 )
 
 PROC_KILL_TIMEOUT_SECS = 5
@@ -59,7 +58,9 @@ _FIXTURE_INDEX = {
 }
 
 
-def _client(game_id: str, fixture_key: str, save_slot: int = 1, checkpoint: bool = False):
+def _client(
+    game_id: str, fixture_key: str, save_slot: int = 1, checkpoint: bool = False
+):
     """Launch ScummVM for *game_id*, yield a connected McpClient, then tear down.
 
     Shared by every fixture. The port is unique per (worker, fixture); the
@@ -124,7 +125,9 @@ def monkey_bar_client() -> McpClient:
 def monkey_kitchen_client() -> McpClient:
     """Monkey 1 EGA demo checkpoint: the kitchen (room 51), hunk o' meat present,
     breath mint already in inventory."""
-    yield from _client("monkey-ega-demo", "monkey_kitchen", save_slot=7, checkpoint=True)
+    yield from _client(
+        "monkey-ega-demo", "monkey_kitchen", save_slot=7, checkpoint=True
+    )
 
 
 @pytest.fixture

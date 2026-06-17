@@ -21,11 +21,10 @@ Regression focus:
     separate garbage "message".
 """
 
-import pytest
 from time import sleep
 
+import pytest
 from utils import McpClient, find_object_by_name
-
 
 SETTLE_SECS = 0.5
 OFFICE_ROOM = 7
@@ -109,7 +108,9 @@ def test_01_samnmax_initial_state(samnmax_client: McpClient) -> None:
     """The save slot drops us straight into the office (room 7)."""
     state = _office_state(samnmax_client)
     assert state.get("room") is not None
-    assert state["room"].get("id") == OFFICE_ROOM, f"Expected office room 7, got {state['room']}"
+    assert (
+        state["room"].get("id") == OFFICE_ROOM
+    ), f"Expected office room 7, got {state['room']}"
 
 
 def test_02_samnmax_v6_verbs_exposed(samnmax_client: McpClient) -> None:
@@ -124,9 +125,9 @@ def test_02_samnmax_v6_verbs_exposed(samnmax_client: McpClient) -> None:
 def test_03_samnmax_max_available(samnmax_client: McpClient) -> None:
     """Max must be addressable as a scene actor named 'max'."""
     state = _office_state(samnmax_client)
-    assert find_object_by_name(state, "max") is not None, (
-        f"Max not found; objects={[o['name'] for o in state.get('objects', [])]}"
-    )
+    assert (
+        find_object_by_name(state, "max") is not None
+    ), f"Max not found; objects={[o['name'] for o in state.get('objects', [])]}"
 
 
 def test_04_samnmax_messages_are_clean(samnmax_client: McpClient) -> None:
@@ -134,7 +135,8 @@ def test_04_samnmax_messages_are_clean(samnmax_client: McpClient) -> None:
     _office_state(samnmax_client)
     state = samnmax_client.state()
     targets = [
-        o["name"] for o in state.get("objects", [])
+        o["name"]
+        for o in state.get("objects", [])
         if "look at" in o.get("compatible_verbs", []) and not o.get("pathway")
     ][:4]
     if not targets:
@@ -157,9 +159,12 @@ def test_05_samnmax_talk_to_max_opens_dialog(samnmax_client: McpClient) -> None:
         # The icon objects map to semantic labels (?, !, golden duck, waving
         # hand) instead of opaque icon_<num> placeholders.
         labels = [c.get("label") for c in choices]
-        assert labels == ["question", "exclamation", "tease", "bye"], (
-            f"expected semantic icon labels, got: {labels}"
-        )
+        assert labels == [
+            "question",
+            "exclamation",
+            "tease",
+            "bye",
+        ], f"expected semantic icon labels, got: {labels}"
     finally:
         _close_conversation(samnmax_client)
 
@@ -198,9 +203,9 @@ def test_07_samnmax_dialog_goodbye_closes(samnmax_client: McpClient) -> None:
     # The 4th icon (the waving hand) is the goodbye topic.
     result = samnmax_client.answer(4)
     texts = [m.get("text", "") for m in result.get("messages", [])]
-    assert any(p in t.lower() for t in texts for p in ("never mind", "that's all")), (
-        f"expected a goodbye line, got: {texts}"
-    )
+    assert any(
+        p in t.lower() for t in texts for p in ("never mind", "that's all")
+    ), f"expected a goodbye line, got: {texts}"
 
     # After the goodbye, no dialog must remain pending.
     for _ in range(6):
@@ -225,7 +230,9 @@ def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -
         pytest.skip("conversation did not open in this build")
     try:
         # The fresh menu shows the four base topics.
-        assert len(question["choices"]) == 4, f"expected 4 base topics, got: {question['choices']}"
+        assert (
+            len(question["choices"]) == 4
+        ), f"expected 4 base topics, got: {question['choices']}"
 
         # The first selection reveals the fifth topic icon.
         result = samnmax_client.answer(2)
@@ -233,7 +240,9 @@ def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -
         follow_up = result.get("question") or samnmax_client.state().get("question")
         assert follow_up is not None, "conversation closed unexpectedly"
         labels = [c.get("label") for c in follow_up["choices"]]
-        assert len(labels) == 5, f"the fifth topic should appear after a selection, got: {labels}"
+        assert (
+            len(labels) == 5
+        ), f"the fifth topic should appear after a selection, got: {labels}"
         assert len(set(labels)) == 5, f"duplicate choice in: {labels}"
         # The revealed icon is the Max head (object 1067) — labelled "max".
         assert "max" in labels, f"expected the 'max' topic icon, got: {labels}"

@@ -10,10 +10,10 @@ parallel with the boxing-gym tests in test_indy3.py (pytest-xdist
 
 from __future__ import annotations
 
-import pytest
 from time import sleep
 
-from utils import McpClient, _wait_until, _state_or_skip
+import pytest
+from utils import McpClient, _state_or_skip, _wait_until
 
 
 def _ensure_henrys_house(client: McpClient) -> dict:
@@ -104,9 +104,9 @@ def test_12_indy3_travel_to_henrys_house(indy3_travel_client: McpClient) -> None
 
     state = _state_or_skip(indy3_travel_client)
     question = state.get("question")
-    assert question is not None, (
-        f"expected the travel destination dialog to be pending, got state: {state}"
-    )
+    assert (
+        question is not None
+    ), f"expected the travel destination dialog to be pending, got state: {state}"
 
     henry_id = None
     for choice in question["choices"]:
@@ -121,14 +121,17 @@ def test_12_indy3_travel_to_henrys_house(indy3_travel_client: McpClient) -> None
     assert new_room != 24, "expected to leave the clipper"
 
     state = _state_or_skip(indy3_travel_client)
-    assert state["room"]["id"] == new_room, (
-        f"state room ({state['room']['id']}) should match the room_changed value ({new_room})"
-    )
+    assert (
+        state["room"]["id"] == new_room
+    ), f"state room ({state['room']['id']}) should match the room_changed value ({new_room})"
     # Henry's House contains study furniture; verify a couple of those names appear.
     object_names = {o["name"] for o in state.get("objects", [])}
-    assert object_names & {"typewriter", "desk", "bookcase", "refrigerator"}, (
-        f"new room doesn't look like Henry's House: {sorted(object_names)}"
-    )
+    assert object_names & {
+        "typewriter",
+        "desk",
+        "bookcase",
+        "refrigerator",
+    }, f"new room doesn't look like Henry's House: {sorted(object_names)}"
 
 
 def test_13_indy3_hidden_objects_not_selectable(
@@ -145,7 +148,9 @@ def test_13_indy3_hidden_objects_not_selectable(
 
     names = {o["name"] for o in state.get("objects", [])}
     hidden = {"old_book", "sticky_tape", "chest"}
-    assert hidden.isdisjoint(names), f"hidden objects leaked into state: {hidden & names}"
+    assert hidden.isdisjoint(
+        names
+    ), f"hidden objects leaked into state: {hidden & names}"
 
     # The room may still be settling after the travel cutscene; retry while
     # the engine reports input locked, then assert the hidden target fails.
@@ -169,5 +174,7 @@ def test_13_indy3_hidden_objects_not_selectable(
     indy3_travel_client.act("pull", "table_cloth")
     sleep(1)
     names = {o["name"] for o in indy3_travel_client.state().get("objects", [])}
-    assert "chest" in names, f"chest not revealed after pulling the cloth: {sorted(names)}"
+    assert (
+        "chest" in names
+    ), f"chest not revealed after pulling the cloth: {sorted(names)}"
     assert "old_book" not in names, "book inside the locked chest must stay hidden"

@@ -33,8 +33,8 @@ from typing import Any
 
 from utils import (
     GAME_PATHS,
-    MCP_HOST,
     MCP_CONNECT_TIMEOUT_SECS,
+    MCP_HOST,
     MCP_TIMEOUT_SECS,
     McpClient,
     launch_scummvm,

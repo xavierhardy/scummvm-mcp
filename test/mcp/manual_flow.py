@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Manually drive Sam & Max: pick up Max, use him on the kitten. Logs VAR(177)."""
+
 import json
 import sys
 import time
 
-from utils import MCP_HOST, wait_for_mcp
 from mcp_cli import _post_tool
+from utils import MCP_HOST, wait_for_mcp
 
 port = int(sys.argv[1]) if len(sys.argv) > 1 else 23499
 client = wait_for_mcp(MCP_HOST, port, timeout=10)
@@ -31,10 +32,15 @@ def hover(x, y):
 
 
 def left():
-    _post_tool(client, "mouse_click", {"x": -1, "y": -1} if False else {"x": cur[0], "y": cur[1]})
+    _post_tool(
+        client,
+        "mouse_click",
+        {"x": -1, "y": -1} if False else {"x": cur[0], "y": cur[1]},
+    )
 
 
 cur = (0, 0)
+
 
 def click(x, y, button="left"):
     args = {"x": x, "y": y}
