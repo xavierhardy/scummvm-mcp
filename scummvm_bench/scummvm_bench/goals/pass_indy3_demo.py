@@ -61,15 +61,15 @@ from .engine import (
     on_room_changed,
 )
 
-ROOM_FIRST = 25     # boxing gym — where control starts
+ROOM_FIRST = 25  # boxing gym — where control starts
 ROOM_CORRIDOR = 20
-ROOM_OUTSIDE = 24   # the travel hub
-ROOM_OFFICE = 22    # the student-mob office
+ROOM_OUTSIDE = 24  # the travel hub
+ROOM_OFFICE = 22  # the student-mob office
 ROOM_INDY_OFFICE = 21
 ROOM_HENRY = 27
-ROOM_VENICE = 28    # confirmed live (reached after picking up the painting)
+ROOM_VENICE = 28  # confirmed live (reached after picking up the painting)
 
-DOOR_GYM = 103      # corridor door "next to the gym" -> the office (room 22)
+DOOR_GYM = 103  # corridor door "next to the gym" -> the office (room 22)
 # (Door 100, the corridor's left door, leads outside but the faster route never
 #  opens it -- the outside is reached via Indy's office window instead.)
 
@@ -129,7 +129,9 @@ GOALS = {
         _goal(
             "cloth_pulled",
             "Pull the table cloth (its state changes to 1)",
-            on_object_changed("table cloth"),  # objects_changed reports a space, not "_"
+            on_object_changed(
+                "table cloth"
+            ),  # objects_changed reports a space, not "_"
         ),
         _goal(
             "bookcase_pulled",

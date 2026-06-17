@@ -106,9 +106,11 @@ def render_table(results: list[RunResult]) -> str:
         )
 
     widths = [
-        max(len(headers[i]), *(len(row[i]) for row in rows))
-        if rows
-        else len(headers[i])
+        (
+            max(len(headers[i]), *(len(row[i]) for row in rows))
+            if rows
+            else len(headers[i])
+        )
         for i in range(len(headers))
     ]
 
