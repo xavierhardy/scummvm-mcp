@@ -1910,8 +1910,6 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	_sseSnmTalkClicks = 0;
 	_sseSnmCursorTarget = 0;
 	_sseSnmPendingUseTarget = 0;
-	_sseSnmPendingVerb = 0;
-	_sseSnmPendingUseVerb = 0;
 	_sseSnmForcedCursor = 0;
 	// Capture the current input script so we can detect when the game switches
 	// to a dialog-mode script (V7: VAR_VERB_SCRIPT changes to a different value).
@@ -1968,67 +1966,63 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		_sseSnmTalkClicks = 0;
 		_sseSnmTalkNextFrame = _frameCounter + 1;
 	} else if (_vm->_game.id == GID_SAMNMAX && verbId == 7 && targetA != 0 &&
+	           targetB != 0 && snmIsMaxEntity(targetA)) {
+		// Sam & Max 'use Max on Y' (e.g. give Max to the street kitten, which
+		// yields the carnival tickets). This is a two-target "give" interaction,
+		// and — like the other single-cursor games — a two-target sentence is
+		// dispatched straight through doSentence rather than driven by the
+		// cursor-cycling pickup machinery used for the single-target context
+		// actions (talk/use/pick_up). Compare CMI ("use A on B" -> doSentence(5,
+		// A, B)) and The Dig ("use item on target" -> doSentence(3, B, A)):
+		// dispatching the sentence directly runs the right per-object script,
+		// whereas simulating clicks does not reliably arm the held cursor.
+		//
+		// "max" may resolve to the Max actor (id 3) or to the inventory tool
+		// (max_the_object); the give script keys on the inventory object, so
+		// resolve to it. Giving Max produces doSentence(3 'give', max, target).
+		int maxObj = (_vm->whereIsObject(targetA) == WIO_INVENTORY) ? targetA : 0;
+		if (maxObj == 0) {
+			for (int ii = 0; _vm->_inventory && ii < _vm->_numInventory; ++ii) {
+				int obj = _vm->_inventory[ii];
+				if (obj && normalizeActionName(safeUtf8(getObjName(this, obj))) == "max_the_object") {
+					maxObj = obj;
+					break;
+				}
+			}
+		}
+		if (maxObj == 0) {
+			errorOut = "use: Max is not available as a usable item right now";
+			_streaming = false;
+			return false;
+		}
+		debug(1, "mcp: Sam & Max give Max (obj %d) to target %d via doSentence(3)", maxObj, targetB);
+		_vm->doSentence(3 /* give */, maxObj, targetB);
+	} else if (_vm->_game.id == GID_SAMNMAX && verbId == 7 && targetA != 0 &&
 	           targetB != 0 && _vm->whereIsObject(targetA) == WIO_INVENTORY) {
-		debug(1, "mcp: Sam & Max use inventory item on target");
-		// Sam & Max 'use <inventory item> on Y' (e.g. use max on the
-		// cat on the street): Check if the item is "max_the_object".
-		// If nothing is currently held, we need to pick it up first.
-		// For the specific case of using Max on actor_4 (the kitten), we need to
-		// use verb 3 (give) instead of verb 7 (use) to trigger the correct dialog.
-		Common::String objName = safeUtf8(getObjName(this, targetA));
-		bool isMaxObject = (normalizeActionName(objName) == "max_the_object");
-		
+		// Sam & Max 'use <held inventory item> on Y' (non-Max items): the held
+		// item is its own cursor outside the standard rotation, so click the
+		// target with it. doSentence cannot drive this — the interaction lives in
+		// the scene-click input script, not in a verb entrypoint — and cycling can
+		// never reach an item cursor (a right-click drops the held item), so the
+		// item must already be in hand.
 		int cur = (kSnmCursorVerbVar < _vm->_numVariables && _vm->_scummVars)
 		          ? (int)_vm->_scummVars[kSnmCursorVerbVar] : -1;
-		bool somethingHeld = (cur > 0 && !snmIsStandardCursor(cur));
-		
-		if (!somethingHeld) {
-			// Nothing is held. If this is "max_the_object", we need to pick it up first.
-			if (isMaxObject) {
-				// Chain pickup + use in one action: first pick up the item, then use it.
-				// Use verb 3 (give) for the final action on the target
-				_sseSnmTalkActor = targetA;
-				_sseSnmCursorTarget = kSnmPickupCursor;
-				_sseSnmPendingUseTarget = targetB;
-				_sseSnmPendingUseVerb = 3; // Use verb 3 (give) for the final action
-				_sseSnmHovered = false;
-				_sseSnmTalkClicks = 0;
-				_sseSnmTalkNextFrame = _frameCounter + 4;
-				debug(1, "mcp: chaining pickup of max_the_object then give to target %d", targetB);
-			} else {
-				errorOut = "use: nothing is held — pick the item up first (e.g. act pick_up max)";
-				_streaming = false;
-				return false;
-			}
-		} else {
-			// Something is already held, use it on the target
-			_sseSnmTalkActor = targetB;
-			_sseSnmCursorTarget = kSnmItemCursorSentinel;
-			_sseSnmHovered = false;
-			_sseSnmTalkClicks = 0;
-			_sseSnmTalkNextFrame = _frameCounter + 1;
+		if (cur <= 0 || snmIsStandardCursor(cur)) {
+			errorOut = "use: nothing is held — pick the item up first (e.g. act pick_up <item>)";
+			_streaming = false;
+			return false;
 		}
+		_sseSnmTalkActor = targetB;
+		_sseSnmCursorTarget = kSnmItemCursorSentinel;
+		_sseSnmHovered = false;
+		_sseSnmTalkClicks = 0;
+		_sseSnmTalkNextFrame = _frameCounter + 1;
 	} else if (_vm->_game.id == GID_SAMNMAX && verbId == 7 && targetA != 0 &&
 	           targetB != 0 && _vm->objIsActor(targetA)) {
-		debug(1, "mcp: Sam & Max use actor on target");
-		// Sam & Max 'use <actor> on Y' (e.g. use max on the cat on the street):
-		// the actor must first be picked up (click with hand cursor), then the
-		// target clicked with the held-actor cursor. Chain these two clicks inside
-		// one MCP action so callers need not micromanage the transient cursor.
-		// Max is represented by cursor object 889, not by his inventory obj id.
-		Common::String objName = safeUtf8(getObjName(this, targetA));
-		debug(1, "mcp: checking actor: obj=%d name='%s'", targetA, objName.c_str());
-		// Check by object ID (3 is Max's actor ID) or by name
-		if ((targetA == 3 || normalizeActionName(objName) == "max") &&
-		    kSnmCursorVerbVar < _vm->_numVariables && _vm->_scummVars) {
-			// Don't force cursor 889 here - we need to pick up Max first with cursor 890
-			// The cursor will naturally become 889 after successful pickup
-			// Use verb 3 (give) for the final action on the target
-			_sseSnmPendingUseVerb = 3; // Use verb 3 (give) for the final action
-			debug(1, "mcp: preparing to pick up Max (actor %d) then give to target %d", targetA, targetB);
-		} else {
-			debug(1, "mcp: using Max via inventory item path");
-		}
+		// Sam & Max 'use <actor> on Y' (non-Max actors): the actor must first be
+		// picked up (click with the hand cursor), then the target clicked with the
+		// held-actor cursor. Chain these two clicks inside one MCP action so
+		// callers need not micromanage the transient cursor.
 		_sseSnmTalkActor = targetA;
 		_sseSnmCursorTarget = kSnmPickupCursor;
 		_sseSnmPendingUseTarget = targetB;
@@ -3888,16 +3882,10 @@ void ScummMcpBridge::pumpStream() {
 					// Continue the same stream by clicking the second target with
 					// the held cursor. Reset the hover delay because the mouse is
 					// about to jump from the picked-up actor/item to the target.
-					debug(1, "mcp: switching to pending use target %d, pending verb=%d", _sseSnmPendingUseTarget, _sseSnmPendingUseVerb);
+					debug(1, "mcp: switching to pending use target %d", _sseSnmPendingUseTarget);
 					_sseSnmTalkActor = _sseSnmPendingUseTarget;
 					_sseSnmPendingUseTarget = 0;
 					_sseSnmCursorTarget = kSnmItemCursorSentinel;
-					// If a specific verb was set (e.g., verb 3 for give), use it
-					if (_sseSnmPendingUseVerb != 0) {
-						_sseSnmPendingVerb = _sseSnmPendingUseVerb;
-						_sseSnmPendingUseVerb = 0;
-						debug(1, "mcp: transferred pending verb %d to final verb", _sseSnmPendingVerb);
-					}
 					_sseSnmHovered = false;
 					_sseSnmTalkClicks = 0;
 					_sseSnmTalkNextFrame = _frameCounter + 2;
@@ -3940,10 +3928,10 @@ void ScummMcpBridge::pumpStream() {
 				}
 				
 				// Target cursor selected (or give up cycling): left-click to act.
+				// The game uses whatever is currently held (e.g. a picked-up actor)
+				// on the target under the cursor.
 				debug(1, "mcp: snm click target=%d cursor=%d matched=%d at (%d,%d)",
 				      _sseSnmTalkActor, curVerb, cursorMatched, objX, objY);
-				// Position the mouse over the target and do a left click
-				// The game will use whatever is currently held (Max) on the target
 				_vm->_mouse.x = mouseX;
 				_vm->_mouse.y = mouseY;
 				_vm->_virtualMouse.x = objX;
@@ -3952,17 +3940,7 @@ void ScummMcpBridge::pumpStream() {
 				if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = objY;
 				if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
 				if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
-				
-				// For Sam & Max, if we have a pending verb (e.g., verb 3 for give),
-				// use doSentence instead of a plain click
-				if (_sseSnmPendingVerb != 0) {
-					int maxObjId = 35; // max_the_object ID
-					_vm->doSentence(_sseSnmPendingVerb, maxObjId, _sseSnmTalkActor);
-					_sseSnmPendingVerb = 0;
-					debug(1, "mcp: using verb %d with max (%d) on target %d", _sseSnmPendingVerb, maxObjId, _sseSnmTalkActor);
-				} else {
-					_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
-				}
+				_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
 				_sseButtonClearFrame = _frameCounter + 2;
 				_sseSnmTalkActor = 0;
 				_sseDoneAtFrame = 0; // re-settle so the resulting action can play out
@@ -4885,6 +4863,15 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		ne.isPathway   = raw[i].isPathway;
 		entities.push_back(ne);
 	}
+}
+
+bool ScummMcpBridge::snmIsMaxEntity(int obj) const {
+	if (_vm->_game.id != GID_SAMNMAX || obj == 0)
+		return false;
+	if (obj == 3) // Max's actor id
+		return true;
+	Common::String n = normalizeActionName(safeUtf8(getObjName(this, obj)));
+	return n == "max" || n == "max_the_object";
 }
 
 bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity &out) const {

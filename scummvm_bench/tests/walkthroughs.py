@@ -538,18 +538,15 @@ class SamnmaxRealHarness:
                 if await wait_room(9, tries=6):
                     break
             await state()  # state_street
-            # Hold Max and use him on the kitten until its topic dialog opens.
+            # Talk to the kitten (the cat courier) until its topic dialog opens.
             for _ in range(10):
                 if stop.is_set():
                     return
-                await call("act", {"verb": "pick_up", "target1": "max"})
-                await asyncio.sleep(0.8)
-                data = await call(
-                    "act", {"verb": "use", "target1": "max_the_object", "target2": 4}
-                )
+                data = await call("act", {"verb": "talk_to", "target1": 4})
                 if data.get("question") or (await state()).get("question"):
                     break
                 await asyncio.sleep(1.2)
+            # Ask the "question" topic — the kitten admits it swallowed the orders.
             q = (await state()).get("question")
             if isinstance(q, dict):
                 qid = next(
@@ -557,6 +554,18 @@ class SamnmaxRealHarness:
                     q["choices"][0]["id"],
                 )
                 await call("answer", {"id": qid})  # -> Commissioner reveal
+            # Use Max on the kitten to shake the swallowed orders back up: this
+            # adds the carnival tickets to the inventory.
+            for _ in range(10):
+                if stop.is_set():
+                    return
+                data = await call("act", {"verb": "use", "target1": "max", "target2": 4})
+                inv = (await state()).get("inventory") or []
+                if "carnival_tickets" in inv or "carnival_tickets" in (
+                    data.get("inventory_added") or []
+                ):
+                    break
+                await asyncio.sleep(1.2)
             await call("act", {"verb": "use", "target1": "beat_up_desoto"})  # drive off
             await wait_room(10)
 
@@ -565,7 +574,7 @@ SAMNMAX = Walkthrough(
     game_id="samnmax",
     save_slot=1,
     initial_room=7,
-    expected_goals=9,
+    expected_goals=10,
     game_path_env="SAMNMAX_DEMO_PATH",
     game_path_default=str(GAMES_DIR / "samnmax-dos-demo-en"),
     initial_inventory=["max_the_object"],
@@ -578,12 +587,12 @@ SAMNMAX = Walkthrough(
         ("walk", {"x": 50, "y": 180}),  # trigger_cutscene
         ("act", {"verb": "use", "target1": 82}),  # reach_street (->9)
         ("state", {}),  # state_street
-        ("act", {"verb": "pick_up", "target1": "max"}),
+        ("act", {"verb": "talk_to", "target1": 4}),  # talk_to_cat
+        ("answer", {"id": 1}),  # ask_cat_commissioner
         (
             "act",
-            {"verb": "use", "target1": "max_the_object", "target2": 4},
-        ),  # talk_to_cat
-        ("answer", {"id": 1}),  # ask_cat_commissioner
+            {"verb": "use", "target1": "max", "target2": 4},
+        ),  # use_max_on_cat (carnival_tickets)
         ("act", {"verb": "use", "target1": "beat_up_desoto"}),  # use_desoto (->10)
     ],
     steps=[
@@ -596,12 +605,14 @@ SAMNMAX = Walkthrough(
                 ("sam", "So, you want a piece of me, huh? Well, take a piece of this!"),
             ),
         ),
-        ScriptStep("act", {"verb": "pick_up", "target1": "max"}, {}),
         ScriptStep(
             "act",
-            {"verb": "use", "target1": "max_the_object", "target2": 4},
+            {"verb": "talk_to", "target1": 4},
             {
-                **_msgs(("max", "Hey there, lil' fella.")),
+                **_msgs(
+                    ("max", "Hey there, lil' fella."),
+                    ("kitten", "You talkin' to me?"),
+                ),
                 "question": {
                     "choices": [
                         {"id": 1, "label": "question"},
@@ -619,6 +630,24 @@ SAMNMAX = Walkthrough(
                 ("sam", "we've got a message from the Commissioner to collect."),
                 ("kitten", "I swallowed your orders for safekeeping,"),
             ),
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "use", "target1": "max", "target2": 4},
+            {
+                **_msgs(
+                    ("max", "Ooh, that gives me an idea!"),
+                    (
+                        "sam",
+                        "According to these orders, something bizarre is "
+                        "happening at the carnival.",
+                    ),
+                ),
+                "inventory_added": ["carnival_tickets"],
+                "objects_changed": [
+                    {"name": "carnival tickets", "old_state": 0, "new_state": 1}
+                ],
+            },
         ),
         ScriptStep(
             "act", {"verb": "use", "target1": "beat_up_desoto"}, {"room_changed": 10}

@@ -3,9 +3,10 @@
 Sam & Max start in the detectives' office (room 7). Reconciled against a live
 capture: head downstairs to the office staircase (room 8) where a TV brawl
 cutscene plays ("So, you want a piece of me, huh!"), out to the street (room 9),
-use Max on the kitten to open its topic dialog and ask it the "question" topic —
-which reveals the swallowed message from the Commissioner — then board the
-DeSoto, which drives off (room 10).
+talk to the kitten (the cat courier) to open its topic dialog and ask it the
+"question" topic — which reveals it swallowed the Commissioner's orders — then
+use Max on the kitten to shake the orders back up, acquiring the carnival
+tickets, and finally board the DeSoto, which drives off (room 10).
 """
 
 from .engine import (
@@ -15,6 +16,7 @@ from .engine import (
     all_of,
     in_room,
     on_call,
+    on_inventory_added,
     on_message_contains,
     on_question_appeared,
     on_room_changed,
@@ -74,13 +76,18 @@ GOALS = {
         ),
         _goal(
             "talk_to_cat",
-            "Use Max on the kitten to open its dialog",
+            "Talk to the kitten to open its topic dialog",
             all_of(in_room(ROOM_STREET), on_question_appeared()),
         ),
         _goal(
             "ask_cat_commissioner",
-            "Ask the kitten and learn of the Commissioner's message",
+            "Ask the kitten and learn it swallowed the Commissioner's orders",
             on_message_contains("Commissioner"),
+        ),
+        _goal(
+            "use_max_on_cat",
+            "Use Max on the kitten to retrieve the swallowed carnival tickets",
+            all_of(in_room(ROOM_STREET), on_inventory_added("carnival_tickets")),
         ),
         _goal(
             "use_desoto",

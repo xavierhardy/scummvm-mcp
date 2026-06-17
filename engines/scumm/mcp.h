@@ -203,14 +203,6 @@ private:
 	// When non-zero, keep VAR(177) pinned to this held cursor during the S&M
 	// click state machine. Used for selecting Max from a closed inventory.
 	int _sseSnmForcedCursor = 0;
-	// When non-zero during a Sam & Max chained pickup+use action, this is the
-	// verb id to dispatch on the final target (e.g., verb 3 for "give" when
-	// using Max on the kitten).
-	int _sseSnmPendingVerb = 0;
-	// When non-zero, this is the verb id to use for the final action in a
-	// chained pickup+use sequence (set during the pickup phase, consumed
-	// when the held cursor is positioned over the target).
-	int _sseSnmPendingUseVerb = 0;
 	// True when streaming was triggered by toolAnswer() (dialog choice). For V8
 	// the verb slots remain populated with dialog choices throughout, so the
 	// hasPendingQuestion-based "done" signal cannot be used to close the stream
@@ -260,6 +252,11 @@ private:
 	void buildEntityMap(Common::Array<NamedEntity> &entities) const;
 	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
 	bool resolveVerb(const Common::String &action, int &verbId) const;
+
+	// Sam & Max: is this target the sidekick Max — addressed either as his actor
+	// (id 3) or as the inventory tool "max_the_object"? Used to route a two-target
+	// "use Max on Y" through the give sentence.
+	bool snmIsMaxEntity(int obj) const;
 
 	// Maniac Mansion: the playable kids. Slot is the F1-F3 index V0's
 	// switchActor() takes; the actor id comes from VAR(97 + slot). The V1/V2
