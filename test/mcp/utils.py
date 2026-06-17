@@ -5,6 +5,7 @@ MCP integration test utilities: client, ScummVM launcher, shared helpers.
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -346,8 +347,17 @@ def launch_scummvm(
     port: int = 23456,
     scummvm_binary: str = "./scummvm",
     save_slot: int = 1,
+    isolate_saves: bool = True,
 ) -> subprocess.Popen:
-    """Launch ScummVM headlessly with MCP enabled for the given game."""
+    """Launch ScummVM headlessly with MCP enabled for the given game.
+
+    When ``isolate_saves`` is true (the default, used by the test fixtures), the
+    game's ``save_slots/<game_id>`` directory is copied into a private temporary
+    folder used as the ``--savepath``. This keeps parallel instances of the same
+    game from racing on a shared save directory and stops autosaves from
+    polluting the committed save files. Pass ``isolate_saves=False`` (e.g. from
+    ``launch_manual.py``) when you want ``save_state`` to write back into the
+    repository's ``save_slots/<game_id>`` directory."""
     # Create logs directory and per-game log file path for ScummVM's own logger
     logs_dir = os.path.join(os.path.dirname(__file__), "logs")
     os.makedirs(logs_dir, exist_ok=True)
@@ -363,7 +373,18 @@ def launch_scummvm(
 
     tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
     ini_path = os.path.join(tmpdir, "scummvm.ini")
-    save_path = os.path.join(os.path.dirname(__file__), f"save_slots/{game_id}")
+    repo_save_path = os.path.join(os.path.dirname(__file__), f"save_slots/{game_id}")
+
+    if isolate_saves:
+        # Give this instance its own copy of the save slots so concurrent
+        # same-game instances never share (and clobber) save files.
+        save_path = os.path.join(tmpdir, "saves")
+        if os.path.isdir(repo_save_path):
+            shutil.copytree(repo_save_path, save_path)
+        else:
+            os.makedirs(save_path, exist_ok=True)
+    else:
+        save_path = repo_save_path
 
     with open(ini_path, "w") as f:
         f.write(content)

@@ -10,7 +10,7 @@ slot = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 
 binary = os.path.join(os.path.dirname(__file__), "..", "..", "scummvm")
 proc = launch_scummvm("samnmax", GAME_PATHS["samnmax"], port=port, save_slot=slot,
-                      scummvm_binary=binary)
+                      scummvm_binary=binary, isolate_saves=False)
 print(f"[manual] scummvm pid={proc.pid} port={port} slot={slot}", flush=True)
 try:
     proc.wait()

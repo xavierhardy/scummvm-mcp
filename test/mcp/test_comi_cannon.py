@@ -54,21 +54,23 @@ def _shoot(client: McpClient, x: int, y: int) -> dict:
 def test_01_cannon_room_reachable(comi_s4_client: McpClient) -> None:
     """Save slot 4 must load directly into the cannon minigame room."""
     state = comi_s4_client.state()
-    assert state.get("room") is not None
-    assert state["room"]["id"] != 0
+    assert state.get("room") is not None, f"expected a room in state, got: {state}"
+    assert state["room"]["id"] != 0, (
+        f"expected the cannon minigame room, got room 0 (not loaded): {state['room']}"
+    )
 
 
 def test_02_cannon_shoot_returns_result(comi_s4_client: McpClient) -> None:
     """Firing the cannon must return a result without timing out."""
     # Shoot into open sea — no hit expected, but the tool must complete cleanly.
     result = _shoot(comi_s4_client, 320, 215)
-    assert result is not None
+    assert result is not None, "shooting the cannon into open sea timed out / returned no result"
 
 
 def test_03_cannon_shoot_fort_produces_apology(comi_s4_client: McpClient) -> None:
     """Hitting the fort must produce speech — Guybrush apologises to the enemy."""
     result = _shoot(comi_s4_client, FORT_X, FORT_Y)
-    assert result is not None
+    assert result is not None, "shooting the cannon at the fort timed out / returned no result"
     messages = [m["text"] for m in result.get("messages", [])]
     assert len(messages) > 0, (
         f"Expected apology speech after hitting the fort, got no messages "

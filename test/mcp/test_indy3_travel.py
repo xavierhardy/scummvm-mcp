@@ -68,7 +68,9 @@ def test_12_indy3_travel_to_henrys_house(indy3_travel_client: McpClient) -> None
 
     state = _state_or_skip(indy3_travel_client)
     question = state.get("question")
-    assert question is not None
+    assert question is not None, (
+        f"expected the travel destination dialog to be pending, got state: {state}"
+    )
 
     henry_id = None
     for choice in question["choices"]:
@@ -83,7 +85,9 @@ def test_12_indy3_travel_to_henrys_house(indy3_travel_client: McpClient) -> None
     assert new_room != 24, "expected to leave the clipper"
 
     state = _state_or_skip(indy3_travel_client)
-    assert state["room"]["id"] == new_room
+    assert state["room"]["id"] == new_room, (
+        f"state room ({state['room']['id']}) should match the room_changed value ({new_room})"
+    )
     # Henry's House contains study furniture; verify a couple of those names appear.
     object_names = {o["name"] for o in state.get("objects", [])}
     assert object_names & {"typewriter", "desk", "bookcase", "refrigerator"}, (

@@ -1071,6 +1071,27 @@ void ScummMcpBridge::registerTools() {
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
+		// save_state — write the current game to a save slot
+		{
+			Networking::McpServer::ToolSpec spec;
+			spec.name = "save_state";
+			spec.description =
+			    "Save the current game to a save slot, the same way the in-game "
+			    "save menu does. Writes <target>.s<NN> in the active save path, so "
+			    "it can be used to capture reusable save states for tests. Returns "
+			    "the slot and whether the save was accepted. Engine-version-agnostic.";
+			Common::JSONObject props;
+			props.setVal("slot", mcpProp("integer",
+			    "Save slot index to write (e.g. 2 -> <target>.s02)."));
+			props.setVal("description", mcpProp("string",
+			    "Optional human-readable label stored in the save header "
+			    "(default \"mcp save\")."));
+			const char *req[] = {"slot"};
+			spec.inputSchema  = mcpObjectSchema(props, req, 1);
+			spec.outputSchema = nullptr;
+			spec.streaming    = false;
+			_server->registerTool(spec);
+		}
 	}
 }
 
@@ -1132,6 +1153,7 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 		if (!toolMouseClick(args, errorOut)) return nullptr;
 		return new Common::JSONValue(Common::JSONObject());
 	}
+	if (name == "save_state")   return toolSaveState(args, errorOut);
 	errorOut = "Unknown tool: " + name;
 	return nullptr;
 }
@@ -2793,6 +2815,43 @@ static bool jsonKeyToKeyState(const Common::String &name, bool ctrl, bool shift,
 
 	out = Common::KeyState(kc, ascii, flags);
 	return true;
+}
+
+Common::JSONValue *ScummMcpBridge::toolSaveState(const Common::JSONValue &args, Common::String &errorOut) {
+	if (!args.isObject() || !args.asObject().contains("slot") ||
+	    !args.asObject()["slot"]->isIntegerNumber()) {
+		errorOut = "save_state: missing integer 'slot'";
+		return nullptr;
+	}
+	int slot = (int)args.asObject()["slot"]->asIntegerNumber();
+	if (slot < 0) {
+		errorOut = "save_state: 'slot' must be >= 0";
+		return nullptr;
+	}
+	Common::String desc = "mcp save";
+	if (args.asObject().contains("description") && args.asObject()["description"]->isString())
+		desc = args.asObject()["description"]->asString();
+
+	Common::JSONObject out;
+	out.setVal("slot", mcpJsonInt(slot));
+
+	// Refuse when the engine itself would refuse (e.g. mid-cutscene, save menu
+	// script running, or HE games without scripted save support).
+	if (!_vm->canSaveGameStateCurrently(nullptr)) {
+		out.setVal("saved", mcpJsonBool(false));
+		out.setVal("reason", mcpJsonString("game cannot be saved in the current state"));
+		return new Common::JSONValue(out);
+	}
+
+	// Defer to the engine's own save path. requestSave() sets _saveLoadFlag,
+	// which this same scummLoop() iteration (pump() runs at its top) processes
+	// later in the frame, writing <target>.s<NN> under the active save path —
+	// exactly what the in-game save menu produces.
+	_vm->requestSave(slot, desc);
+	debug(1, "mcp: save_state requested slot %d ('%s')", slot, desc.c_str());
+	out.setVal("saved", mcpJsonBool(true));
+	out.setVal("description", mcpJsonString(desc));
+	return new Common::JSONValue(out);
 }
 
 Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Common::String &errorOut) {
@@ -4902,19 +4961,12 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 		}
 	}
 	bool v0Game = (_vm->_game.version == 0);
-	// Sam & Max: when user asks for "max", prefer the inventory item "max_the_object"
-	// if it exists, otherwise fall back to the actor. This allows "use max on Y" to work
-	// correctly while still supporting other actions that target Max the actor.
+	// Sam & Max: when the user asks for "max", prefer the *actor* (the sidekick
+	// walking the scene) over the "max_the_object" inventory alias. talk_to,
+	// look_at and pick_up all act on the actor, and toolAct's two-target "use Max
+	// on Y" path detects the actor (id 3) and maps it to the inventory object for
+	// the give sentence (see snmIsMaxEntity), so the actor is the right default.
 	if (_vm->_game.id == GID_SAMNMAX && normalized == "max") {
-		// Look for the inventory item "max_the_object" first
-		for (uint i = 0; i < entities.size(); ++i) {
-			if (entities[i].kind == NamedEntity::kInventory &&
-			    entities[i].displayName == "max_the_object") {
-				out = entities[i];
-				return true;
-			}
-		}
-		// If no inventory item, fall back to actor
 		if (actorMatch >= 0) {
 			out = entities[(uint)actorMatch];
 			return true;
@@ -4922,6 +4974,15 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 		// Some Sam & Max scenes don't expose actor names. Fall back to Max actor id (3).
 		for (uint i = 0; i < entities.size(); ++i) {
 			if (entities[i].kind == NamedEntity::kActor && entities[i].numId == 3) {
+				out = entities[i];
+				return true;
+			}
+		}
+		// No actor present (e.g. a scene where Max is only an inventory tool):
+		// fall back to the inventory alias so "use max on Y" still resolves.
+		for (uint i = 0; i < entities.size(); ++i) {
+			if (entities[i].kind == NamedEntity::kInventory &&
+			    entities[i].displayName == "max_the_object") {
 				out = entities[i];
 				return true;
 			}

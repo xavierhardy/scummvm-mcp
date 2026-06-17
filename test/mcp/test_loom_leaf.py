@@ -70,7 +70,9 @@ def test_09_loom_pathway_named(loom_leaf_client) -> None:
     assert "pathway_460" in names, (
         f"Expected `pathway_460` (renamed from unnamed obj 460) in room 36, got: {list(names)}"
     )
-    assert names["pathway_460"] == 460
+    assert names["pathway_460"] == 460, (
+        f"`pathway_460` should map to object id 460, got: {names['pathway_460']}"
+    )
 
 
 def test_10_loom_pathway_room_change(loom_leaf_client) -> None:

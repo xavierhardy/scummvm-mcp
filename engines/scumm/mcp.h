@@ -224,6 +224,7 @@ private:
 
 	// Debug tools (gated by mcp_debug ini option). Engine-version-agnostic.
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut);
+	Common::JSONValue *toolSaveState(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolKeystroke(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseMove(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseClick(const Common::JSONValue &args, Common::String &errorOut);
