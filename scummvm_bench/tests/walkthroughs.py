@@ -943,24 +943,6 @@ class IndyRealHarness:
                 return await room() == dest
 
             stop = ctx.stop_event
-            await state()  # state_first_room (gym, room 25)
-            await go(213, 20)  # gym -> corridor
-            await state()  # state_corridor (20)
-            await go(100, 24, opens=True)  # left door -> outside
-            await state()  # state_outside (24)
-            # Going outside plays a ~30s Donovan cutscene (room 29, input locked);
-            # wait until it has been seen and control returns to room 24.
-            saw_cutscene = False
-            for _ in range(80):
-                if stop.is_set():
-                    return
-                s = await state()
-                rid = (s.get("room") or {}).get("id")
-                if rid == 29:
-                    saw_cutscene = True
-                elif saw_cutscene and rid == 24 and "travel" in (s.get("verbs") or []):
-                    break
-                await asyncio.sleep(1.0)
 
             async def travel_to(keyword: str, dest: int) -> bool:
                 for _ in range(8):
@@ -980,25 +962,36 @@ class IndyRealHarness:
                         return True
                 return await room() == dest
 
-            await travel_to("henry", 27)  # travel_henry
-            await state()  # state_henry
-            # Ransack Henry's house: plant -> reveal chest via cloth -> bookcase
-            # -> sticky tape.
-            await call("act", {"verb": "pick_up", "target1": "plant"})
-            await call("act", {"verb": "pull", "target1": "table_cloth"})
-            await call("act", {"verb": "pull", "target1": "bookcase"})
-            await call("act", {"verb": "pick_up", "target1": "sticky_tape"})
+            async def settle_outside() -> None:
+                # The first time we reach the outside (here, climbing out of the
+                # office window) ScummVM plays a ~30s Donovan cutscene (room 29,
+                # input locked). Wait it out; if it never starts, return as soon
+                # as we're stable in room 24 with the travel verb available.
+                saw = False
+                for i in range(70):
+                    if stop.is_set():
+                        return
+                    s = await state()
+                    rid = (s.get("room") or {}).get("id")
+                    if rid == 29:
+                        saw = True
+                    elif rid == 24 and "travel" in (s.get("verbs") or []) and (saw or i >= 6):
+                        return
+                    await asyncio.sleep(0.5)
 
-            # Back to the college: Henry's door -> outside -> corridor.
-            await go(231, 24)
-            await go(203, 20, opens=True)
-            # Corridor door 103 -> office (room 22).
+            await state()  # state_first_room (gym, room 25)
+            await go(213, 20)  # gym -> corridor
+            await state()  # state_corridor (20)
+            # Faster route: go straight to the office and never touch the left
+            # door -- we reach the outside via the office window instead, which
+            # saves the back-and-forth corridor trips. Take door 103 (next to the
+            # gym) straight into the office.
             await call("act", {"verb": "open", "target1": 103})  # open_door_gym
-            await go(103, 22)  # reach_office_via_103
+            await go(103, 22)  # reach_office_via_103 (room 22)
             await state()  # state_office (22)
-            # Calm the student mob: pick the diplomatic lines (the "take down
-            # names" line resolves it and opens Indy's office). Avoid the
-            # "leave" options which just bail out.
+            # Calm the student mob -- unavoidable (the window only saves the
+            # *return* corridor trips, not this first entry). Pick the diplomatic
+            # lines; "take down names" resolves it and opens Indy's office.
             prefer = ("work something out", "calmly", "take it easy", "fair for everyone")
             resolve = "take down names"
             await call("act", {"verb": "talk to", "target1": "students"})
@@ -1020,31 +1013,51 @@ class IndyRealHarness:
                 await asyncio.sleep(0.6)
             await wait_room(21, tries=8)
             await state()  # state_indy_office (21)
-            # Mail chain -> grail diary; sticky tape on the solvent jar -> small key.
-            await call("act", {"verb": "open", "target1": "window"})
+            # Mail chain -> grail diary first (the small key needs the sticky tape,
+            # still in Henry's house, so that waits for the second office trip).
             for item in ("junk_mail", "letters", "papers", "package"):
                 await call("act", {"verb": "pick_up", "target1": item})
             await call("act", {"verb": "open", "target1": "package"})  # grail diary
+            # Open the window only once we have the diary, then climb out to the
+            # outside (first time -> Donovan cutscene).
+            await call("act", {"verb": "open", "target1": "window"})  # open_window
+            await go("window", 24)  # reach_outside (24)
+            await settle_outside()
+            await state()  # state_outside (24)
+            # Henry's house #1: grab the painting and pull the bookcase for the
+            # sticky tape. LEAVE the plant and the cloth -- the cloth can't be
+            # pulled until the plant is moved, and that only happens on the second
+            # trip (once we have the key).
+            await travel_to("henry", 27)  # travel_henry (27)
+            await call("act", {"verb": "pick_up", "target1": "painting"})
+            await call("act", {"verb": "pull", "target1": "bookcase"})
+            await call("act", {"verb": "pick_up", "target1": "sticky_tape"})
+            # Back to Indy's office through the WINDOW (no corridor / mob this
+            # time): use the sticky tape on the solvent jar to get the small key.
+            await go(231, 24)  # Henry's -> outside
+            await go("window", 21)  # outside -> Indy's office through the window
             await call("act", {"verb": "use", "target1": "sticky_tape", "target2": "jar"})  # small_key
-            # Escape through the window back outside.
-            await go("window", 24)
-            # Travel back to Henry's, open the chest for the old book.
+            await go("window", 24)  # back outside through the window
+            # Henry's house #2 (last trip): in order -- move the plant, then pull
+            # the table cloth (only possible after the plant moves) to reveal the
+            # chest, then open it for the old book. The painting is already in
+            # hand, so taking the old book gives Indy everything for the Grail
+            # quest and the Venice trip unlocks back outside.
             await travel_to("henry", 27)
-            await state()  # state_henry (revisit)
+            await state()  # state_henry (27)
+            await call("act", {"verb": "pick_up", "target1": "plant"})  # plant_moved (after the key)
+            await call("act", {"verb": "pull", "target1": "table_cloth"})  # cloth_pulled (needs plant moved)
             await call("act", {"verb": "use", "target1": "small_key", "target2": "chest"})
             await call("act", {"verb": "pick_up", "target1": "old_book"})
-            # The painting is the last Grail-quest item: picking it up makes Indy
-            # say he "has everything he needs", which adds the Venice trip to the
-            # travel menu back outside.
-            await call("act", {"verb": "pick_up", "target1": "painting"})
             await go(231, 24)
-            await travel_to("venice", 28)
+            await travel_to("venice", 28)  # travel_venice (STOP)
 
 
 # The whole-demo arc is deterministic in the mock backend (canned responses),
-# so the mock self-test exercises all 31 goals end to end. The room ids
-# (gym 25, corridor 20, outside 24, Henry's house 27) are reconciled against a
-# live capture; office 22 / Indy's office 21 are the demo's college offices.
+# so the mock self-test exercises all 30 goals end to end, mirroring the faster
+# route (office first, then the window as the outside<->office shortcut). The
+# room ids (gym 25, corridor 20, outside 24, Henry's house 27) are reconciled
+# against a live capture; office 22 / Indy's office 21 are the college offices.
 _INDY_OFFICE_LINES = _msgs(
     ("indy", "Just a moment, folks. I'm sure we can work something out."),
     ("indy", "Please relax. I have a solution that is fair for everyone."),
@@ -1060,54 +1073,54 @@ INDY3 = Walkthrough(
     game_id="pass",
     save_slot=3,
     initial_room=25,
-    expected_goals=31,
+    expected_goals=30,
     game_path_env="PASS_PATH",
     game_path_default=str(GAMES_DIR / "pass"),
     dynamic_real=True,
     real_harness_factory=lambda wt: IndyRealHarness(wt),
     calls=[
         ("state", {}),  # 1 state_first_room (gym 25)
-        ("act", {"verb": "walk to", "target1": "door"}),  # 2 reach_corridor (->20)
-        ("state", {}),  # 3 state_corridor (20)
-        ("act", {"verb": "open", "target1": 100}),  # 4 open_door_left
-        ("act", {"verb": "walk to", "target1": 100}),  # 5 reach_outside (->24)
-        ("state", {}),  # 6 state_outside (24)
-        ("act", {"verb": "travel", "target1": "henry"}),  # 7 travel_henry (->27)
-        ("act", {"verb": "pick_up", "target1": "plant"}),  # 8 plant_moved
-        ("act", {"verb": "pull", "target1": "table_cloth"}),  # 9 cloth_pulled
-        ("act", {"verb": "pull", "target1": "bookcase"}),  # 10 bookcase_pulled
-        ("act", {"verb": "pick_up", "target1": "sticky_tape"}),  # 11 sticky tape
-        ("act", {"verb": "open", "target1": 103}),  # 12 open_door_gym
-        ("act", {"verb": "walk to", "target1": 103}),  # 13 reach_office_via_103 (->22)
-        ("state", {}),  # 14 state_office (22)
-        ("act", {"verb": "talk to", "target1": "students"}),  # 15-19 students+lines (->21)
-        ("state", {}),  # 20 state_indy_office (21)
-        ("act", {"verb": "open", "target1": "window"}),  # 21 open_window
-        ("act", {"verb": "pick_up", "target1": "junk_mail"}),  # 22
-        ("act", {"verb": "pick_up", "target1": "letters"}),  # 23
-        ("act", {"verb": "pick_up", "target1": "papers"}),  # 24
-        ("act", {"verb": "pick_up", "target1": "package"}),  # 25
-        ("act", {"verb": "open", "target1": "package"}),  # 26 open_package (grail diary)
-        ("act", {"verb": "use", "target1": "sticky_tape", "target2": "jar"}),  # 27 small_key
-        ("act", {"verb": "travel", "target1": "henry"}),  # nav back -> Henry's (27)
-        ("state", {}),  # 28 state_henry (27)
-        ("act", {"verb": "use", "target1": "small_key", "target2": "chest"}),  # 29
-        ("act", {"verb": "pick_up", "target1": "old_book"}),  # 30 old_book
-        ("act", {"verb": "pick_up", "target1": "painting"}),  # 31 pick_up_painting
-        ("act", {"verb": "travel", "target1": "venice"}),  # 32 travel_venice (STOP)
+        ("act", {"verb": "walk to", "target1": "door"}),  # reach_corridor (->20)
+        ("state", {}),  # state_corridor (20)
+        # Faster route: straight to the office via door 103 (no left door / no
+        # going outside first).
+        ("act", {"verb": "open", "target1": 103}),  # open_door_gym
+        ("act", {"verb": "walk to", "target1": 103}),  # reach_office_via_103 (->22)
+        ("state", {}),  # state_office (22)
+        ("act", {"verb": "talk to", "target1": "students"}),  # talk_to_students + 3 lines (->21)
+        ("state", {}),  # state_indy_office (21)
+        # Mail chain -> grail diary, then open the window (only after the diary).
+        ("act", {"verb": "pick_up", "target1": "junk_mail"}),
+        ("act", {"verb": "pick_up", "target1": "letters"}),
+        ("act", {"verb": "pick_up", "target1": "papers"}),
+        ("act", {"verb": "pick_up", "target1": "package"}),
+        ("act", {"verb": "open", "target1": "package"}),  # open_package (grail diary)
+        ("act", {"verb": "open", "target1": "window"}),  # open_window
+        ("act", {"verb": "walk to", "target1": "window"}),  # reach_outside (window ->24)
+        ("state", {}),  # state_outside (24)
+        # Henry's #1: painting + sticky tape (leave the plant AND the cloth).
+        ("act", {"verb": "travel", "target1": "henry"}),  # travel_henry (->27)
+        ("act", {"verb": "pick_up", "target1": "painting"}),  # pick_up_painting
+        ("act", {"verb": "pull", "target1": "bookcase"}),  # bookcase_pulled
+        ("act", {"verb": "pick_up", "target1": "sticky_tape"}),  # pick_up_sticky_tape
+        # Back to the office through the window for the small key.
+        ("act", {"verb": "walk to", "target1": 231}),  # nav Henry's -> outside (->24)
+        ("act", {"verb": "walk to", "target1": "window"}),  # nav outside -> office (window ->21)
+        ("act", {"verb": "use", "target1": "sticky_tape", "target2": "jar"}),  # obtain_small_key
+        ("act", {"verb": "walk to", "target1": "window"}),  # nav office -> outside (window ->24)
+        # Henry's #2 (last trip), in order: move the plant, then pull the cloth
+        # (only possible after the plant), then open the chest.
+        ("act", {"verb": "travel", "target1": "henry"}),  # nav -> Henry's (->27)
+        ("state", {}),  # state_henry (27)
+        ("act", {"verb": "pick_up", "target1": "plant"}),  # plant_moved (after the key)
+        ("act", {"verb": "pull", "target1": "table_cloth"}),  # cloth_pulled (needs plant moved)
+        ("act", {"verb": "use", "target1": "small_key", "target2": "chest"}),  # use_key_on_chest
+        ("act", {"verb": "pick_up", "target1": "old_book"}),  # pick_up_old_book (last Grail item)
+        ("act", {"verb": "walk to", "target1": 231}),  # nav Henry's -> outside (->24)
+        ("act", {"verb": "travel", "target1": "venice"}),  # travel_venice (STOP)
     ],
     steps=[
         ScriptStep("act", {"verb": "walk to", "target1": "door"}, {"room_changed": 20}),
-        ScriptStep("act", {"verb": "open", "target1": 100}, {}),
-        ScriptStep("act", {"verb": "walk to", "target1": 100}, {"room_changed": 24}),
-        ScriptStep("act", {"verb": "travel", "target1": "henry"}, {"room_changed": 27}),
-        ScriptStep("act", {"verb": "pick_up", "target1": "plant"}, _objc("plant")),
-        ScriptStep("act", {"verb": "pull", "target1": "table_cloth"}, _objc("table cloth")),
-        ScriptStep("act", {"verb": "pull", "target1": "bookcase"}, _objc("bookcase")),
-        ScriptStep(
-            "act", {"verb": "pick_up", "target1": "sticky_tape"},
-            {"inventory_added": ["sticky_tape"]},
-        ),
         ScriptStep("act", {"verb": "open", "target1": 103}, {}),
         # Door 103 (the one "next to the gym") leads into the office (22); the
         # student dialog then disperses the mob straight into Indy's office (21).
@@ -1116,23 +1129,36 @@ INDY3 = Walkthrough(
             "act", {"verb": "talk to", "target1": "students"},
             {**dict(_INDY_OFFICE_LINES), "room_changed": 21},
         ),
-        ScriptStep("act", {"verb": "open", "target1": "window"}, _objc("window")),
         ScriptStep("act", {"verb": "pick_up", "target1": "junk_mail"}, {"inventory_added": ["junk_mail"]}),
         ScriptStep("act", {"verb": "pick_up", "target1": "letters"}, {"inventory_added": ["letters"]}),
         ScriptStep("act", {"verb": "pick_up", "target1": "papers"}, {"inventory_added": ["papers"]}),
         ScriptStep("act", {"verb": "pick_up", "target1": "package"}, {"inventory_added": ["package"]}),
         ScriptStep("act", {"verb": "open", "target1": "package"}, _objc("package")),
+        ScriptStep("act", {"verb": "open", "target1": "window"}, _objc("window")),
+        # The window is the outside<->office shortcut, walked three times in
+        # order: out (->24), back in (->21), out again (->24).
+        ScriptStep("act", {"verb": "walk to", "target1": "window"}, {"room_changed": 24}),
+        ScriptStep("act", {"verb": "walk to", "target1": "window"}, {"room_changed": 21}),
+        ScriptStep("act", {"verb": "walk to", "target1": "window"}, {"room_changed": 24}),
+        ScriptStep("act", {"verb": "travel", "target1": "henry"}, {"room_changed": 27}),
+        ScriptStep("act", {"verb": "pick_up", "target1": "painting"}, {"inventory_added": ["painting"]}),
+        ScriptStep("act", {"verb": "pull", "target1": "bookcase"}, _objc("bookcase")),
+        ScriptStep("act", {"verb": "pick_up", "target1": "sticky_tape"}, {"inventory_added": ["sticky_tape"]}),
+        ScriptStep("act", {"verb": "walk to", "target1": 231}, {"room_changed": 24}),
         ScriptStep(
             "act", {"verb": "use", "target1": "sticky_tape", "target2": "jar"},
             {**_msgs(("indy", "Hey! There's a key in here!")), "inventory_added": ["small_key"]},
         ),
+        ScriptStep("act", {"verb": "pick_up", "target1": "plant"}, _objc("plant")),
+        ScriptStep("act", {"verb": "pull", "target1": "table_cloth"}, _objc("table cloth")),
         ScriptStep("act", {"verb": "use", "target1": "small_key", "target2": "chest"}, _objc("chest")),
-        ScriptStep("act", {"verb": "pick_up", "target1": "old_book"}, {"inventory_added": ["old_book"]}),
+        # The old book is the last Grail item taken, so Indy announces he has
+        # everything he needs (which unlocks the Venice trip outside).
         ScriptStep(
-            "act", {"verb": "pick_up", "target1": "painting"},
+            "act", {"verb": "pick_up", "target1": "old_book"},
             {
                 **_msgs(("indy", "Now I have everything I need to begin my quest for my father and the Holy Grail!")),
-                "inventory_added": ["painting"],
+                "inventory_added": ["old_book"],
             },
         ),
         ScriptStep("act", {"verb": "travel", "target1": "venice"}, {"room_changed": 28}),

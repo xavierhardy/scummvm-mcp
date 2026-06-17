@@ -180,29 +180,9 @@ def capture_pass(port: int = 23992) -> None:
         client = wait_for_mcp(MCP_HOST, port, timeout=30)
         assert _wait_room(client, 25), f"expected the gym (room 25), got {_room(client)}"
 
+        # Faster route: straight to the office via door 103 (never open the left
+        # door / go outside first -- the outside is reached via the window).
         go(213, 20)                  # gym -> corridor
-        go(100, 24, opens=True)      # left door -> outside
-        # Going outside plays a ~30s Donovan cutscene (room 29, input locked);
-        # wait until it has been seen and control returns to room 24.
-        saw = False
-        for _ in range(80):
-            s = client.state()
-            rid = (s.get("room") or {}).get("id")
-            if rid == 29:
-                saw = True
-            elif saw and rid == 24 and "travel" in (s.get("verbs") or []):
-                break
-            time.sleep(1.0)
-
-        assert travel_to("henry", 27), "could not travel to Henry's house"
-        # Ransack Henry's house: plant -> chest via cloth -> bookcase -> tape.
-        act("pick_up", "plant")
-        act("pull", "table_cloth")
-        act("pull", "bookcase")
-        act("pick_up", "sticky_tape")
-
-        go(231, 24)                  # Henry's door -> outside
-        go(203, 20, opens=True)      # outside -> corridor
         act("open", 103)
         go(103, 22)                  # corridor door 103 -> office
         # Calm the student mob (the "take down names" line opens Indy's office).
@@ -223,18 +203,41 @@ def capture_pass(port: int = 23992) -> None:
             time.sleep(0.6)
         assert _wait_room(client, 21, tries=8), f"expected Indy's office (21), got {_room(client)}"
 
-        # Mail chain -> grail diary; sticky tape on the solvent jar -> small key.
-        act("open", "window")
+        # Mail chain -> grail diary, then open the window (only once we have the
+        # diary) and climb out -- first time out plays the Donovan cutscene.
         for item in ("junk_mail", "letters", "papers", "package"):
             act("pick_up", item)
         act("open", "package")                     # grail_diary
-        act("use", "sticky_tape", "jar")           # small_key (added async)
-        go("window", 24)                           # escape outside
+        act("open", "window")
+        go("window", 24)                           # climb out to the outside
+        saw = False
+        for _ in range(80):
+            s = client.state()
+            rid = (s.get("room") or {}).get("id")
+            if rid == 29:
+                saw = True
+            elif rid == 24 and "travel" in (s.get("verbs") or []):
+                break
+            time.sleep(1.0)
 
+        # Henry's #1: painting + sticky tape (leave the plant AND the cloth --
+        # the cloth can't be pulled until the plant is moved, on the last trip).
+        assert travel_to("henry", 27), "could not travel to Henry's house"
+        act("pick_up", "painting")
+        act("pull", "bookcase")
+        act("pick_up", "sticky_tape")
+        # Back to the office through the window: sticky tape on the jar -> key.
+        go(231, 24)                                # Henry's -> outside
+        go("window", 21)                           # outside -> office through the window
+        act("use", "sticky_tape", "jar")           # small_key (added async)
+        go("window", 24)                           # back outside
+        # Henry's #2 (last trip), in order: move the plant, pull the cloth (only
+        # possible after the plant) to reveal the chest, then open it.
         assert travel_to("henry", 27), "could not travel back to Henry's house"
+        act("pick_up", "plant")                    # only after the key
+        act("pull", "table_cloth")                 # now reveals the chest
         act("use", "small_key", "chest")
-        act("pick_up", "old_book")
-        act("pick_up", "painting")                 # Grail-quest trigger -> unlocks Venice
+        act("pick_up", "old_book")                 # last Grail item -> unlocks Venice
         go(231, 24)                                # out to the travel hub
 
         assert _room(client) == 24, f"expected the travel hub (room 24), got {_room(client)}"

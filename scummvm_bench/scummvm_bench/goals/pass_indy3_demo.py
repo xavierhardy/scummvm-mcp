@@ -15,16 +15,25 @@ Room ids reconciled against a live capture of the SCUMM V3 demo:
   * Indy's office          = 21   (entered after the student mob disperses)
 The corridor's other doors (101/102) are locked classrooms ("class in session").
 
-Full solve (reconciled live): leave the gym, cross the corridor, go outside
-(sit through the Donovan cutscene), travel to Henry's house and ransack it
-(plant / pull cloth -> chest / pull bookcase -> sticky tape); back through the
-corridor's door 103 into the office, calm the student mob (work-something-out ->
-please-relax -> Irene-take-down-names) which opens Indy's office; there open the
-window, take the mail and open the package (grail diary), and use the sticky
-tape on the solvent jar to fish out the small key; travel back to Henry's, use
-the key on the chest for the old book and pick up the painting -- Indy then says
-he "has everything he needs" for the Grail quest, which adds "To the Plane to
-Venice" to the travel menu back outside; travel there to end the demo.
+Full solve (faster route, reconciled live): leave the gym, cross to the
+corridor, and go straight into the office via door 103 (the one next to the
+gym) -- WITHOUT opening the left door / going outside first. Calm the student
+mob (work-something-out -> please-relax -> Irene-take-down-names) to open Indy's
+office; take the mail and open the package for the grail diary, then -- right
+before leaving -- open the window and climb out to the outside (the first time
+out plays the Donovan cutscene). Travel to Henry's house and take the painting +
+pull the bookcase for the sticky tape (the plant and the cloth wait -- the cloth
+can't be pulled until the plant is moved). Return to Indy's office through the
+WINDOW (no corridor / mob this time) and use the sticky tape on the solvent jar
+for the small key; climb back out. Travel to Henry's again and, in order, move
+the plant, pull the cloth (now possible) to reveal the chest, and open it for
+the old book -- with the painting already in hand Indy then says he "has
+everything he needs" for the Grail quest, which adds "To the Plane to Venice" to
+the travel menu back outside; travel there to end the demo.
+
+Going to the office first and using the window as the outside<->office shortcut
+avoids the back-and-forth corridor trips of the naive route. The left door (100)
+is never opened, so that is intentionally not a goal here.
 
 The student dialog in this build runs work-something-out -> please-relax ->
 take-down-names; the "talk about this calmly" line is never offered, so it is
@@ -60,8 +69,9 @@ ROOM_INDY_OFFICE = 21
 ROOM_HENRY = 27
 ROOM_VENICE = 28    # confirmed live (reached after picking up the painting)
 
-DOOR_LEFT = 100     # corridor -> outside
 DOOR_GYM = 103      # corridor door "next to the gym" -> the office (room 22)
+# (Door 100, the corridor's left door, leads outside but the faster route never
+#  opens it -- the outside is reached via Indy's office window instead.)
 
 
 def _goal(
@@ -96,14 +106,8 @@ GOALS = {
             kind="call",
         ),
         _goal(
-            "open_door_left",
-            "Open the door on the left",
-            on_call("act", verb="open", target1=DOOR_LEFT),
-            kind="call",
-        ),
-        _goal(
             "reach_outside",
-            "Walk through the left door to the outside",
+            "Reach the outside (climbing out of Indy's office window)",
             on_room_changed(ROOM_OUTSIDE),
         ),
         _goal(
