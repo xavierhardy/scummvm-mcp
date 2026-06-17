@@ -71,14 +71,8 @@ def _walk_click(client: McpClient, x: int, y: int) -> None:
 # ---------------------------------------------------------------------------
 # Tests (ordered walkthrough)
 # ---------------------------------------------------------------------------
-
-
-def test_01_ft_intro_to_dumpster(ft_client: McpClient) -> None:
-    """Skip the opening intro/title until the alley (room 10).
-
-    Ben lies inside the closed dumpster, so the room is loaded but his actor
-    is not placed yet — only the room id is observable at this point.
-    """
+def test_ft_walkthrough(ft_client: McpClient) -> None:
+    # Skip the opening intro/title until the alley (room 10).
     for _ in range(20):
         if _room(ft_client) == ALLEY_ROOM:
             break
@@ -91,17 +85,6 @@ def test_01_ft_intro_to_dumpster(ft_client: McpClient) -> None:
         f"did not reach the dumpster alley (room {ALLEY_ROOM}), got {_room(ft_client)}"
     )
 
-
-def test_02_ft_open_dumpster_and_leave_alley(ft_client: McpClient) -> None:
-    """Open the dumpster, climb out, and leave the alley (room 10 -> 6).
-
-    Ben is not placed in the room until he is out of the dumpster, so the
-    lid-open / climb-out / alley-exit steps have no intermediate observable
-    state — they are asserted together via the room transition. Clicks on
-    the lid area (top of the screen) advance the wake-up sequence and the
-    alley mouth at the top right is the exit. The engine ignores repeated
-    clicks at an unchanged cursor position, so the click points alternate.
-    """
     sleep(2)  # let the wake-up script start before the first click
     for _ in range(10):
         for pt in ((160, 50), (240, 50), (300, 75)):
@@ -113,9 +96,7 @@ def test_02_ft_open_dumpster_and_leave_alley(ft_client: McpClient) -> None:
         f"never left the alley, still in room {_room(ft_client)}"
     )
 
-
-def test_03_ft_bar_front_verbs_and_pathways(ft_client: McpClient) -> None:
-    """Bar front sanity: coin verbs exposed, exits flagged, sign is mouth-only."""
+    # Bar front sanity: coin verbs exposed, exits flagged, sign is mouth-only.
     state = get_state_with_retry(ft_client)
 
     verbs = set(state.get("verbs", []))
@@ -145,31 +126,18 @@ def test_03_ft_bar_front_verbs_and_pathways(ft_client: McpClient) -> None:
         f"sign should be mouth-only among coin verbs, got {cv}"
     )
 
-
-def test_04_ft_punch_door(ft_client: McpClient) -> None:
-    """Punching the locked bar door: Ben pounds it shouting 'Open up!'."""
+    # Punching the locked bar door: Ben pounds it shouting 'Open up!'.
     result = _act_retry(ft_client, "fist", "door")
     texts = [m.get("text", "") for m in result.get("messages", [])]
     assert "Open up!" in texts, f"expected Ben to pound the door, got {texts}"
 
-
-def test_05_ft_kick_door_open(ft_client: McpClient) -> None:
     """Kicking the door bursts it open (object state 0 -> 1)."""
     result = _act_retry(ft_client, "kick", "door")
     assert {"name": "door", "old_state": 0, "new_state": 1} in result.get(
         "objects_changed", []
     ), f"door did not open on kick: {result}"
 
-
-def test_06_ft_punch_after_kick(ft_client: McpClient) -> None:
-    """Once kicked open, punching cannot affect the door any further.
-
-    Note: the demo's fist script itself still runs and replays Ben's
-    "Open up!" line even on the open door (verified in-game — the script
-    does not branch on the door state). What must hold is that the punch
-    has no effect: the door stays open (state 1) and no state change is
-    reported.
-    """
+    # Once kicked open, punching cannot affect the door any further.
     result = _act_retry(ft_client, "fist", "door")
     assert not result.get("objects_changed"), (
         f"punching the kicked-open door must not change it: {result}"
@@ -180,15 +148,7 @@ def test_06_ft_punch_after_kick(ft_client: McpClient) -> None:
         f"door must remain open after the punch, got {door}"
     )
 
-
-def test_07_ft_enter_bar(ft_client: McpClient) -> None:
-    """Walk through the kicked-open doorway into the bar (room 6 -> 7).
-
-    The click must land in the door-only part of its bbox (192-216 x 64-95):
-    below y=96 the bike's bbox overlaps and steals the hit, and the door's
-    nominal object position (189,101) — which walk_to targets — misses the
-    bbox entirely. Clicking (204, 80) hits only the doorway.
-    """
+    # Walk through the kicked-open doorway into the bar (room 6 -> 7).
     for _ in range(10):
         _walk_click(ft_client, 204, 80)
         sleep(1.5)
@@ -198,9 +158,7 @@ def test_07_ft_enter_bar(ft_client: McpClient) -> None:
         f"did not enter the bar, still in room {_room(ft_client)}"
     )
 
-
-def test_08_ft_look_at_bar_scenery(ft_client: McpClient) -> None:
-    """'mouth' on the antlers makes Ben comment, with clean text output."""
+    # 'mouth' on the antlers makes Ben comment, with clean text output.
     result = _act_retry(ft_client, "mouth", "antlers")
     texts = [m.get("text", "") for m in result.get("messages", [])]
     assert any("mounted on my handlebars" in t for t in texts), (
@@ -211,15 +169,7 @@ def test_08_ft_look_at_bar_scenery(ft_client: McpClient) -> None:
             f"garbage message with no ASCII alnum content: {t!r}"
         )
 
-
-def test_09_ft_punch_bartender_gets_keys(ft_client: McpClient) -> None:
-    """Punching the bartender makes him hand over the keys to Ben's bike.
-
-    The punch cuts to a close-up (room 77) and a long scripted interrogation
-    plays out; the bartender surrenders the keys ('Here are your keys, all
-    right?!') and the scene returns to the bar. The keys are handed over in
-    the cutscene (the demo never adds an inventory object for them).
-    """
+    # Punching the bartender makes him hand over the keys to Ben's bike.
     result = _act_retry(ft_client, "fist", "bartender")
     texts = [m.get("text", "") for m in result.get("messages", [])]
 
