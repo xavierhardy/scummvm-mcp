@@ -23,6 +23,32 @@ from assertions import assert_inventory_does_not_contain, assert_inventory_conta
 from utils import McpClient
 
 
+def _talk_to_troll(client: McpClient) -> dict:
+    """Walk to the troll and open his dialog; return the talk result.
+
+    Self-contained setup so the dialog tests run on their own fresh instance:
+    walking near the troll first (as a player would) reproduces the same talk
+    result regardless of Guybrush's start position.
+    """
+    client.walk(120, 132)
+    return client.act("rede mit", "troll")
+
+
+def _navigate_to_dock(client: McpClient) -> dict:
+    """From the troll clearing (room 55), open the doors and walk through the
+    SCUMM bar and kitchen onto the back dock where the red herring (306) sits.
+
+    Self-contained setup for the dock/red-herring tests. Returns the dock state.
+    """
+    client.act("öffne", "tür")
+    client.act("geh zu", "tür")  # -> SCUMM bar (room 52)
+    client.act("öffne", 354)  # far door behind the bar
+    client.act("geh zu", 354)  # -> kitchen (room 51)
+    client.act("öffne", 304)  # back door onto the dock
+    client.act("geh zu", 304)  # same room — scrolls to the dock
+    return client.state()
+
+
 def test_01_de_initial_state(monkey_de_client: McpClient) -> None:
     """Verify initial game state and that the German door surfaces as 'tür'."""
     state = monkey_de_client.state()
@@ -69,7 +95,7 @@ def test_03_de_talk_to_troll(monkey_de_client: McpClient) -> None:
     state = monkey_de_client.state()
     assert state["room"]["id"] == 55
 
-    result = monkey_de_client.act("rede mit", "troll")
+    result = _talk_to_troll(monkey_de_client)
     expected = {
         "question": {
             "choices": [
@@ -105,6 +131,9 @@ def test_04_de_answer_troll_dialog(monkey_de_client: McpClient) -> None:
     """Answer dialog choice 3 (Bitte, bitte?)."""
     state = monkey_de_client.state()
     assert state["room"]["id"] == 55
+
+    # Open the troll dialog first so this test stands alone.
+    _talk_to_troll(monkey_de_client)
 
     result = monkey_de_client.answer(3)
     assert result == {
@@ -167,15 +196,22 @@ def test_07_de_close_door(monkey_de_client: McpClient) -> None:
     state = monkey_de_client.state()
     assert state["room"]["id"] == 55
 
-    # The German EGA demo door exposes only "schließe" and "geh zu" as
-    # compatible verbs — confirm the listing and that the verb dispatches
-    # without an "unknown verb" error.
+    # Open the door first so this test is self-contained (the closed door does
+    # not advertise "schließe"; only an open one can be closed).
     door = next(o for o in state["objects"] if o["id"] == 422)
+    if door["state"] == 0:
+        monkey_de_client.act("öffne", "tür")
+        state = monkey_de_client.state()
+        door = next(o for o in state["objects"] if o["id"] == 422)
+
+    # The German EGA demo door exposes "schließe" and "geh zu" as compatible
+    # verbs — confirm the listing and that the verb dispatches without an
+    # "unknown verb" error.
     assert door["name"] == "tür"
     assert "schließe" in door["compatible_verbs"]
 
-    # Door was opened by test_06; closing it now is a real state change
-    # (1 -> 0) and proves the eszett-bearing "Schließe" label resolves.
+    # Closing the open door is a real state change (1 -> 0) and proves the
+    # eszett-bearing "Schließe" label resolves.
     result = monkey_de_client.act("schließe", "tür")
     assert result["objects_changed"] == [
         {"name": "tür", "old_state": 1, "new_state": 0}
@@ -193,7 +229,7 @@ def test_08_de_navigate_to_scumm_bar_dock(monkey_de_client: McpClient) -> None:
     state = monkey_de_client.state()
     assert state["room"]["id"] == 55
 
-    monkey_de_client.act("öffne", "tür")  # test_07 closed it again
+    monkey_de_client.act("öffne", "tür")  # door starts closed in a fresh demo
     result = monkey_de_client.act("geh zu", "tür")
     assert result.get("room_changed") == 52, f"expected the SCUMM bar, got {result}"
 
@@ -217,8 +253,12 @@ def test_09_de_seagull_blocks_red_herring(monkey_de_client: McpClient) -> None:
     Targets the herring by its padding-free name — the matcher must resolve
     "roter_hering" against the game's '@'-padded label.
     """
+    _navigate_to_dock(monkey_de_client)
+
     result = monkey_de_client.act("nimm", "roter_hering")
-    assert "roter_hering" not in monkey_de_client.state()["inventory"]
+    assert "roter_hering" not in monkey_de_client.state()["inventory"], (
+        "grabbing the herring while the seagull guards it must fail"
+    )
     assert result.get("messages"), (
         f"expected Guybrush to comment on the seagull, got {result}"
     )
@@ -236,6 +276,7 @@ def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> No
     the final grab must follow immediately, with no pause at all.
     """
     client = monkey_de_client
+    _navigate_to_dock(client)
     for _ in range(3):
         client.act("geh zu", 307)
         sleep(1.5)  # let the plank-bounce script finish before the next step

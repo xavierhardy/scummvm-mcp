@@ -11,9 +11,16 @@ walk to path -> answer (-> room 63) -> walk to mountain cleft -> pick up the
 tire repair kit -> close crate -> open crate.
 """
 
+import pytest
+
 from assertions import assert_messages_produced, assert_inventory_contains
 from utils import McpClient
 from time import sleep
+
+# Fate of Atlantis cannot save/load: the demo is intro-driven and played as one
+# ordered walkthrough. Pin it to a single xdist worker (one merged test today,
+# but the mark keeps it grouped if it is ever split into steps).
+pytestmark = pytest.mark.xdist_group("atlantis")
 
 INTRO_POLL_SECS = 0.5
 

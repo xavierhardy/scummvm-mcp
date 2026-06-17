@@ -5,7 +5,7 @@ Save slot 4 (pass.s04) drops Indy in the Pan Am clipper (room 24), where the
 'Travel' verb on the verb bar opens the destination dialog ('To Henry's House'
 / 'Cancel'). Runs against its own fixture/instance so it can execute in
 parallel with the boxing-gym tests in test_indy3.py (pytest-xdist
---dist=loadfile).
+--dist=loadgroup).
 """
 
 from __future__ import annotations
@@ -14,6 +14,42 @@ import pytest
 from time import sleep
 
 from utils import McpClient, _wait_until, _state_or_skip
+
+
+def _ensure_henrys_house(client: McpClient) -> dict:
+    """Make sure Indy is in Henry's house, running the travel flow from the
+    clipper if needed, and return the current state.
+
+    Self-contained so the hidden-object test can run on its own fresh instance.
+    Skips if Henry's house can't be reached.
+    """
+    state = _state_or_skip(client)
+    room = state.get("room", {}).get("id")
+    if room == 24:  # in the clipper — drive the travel flow to Henry's house
+        if client.state().get("question") is None:
+            client.act("travel")
+            _wait_until(
+                lambda: client.state().get("question") is not None, timeout=10.0
+            )
+        question = client.state().get("question")
+        if question is None:
+            pytest.skip("destination dialog did not appear")
+        henry_id = next(
+            (c["id"] for c in question["choices"] if "henry" in c["label"].lower()),
+            None,
+        )
+        if henry_id is None:
+            pytest.skip("no 'Henry' destination offered")
+        client.answer(henry_id)
+        _wait_until(
+            lambda: client.state().get("room", {}).get("id") not in (None, 24),
+            timeout=15.0,
+        )
+        state = _state_or_skip(client)
+        room = state.get("room", {}).get("id")
+    if room is None or room == 24:
+        pytest.skip("could not reach Henry's house")
+    return state
 
 
 # ---------------------------------------------------------------------------
@@ -103,11 +139,9 @@ def test_13_indy3_hidden_objects_not_selectable(
     In Henry's house the sticky tape hides behind the bookcase, the chest
     under the table cloth, and the old book inside the (locked) chest. The
     engine's findObject() gates clicks on the parent object's state; the MCP
-    bridge must mirror that. Runs after test_12 left us in Henry's house.
+    bridge must mirror that. Self-contained: travels to Henry's house first.
     """
-    state = _state_or_skip(indy3_travel_client)
-    if state.get("room", {}).get("id") == 24:
-        pytest.skip("still in the clipper — travel to Henry's house didn't happen")
+    state = _ensure_henrys_house(indy3_travel_client)
 
     names = {o["name"] for o in state.get("objects", [])}
     hidden = {"old_book", "sticky_tape", "chest"}

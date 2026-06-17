@@ -4,7 +4,7 @@ Integration tests for the Maniac Mansion C64 demo phone (save slot 2).
 Save slot 2 starts next to the phone (room 5); using it opens the dial pad
 (room 43) where the `dial` tool presses the keypad buttons. Runs against its
 own fixture/instance so it can execute in parallel with the walkthrough tests
-in test_maniac_c64.py (pytest-xdist --dist=loadfile).
+in test_maniac_c64.py (pytest-xdist --dist=loadgroup).
 """
 
 from time import sleep

@@ -3,7 +3,7 @@ Integration tests for The Dig (DOS demo, SCUMM V7), wreck save slot 5.
 
 Save slot 5 (dig-demo.s05) loads wreck room 19 with the takeable wire and
 Brink present. Runs against its own fixture/instance so it can execute in
-parallel with the canyon tests in test_dig.py (pytest-xdist --dist=loadfile).
+parallel with the canyon tests in test_dig.py (pytest-xdist --dist=loadgroup).
 """
 
 from utils import McpClient

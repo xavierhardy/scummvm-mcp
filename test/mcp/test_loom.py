@@ -20,6 +20,25 @@ from utils import (
 )
 
 
+def _listen_to_egg(client: McpClient):
+    """Walk Bobbin away then click the egg so he hears its Opening draft.
+
+    Returns (notes, messages) from the listen, or (None, None) if the egg isn't
+    in the room. Self-contained setup: hearing the draft is the prerequisite for
+    replaying it to hatch the egg, so tests that replay call this first.
+    """
+    state = get_state_with_retry(client)
+    egg_id = _find_id(state, "egg")
+    if egg_id is None:
+        return None, None
+    client.walk(40, 130)
+    sleep(2)
+    notes, messages, _ = client.call_capturing(
+        "act", {"verb": "interact", "target1": egg_id}
+    )
+    return notes, messages
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -69,16 +88,9 @@ def test_04_loom_egg_listen(loom_client: McpClient) -> None:
         pytest.skip("Save did not reach interactive state")
 
     state = get_state_with_retry(loom_client)
-    egg_id = _find_id(state, "egg")
-    assert egg_id is not None, f"egg not in room: {state.get('objects')}"
+    assert _find_id(state, "egg") is not None, f"egg not in room: {state.get('objects')}"
 
-    # Move Bobbin away so the click triggers the walk-over + listen flow.
-    loom_client.walk(40, 130)
-    sleep(2)
-
-    notes, messages, _ = loom_client.call_capturing(
-        "act", {"verb": "interact", "target1": egg_id}
-    )
+    notes, messages = _listen_to_egg(loom_client)
     assert notes == ["e", "c", "e", "d"], f"expected the Opening draft, got {notes}"
     texts = [m.get("text") for m in messages]
     assert "It's trying to open!" in texts, f"expected Bobbin's listen line, got {texts}"
@@ -93,6 +105,15 @@ def test_05_loom_egg_replay_hatches(loom_client: McpClient) -> None:
     slow because the game is, not the bridge). Afterwards the egg object is
     consumed and gone from the room.
     """
+    if not wait_for_interactive(loom_client):
+        pytest.skip("Save did not reach interactive state")
+
+    # Hearing the egg's draft is the prerequisite for replaying it (self-contained
+    # so this runs on its own fresh instance, not after test_04).
+    listened, _ = _listen_to_egg(loom_client)
+    if listened != ["e", "c", "e", "d"]:
+        pytest.skip(f"could not hear the Opening draft to replay (got {listened})")
+
     notes = ["e", "c", "e", "d"]
     replay_notes, messages, result = loom_client.call_capturing(
         "play_note", {"notes": notes}

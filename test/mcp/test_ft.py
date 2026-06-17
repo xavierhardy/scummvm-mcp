@@ -20,6 +20,11 @@ from time import sleep
 
 from utils import McpClient, get_state_with_retry
 
+# Full Throttle cannot save/load: the demo is one strictly-ordered storyline run
+# on a single instance. Pin every test in this file to one xdist worker so they
+# run in sequence (the session-scoped ft_client is shared across them).
+pytestmark = pytest.mark.xdist_group("ft")
+
 
 FT_VERBS = {"fist", "kick", "mouth", "walk to", "interact", "use item"}
 

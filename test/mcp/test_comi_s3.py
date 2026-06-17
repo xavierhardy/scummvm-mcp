@@ -3,7 +3,7 @@
 Save slot 3 starts with the ramrod and plastic hook in inventory, ready for
 the inventory-combine and gaff-fishing flow. Runs against its own
 fixture/instance so it can execute in parallel with test_comi.py
-(pytest-xdist --dist=loadfile).
+(pytest-xdist --dist=loadgroup).
 
 Each test sets up the state it needs (the gaff combine is idempotent: it is
 only performed if the gaff is not already in inventory), so the tests do not

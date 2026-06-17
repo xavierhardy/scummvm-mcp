@@ -18,6 +18,28 @@ from utils import McpClient, _wait_until, _state_or_skip, _find_object
 INTERACTIVE_TIMEOUT_SECS = 30
 
 
+def _start_fight(client: McpClient) -> dict:
+    """Reach the boxing fight from the gym save and return the fight HUD state.
+
+    Self-contained so each fight test runs on its own fresh instance: walk to
+    the locker room, accept the coach's challenge (choice 1), and wait for the
+    fight HUD to appear. Skips if the fight can't be reached.
+    """
+    if client.state().get("fight") is None:
+        if client.state().get("question") is None:
+            client.act("walk to", "locker_room")
+            _wait_until(
+                lambda: client.state().get("question") is not None, timeout=10.0
+            )
+        if client.state().get("question") is not None:
+            client.answer(1)
+        _wait_until(lambda: client.state().get("fight") is not None, timeout=10.0)
+    fight = client.state().get("fight")
+    if fight is None:
+        pytest.skip("could not start the boxing fight from the gym save")
+    return fight
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -67,45 +89,24 @@ def test_03_indy3_walk_to_locker_triggers_dialog(indy3_client: McpClient) -> Non
 
 def test_04_indy3_answer_starts_fight(indy3_client: McpClient) -> None:
     """Choosing choice 1 ('go easy') starts the fight; state.fight populates."""
-    state = _state_or_skip(indy3_client)
-
-    # If we ended up past the dialog already (e.g. ran out of order), reset by
-    # walking back and re-triggering the dialog.
-    if state.get("question") is None and state.get("fight") is None:
-        indy3_client.act("walk to", "locker_room")
-        _wait_until(
-            lambda: indy3_client.state().get("question") is not None, timeout=10.0
-        )
-
-    state = _state_or_skip(indy3_client)
-    if state.get("question") is None:
-        pytest.skip("no dialog pending")
-
-    indy3_client.answer(1)
-
-    if not _wait_until(
-        lambda: indy3_client.state().get("fight") is not None, timeout=10.0
-    ):
-        pytest.skip("fight HUD did not appear after answer(1)")
-
-    state = _state_or_skip(indy3_client)
-    fight = state.get("fight")
-    assert fight is not None, "expected fight in state after starting fight"
-    assert "indy" in fight and "opponent" in fight
+    fight = _start_fight(indy3_client)
+    assert "indy" in fight and "opponent" in fight, f"fight HUD missing sides: {fight}"
     for who in ("indy", "opponent"):
         side = fight[who]
-        assert "health" in side and "punch_power" in side
-        assert isinstance(side["health"], int) and side["health"] > 0
-        assert isinstance(side["punch_power"], int) and side["punch_power"] >= 0
+        assert "health" in side and "punch_power" in side, (
+            f"{who} side missing health/punch_power: {side}"
+        )
+        assert isinstance(side["health"], int) and side["health"] > 0, (
+            f"{who} should start with positive health, got: {side}"
+        )
+        assert isinstance(side["punch_power"], int) and side["punch_power"] >= 0, (
+            f"{who} punch_power should be a non-negative int, got: {side}"
+        )
 
 
 def test_05_indy3_punch_high_lands(indy3_client: McpClient) -> None:
     """A high punch (numpad 9) reduces the opponent's health."""
-    state = _state_or_skip(indy3_client)
-    if state.get("fight") is None:
-        pytest.skip("not in a fight")
-
-    before = state["fight"]
+    before = _start_fight(indy3_client)
     indy3_client.call_capturing("keystroke", {"key": "9"})
     sleep(2.0)
     state = _state_or_skip(indy3_client)
@@ -131,9 +132,7 @@ def test_05_indy3_punch_high_lands(indy3_client: McpClient) -> None:
 
 def test_06_indy3_block_then_step_back(indy3_client: McpClient) -> None:
     """Mid block (5) followed by step-back (4) keeps the fight running."""
-    state = _state_or_skip(indy3_client)
-    if state.get("fight") is None:
-        pytest.skip("not in a fight")
+    _start_fight(indy3_client)
 
     indy3_client.call_capturing("keystroke", {"key": "5"})
     sleep(1.5)

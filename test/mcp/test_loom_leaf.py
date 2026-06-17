@@ -2,7 +2,7 @@
 Integration tests for the Loom segment of Passport to Adventure (SCUMM V3),
 save slot 2 (pass.s02): the leaf-on-a-tree scene (room 36) with a left-side
 pathway. Runs against its own fixture/instance so it can execute in parallel
-with the distaff tests in test_loom.py (pytest-xdist --dist=loadfile).
+with the distaff tests in test_loom.py (pytest-xdist --dist=loadgroup).
 """
 
 import pytest
