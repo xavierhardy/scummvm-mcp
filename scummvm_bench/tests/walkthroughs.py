@@ -566,8 +566,15 @@ class SamnmaxRealHarness:
                 ):
                     break
                 await asyncio.sleep(1.2)
-            await call("act", {"verb": "use", "target1": "beat_up_desoto"})  # drive off
-            await wait_room(10)
+            # Board the DeSoto, which drives off (room 10). The use-Max cutscene
+            # just played, so retry the boarding until the room actually flips.
+            for _ in range(8):
+                if stop.is_set():
+                    return
+                await call("act", {"verb": "use", "target1": "beat_up_desoto"})
+                if await wait_room(10, tries=8):
+                    break
+                await asyncio.sleep(1.0)
 
 
 SAMNMAX = Walkthrough(
