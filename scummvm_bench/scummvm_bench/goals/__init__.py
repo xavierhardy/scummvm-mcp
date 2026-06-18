@@ -23,7 +23,7 @@ GOAL_SETS: dict[tuple[str, int | None], GoalSet] = {
     ("comi-demo", 1): COMI_DEMO_GOALSET,
     ("samnmax", 1): SAMNMAX_DEMO_GOALSET,
     ("dig-demo", 1): THE_DIG_DEMO_GOALSET,
-    ("pass", 2): PASS_LOOM_DEMO_GOALSET,
+    ("pass", 6): PASS_LOOM_DEMO_GOALSET,
     ("pass", 3): PASS_INDY3_DEMO_GOALSET,
     # Intro-skip demos with no save state (start from scratch); slot-agnostic.
     ("ft-demo", None): FT_DEMO_GOALSET,
