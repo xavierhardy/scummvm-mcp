@@ -51,9 +51,11 @@ ROOM_VILLAGE = 39
 ROOM_TENTS = 41       # the tents hub
 ROOM_TENT_LEFT = 44   # the Elders' tent
 ROOM_COUNCIL = 45     # the High Council / egg / loom
-ROOM_FOREST = 40      # the owl-holes (spec)
+ROOM_FOREST = 40      # the owl-holes
 ROOM_OTHER_TENT = 38  # holds the "darkness"
-ROOM_DARKNESS = 42    # opened by casting c-c-c-c on the darkness (spec)
+ROOM_DARKNESS = 42    # opened by casting the owls' draft on the darkness
+ROOM_BEACH = 46       # the beach / dock; the tree (pathway 625) appears here
+                      # once the sky is open and leads back to 36 (leaving)
 
 PATH_TO_VILLAGE = 460     # 36 -> 39
 PATH_TO_TENTS = 510       # 39 -> 41
@@ -176,49 +178,42 @@ GOALS = {
             kind="call",
         ),
         _goal(
-            "play_cccc_darkness",
-            "Play the Hole draft (c-c-c-c) on the darkness (opens room 42)",
+            "play_darkness_draft",
+            "Cast the owls' draft on the darkness (opens room 42)",
             on_room_changed(ROOM_DARKNESS),
         ),
         _goal(
             "interact_book",
-            "Interact with the book",
-            # RECONCILE: confirm the observable (message / object change).
-            all_of(in_room(ROOM_DARKNESS), on_call("act", verb="interact")),
-            kind="call",
+            'Read the book ("This is the Book of Patterns...")',
+            on_message_contains("Book of Patterns"),
         ),
         _goal(
             "interact_dye_pot",
-            "Interact with the dye pot",
-            # RECONCILE: confirm the observable.
-            all_of(in_room(ROOM_DARKNESS), on_call("act", verb="interact")),
-            kind="call",
+            'Examine the dye pot (learns the dye draft)',
+            on_message_contains("dye draft"),
         ),
         _goal(
             "dye_green",
-            "Dye something green",
-            # RECONCILE: confirm the message produced when dyeing green.
-            on_message_contains("green"),
+            'Dye the heap green ("I changed the color!")',
+            on_message_contains("changed the color"),
         ),
         _goal(
             "open_sky",
-            "Play the Opening draft (e-c-e-d) on the sky in the first room",
-            # RECONCILE: confirm the message produced when the sky opens.
-            all_of(in_room(ROOM_FIRST), on_message_contains("sky")),
+            "Cast the Opening draft on the sky (to the right of the first room)",
+            all_of(in_room(ROOM_FIRST), on_message_contains("real game")),
         ),
         _goal(
             "reach_dock",
-            "Go to the dock",
-            # RECONCILE: confirm the dock's room id (use a state check there).
-            on_call("state"),
-            kind="call",
+            "Go to the dock (the beach), where the tree now stands",
+            on_room_changed(ROOM_BEACH),
         ),
         _goal(
             "leave_island",
             "Use the tree to leave the island (end of demo)",
             on_room_changed(ROOM_FIRST),
             stopping=True,
-            times=2,  # first re-entry to 36 is for the sky; the 2nd is leaving
+            times=2,  # first re-entry to 36 is for the sky; the 2nd (from the
+            # beach, via the tree) is leaving the island
         ),
     )
 }

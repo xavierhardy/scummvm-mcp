@@ -82,6 +82,7 @@ class McpClient:
     def _decode_stream(self, resp: httpx.Response, tool: str) -> dict[str, object]:
         if resp.status_code >= 400:
             raise McpError(f"{tool}: HTTP {resp.status_code}")
+        notes: list[str] = []
         for line in resp.iter_lines():
             raw = line[6:].strip() if line.startswith("data: ") else line.strip()
             if not raw or raw == ": keepalive":
@@ -92,8 +93,18 @@ class McpClient:
                 raise McpDecodeError(f"{tool}: bad SSE JSON: {raw!r}") from exc
             if not isinstance(msg, dict):
                 continue
+            # Loom plays distaff notes as streamed notifications (type "note");
+            # collect them so callers can learn a draft and replay it.
+            params = msg.get("params")
+            if isinstance(params, dict) and params.get("type") == "note":
+                text = params.get("text")
+                if isinstance(text, str) and text:
+                    notes.append(text)
             if "result" in msg:
-                return self._extract_result(msg)
+                result = self._extract_result(msg)
+                if notes and isinstance(result, dict) and "notes" not in result:
+                    result = {**result, "notes": notes}
+                return result
             if "error" in msg:
                 raise self._error_from(msg["error"], tool)
         raise McpDecodeError(f"{tool}: stream ended without result")
