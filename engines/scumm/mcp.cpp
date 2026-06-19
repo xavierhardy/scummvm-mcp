@@ -819,6 +819,7 @@ void ScummMcpBridge::registerTools() {
 		props.setVal("objects_changed", mcpProp("array",  "Objects whose state changed: [{name, old_state, new_state}]"));
 		props.setVal("messages",        mcpProp("array",  "Dialog/narration lines spoken during the action: [{text, actor?}]"));
 		props.setVal("question",        mcpProp("object", "Pending dialog question if action ended with one: {choices:[{id,label}]}"));
+		props.setVal("boats_remaining", mcpProp("integer", "CMI cannon minigame only: war-canoes still afloat after the shot (drops by one per boat sunk; 0 means the minigame is won)."));
 		return mcpObjectSchema(props);
 	};
 
@@ -925,19 +926,24 @@ void ScummMcpBridge::registerTools() {
 	if (_vm->_game.id == GID_CMI) {
 		Common::JSONObject props;
 		props.setVal("x", mcpProp("integer",
-		    "Screen X coordinate to aim the cannon at (0–639)."));
+		    "Screen X coordinate to aim the cannon at (0–639). Pass a boat's x "
+		    "from state.objects (entries named boat_1, boat_2, … carry the exact "
+		    "aim point)."));
 		props.setVal("y", mcpProp("integer",
-		    "Screen Y coordinate to aim the cannon at (0–479)."));
+		    "Screen Y coordinate to aim the cannon at (0–479). Pass a boat's y "
+		    "from state.objects."));
 		const char *req[] = {"x", "y"};
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "shoot_cannon";
 		spec.description =
 		    "Aim the cannon at screen position (x, y) and fire a cannonball. "
-		    "Only available in the Curse of Monkey Island cannon minigame. "
-		    "Moves the mouse cursor to the target coordinates and simulates a "
-		    "left click to fire. Blocks until the shot resolves — cannonball "
-		    "flight, explosion, and any resulting speech (e.g. Guybrush "
-		    "apologising if the fort is hit) — then returns state changes.";
+		    "Only available in the Curse of Monkey Island cannon minigame. The "
+		    "skeleton war-canoes to sink are listed in state as boat_N objects "
+		    "with their (x, y); aim at one of those points. Moves the mouse "
+		    "cursor to (x, y) and left-clicks to fire. Blocks until the shot "
+		    "resolves — cannonball flight, explosion, and any resulting speech "
+		    "(e.g. the skeleton crew jeering on a miss) — then returns state "
+		    "changes; a sunk boat disappears from state.objects.";
 		spec.inputSchema  = mcpObjectSchema(props, req, 2);
 		spec.outputSchema = makeChangesSchema();
 		spec.streaming    = true;
@@ -1542,6 +1548,33 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 		}
 	}
+	// CMI cannon minigame (the demo's room 4): the skeleton war-canoes you have
+	// to sink are drawn as clusters of unnamed actor sprites (a hull plus crew),
+	// not as background objects, so the loop above never lists them and the MCP
+	// client has nothing to aim at. Surface each boat as a synthetic room object
+	// carrying the cluster centre (x, y) — exactly the point to pass to
+	// shoot_cannon. Boats are the in-room actors in the sea band wearing the
+	// war-canoe costumes (18-24, determined live); the muzzle-splash sprites
+	// (costume 15) and the fort defenders (higher up, costume 29) are excluded.
+	if (_vm->_game.id == GID_CMI && _vm->_currentRoom == 4) {
+		Common::Array<Common::Point> boatCenters;
+		Common::Array<int> boatObjs;
+		collectCmiCannonBoats(boatCenters, boatObjs);
+		for (uint c = 0; c < boatCenters.size(); ++c) {
+			Common::JSONObject boat;
+			boat.setVal("id",               mcpJsonInt(boatObjs[c]));
+			boat.setVal("name",             mcpJsonString(Common::String::format("boat_%u", c + 1)));
+			boat.setVal("state",            mcpJsonInt(0));
+			boat.setVal("x",                mcpJsonInt(boatCenters[c].x));
+			boat.setVal("y",                mcpJsonInt(boatCenters[c].y));
+			boat.setVal("pathway",          mcpJsonBool(false));
+			Common::JSONArray bv;
+			bv.push_back(mcpJsonString("shoot cannon"));
+			boat.setVal("compatible_verbs", new Common::JSONValue(bv));
+			objects.push_back(new Common::JSONValue(boat));
+		}
+	}
+
 	out.setVal("inventory", new Common::JSONValue(inventory));
 	out.setVal("objects",   new Common::JSONValue(objects));
 
@@ -2878,6 +2911,25 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	if (wantScreenshot && g_system)
 		g_system->saveScreenshot();
 
+	// Debug-only: warp the virtual mouse to (mouse_x, mouse_y) without clicking.
+	// Lets a caller probe how the engine maps cursor motion to on-screen aim
+	// (e.g. the CMI cannon's velocity-style crosshair) by moving and re-reading.
+	if (args.isObject() && args.asObject().contains("mouse_x") &&
+	    args.asObject()["mouse_x"]->isIntegerNumber() &&
+	    args.asObject().contains("mouse_y") &&
+	    args.asObject()["mouse_y"]->isIntegerNumber()) {
+		int mx = (int)args.asObject()["mouse_x"]->asIntegerNumber();
+		int my = (int)args.asObject()["mouse_y"]->asIntegerNumber();
+		_vm->_mouse.x        = mx;
+		_vm->_mouse.y        = my;
+		_vm->_virtualMouse.x = mx;
+		_vm->_virtualMouse.y = my;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = mx;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = my;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mx;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = my;
+	}
+
 	Common::JSONObject out;
 	out.setVal("screenshot_saved", mcpJsonBool(wantScreenshot));
 	out.setVal("game_id",       mcpJsonInt((int)_vm->_game.id));
@@ -3014,6 +3066,53 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	}
 	out.setVal("room_objects", new Common::JSONValue(roomObjs));
 
+	// Debug-only: dump every valid actor with its live position. Used to find
+	// moving sprites that aren't background objects (e.g. the CMI cannon-minigame
+	// skeleton boats). Read-only — touches no game state.
+	Common::JSONArray actorsArr;
+	for (int i = 1; _vm->_actors && i < _vm->_numActors; ++i) {
+		Actor *a = _vm->_actors[i];
+		if (!a) continue;
+		Common::JSONObject ja;
+		ja.setVal("number",  mcpJsonInt(a->_number));
+		ja.setVal("x",       mcpJsonInt(a->getRealPos().x));
+		ja.setVal("y",       mcpJsonInt(a->getRealPos().y));
+		ja.setVal("top",     mcpJsonInt(a->_top));
+		ja.setVal("bottom",  mcpJsonInt(a->_bottom));
+		ja.setVal("width",   mcpJsonInt((int)a->_width));
+		ja.setVal("room",    mcpJsonInt(a->_room));
+		ja.setVal("costume", mcpJsonInt((int)a->_costume));
+		ja.setVal("visible", mcpJsonBool(a->_visible));
+		ja.setVal("moving",  mcpJsonInt(a->_moving));
+		ja.setVal("in_room", mcpJsonBool(a->isInCurrentRoom()));
+		Common::String an = getObjName(this, _vm->actorToObj(a->_number));
+		ja.setVal("name", mcpJsonString(an.empty() ? Common::String::format("actor-%d", a->_number)
+		                                           : normalizeActionName(safeUtf8(an))));
+		actorsArr.push_back(new Common::JSONValue(ja));
+	}
+	out.setVal("actors", new Common::JSONValue(actorsArr));
+
+	// Debug-only: dump the current room's walk-boxes (number, 4 corners, flags).
+	// The CMI cannon minigame scores a hit by testing whether the cannonball
+	// (an actor) lands inside a per-boat box, so the box geometry is what aiming
+	// must target. Read-only.
+	{
+		Common::JSONArray boxesArr;
+		int nb = _vm->getNumBoxes();
+		for (int b = 0; b < nb; ++b) {
+			BoxCoords bc = _vm->getBoxCoordinates(b);
+			Common::JSONObject jb;
+			jb.setVal("box",   mcpJsonInt(b));
+			jb.setVal("ul_x",  mcpJsonInt(bc.ul.x)); jb.setVal("ul_y", mcpJsonInt(bc.ul.y));
+			jb.setVal("ur_x",  mcpJsonInt(bc.ur.x)); jb.setVal("ur_y", mcpJsonInt(bc.ur.y));
+			jb.setVal("lr_x",  mcpJsonInt(bc.lr.x)); jb.setVal("lr_y", mcpJsonInt(bc.lr.y));
+			jb.setVal("ll_x",  mcpJsonInt(bc.ll.x)); jb.setVal("ll_y", mcpJsonInt(bc.ll.y));
+			jb.setVal("flags", mcpJsonInt((int)_vm->getBoxFlags(b)));
+			boxesArr.push_back(new Common::JSONValue(jb));
+		}
+		out.setVal("boxes", new Common::JSONValue(boxesArr));
+	}
+
 	// V6+ blast-object queue (icon dialog choices in Sam & Max draw here, as in
 	// The Dig). Dump for any V6+ game so dialog-icon debugging works for S&M too.
 	if (_vm->_game.version >= 6) {
@@ -3101,6 +3200,19 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 			out.setVal("verb_script", mcpJsonInt((int)_vm->VAR(_vm->VAR_VERB_SCRIPT)));
 	}
 
+	// Debug-only: CMI cannon-minigame aim state. The fire script (room-4 local
+	// 2008) reads var234 (barrel target column, slewed by the mouse's X offset
+	// from centre), var235 (elevation index 0..15, slewed by mouse Y / 30) and
+	// var237 (which cannonball costume), and launches the ball straight up from
+	// the barrel's current X. Surfacing them makes the aim observable.
+	if (_vm->_game.id == GID_CMI && _vm->_currentRoom == 4) {
+		out.setVal("cannon_barrel_target_x", mcpJsonInt((int)_vm->VAR(234)));
+		out.setVal("cannon_elevation",       mcpJsonInt((int)_vm->VAR(235)));
+		out.setVal("cannon_ball_costume",    mcpJsonInt((int)_vm->VAR(237)));
+		if (_vm->_actors && _vm->_numActors > 3 && _vm->_actors[3])
+			out.setVal("cannon_barrel_x", mcpJsonInt(_vm->_actors[3]->getRealPos().x));
+	}
+
 	return new Common::JSONValue(out);
 }
 
@@ -3115,6 +3227,13 @@ bool ScummMcpBridge::toolShootCannon(const Common::JSONValue &args, Common::Stri
 	}
 	if (_vm->_game.id != GID_CMI) {
 		errorOut = "shoot_cannon: only available in Curse of Monkey Island";
+		return false;
+	}
+	// The aim drives the room-4 cannon's own control globals (VAR 234/235); those
+	// indices mean other things elsewhere, so only fire inside the minigame room.
+	if (_vm->_currentRoom != 4) {
+		errorOut = "shoot_cannon: only available in the cannon minigame (use the "
+		           "cannon from the cannon room to enter it)";
 		return false;
 	}
 	if (_vm->_userPut <= 0) {
@@ -3139,18 +3258,6 @@ bool ScummMcpBridge::toolShootCannon(const Common::JSONValue &args, Common::Stri
 	x = CLIP<int>(x, 0, maxX);
 	y = CLIP<int>(y, 0, maxY);
 
-	// Move the virtual mouse cursor to the target and fire.
-	_vm->_mouse.x        = x;
-	_vm->_mouse.y        = y;
-	_vm->_virtualMouse.x = x;
-	_vm->_virtualMouse.y = y;
-	if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = x;
-	if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = y;
-	if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = x;
-	if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = y;
-	_vm->_lastInputScriptTime = _vm->_system->getMillis();
-	_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
-
 	snapshotPreAction();
 	_streaming = true;
 	_sseAnswerStream = false;
@@ -3162,13 +3269,27 @@ bool ScummMcpBridge::toolShootCannon(const Common::JSONValue &args, Common::Stri
 	_sseMessages.clear();
 	_ssePendingSecondClick = false;
 	_ssePendingNotes.clear();
-	_sseButtonClearFrame = _frameCounter + 2;
+	_sseButtonClearFrame = 0; // set when the deferred fire actually clicks
 	_ssePendingV7Choice = 0;
 	_ssePendingV7UseClick = false;
 	_sseVerbScript = 0;
 	_sseInitialVerbScript = 0;
 	_sseVerbScriptChanged = false;
 	_sseTargetObject = 0;
+	// Map the target screen point (x, y) — a boat_N centre from state — onto the
+	// cannon's two control parameters, derived from the room-4 fire script:
+	// the ball launches straight up from the barrel column and lands at
+	//     (barrelColumn, 320 - elevation*18),   elevation in 0..12.
+	// So the barrel column equals the target X (clamped to the barrel's travel
+	// range 140..520), and the elevation is the index whose landing row is
+	// closest to the target Y. pumpStream drives the cannon to these and fires.
+	int barrelTarget = CLIP<int>(x, 140, 520);
+	int elevIndex = (320 - y + 9) / 18;          // round((320 - y) / 18)
+	elevIndex = CLIP<int>(elevIndex, 0, 12);
+	_sseCannonAimX = barrelTarget;
+	_sseCannonAimY = elevIndex;
+	_sseCannonAiming = true;
+	_sseCannonGiveUpFrame = _frameCounter + 240; // safety cap on the barrel swing
 	_server->startStreaming();
 	return true;
 }
@@ -3598,6 +3719,51 @@ void ScummMcpBridge::pumpStream() {
 		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
 		_ssePendingSecondClick = false;
 	}
+
+	// CMI cannon minigame aim. The room-4 control script (local 2008/2007) aims
+	// the cannon through two of its own globals: VAR(234) is the barrel's target
+	// column (the barrel actor walks toward it) and VAR(235) is the elevation
+	// index 0..12. The fire script samples getObjectX(3) for the launch column
+	// and shoots the ball straight up, so it lands at
+	//     (barrelColumn, 320 - elevation*18).
+	// Script 2007 normally slews those two globals from the mouse: it nudges
+	// VAR(234) by +/-10 while the cursor X sits outside a +/-10 px deadzone of
+	// screen centre (320), and slews VAR(235) toward VAR_VIRT_MOUSE_Y / 30.
+	// Rather than fight that velocity-style control, we park the cursor in the
+	// centre/elevation deadzone (so 2007 leaves the globals alone) and write the
+	// exact target column and elevation ourselves. _sseCannonAimX is the desired
+	// barrel column and _sseCannonAimY the elevation index (see toolShootCannon).
+	if (_sseCannonAiming) {
+		Actor *cannon = (_vm->_actors && _vm->_numActors > 3) ? _vm->_actors[3] : nullptr;
+		int barrelX = cannon ? cannon->getRealPos().x : _sseCannonAimX;
+		// Park the cursor: X in the centre deadzone (no var234 drift); Y on the
+		// elevation row (y/30 == target so var235 does not slew).
+		int holdX = 320;
+		int holdY = _sseCannonAimY * 30 + 15;
+		_vm->_mouse.x        = holdX;
+		_vm->_mouse.y        = holdY;
+		_vm->_virtualMouse.x = holdX;
+		_vm->_virtualMouse.y = holdY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = holdX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = holdY;
+		_vm->_lastInputScriptTime = _vm->_system->getMillis();
+		// Force the exact aim (the room-4 fire/aim globals are confirmed to live
+		// at 234/235 for this game; gated to GID_CMI room 4 by toolShootCannon).
+		if (_vm->_numVariables > 235) {
+			_vm->VAR(234) = _sseCannonAimX;   // barrel target column
+			_vm->VAR(235) = _sseCannonAimY;   // elevation index
+		}
+		_sseLastEventFrame = _frameCounter; // not "stuck" while aiming
+		// Fire once the barrel has actually reached the target column (the fire
+		// script samples its live X) — or after a safety cap on the swing.
+		if (ABS(_sseCannonAimX - barrelX) <= 3 || !cannon ||
+		    _frameCounter >= _sseCannonGiveUpFrame) {
+			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown — fire
+			_sseButtonClearFrame = _frameCounter + 2;
+			_sseCannonAiming = false;
+		}
+	}
+
 	// Feed the next pending note by invoking the engine's verb script
 	// directly (kKeyClickArea). Each runInputScript invocation runs Script 97
 	// (Loom's input handler) which kills any prior instance — meaning two
@@ -4195,6 +4361,60 @@ void ScummMcpBridge::snapshotPreAction() {
 	}
 }
 
+void ScummMcpBridge::collectCmiCannonBoats(Common::Array<Common::Point> &centers,
+                                           Common::Array<int> &repObjs) const {
+	centers.clear();
+	repObjs.clear();
+	if (_vm->_game.id != GID_CMI || _vm->_currentRoom != 4 || !_vm->_actors)
+		return;
+	struct BoatCluster { int sumX; int sumY; int n; int repObj; };
+	Common::Array<BoatCluster> boats;
+	for (int i = 1; i < _vm->_numActors; ++i) {
+		Actor *a = _vm->_actors[i];
+		if (!a || !a->isInCurrentRoom() || !a->_visible)
+			continue;
+		int ax = a->getRealPos().x, ay = a->getRealPos().y;
+		if (ax <= 0 || ay <= 0)
+			continue;
+		if (ay < 150 || ay > 360)                 // the sea band
+			continue;
+		if (a->_costume < 18 || a->_costume > 24) // war-canoe hull/crew sprites
+			continue;
+		bool placed = false;
+		for (uint c = 0; c < boats.size(); ++c) {
+			int cx = boats[c].sumX / boats[c].n;
+			int cy = boats[c].sumY / boats[c].n;
+			if (ABS(cx - ax) <= 45 && ABS(cy - ay) <= 60) {
+				boats[c].sumX += ax;
+				boats[c].sumY += ay;
+				boats[c].n++;
+				placed = true;
+				break;
+			}
+		}
+		if (!placed) {
+			BoatCluster bc;
+			bc.sumX = ax;
+			bc.sumY = ay;
+			bc.n = 1;
+			bc.repObj = _vm->actorToObj(a->_number);
+			boats.push_back(bc);
+		}
+	}
+	// Stable left-to-right ordering so boat_1 is always the leftmost.
+	for (uint p = 0; p + 1 < boats.size(); ++p)
+		for (uint q = 0; q + 1 < boats.size() - p; ++q)
+			if (boats[q].sumX / boats[q].n > boats[q + 1].sumX / boats[q + 1].n) {
+				BoatCluster t = boats[q];
+				boats[q] = boats[q + 1];
+				boats[q + 1] = t;
+			}
+	for (uint c = 0; c < boats.size(); ++c) {
+		centers.push_back(Common::Point(boats[c].sumX / boats[c].n, boats[c].sumY / boats[c].n));
+		repObjs.push_back(boats[c].repObj);
+	}
+}
+
 Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 	Common::JSONObject changes;
 
@@ -4379,6 +4599,19 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 			question.setVal("choices", new Common::JSONValue(choiceList));
 			changes.setVal("question", new Common::JSONValue(question));
 		}
+	}
+
+	// CMI cannon minigame: report how many war-canoes are still afloat after the
+	// action resolves. A sunk boat is an actor cluster vanishing, which never
+	// shows up in objects_changed, so this is the signal a bench/agent needs to
+	// know a shot connected (the count drops by one per boat sunk). Gate on the
+	// room the action *started* in: sinking the last boat triggers the win
+	// sequence and leaves room 4, and we still want to report the final 0.
+	if (_vm->_game.id == GID_CMI && _ssePreRoom == 4) {
+		Common::Array<Common::Point> boatCenters;
+		Common::Array<int> boatObjs;
+		collectCmiCannonBoats(boatCenters, boatObjs);
+		changes.setVal("boats_remaining", mcpJsonInt((int)boatCenters.size()));
 	}
 
 	return changes;

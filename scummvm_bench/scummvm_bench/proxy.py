@@ -105,11 +105,25 @@ class BenchProxy:
         if tool == "state":
             self._state_cache = result
             return
+        updated = dict(self._state_cache)
         room_changed = result.get("room_changed")
         if isinstance(room_changed, int):
-            updated = dict(self._state_cache)
             updated["room"] = {"id": room_changed}
-            self._state_cache = updated
+        # Track inventory across actions so state-guard predicates (in_inventory)
+        # are accurate between explicit state() reads. Mirrors how the engine
+        # reports inventory_added/removed in each action result.
+        added = result.get("inventory_added")
+        removed = result.get("inventory_removed")
+        if isinstance(added, list) or isinstance(removed, list):
+            inv = [i for i in updated.get("inventory", []) if isinstance(i, str)]
+            for item in removed if isinstance(removed, list) else []:
+                if isinstance(item, str) and item in inv:
+                    inv.remove(item)
+            for item in added if isinstance(added, list) else []:
+                if isinstance(item, str) and item not in inv:
+                    inv.append(item)
+            updated["inventory"] = inv
+        self._state_cache = updated
 
     # -- FastMCP wiring ----------------------------------------------------
 

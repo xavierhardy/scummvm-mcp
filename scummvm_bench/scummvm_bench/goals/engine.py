@@ -148,6 +148,27 @@ def on_object_changed(name: str) -> Predicate:
     return predicate
 
 
+def on_boats_remaining_at_most(n: int) -> Predicate:
+    """Result-based: a COMI cannon shot left ``n`` or fewer war-canoes afloat.
+
+    A sunk boat is an actor cluster vanishing, which never shows up in
+    ``objects_changed``; the engine instead reports ``boats_remaining`` (canoes
+    still afloat) in every shot result. ``boats_remaining`` only ever decreases,
+    so giving the four ``sink_boat_N`` goals the thresholds 3, 2, 1, 0 latches
+    them one per boat sunk, regardless of which shot landed the hit and without
+    depending on the count carried in ``state_before`` (a miss reports the same
+    count, so it never advances a threshold that has not already been crossed).
+    """
+
+    def predicate(event: GoalEvent) -> bool:
+        if not event.result:
+            return False
+        remaining = event.result.get("boats_remaining")
+        return isinstance(remaining, int) and remaining <= n
+
+    return predicate
+
+
 def on_message_contains(substr: str) -> Predicate:
     """Result-based: a returned message text contains ``substr``."""
     needle = substr.lower()
@@ -188,6 +209,21 @@ def in_room(room_id: int) -> Predicate:
 
     def predicate(event: GoalEvent) -> bool:
         return _current_room(event.state_before) == room_id
+
+    return predicate
+
+
+def in_inventory(item: str) -> Predicate:
+    """State guard: ``item`` was already held *before* the call.
+
+    Useful to disambiguate an action that is reachable at two different points
+    in a game by the items the player has acquired by then (e.g. firing the COMI
+    cannon to enter the minigame vs. firing it to escape, told apart by whether
+    the cutlass fished from the wreckage is already in hand)."""
+    target = _norm(item)
+
+    def predicate(event: GoalEvent) -> bool:
+        return any(target in _norm(i) for i in _as_list(event.state_before.get("inventory")))
 
     return predicate
 

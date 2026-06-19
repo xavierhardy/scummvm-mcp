@@ -248,10 +248,24 @@ class ComiRealHarness:
                     return data
                 return data
 
+            async def state() -> dict:
+                s = await call("state", {})
+                return s if isinstance(s, dict) else {}
+
+            async def room() -> object:
+                r = (await state()).get("room")
+                return r.get("id") if isinstance(r, dict) else None
+
             async def question() -> dict | None:
-                state = await call("state", {})
-                q = state.get("question")
+                q = (await state()).get("question")
                 return q if isinstance(q, dict) else None
+
+            async def wait_room(target: int, tries: int = 18) -> bool:
+                for _ in range(tries):
+                    if await room() == target:
+                        return True
+                    await asyncio.sleep(0.6)
+                return False
 
             def pick(q: dict, *kw: str) -> int | None:
                 for choice in q["choices"]:
@@ -312,24 +326,51 @@ class ComiRealHarness:
                 )
                 await call("answer", {"id": sid})
 
-            # Escape phase. NOTE: best-effort — the cut-rope / backfire-escape
-            # chain is not yet reconciled against a live capture, so the cannon
-            # coordinates and the resulting room may need tuning before a real
-            # run reaches the stopping goal.
+            # Pick up the hook Wally dropped and the ramrod off the wall.
             if stop.is_set():
                 return
             await call("act", {"verb": "pick_up", "target1": "plastic_hook"})
             await call("act", {"verb": "pick_up", "target1": "ramrod"})
-            # Fire the cannon to sink the four skeleton boats.
-            for _ in range(8):
+
+            # Man the cannon -> boat-sinking minigame (room 4). Each boat is
+            # surfaced in state as a boat_N object carrying its aim point; sink
+            # them one at a time until none remain (boats_remaining == 0).
+            await call("act", {"verb": "use", "target1": "cannon"})
+            await wait_room(4)
+            for _ in range(12):
                 if stop.is_set():
                     return
-                await call("shoot_cannon", {"x": 200, "y": 300})
-                await asyncio.sleep(0.4)
+                boats = [
+                    (o["x"], o["y"])
+                    for o in (await state()).get("objects", [])
+                    if str(o.get("name", "")).startswith("boat")
+                ]
+                if not boats:
+                    break
+                res = await call("shoot_cannon", {"x": boats[0][0], "y": boats[0][1]})
+                if res.get("boats_remaining") == 0 or res.get("room_changed") is not None:
+                    break
+
+            # The minigame returns to the cannon room (room 3). Now that the
+            # boats are wreckage, fish the debris out at the gunport (room 5):
+            # combine ramrod + plastic_hook into a gaff, then gaff the debris to
+            # land the cutlass. Pathways: room 3 -> room 5 via obj_266, back via
+            # obj_321.
+            await wait_room(3)
+            if await room() != 5:
+                await call("act", {"verb": "walk_to", "target1": "obj_266"})
+                await wait_room(5)
             await call(
                 "act", {"verb": "use", "target1": "ramrod", "target2": "plastic_hook"}
             )
             await call("act", {"verb": "use", "target1": "gaff", "target2": "debris"})
+
+            # Back to the cannon room, cut the restraint rope with the cutlass,
+            # then fire the unrestrained cannon: it backfires Guybrush out in the
+            # closing cutscene that ends the demo (the stopping goal).
+            if await room() != 3:
+                await call("act", {"verb": "walk_to", "target1": "obj_321"})
+                await wait_room(3)
             await call(
                 "act",
                 {
@@ -338,19 +379,16 @@ class ComiRealHarness:
                     "target2": "cannon_restraint_rope",
                 },
             )
-            # Fire again — with nothing to hold it down the cannon backfires.
-            for _ in range(6):
-                if stop.is_set():
-                    return
-                await call("shoot_cannon", {"x": 320, "y": 215})
-                await asyncio.sleep(0.6)
+            if stop.is_set():
+                return
+            await call("act", {"verb": "use", "target1": "cannon"})
 
 
 COMI = Walkthrough(
     game_id="comi-demo",
     save_slot=1,
     initial_room=3,
-    expected_goals=12,
+    expected_goals=16,
     game_path_env="COMI_DEMO_PATH",
     game_path_default=str(GAMES_DIR / "COMIDEMO"),
     initial_inventory=["helium_balloons"],
@@ -364,18 +402,22 @@ COMI = Walkthrough(
         ("answer", {"id": 5}),  # provoke_failure (Wally drops the hook)
         ("act", {"verb": "pick_up", "target1": "plastic_hook"}),  # get_plastic_hook
         ("act", {"verb": "pick_up", "target1": "ramrod"}),  # get_ramrod
-        ("shoot_cannon", {"x": 200, "y": 300}),  # fire_at_boats
+        ("act", {"verb": "use", "target1": "cannon"}),  # man_the_cannon (-> room 4)
+        ("shoot_cannon", {"x": 228, "y": 238}),  # sink_boat_1 (3 afloat)
+        ("shoot_cannon", {"x": 304, "y": 203}),  # sink_boat_2 (2 afloat)
+        ("shoot_cannon", {"x": 393, "y": 195}),  # sink_boat_3 (1 afloat)
+        ("shoot_cannon", {"x": 468, "y": 280}),  # sink_boat_4 (0 -> back to room 3)
         (
             "act",
             {"verb": "use", "target1": "ramrod", "target2": "plastic_hook"},
-        ),  # gaff
-        ("act", {"verb": "use", "target1": "gaff", "target2": "debris"}),  # cutlass
+        ),  # make_gaff
+        ("act", {"verb": "use", "target1": "gaff", "target2": "debris"}),  # fish cutlass
         # cut_restraint_rope
         (
             "act",
             {"verb": "use", "target1": "cutlass", "target2": "cannon_restraint_rope"},
         ),
-        ("shoot_cannon", {"x": 320, "y": 215}),  # escape_to_treasure_room (STOP)
+        ("act", {"verb": "use", "target1": "cannon"}),  # escape_via_cannon (STOP)
     ],
     steps=[
         ScriptStep(
@@ -433,15 +475,23 @@ COMI = Walkthrough(
             {"verb": "pick_up", "target1": "ramrod"},
             {"inventory_added": ["ramrod"]},
         ),
+        # First "use cannon": with the rope still intact it drops Guybrush into
+        # the boat-sinking minigame (room 4).
+        ScriptStep(
+            "act",
+            {"verb": "use", "target1": "cannon"},
+            {"room_changed": 4, **_msgs(("guybrush", "Let's see how this works."))},
+        ),
+        # The four aimed shots: each sinks one war-canoe, so boats_remaining
+        # counts 3, 2, 1, 0. The final hit wins the minigame and returns to the
+        # cannon room (room 3). Same (tool, {}) match -> consumed in order.
+        ScriptStep("shoot_cannon", {}, {"boats_remaining": 3}),
+        ScriptStep("shoot_cannon", {}, {"boats_remaining": 2}),
+        ScriptStep("shoot_cannon", {}, {"boats_remaining": 1}),
         ScriptStep(
             "shoot_cannon",
             {},
-            {
-                "objects_changed": [
-                    {"name": "skeleton_boat", "old_state": 0, "new_state": 1}
-                ],
-                **_msgs(("guybrush", "Got one!")),
-            },
+            {"boats_remaining": 0, "room_changed": 3, **_msgs(("guybrush", "Yes!"))},
         ),
         ScriptStep(
             "act",
@@ -469,12 +519,14 @@ COMI = Walkthrough(
                 **_msgs(("guybrush", "Snip.")),
             },
         ),
-        # Second shot: nothing restrains the cannon, so it backfires Guybrush
-        # through the door into the treasure room (room 4).
+        # Second "use cannon": the rope is cut, so the unrestrained cannon
+        # backfires Guybrush out in the closing cutscene — the end of the demo.
+        # No room change; told apart from the minigame entry by the cutlass now
+        # being in hand (see escape_via_cannon).
         ScriptStep(
-            "shoot_cannon",
-            {},
-            {"room_changed": 4, **_msgs(("guybrush", "Yaaaah!"))},
+            "act",
+            {"verb": "use", "target1": "cannon"},
+            _msgs(("guybrush", "Yaaaah!")),
         ),
     ],
 )

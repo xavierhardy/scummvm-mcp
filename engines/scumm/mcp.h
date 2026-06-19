@@ -13,6 +13,7 @@
 
 #include "common/array.h"
 #include "common/formats/json.h"
+#include "common/rect.h"
 #include "common/str.h"
 
 namespace Scumm {
@@ -134,6 +135,11 @@ private:
 	Common::Array<int> _ssePendingDialObjs;
 	int _sseDialVerbId = 0;
 	uint32 _sseLastDialFedFrame = 0;
+	// CMI cannon minigame aim (see pumpStream / toolShootCannon). _sseCannonAimX
+	// is the barrel's target column, _sseCannonAimY the elevation index 0..12.
+	bool _sseCannonAiming = false;
+	int _sseCannonAimX = 0, _sseCannonAimY = 0;
+	uint32 _sseCannonGiveUpFrame = 0; // safety cap on the barrel swing before firing
 	// Last value seen in the Loom note variable (var 259). Used in pumpStream
 	// to detect 0 -> note transitions and emit them as MCP notifications.
 	int32 _ssePrevNoteValue;
@@ -228,6 +234,13 @@ private:
 	bool toolKeystroke(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseMove(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseClick(const Common::JSONValue &args, Common::String &errorOut);
+
+	// CMI cannon minigame (room 4): cluster the war-canoe actor sprites into the
+	// boats still afloat, ordered left-to-right. Fills each cluster's centre
+	// point and a representative object id. Used by toolState (to expose the
+	// boat_N aim targets) and buildStateChanges (to report boats_remaining).
+	void collectCmiCannonBoats(Common::Array<Common::Point> &centers,
+	                           Common::Array<int> &repObjs) const;
 
 	// Loom segment detection (full Loom or the Loom mini-game in Passport to Adventure)
 	bool isInLoomSection() const;
