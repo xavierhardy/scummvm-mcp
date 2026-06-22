@@ -268,6 +268,26 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="Dial")
 
+    def ride_bike(self) -> dict[str, Any]:
+        """Play the Full Throttle motorcycle minigame (streaming call).
+
+        Only valid in Full Throttle once Ben has his bike keys and is at the bike
+        (bar front, room 6). Mounts the bike, rides onto the highway, and
+        auto-plays the Rottwheeler fight (steering + punching) until the section
+        resolves at the mechanic's shack. Takes no arguments. Blocks until done.
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "ride_bike", "arguments": {}},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
+            return self._decode_stream_response(resp=resp, tool="RideBike")
+
     def play_note(self, note) -> dict[str, Any]:
         """Play one or more notes on the Loom distaff (streaming call).
 

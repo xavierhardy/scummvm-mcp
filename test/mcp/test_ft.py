@@ -17,6 +17,7 @@ The tests follow the demo's storyline in order, on one session:
 
 from time import sleep
 
+import httpx
 import pytest
 from utils import McpClient, get_state_with_retry
 
@@ -31,6 +32,14 @@ FT_VERBS = {"fist", "kick", "mouth", "walk to", "interact", "use item"}
 ALLEY_ROOM = 10  # Ben wakes inside the dumpster here
 BAR_FRONT_ROOM = 6  # the Kickstand front, with the bike and the door
 BAR_ROOM = 7  # inside the bar
+STREET_ROOM = 5  # the street outside the bar (between the bar and the bike)
+# The highway section resolves to one of two rooms: the demo's closing narration
+# after Ben wins the Rottwheeler fight (room 48), or Mo's mechanic shack after a
+# wipe-out (room 17). The auto-pilot is built to win, so it normally reaches 48.
+ENDING_ROOM = 48
+SHACK_ROOM = 17
+RIDE_END_ROOMS = {ENDING_ROOM, SHACK_ROOM}
+BAR_AREA = {BAR_FRONT_ROOM, BAR_ROOM, 77}  # 77 is the keys close-up
 
 
 def _room(client: McpClient) -> int:
@@ -195,3 +204,83 @@ def test_ft_walkthrough(ft_client: McpClient) -> None:
             break
         sleep(2)
     assert _room(ft_client) == BAR_ROOM, "cutscene did not return to the bar"
+
+
+def test_ft_ride_bike(ft_client: McpClient) -> None:
+    """Continue the walkthrough: leave the bar, mount the bike, and play the
+    highway motorcycle minigame via the ride_bike tool.
+
+    After the keys, the bar runs ambient cutscenes (the badger's warning, the TV
+    news) that briefly lock input; once control returns Ben walks out of the
+    bottom exit to the street (room 5), then on to his bike at the bar front
+    (room 6). 'ride_bike' mounts the bike, rides onto the highway, and auto-plays
+    the Rottwheeler fight (a real-time INSANE action sequence steered by the
+    mouse with left-click punches) until the section resolves at Mo's shack."""
+    # The 'ride_bike' tool blocks for the whole ride + fight + wipe-out, which is
+    # far longer than the default per-request timeout, and the bike fight runs
+    # inside INSANE's own loop (no SSE keepalives meanwhile), so give it a roomy
+    # read timeout for this one call.
+    saved_http = ft_client._client
+
+    def _leave_bar() -> int:
+        # Walk to the bottom exit; the post-keys cutscenes lock input, so retry
+        # patiently until control returns and Ben crosses to the street (room 5).
+        for _ in range(120):
+            r = _room(ft_client)
+            if r not in BAR_AREA:
+                return r
+            _walk_click(ft_client, 95, 196)
+            sleep(0.8)
+        return _room(ft_client)
+
+    left_to = _leave_bar()
+    assert (
+        left_to not in BAR_AREA
+    ), f"never left the bar after the keys (still in room {left_to})"
+
+    # From the street, head to the bike at the bar front (room 6).
+    for _ in range(15):
+        if _room(ft_client) == BAR_FRONT_ROOM:
+            break
+        if _room(ft_client) == STREET_ROOM:
+            _act_retry(ft_client, "walk to", 36, attempts=3)
+        sleep(1.2)
+    assert (
+        _room(ft_client) == BAR_FRONT_ROOM
+    ), f"did not reach the bike at the bar front, in room {_room(ft_client)}"
+
+    # Play the minigame. Use a long read timeout for this single streaming call.
+    ft_client._client = httpx.Client(timeout=httpx.Timeout(300.0))
+    try:
+        result = ft_client.ride_bike()
+    finally:
+        ft_client._client = saved_http
+
+    # The section resolves off the highway: room 48 (the closing narration after
+    # Ben wins the fight) or room 17 (Mo's shack after a wipe-out). The auto-pilot
+    # is built to win, so we expect the closing narration.
+    end_room = result.get("room_changed")
+    assert (
+        end_room in RIDE_END_ROOMS
+    ), f"ride_bike did not resolve the highway section: {result}"
+    assert (
+        end_room == ENDING_ROOM
+    ), f"the auto-pilot did not win the fight (ended in room {end_room}): {result}"
+    # The winning path plays the demo's closing narration.
+    blob = " ".join(m.get("text", "") for m in result.get("messages", []))
+    assert "Cavefish" in blob or "weapons you pick up" in blob, (
+        f"expected the post-fight closing narration, got: {blob!r}"
+    )
+
+
+def test_ft_ride_bike_requires_context(ft_client: McpClient) -> None:
+    """ride_bike refuses outside the bike-with-keys context.
+
+    By this point the highway section is over: Ben is no longer at his bike at the
+    bar front and the keys have been consumed, so the tool must reject the call
+    (wrong room / no keys / not accepting input) rather than misfire."""
+    with pytest.raises(RuntimeError) as exc:
+        ft_client.ride_bike()
+    assert "ride_bike" in str(exc.value).lower(), (
+        f"unexpected ride_bike rejection: {exc.value}"
+    )

@@ -533,6 +533,45 @@ void Insane::setEnemyAnimation(int32 actornum, int anim) {
 int32 Insane::processMouse() {
 	int32 buttons = 0;
 
+	// MCP auto-pilot: synthesize Ben's steering + punches so the bike fight can be
+	// played through the MCP server (which cannot feed input during INSANE's own
+	// loop). _actor[0] is Ben, _actor[1] the enemy; both .x are lateral positions
+	// (0..320). Ben's control is the virtual mouse X (cursorX = mouseX - 160), so
+	// steer toward the enemy and pulse the left button to punch in that direction.
+	if (_mcpAutoPilot) {
+		_mcpAutoPilotFrame++;
+		int benX = _actor[0].x;
+		int enemyX = _actor[1].x;
+		// Steer Ben alongside the enemy. Ben only accelerates laterally when his
+		// tilt is non-zero (actionBen: speed += cursorX/40 only "if tilt"); the
+		// fight scene never sets tilt from the mouse the way the road does, so the
+		// centering force otherwise pins him at x=100. Drive both: lean fully
+		// toward the enemy (tilt) and push the virtual mouse X to that side
+		// (cursorX = mouseX-160) so he closes the gap, then hold center once
+		// alongside. Punch in the lean direction — exactly the player's
+		// "click to punch the way you last leaned".
+		int steerX, lean;
+		if (enemyX > benX + 6) {
+			steerX = 300; lean = 7;   // enemy to the right: lean/steer right
+		} else if (enemyX < benX - 6) {
+			steerX = 20; lean = -7;   // enemy to the left: lean/steer left
+		} else {
+			steerX = 160; lean = (enemyX >= benX) ? 1 : -1; // alongside: keep facing
+		}
+		_enemyState[EN_BEN][0] = steerX;
+		_enemyState[EN_BEN][1] = 100;
+		_actor[0].tilt = lean;
+		// Punch in bursts (pulsed so each press registers as a distinct hit). The
+		// engine only lands damage when Ben is actually alongside and facing the
+		// enemy, so it is safe to keep throwing punches.
+		bool punch = ((_mcpAutoPilotFrame % 4) < 2);
+		if (_mcpAutoPilotFrame % 32 == 0)
+			debug(7, "FTAUTOPILOT scene=%d benX=%d enemyX=%d steer=%d lean=%d punch=%d "
+			         "benDmg=%d/%d enDmg=%d/%d", _currSceneId, benX, enemyX, steerX, lean, punch,
+			      _actor[0].damage, _actor[0].maxdamage, _actor[1].damage, _actor[1].maxdamage);
+		return punch ? 1 : 0;
+	}
+
 	_enemyState[EN_BEN][0] = _vm->_mouse.x;
 	_enemyState[EN_BEN][1] = _vm->_mouse.y;
 

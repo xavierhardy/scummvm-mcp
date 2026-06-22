@@ -24,6 +24,7 @@
 #include "scumm/boxes.h"
 #ifdef ENABLE_SCUMM_7_8
 #include "scumm/scumm_v7.h"
+#include "scumm/insane/insane.h"
 #endif
 
 namespace Scumm {
@@ -373,6 +374,18 @@ void ScummMcpBridge::pump() {
 	    !_v7DialogChoices.empty()) {
 		_v7DialogChoices.clear();
 	}
+	// Full Throttle: the bar runs a different gameplay verb script than the
+	// dumpster where the baseline was captured, so the verb_script == baseline
+	// clear above never fires there. A leftover choice captured from a one-shot
+	// cutscene line (the keys sequence's last bartender line renders in the
+	// bottom status band) would then keep hasPendingQuestion() true forever and
+	// trap the player in the bar. A live conversation re-enqueues its choices
+	// every frame, so expire any capture that has not been refreshed recently.
+	const uint32 kV7ChoiceStaleFrames = 30;
+	if (_vm && _vm->_game.id == GID_FT && !_v7DialogChoices.empty() &&
+	    _frameCounter - _v7DialogChoicesFrame > kV7ChoiceStaleFrames) {
+		_v7DialogChoices.clear();
+	}
 	if (_vm && _vm->_game.id == GID_SAMNMAX && !hasPendingQuestion() && !_v7DialogChoices.empty())
 		_v7DialogChoices.clear();
 
@@ -697,9 +710,13 @@ void ScummMcpBridge::onV7BlastTextSnapshot() {
 	}
 	// Only overwrite when the new snapshot is non-empty: between
 	// re-renders the script briefly empties the queue, and we'd lose the
-	// choices if we cleared on every frame.
-	if (!fresh.empty())
+	// choices if we cleared on every frame. Stamp the refresh frame so pump()
+	// can expire a capture that stops being re-rendered (see the staleness
+	// clear there).
+	if (!fresh.empty()) {
 		_v7DialogChoices = fresh;
+		_v7DialogChoicesFrame = _frameCounter;
+	}
 }
 
 const byte *ScummMcpBridge::callGetObjOrActorName(int obj) const {
@@ -950,6 +967,26 @@ void ScummMcpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
+	// --- ride_bike (Full Throttle highway bike fight) ---
+	if (_vm->_game.id == GID_FT) {
+		Networking::McpServer::ToolSpec spec;
+		spec.name = "ride_bike";
+		spec.description =
+		    "Play the Full Throttle motorcycle minigame. Only available in Full "
+		    "Throttle once Ben has the bike keys (from the bartender) and is at his "
+		    "bike at the bar front. Mounts the bike and rides onto the highway, "
+		    "where a rival Rottwheeler biker attacks; the fight runs as a real-time "
+		    "action sequence steered by the mouse with left-click punches, so this "
+		    "tool auto-plays it — steering Ben alongside the enemy and punching in "
+		    "their direction until the fight resolves. Blocks until the section "
+		    "ends (Ben wipes out and wakes at the mechanic's shack), then returns "
+		    "state changes. Takes no arguments.";
+		spec.inputSchema  = nullptr;  // No input required
+		spec.outputSchema = makeChangesSchema();
+		spec.streaming    = true;
+		_server->registerTool(spec);
+	}
+
 	// --- switch_character (Maniac Mansion only) ---
 	// V0 (C64/Apple II) maps F1-F3 to switchActor(slot)/VAR(97+slot); the
 	// V1/V2 ports use the in-game "New Kid" verb but share the same ego/kid
@@ -1077,6 +1114,19 @@ void ScummMcpBridge::registerTools() {
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
+		// screenshot — capture the current frame to the screenshot path
+		{
+			Networking::McpServer::ToolSpec spec;
+			spec.name = "screenshot";
+			spec.description =
+			    "Save a PNG screenshot of the current frame to the configured "
+			    "screenshot path (auto-numbered, like the in-app screenshot key). "
+			    "Useful for visually inspecting the game state. Engine-agnostic.";
+			spec.inputSchema  = nullptr;  // No input required
+			spec.outputSchema = nullptr;
+			spec.streaming    = false;
+			_server->registerTool(spec);
+		}
 		// save_state — write the current game to a save slot
 		{
 			Networking::McpServer::ToolSpec spec;
@@ -1138,6 +1188,10 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 		if (!toolShootCannon(args, errorOut)) return nullptr;
 		return nullptr;
 	}
+	if (name == "ride_bike") {
+		if (!toolRideBike(args, errorOut)) return nullptr;
+		return nullptr;
+	}
 	if (name == "switch_character") {
 		if (!toolSwitchCharacter(args, errorOut)) return nullptr;
 		return nullptr;
@@ -1159,6 +1213,7 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 		if (!toolMouseClick(args, errorOut)) return nullptr;
 		return new Common::JSONValue(Common::JSONObject());
 	}
+	if (name == "screenshot")   return toolScreenshot(args, errorOut);
 	if (name == "save_state")   return toolSaveState(args, errorOut);
 	errorOut = "Unknown tool: " + name;
 	return nullptr;
@@ -3295,6 +3350,77 @@ bool ScummMcpBridge::toolShootCannon(const Common::JSONValue &args, Common::Stri
 }
 
 // ---------------------------------------------------------------------------
+// Tool: ride_bike (Full Throttle highway bike fight)
+// ---------------------------------------------------------------------------
+
+bool ScummMcpBridge::toolRideBike(const Common::JSONValue &args, Common::String &errorOut) {
+	(void)args;
+	if (_streaming) {
+		errorOut = "ride_bike: another action is already in progress";
+		return false;
+	}
+	if (_vm->_game.id != GID_FT) {
+		errorOut = "ride_bike: only available in Full Throttle";
+		return false;
+	}
+	if (_vm->_userPut <= 0) {
+		errorOut = "ride_bike: game is not accepting input right now";
+		return false;
+	}
+	// The bike is object 55 at the bar front (room 6); riding it needs the keys
+	// (object 54, picked up from the bartender). Without them the bike just says
+	// "Some joker took my keys." rather than starting the ride.
+	if (_vm->_currentRoom != 6) {
+		errorOut = "ride_bike: go to Ben's bike at the bar front (walk back out of the bar) first";
+		return false;
+	}
+	int ego = (_vm->VAR_EGO != 0xFF) ? (int)_vm->VAR(_vm->VAR_EGO) : 1;
+	if (_vm->getOwner(54) != ego) {
+		errorOut = "ride_bike: Ben needs his bike keys first — punch the bartender to get them";
+		return false;
+	}
+	ScummEngine_v7 *v7 = static_cast<ScummEngine_v7 *>(_vm);
+	Insane *insane = v7->getInsane();
+	if (!insane) {
+		errorOut = "ride_bike: the action engine is not available";
+		return false;
+	}
+
+	// Enable the INSANE auto-pilot so the bike fight (which runs inside INSANE's
+	// own loop, out of reach of the MCP server's per-frame pump) plays itself.
+	insane->_mcpAutoPilot = true;
+	insane->_mcpAutoPilotFrame = 0;
+
+	snapshotPreAction();
+	_streaming = true;
+	_sseAnswerStream = false;
+	_sseStartFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
+	_sseEgoMoved = false;
+	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
+	_sseTargetObject = 0;
+	_sseButtonClearFrame = 0;
+	_ssePendingV7Choice = 0;
+	_ssePendingV7UseClick = false;
+	_sseFtRide = true;
+	// Frame cap is a safety net only; _frameCounter does not advance while INSANE
+	// owns the loop, so this counts real (non-INSANE) pump frames before/after.
+	_sseFtRideGiveUpFrame = _frameCounter + 1200;
+
+	// Mount the bike: dispatch the fist coin-verb on object 55, exactly as a
+	// player clicking it does. resolveVerb keeps the verb id correct across builds.
+	int fistVerb = 9;
+	resolveVerb("fist", fistVerb);
+	_vm->doSentence(fistVerb, 55, 0);
+	_server->startStreaming();
+	return true;
+}
+
+// ---------------------------------------------------------------------------
 // Tool: switch_character (Maniac Mansion)
 // ---------------------------------------------------------------------------
 
@@ -3634,6 +3760,20 @@ bool ScummMcpBridge::toolMouseClick(const Common::JSONValue &args, Common::Strin
 	return true;
 }
 
+Common::JSONValue *ScummMcpBridge::toolScreenshot(const Common::JSONValue &args, Common::String &errorOut) {
+	(void)args;
+	if (!_vm || !_vm->_system) {
+		errorOut = "screenshot: no system available";
+		return nullptr;
+	}
+	// Save to the configured screenshot path, auto-numbered, exactly like the
+	// in-app "save screenshot" action. Engine-version-agnostic.
+	_vm->_system->saveScreenshot();
+	Common::JSONObject out;
+	out.setVal("saved", mcpJsonBool(true));
+	return new Common::JSONValue(out);
+}
+
 // ---------------------------------------------------------------------------
 // Streaming pump
 // ---------------------------------------------------------------------------
@@ -3669,6 +3809,35 @@ void ScummMcpBridge::pumpStream() {
 	if (!_streaming) return;
 
 	emitPendingMessages();
+
+	// Full Throttle bike fight (ride_bike): the ride + fight run inside INSANE's
+	// own loop, during which pumpStream is not ticked at all. So we only reach
+	// here before the ride starts (still room 6) or after the whole section has
+	// resolved. The demo resolves the highway either to its closing narration
+	// (room 48, after Ben wins the fight) or to the mechanic's shack (room 17,
+	// after a wipe-out), so keep the stream open — suppressing the usual
+	// room-change/settle close — until one of those is reached, then disable the
+	// auto-pilot and finish. A frame cap (real, non-INSANE frames) is a safety net.
+	if (_sseFtRide) {
+		bool resolved = (_vm->_currentRoom == 48 || _vm->_currentRoom == 17);
+		bool capped = (_frameCounter >= _sseFtRideGiveUpFrame);
+		if (resolved || capped) {
+			ScummEngine_v7 *v7 = (ScummEngine_v7 *)_vm;
+			if (v7->getInsane())
+				v7->getInsane()->_mcpAutoPilot = false;
+			_sseFtRide = false;
+			debug(1, "mcp: ride_bike finished (resolved=%d capped=%d room=%d)",
+			      resolved, capped, _vm->_currentRoom);
+			Common::JSONObject changes = buildStateChanges();
+			_streaming = false;
+			_server->endStream(new Common::JSONValue(changes), true);
+			return;
+		}
+		// Still waiting for INSANE to run/resolve; do not let the generic close
+		// logic below fire on the pre-ride frames.
+		_sseLastEventFrame = _frameCounter;
+		return;
+	}
 
 	// On the first pump of a new stream, snapshot the Loom note variable so
 	// the watcher below only emits transitions occurring during this action.

@@ -140,6 +140,12 @@ private:
 	bool _sseCannonAiming = false;
 	int _sseCannonAimX = 0, _sseCannonAimY = 0;
 	uint32 _sseCannonGiveUpFrame = 0; // safety cap on the barrel swing before firing
+	// Full Throttle bike fight (ride_bike): the fight runs inside INSANE's own
+	// loop and is auto-played by Insane::_mcpAutoPilot. While this is set the
+	// stream stays open (suppressing the usual room-change/settle close) until the
+	// fight resolves to Mo's shack (room 17) or a frame cap is hit.
+	bool _sseFtRide = false;
+	uint32 _sseFtRideGiveUpFrame = 0;
 	// Last value seen in the Loom note variable (var 259). Used in pumpStream
 	// to detect 0 -> note transitions and emit them as MCP notifications.
 	int32 _ssePrevNoteValue;
@@ -152,6 +158,13 @@ private:
 
 	// V7 dialog-choice cache, refreshed each frame from the blast-text queue.
 	Common::Array<V7Choice> _v7DialogChoices;
+	// Frame at which _v7DialogChoices was last refreshed with a non-empty
+	// capture. Full Throttle draws conversation choices as blast text that the
+	// dialog script re-enqueues every frame, whereas a one-shot cutscene line
+	// (e.g. the bartender's last line in the keys sequence) is captured once and
+	// then never refreshed. Used to expire such stale captures so they cannot
+	// masquerade as a pending question and block movement after the cutscene.
+	uint32 _v7DialogChoicesFrame = 0;
 
 	// V7: VAR_VERB_SCRIPT "normal" value observed before first action; used to
 	// detect when the game has switched to a dialog input handler.
@@ -225,6 +238,7 @@ private:
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolShootCannon(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolRideBike(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolDial(const Common::JSONValue &args, Common::String &errorOut);
 
@@ -234,6 +248,7 @@ private:
 	bool toolKeystroke(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseMove(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseClick(const Common::JSONValue &args, Common::String &errorOut);
+	Common::JSONValue *toolScreenshot(const Common::JSONValue &args, Common::String &errorOut);
 
 	// CMI cannon minigame (room 4): cluster the war-canoe actor sprites into the
 	// boats still afloat, ordered left-to-right. Fills each cluster's centre

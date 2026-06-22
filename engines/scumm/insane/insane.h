@@ -70,6 +70,14 @@ public:
 	bool isInsaneActive() { return _insaneIsRunning; }
 	void syncCurrentSanFlags();
 
+	// MCP auto-pilot for the Full Throttle bike fight. The combat runs inside the
+	// SMUSH/INSANE loop (Ben steers with the mouse X and punches with the left
+	// button), which the MCP server cannot drive frame-by-frame from outside. When
+	// the bridge sets this true, processMouse() synthesizes the steer+punch input
+	// to play the fight automatically. _mcpAutoPilotFrame paces the punch pulses.
+	bool _mcpAutoPilot = false;
+	uint32 _mcpAutoPilotFrame = 0;
+
  protected:
 
 	ScummEngine_v7 *_vm;
