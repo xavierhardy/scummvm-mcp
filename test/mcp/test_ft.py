@@ -33,12 +33,20 @@ ALLEY_ROOM = 10  # Ben wakes inside the dumpster here
 BAR_FRONT_ROOM = 6  # the Kickstand front, with the bike and the door
 BAR_ROOM = 7  # inside the bar
 STREET_ROOM = 5  # the street outside the bar (between the bar and the bike)
-# The highway section resolves to one of two rooms: the demo's closing narration
-# after Ben wins the Rottwheeler fight (room 48), or Mo's mechanic shack after a
-# wipe-out (room 17). The auto-pilot is built to win, so it normally reaches 48.
-ENDING_ROOM = 48
+# The highway fight resolves to one of two rooms: the Cavefish cave after Ben wins
+# the Rottwheeler fight (room 48), or Mo's mechanic shack after a wipe-out (room
+# 17). The auto-pilot is built to win, so it normally reaches the cave (48).
+CAVE_ROOM = 48  # cave entry, where the post-fight "Cavefish" narration plays
 SHACK_ROOM = 17
-RIDE_END_ROOMS = {ENDING_ROOM, SHACK_ROOM}
+RIDE_END_ROOMS = {CAVE_ROOM, SHACK_ROOM}
+# Inside the cave you travel ON the bike (walking gives "I don't spelunk"). From
+# the cave entry, riding the right-hand exit (obj 227) reaches the ramp scene
+# (room 49); using the ramp there (obj 235, fist) does the gorge jump, which rolls
+# the demo's closing LucasArts card (room 169) and then loops back to the intro.
+CAVE_RAMP_ROOM = 49
+CAVE_RIGHT_EXIT = 227
+RAMP_OBJ = 235
+DEMO_END_ROOM = 169
 BAR_AREA = {BAR_FRONT_ROOM, BAR_ROOM, 77}  # 77 is the keys close-up
 
 
@@ -256,20 +264,20 @@ def test_ft_ride_bike(ft_client: McpClient) -> None:
     finally:
         ft_client._client = saved_http
 
-    # The section resolves off the highway: room 48 (the closing narration after
-    # Ben wins the fight) or room 17 (Mo's shack after a wipe-out). The auto-pilot
-    # is built to win, so we expect the closing narration.
+    # The section resolves off the highway: the Cavefish cave (room 48) after Ben
+    # wins, or Mo's shack (room 17) after a wipe-out. The auto-pilot is built to
+    # win, so we expect the cave, with the post-fight narration.
     end_room = result.get("room_changed")
     assert (
         end_room in RIDE_END_ROOMS
     ), f"ride_bike did not resolve the highway section: {result}"
     assert (
-        end_room == ENDING_ROOM
+        end_room == CAVE_ROOM
     ), f"the auto-pilot did not win the fight (ended in room {end_room}): {result}"
-    # The winning path plays the demo's closing narration.
+    # The winning path plays the post-fight narration that sets up the cave.
     blob = " ".join(m.get("text", "") for m in result.get("messages", []))
     assert "Cavefish" in blob or "weapons you pick up" in blob, (
-        f"expected the post-fight closing narration, got: {blob!r}"
+        f"expected the post-fight narration, got: {blob!r}"
     )
 
 
@@ -283,4 +291,69 @@ def test_ft_ride_bike_requires_context(ft_client: McpClient) -> None:
         ft_client.ride_bike()
     assert "ride_bike" in str(exc.value).lower(), (
         f"unexpected ride_bike rejection: {exc.value}"
+    )
+
+
+def test_ft_jump_gorge(ft_client: McpClient) -> None:
+    """Finish the demo: ride through the cave and jump the canyon.
+
+    After winning the bike fight Ben is in the Cavefish cave (room 48), still on
+    his bike. Inside the cave you must travel by bike — walking dismounts and Ben
+    just says "I don't spelunk" at the scene exits — so ride the right-hand exit
+    (obj 227) to the ramp scene (room 49). There, using the ramp (obj 235)
+    attaches it and launches the gorge jump, which rolls the demo's closing
+    LucasArts card (room 169) and then loops back to the opening narration
+    ("Sometimes, you just wake up in trouble.")."""
+    # Should still be in the cave after the fight.
+    for _ in range(15):
+        if _room(ft_client) == CAVE_ROOM:
+            break
+        sleep(2)
+    assert _room(ft_client) == CAVE_ROOM, f"not in the cave, room {_room(ft_client)}"
+
+    # Ride deeper into the cave to the ramp scene — on the bike (obj 227 exit).
+    for _ in range(8):
+        if _room(ft_client) == CAVE_RAMP_ROOM:
+            break
+        _act_retry(ft_client, "interact", CAVE_RIGHT_EXIT, attempts=3)
+        sleep(2)
+    assert (
+        _room(ft_client) == CAVE_RAMP_ROOM
+    ), f"did not ride to the ramp scene, in room {_room(ft_client)}"
+
+    # Use the ramp (obj 235) — look, attach, then launch the jump. The jump plays
+    # as a SMUSH that freezes the MCP pump, so give the fist a long read timeout
+    # and tolerate it not returning cleanly.
+    _act_retry(ft_client, "mouth", RAMP_OBJ, attempts=2)
+    _act_retry(ft_client, "interact", RAMP_OBJ, attempts=2)
+    saved_http = ft_client._client
+    ft_client._client = httpx.Client(timeout=httpx.Timeout(180.0))
+    try:
+        try:
+            ft_client.act("fist", RAMP_OBJ)
+        except (httpx.ReadTimeout, httpx.ConnectError, RuntimeError):
+            pass
+    finally:
+        ft_client._client = saved_http
+
+    # The gorge jump rolls the demo's end card (room 169) and then loops back to
+    # the opening narration. Confirm we reached the ending.
+    rooms_seen: set[int] = set()
+    looped = False
+    for _ in range(20):
+        state = get_state_with_retry(ft_client)
+        rid = state.get("room", {}).get("id")
+        if rid is not None:
+            rooms_seen.add(rid)
+        if any(
+            "wake up in trouble" in (m.get("text") or "")
+            for m in state.get("messages", [])
+        ):
+            looped = True
+        if DEMO_END_ROOM in rooms_seen or looped:
+            break
+        sleep(1.5)
+    assert DEMO_END_ROOM in rooms_seen or looped, (
+        f"the gorge jump did not roll the demo ending "
+        f"(rooms seen: {sorted(rooms_seen)}, looped={looped})"
     )
