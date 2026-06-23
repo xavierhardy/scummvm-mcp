@@ -418,6 +418,61 @@ bool ScummMcpBridge::isInIndy3Fight() const {
 	return indyHealth > 0 && oppHealth > 0 && indyHealth <= 2000 && oppHealth <= 2000;
 }
 
+bool ScummMcpBridge::isInAtlantisBook() const {
+	// The "Lost Dialogue" close-up is a dedicated full-screen room whose two page
+	// halves are room objects 1103 (left) and 1104 (right). They are only loaded
+	// while the book is open, so their presence pins the close-up without hard-
+	// coding the room id. Gated on Fate of Atlantis so no other game is affected.
+	if (!_vm || _vm->_game.id != GID_INDY4) return false;
+	return _vm->getObjectIndex(1103) != -1 && _vm->getObjectIndex(1104) != -1;
+}
+
+int ScummMcpBridge::atlantisBookPageFromName(const Common::String &name) {
+	// Accept "page_N" (1..kAtlantisBookPages); return 0 for anything else.
+	Common::String n = name;
+	n.toLowercase();
+	if (!n.hasPrefix("page_")) return 0;
+	Common::String num = n;
+	num.erase(0, 5);
+	if (num.empty()) return 0;
+	int page = 0;
+	for (uint i = 0; i < num.size(); ++i) {
+		if (num[i] < '0' || num[i] > '9') return 0;
+		page = page * 10 + (num[i] - '0');
+	}
+	return (page >= 1 && page <= kAtlantisBookPages) ? page : 0;
+}
+
+bool ScummMcpBridge::turnAtlantisBookPage(int page, Common::String &errorOut) {
+	if (page < 1 || page > kAtlantisBookPages) {
+		errorOut = "act: invalid book page";
+		return false;
+	}
+	// Each page is rendered by local script (200 + page) — the very script the
+	// in-game page tab starts. Running it redraws the page and prints its lines,
+	// which the bridge captures as messages. Stream like any other action so the
+	// printed text settles before the result is returned.
+	snapshotPreAction();
+	_streaming = true;
+	_sseAnswerStream = false;
+	_sseStartFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
+	_sseEgoMoved = false;
+	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
+	_sseTargetObject = 0;
+	_sseButtonClearFrame = 0;
+	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
+	_sseInitialVerbScript = _sseVerbScript;
+	_sseVerbScriptChanged = false;
+	_vm->runScript(200 + page, false, false, nullptr);
+	_server->startStreaming();
+	return true;
+}
+
 bool ScummMcpBridge::isInLoomSection() const {
 	if (!_vm) return false;
 	if (_vm->_game.id == GID_LOOM) return true;
@@ -1630,6 +1685,28 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 	}
 
+	// Fate of Atlantis "Lost Dialogue" close-up: the book is a full-screen tabbed
+	// reference whose pages are not ordinary selectable objects. Surface each page
+	// as a synthetic "page_N" object so an MCP client can turn to it with
+	// `act look_at page_N`; the page's lines then stream back as messages (the
+	// same text the book prints on-screen). This is how the randomised Thera ->
+	// Atlantis heading on page 3 is read without the mouse/screenshot debug tools.
+	if (isInAtlantisBook()) {
+		for (int p = 1; p <= kAtlantisBookPages; ++p) {
+			Common::JSONObject page;
+			page.setVal("id",               mcpJsonInt(0));
+			page.setVal("name",             mcpJsonString(Common::String::format("page_%d", p)));
+			page.setVal("state",            mcpJsonInt(0));
+			page.setVal("x",                mcpJsonInt(0));
+			page.setVal("y",                mcpJsonInt(0));
+			page.setVal("pathway",          mcpJsonBool(false));
+			Common::JSONArray pv;
+			pv.push_back(mcpJsonString("look at"));
+			page.setVal("compatible_verbs", new Common::JSONValue(pv));
+			objects.push_back(new Common::JSONValue(page));
+		}
+	}
+
 	out.setVal("inventory", new Common::JSONValue(inventory));
 	out.setVal("objects",   new Common::JSONValue(objects));
 
@@ -1829,6 +1906,16 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		return false;
 	}
 	Common::String verbStr = a["verb"]->asString();
+
+	// Fate of Atlantis "Lost Dialogue": while the book close-up is open, a
+	// "page_N" target turns to that page (see toolState / isInAtlantisBook). This
+	// is a synthetic target rather than a real verb script, so handle it up front,
+	// before verb/target resolution. Any verb is accepted (the page just opens).
+	if (isInAtlantisBook() && a.contains("target1") && a["target1"]->isString()) {
+		int page = atlantisBookPageFromName(a["target1"]->asString());
+		if (page > 0)
+			return turnAtlantisBookPage(page, errorOut);
+	}
 
 	int verbId = -1;
 	if (!resolveVerb(verbStr, verbId)) {
@@ -2572,14 +2659,19 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
-			// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
-			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
-			if (vs.curmode != 0 && vs.curmode != 1) continue;
+			// Count only displayed choices (curmode==1) with a non-empty label, so
+			// the 1-based index matches exactly what toolState lists in
+			// state.question. Hidden placeholder slots (curmode==0 numeric keys with
+			// blank labels, e.g. Fate of Atlantis's captain menu) must be skipped
+			// here too, or answer(N) would select the choice before the intended one.
+			if (vs.curmode != 1) continue;
 			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 			if (!ptr) continue;
 			byte textBuf[256];
 			_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
 			if (!textBuf[0]) continue;
+			Common::String cleanLabel = cleanGameText(safeUtf8(Common::String((const char *)textBuf)));
+			if (cleanLabel.empty()) continue;
 			++current;
 			if (current == choiceIdx) { chosenSlot = slot; break; }
 		}
@@ -4941,9 +5033,13 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 		// choices, but their key=0 would incorrectly set hasUnkeyed=true and prevent
 		// Indy4-style numeric-key dialog detection. In V0, verbid=1 is Open, not OBIM.
 		if (_vm->_game.version > 0 && vs.verbid == 1) continue;
-		// Only accept curmode=0 if slot has numeric key (dialog); otherwise require curmode=1
-		if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
-		if (vs.curmode != 0 && vs.curmode != 1) continue;
+		// A clickable dialog choice is always displayed (curmode==1). Hidden slots
+		// (curmode==0) must not count — whether a choice not yet shown or, more
+		// importantly, the numeric-keyed verb slots that linger after a finished
+		// conversation. Fate of Atlantis leaves the captain's dialog verbs resident
+		// (curmode=0, keys '1'-'9', old labels) while you read Plato's Dialogue, and
+		// counting them used to make the book close-up report a phantom question.
+		if (vs.curmode != 1) continue;
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
 		byte textBuf[256];

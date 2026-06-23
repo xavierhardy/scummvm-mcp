@@ -265,6 +265,18 @@ private:
 	// and punch-power gauges so an MCP client can react to the HUD.
 	bool isInIndy3Fight() const;
 
+	// Fate of Atlantis "Lost Dialogue" close-up (Indy4): a full-screen, tabbed
+	// reference book. When it is open toolState exposes its pages as synthetic
+	// "page_N" objects and toolAct turns to a page (running its page script) so
+	// an MCP client can read every page — including the randomised Thera ->
+	// Atlantis heading — using only the standard tools (no mouse/screenshot).
+	static const int kAtlantisBookPages = 5;
+	bool isInAtlantisBook() const;
+	// 1..kAtlantisBookPages for a "page_N" target name, 0 otherwise.
+	static int atlantisBookPageFromName(const Common::String &name);
+	// Turn the open book to page (1..kAtlantisBookPages) and stream its lines.
+	bool turnAtlantisBookPage(int page, Common::String &errorOut);
+
 	// Register all tools with the server.
 	void registerTools();
 
