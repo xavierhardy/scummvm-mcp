@@ -1524,7 +1524,12 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			break;
 		}
 		case NamedEntity::kObject: {
-			// Skip objects that are out of bounds for the object space
+			// Skip objects out of bounds for the object-detail helpers below
+			// (getObjX/getState/getVerbEntrypoint assert id <= 255). V0 encodes
+			// the object type in the high byte, so its background scene objects
+			// (clock 269, gargoyles 342/344, ...) exceed _numGlobalObjects (256)
+			// and are intentionally not listed here. They remain targetable via
+			// `act` by name or id (toolAct uses a wider V0 ceiling).
 			if (_vm->_numGlobalObjects > 0 && ne.numId >= _vm->_numGlobalObjects) break;
 
 			// Find the actual verb bar labels and check if verbs exist
@@ -1923,6 +1928,13 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		return false;
 	}
 
+	// V0 (Maniac Mansion C64/Apple II) encodes an object's type in the high byte
+	// of its number (OBJECT_V0(id,type) = type<<8 | id), so legitimate object
+	// numbers run up to (kObjectV0TypeActor<<8 | 0xFF) = 0x2FF, well past
+	// _numGlobalObjects (256). Use a wider ceiling for V0 so name-resolved scene
+	// objects like Maniac's staircase gargoyles (e.g. 342) are not rejected.
+	const int objIdLimit = (_vm->_game.version == 0) ? 0x300 : _vm->_numGlobalObjects;
+
 	auto resolveTarget = [&](const char *param, int &out) -> bool {
 		if (!a.contains(param)) return true;
 		const Common::JSONValue *v = a[param];
@@ -1932,10 +1944,10 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 				errorOut = Common::String::format("act: %s id %d is negative", param, out);
 				return false;
 			}
-			if (_vm->_numGlobalObjects > 0 && out >= _vm->_numGlobalObjects) {
+			if (objIdLimit > 0 && out >= objIdLimit) {
 				errorOut = Common::String::format(
 					"act: %s id %d out of bounds (0-%d)",
-					param, out, _vm->_numGlobalObjects - 1);
+					param, out, objIdLimit - 1);
 				return false;
 			}
 			return true;
@@ -1959,10 +1971,10 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 			} else {
 				out = (ent.kind == NamedEntity::kActor) ? _vm->actorToObj(ent.numId) : ent.numId;
 			}
-			if (_vm->_numGlobalObjects > 0 && out >= _vm->_numGlobalObjects) {
+			if (objIdLimit > 0 && out >= objIdLimit) {
 				errorOut = Common::String::format(
 					"act: %s id %d out of bounds (0-%d)",
-					param, out, _vm->_numGlobalObjects - 1);
+					param, out, objIdLimit - 1);
 				return false;
 			}
 			return true;

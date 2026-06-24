@@ -27,6 +27,14 @@ def _unlock_front_door(client: McpClient) -> None:
     client.act("use", "key", "front_door")
 
 
+def _reach_kitchen(client: McpClient) -> None:
+    """Enter the mansion and step into the kitchen (room 7)."""
+    _unlock_front_door(client)
+    client.act("walk_to", "front_door")  # -> entrance hall (room 10)
+    client.act("open", 35)               # kitchen door (shares the name "door")
+    client.act("walk_to", 35)            # -> kitchen (room 7)
+
+
 def test_01_maniac_initial_state(maniac_client: McpClient) -> None:
     """Verify initial game state."""
     state = maniac_client.state()
@@ -106,3 +114,48 @@ def test_09_maniac_switch_character_rejects_unknown_name(
     """Switching to a non-switchable name fails with the available kids listed."""
     with pytest.raises(RuntimeError, match="unknown character"):
         maniac_client.switch_character("purple tentacle")
+
+
+def test_10_maniac_parent_state_key_hidden_until_mat_pulled(
+    maniac_client: McpClient,
+) -> None:
+    """The key under the door mat can't be taken before the mat is pulled.
+
+    Mirrors the engine's findObject() parent-state gate (cf. Indy3's
+    test_13_indy3_hidden_objects_not_selectable): while the mat is un-pulled the
+    key is parented to it with a revealing state it hasn't reached, so the MCP
+    neither lists it nor resolves it by name. Pulling the mat reveals it.
+    """
+    names = {o["name"] for o in maniac_client.state().get("objects", [])}
+    assert "key" not in names, "key leaked into state before the mat was pulled"
+    with pytest.raises(RuntimeError, match="unknown target1"):
+        maniac_client.act("pick_up", "key")
+
+    maniac_client.act("pull", "door mat")
+    names = {o["name"] for o in maniac_client.state().get("objects", [])}
+    assert "key" in names, "key should appear once the mat is pulled"
+    result = maniac_client.act("pick_up", "key")
+    assert_inventory_contains(result, "key")
+
+
+def test_11_maniac_parent_state_fridge_contents_hidden_until_opened(
+    maniac_client: McpClient,
+) -> None:
+    """Fridge contents can't be taken before the refrigerator is opened.
+
+    Same parent-state gate as the key: the can of pepsi, old batteries, cheese,
+    etc. are parented to the fridge with parentstate=open, so they stay hidden
+    (and unresolvable by name) until it is opened.
+    """
+    _reach_kitchen(maniac_client)
+    names = {o["name"] for o in maniac_client.state().get("objects", [])}
+    hidden = {"can_of_pepsi", "old_batteries", "cheese", "lettuce"}
+    assert hidden.isdisjoint(names), f"fridge contents leaked while closed: {hidden & names}"
+    with pytest.raises(RuntimeError, match="unknown target1"):
+        maniac_client.act("pick_up", "can_of_pepsi")
+
+    maniac_client.act("open", "refrigerator")
+    names = {o["name"] for o in maniac_client.state().get("objects", [])}
+    assert "can_of_pepsi" in names, "fridge contents should appear once it is opened"
+    result = maniac_client.act("pick_up", "old_batteries")
+    assert_inventory_contains(result, "old_batteries")
