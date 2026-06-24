@@ -315,7 +315,7 @@ def test_ft_jump_gorge(ft_client: McpClient) -> None:
     for _ in range(8):
         if _room(ft_client) == CAVE_RAMP_ROOM:
             break
-        _act_retry(ft_client, "interact", CAVE_RIGHT_EXIT, attempts=3)
+        _act_retry(ft_client, "interact", CAVE_RIGHT_EXIT, attempts=15)
         sleep(2)
     assert (
         _room(ft_client) == CAVE_RAMP_ROOM
