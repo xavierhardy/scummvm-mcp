@@ -326,7 +326,7 @@ scummvm.ini
 /test/mcp/logs/
 /test/mcp/save_slots/maniac-c64/maniac-c64.s00
 /test/debug
-/test/mcp/_run*
+/test/mcp/_*
 /test/mcp/probe_*
 /test/mcp/verify_*
 /test/mcp/play_*
