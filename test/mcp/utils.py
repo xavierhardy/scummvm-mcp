@@ -113,7 +113,7 @@ class McpClient:
                         raise RuntimeError(f"{tool} error: {msg['error']['message']}")
                 else:
                     raise RuntimeError(f"{tool} error: {msg['error']}")
-        raise RuntimeError("{tool stream ended without result")
+        raise RuntimeError(f"{tool} stream ended without result")
 
     def initialize(self) -> None:
         """Initialize MCP session."""
