@@ -99,11 +99,17 @@ def _question(client: McpClient):
     return _state(client).get("question")
 
 
-def _act(client: McpClient, *args) -> dict:
-    """One streaming call on a fresh connection, gently retried on transient
-    backlog ("not accepting input" / 202-empty / HTTP errors)."""
+def _act(client: McpClient, *args, input_wait: float = 150.0) -> dict:
+    """One streaming call on a fresh connection, patiently retried.
+
+    "not accepting input" is a legitimate wait: the captain's arrival at the dive
+    site and Kerner's betrayal play long, uninterruptible cutscenes, so retry
+    until input returns (up to ``input_wait`` seconds). Empty 202 bodies / HTTP
+    errors are transient backlog and get the same gentle back-off.
+    """
+    deadline = time() + input_wait
     last = None
-    for _ in range(10):
+    while time() < deadline:
         _fresh(client)
         try:
             return client.act(*args) or {}
@@ -117,7 +123,7 @@ def _act(client: McpClient, *args) -> dict:
         except Exception as exc:
             last = exc
             sleep(2.0)
-    raise AssertionError(f"act{args} never succeeded: {last}")
+    raise AssertionError(f"act{args} never succeeded within {input_wait}s: {last}")
 
 
 def _answer(client: McpClient, choice_id: int) -> dict:
@@ -134,12 +140,19 @@ def _answer(client: McpClient, choice_id: int) -> dict:
     return {}
 
 
-def _skip(client: McpClient) -> None:
-    _fresh(client)
-    try:
-        client.skip()
-    except Exception:
-        pass
+def _skip(client: McpClient) -> dict:
+    """skip() on a fresh connection; returns the result dict ({} on transient)."""
+    for _ in range(6):
+        _fresh(client)
+        try:
+            return client.skip() or {}
+        except RuntimeError as exc:
+            if "tool rejected" in str(exc) or "no " in str(exc):
+                return {}  # nothing to skip right now
+            sleep(1.0)
+        except Exception:
+            sleep(1.0)
+    return {}
 
 
 def _wait_question(client: McpClient, timeout: float = 45.0):
@@ -191,13 +204,29 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     """Drive the whole Fate of Atlantis demo walkthrough in one sequential run."""
     client = atlantis_client
 
-    # --- Wait for the opening dock dialog ----------------------------------
-    # The demo auto-plays its intro straight into the "what's the plan?" dialog,
-    # so just wait for it. (Do NOT spam skip() here: skip is a streaming call and
-    # firing it repeatedly can leave the single-threaded server mid-stream, which
-    # then queues the dialog answer with an empty body so it never lands.)
-    question = _wait_question(client, timeout=90.0)
-    assert question is not None, "[intro] opening dialog never appeared"
+    # --- Skip the intro until the opening dock dialog is pending -----------
+    # The intro is SMUSH/scripted screens that skip() advances (it returns the
+    # room change each time); after a couple of screens Sophia opens the
+    # "what's the plan?" dialog on the dock. This mirrors _run_atlantis_end.py.
+    result = _skip(client)
+    for _ in range(60):
+        if "room_changed" in result:
+            break
+        sleep(INTRO_POLL_SECS)
+        result = _skip(client)
+    old_room = result.get("room_changed")
+    for _ in range(60):  # wait past the first post-skip screen
+        if _room(client) != old_room:
+            old_room = _room(client)
+            break
+        sleep(INTRO_POLL_SECS)
+    for _ in range(60):  # ...and the second
+        if _room(client) != old_room:
+            break
+        sleep(INTRO_POLL_SECS)
+    _skip(client)
+    question = _wait_question(client, timeout=60.0)
+    assert question is not None, "[intro] opening dialog never appeared after skipping the intro"
 
     # --- Answer the opening dialog (goal: answer_opening) ------------------
     result = _pick(client, "look around", {"question": question})
