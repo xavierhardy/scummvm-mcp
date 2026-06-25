@@ -85,6 +85,15 @@ def _msgs(*pairs: tuple[str, str]) -> dict[str, object]:
     return {"messages": [{"actor": a, "text": t} for a, t in pairs]}
 
 
+def _inv(*items: str) -> dict[str, object]:
+    return {"inventory_added": list(items)}
+
+
+def _pickup(name: str) -> "ScriptStep":
+    """A pick_up step whose target name equals the inventory item it yields."""
+    return ScriptStep("act", {"verb": "pick_up", "target1": name}, _inv(name))
+
+
 # ---------------------------------------------------------------------------
 # Real-ScummVM driver (shared by every game's real test)
 # ---------------------------------------------------------------------------
@@ -138,33 +147,80 @@ MANIAC = Walkthrough(
     game_id="maniac-c64",
     save_slot=1,
     initial_room=1,
-    expected_goals=10,
+    # Every reachable room, both light switches and every carriable item: the
+    # full goal set in goals/maniac_mansion_c64_demo.py (== get_goal_set total).
+    expected_goals=29,
     game_path_env="MANIAC_C64_PATH",
     game_path_default=str(GAMES_DIR / "ManiacMansionDemo/Games/ManiacMansion"),
     calls=[
-        ("state", {}),  # 1 state_outside
-        ("act", {"verb": "walk_to", "target1": "front_door"}),  # 2 approach
-        ("act", {"verb": "pull", "target1": "door mat"}),  # 3 pull_door_mat
-        ("act", {"verb": "pick_up", "target1": "key"}),  # 4 pick_up_key
+        ("state", {}),  # 1  state_outside
+        ("act", {"verb": "walk_to", "target1": "front_door"}),  # 2  approach
+        ("act", {"verb": "pull", "target1": "door mat"}),  # 3  pull_door_mat
+        ("act", {"verb": "pick_up", "target1": "key"}),  # 4  get_key
         ("act", {"verb": "use", "target1": "key", "target2": "front_door"}),  # 5
-        ("act", {"verb": "walk_to", "target1": "front_door"}),  # 6 enter_mansion (->10)
-        # Tour the whole ground floor; interior doors are addressed by object id.
+        ("act", {"verb": "walk_to", "target1": "front_door"}),  # 6 enter_mansion ->10
+        # Kitchen: flashlight, chainsaw, then open the fridge for its contents.
         ("act", {"verb": "open", "target1": 35}),  # kitchen door
-        ("act", {"verb": "walk_to", "target1": 35}),  # 7 reach_kitchen (->7)
+        ("act", {"verb": "walk_to", "target1": 35}),  # 8  reach_kitchen (->7)
+        ("act", {"verb": "pick_up", "target1": "flashlight"}),  # 9  get_flashlight
+        ("act", {"verb": "pick_up", "target1": "chainsaw"}),  # 10 get_chainsaw
+        ("act", {"verb": "open", "target1": "refrigerator"}),  # 11 open_fridge
+        ("act", {"verb": "pick_up", "target1": "old_batteries"}),  # 12 get_batteries
+        ("act", {"verb": "pick_up", "target1": "can_of_pepsi"}),  # 13 get_pepsi
+        ("act", {"verb": "pick_up", "target1": "cheese"}),  # 14 get_cheese
+        ("act", {"verb": "pick_up", "target1": "lettuce"}),  # 15 get_lettuce
+        ("act", {"verb": "pick_up", "target1": "broken_bottles_of_ketchup"}),  # ketchup
+        # Dining room.
         ("act", {"verb": "open", "target1": 49}),  # dining door
-        ("act", {"verb": "walk_to", "target1": 49}),  # 8 reach_dining_room (->37)
+        ("act", {"verb": "walk_to", "target1": 49}),  # 18 reach_dining (->37)
+        ("act", {"verb": "pick_up", "target1": "old_rotting_turkey"}),  # 19 get_turkey
+        ("act", {"verb": "pick_up", "target1": "week_old_roast"}),  # 20 get_roast
+        # Pantry.
         ("act", {"verb": "open", "target1": 65}),  # pantry door
-        ("act", {"verb": "walk_to", "target1": 65}),  # 9 reach_pantry (->36)
-        ("act", {"verb": "walk_to", "target1": 91}),  # back to dining (->37)
-        ("act", {"verb": "walk_to", "target1": 62}),  # back to kitchen (->7)
-        ("act", {"verb": "walk_to", "target1": 48}),  # back to hall (->10)
+        ("act", {"verb": "walk_to", "target1": 65}),  # 22 reach_pantry (->36)
+        ("act", {"verb": "pick_up", "target1": "tentacle_chow"}),  # 23 tentacle_chow
+        ("act", {"verb": "pick_up", "target1": "canned_goods"}),  # 24 canned_goods
+        ("act", {"verb": "pick_up", "target1": "fruit_drinks"}),  # 25 fruit_drinks
+        ("act", {"verb": "pick_up", "target1": "glass_jar"}),  # 26 glass_jar
+        # Back-track pantry -> dining -> kitchen -> hall (each door's far-side id).
+        ("act", {"verb": "walk_to", "target1": 91}),  # 27 (->37)
+        ("act", {"verb": "walk_to", "target1": 62}),  # 28 (->7)
+        ("act", {"verb": "walk_to", "target1": 48}),  # 29 (->10)
+        # Living room: only Bernard can take the radio tube (Dave refuses).
         ("act", {"verb": "open", "target1": 37}),  # living-room door
-        ("act", {"verb": "walk_to", "target1": 37}),  # 10 reach_living_room (->3)
+        ("act", {"verb": "walk_to", "target1": 37}),  # 31 reach_living (->3)
+        ("switch_character", {"name": "bernard"}),  # 32
+        ("act", {"verb": "open", "target1": "old radio"}),  # 33 reveal the radio tube
+        ("act", {"verb": "pick_up", "target1": "radio_tube"}),  # 34 get_radio_tube
+        # Library: turn on the lamp, pull the loose panel for the cassette tape.
         ("act", {"verb": "open", "target1": 93}),  # library door
-        ("act", {"verb": "walk_to", "target1": 93}),  # 11 reach_library (->5) STOP
+        ("act", {"verb": "walk_to", "target1": 93}),  # 36 reach_library (->5)
+        ("act", {"verb": "turn_on", "target1": "lamp"}),  # 37 turn_on_library_lamp
+        ("act", {"verb": "pull", "target1": "loose panel"}),  # 38 reveal the tape
+        ("act", {"verb": "pick_up", "target1": "cassette_tape"}),  # 39 cassette tape
+        # Back to the hall (library -> living -> hall) for the gargoyle puzzle.
+        ("act", {"verb": "walk_to", "target1": 93}),  # 40 (->3, library side)
+        ("act", {"verb": "walk_to", "target1": 37}),  # 41 (->10, living side)
+        # The handle-less basement door: one kid holds the right gargoyle (342)
+        # while the other slips through into the basement.
+        ("act", {"verb": "pull", "target1": 342}),  # 42 hold the gargoyle
+        ("switch_character", {"name": "dave"}),  # 43 the other kid slips through
+        ("act", {"verb": "walk_to", "target1": 340}),  # 44 reach_basement (->8)
+        ("act", {"verb": "turn_on", "target1": "light_switch"}),  # 45 basement light
+        ("act", {"verb": "pick_up", "target1": "silver_key"}),  # 46 get_silver_key
+        # Up from the basement, back to the pantry, then unlock its far door (92)
+        # with the silver key and step out to the pool.
+        ("act", {"verb": "walk_to", "target1": 339}),  # 47 basement stairs up (->10)
+        ("act", {"verb": "walk_to", "target1": 35}),  # 48 (->7)
+        ("act", {"verb": "walk_to", "target1": 49}),  # 49 (->37)
+        ("act", {"verb": "walk_to", "target1": 65}),  # 50 (->36)
+        ("act", {"verb": "use", "target1": "silver_key", "target2": 92}),  # 51 unlock
+        ("act", {"verb": "walk_to", "target1": 92}),  # 52 reach_pool (->6) STOP
     ],
     steps=[
-        # first walk_to positions the kid; the second (after unlocking) enters.
+        # Outside: the first walk_to positions the kid, the second (after
+        # unlocking) enters; door 37 toggles hall<->living and door 93 toggles
+        # living<->library, so each has two steps consumed in call order.
         ScriptStep("act", {"verb": "walk_to", "target1": "front_door"}, {}),
         ScriptStep(
             "act", {"verb": "walk_to", "target1": "front_door"}, {"room_changed": 10}
@@ -175,18 +231,11 @@ MANIAC = Walkthrough(
         ScriptStep(
             "act",
             {"verb": "pick_up", "target1": "key"},
-            {
-                "inventory_added": ["key"],
-                **_door("key", 0, 10),
-            },
+            {**_inv("key"), **_door("key", 0, 10)},
         ),
         ScriptStep(
             "act",
-            {
-                "verb": "use",
-                "target1": "key",
-                "target2": "front_door",
-            },
+            {"verb": "use", "target1": "key", "target2": "front_door"},
             _door("front door", 4, 8),
         ),
         # Opening interior doors has no observable change; the walk-through enters.
@@ -201,8 +250,54 @@ MANIAC = Walkthrough(
         ScriptStep("act", {"verb": "walk_to", "target1": 91}, {"room_changed": 37}),
         ScriptStep("act", {"verb": "walk_to", "target1": 62}, {"room_changed": 7}),
         ScriptStep("act", {"verb": "walk_to", "target1": 48}, {"room_changed": 10}),
+        # door 37 (hall<->living) then door 93 (living<->library): two each.
         ScriptStep("act", {"verb": "walk_to", "target1": 37}, {"room_changed": 3}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 37}, {"room_changed": 10}),
         ScriptStep("act", {"verb": "walk_to", "target1": 93}, {"room_changed": 5}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 93}, {"room_changed": 3}),
+        # Kitchen pickups + the fridge (its contents are revealed by opening it).
+        _pickup("flashlight"),
+        _pickup("chainsaw"),
+        ScriptStep(
+            "act",
+            {"verb": "open", "target1": "refrigerator"},
+            _door("refrigerator", 0, 8),
+        ),
+        _pickup("old_batteries"),
+        _pickup("can_of_pepsi"),
+        _pickup("cheese"),
+        _pickup("lettuce"),
+        _pickup("broken_bottles_of_ketchup"),
+        # Dining + pantry pickups.
+        _pickup("old_rotting_turkey"),
+        _pickup("week_old_roast"),
+        _pickup("tentacle_chow"),
+        _pickup("canned_goods"),
+        _pickup("fruit_drinks"),
+        _pickup("glass_jar"),
+        # Living room: switch to Bernard, open the old radio, take the tube.
+        ScriptStep("switch_character", {"name": "bernard"}, {}),
+        ScriptStep("act", {"verb": "open", "target1": "old radio"}, _door("old radio")),
+        _pickup("radio_tube"),
+        # Library: the lamp is a call-goal; the cassette is behind the panel.
+        ScriptStep("act", {"verb": "turn_on", "target1": "lamp"}, {}),
+        ScriptStep(
+            "act", {"verb": "pull", "target1": "loose panel"}, _door("loose panel")
+        ),
+        _pickup("cassette_tape"),
+        # Basement: hold the gargoyle, switch kids, slip in, light + silver key.
+        ScriptStep("act", {"verb": "pull", "target1": 342}, _door("right gargoyle")),
+        ScriptStep("switch_character", {"name": "dave"}, {}),
+        ScriptStep("act", {"verb": "walk_to", "target1": 340}, {"room_changed": 8}),
+        ScriptStep("act", {"verb": "turn_on", "target1": "light_switch"}, {}),
+        _pickup("silver_key"),
+        ScriptStep("act", {"verb": "walk_to", "target1": 339}, {"room_changed": 10}),
+        # Unlock the pantry's far door with the silver key, step out to the pool.
+        ScriptStep(
+            "act", {"verb": "use", "target1": "silver_key", "target2": 92},
+            _door("pool door", 4, 8),
+        ),
+        ScriptStep("act", {"verb": "walk_to", "target1": 92}, {"room_changed": 6}),
     ],
 )
 
