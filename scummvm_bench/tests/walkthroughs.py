@@ -388,6 +388,24 @@ class ComiRealHarness:
                     await asyncio.sleep(0.6)
                 return False
 
+            async def go_through(
+                exit_obj: object, target: int, tries: int = 30
+            ) -> bool:
+                """Walk through a room exit until the room reaches ``target``.
+
+                Winning the minigame returns to the cannon room behind a victory
+                cutscene that locks input for a while ("game is not accepting
+                input right now"); a single walk_to gives up before it clears, so
+                retry patiently until the room actually flips."""
+                for _ in range(tries):
+                    if await room() == target:
+                        return True
+                    await call("act", {"verb": "walk_to", "target1": exit_obj}, tries=2)
+                    if await wait_room(target, tries=3):
+                        return True
+                    await asyncio.sleep(1.0)
+                return False
+
             def pick(q: dict, *kw: str) -> int | None:
                 for choice in q["choices"]:
                     if any(k in choice["label"].lower() for k in kw):
@@ -447,6 +465,25 @@ class ComiRealHarness:
                 )
                 await call("answer", {"id": sid})
 
+            # The failure insult leaves the pirate's topic menu open, and while a
+            # dialog question is pending the engine rejects every act() with
+            # "a dialog question is pending — use 'answer' first". Close the menu
+            # (its last choice is always the "goodbye") so world actions are
+            # accepted again; the threat speech plays first, so poll for the menu.
+            for _ in range(10):
+                if stop.is_set():
+                    return
+                q = await question()
+                if q:
+                    bye = (
+                        pick(q, "swell talking", "goodbye", "later", "bye")
+                        or q["choices"][-1]["id"]
+                    )
+                    await call("answer", {"id": bye})
+                await asyncio.sleep(0.5)
+                if not await question():
+                    break
+
             # Pick up the hook Wally dropped and the ramrod off the wall.
             if stop.is_set():
                 return
@@ -472,15 +509,12 @@ class ComiRealHarness:
                 if res.get("boats_remaining") == 0 or res.get("room_changed") is not None:
                     break
 
-            # The minigame returns to the cannon room (room 3). Now that the
-            # boats are wreckage, fish the debris out at the gunport (room 5):
-            # combine ramrod + plastic_hook into a gaff, then gaff the debris to
-            # land the cutlass. Pathways: room 3 -> room 5 via obj_266, back via
-            # obj_321.
-            await wait_room(3)
-            if await room() != 5:
-                await call("act", {"verb": "walk_to", "target1": "obj_266"})
-                await wait_room(5)
+            # The minigame returns to the cannon room (room 3) behind a victory
+            # cutscene. Now that the boats are wreckage, fish the debris out at
+            # the gunport (room 5): combine ramrod + plastic_hook into a gaff,
+            # then gaff the debris to land the cutlass. Pathways: room 3 -> room 5
+            # via obj_266, back via obj_321 (go_through waits out the cutscene).
+            await go_through("obj_266", 5)
             await call(
                 "act", {"verb": "use", "target1": "ramrod", "target2": "plastic_hook"}
             )
@@ -489,9 +523,7 @@ class ComiRealHarness:
             # Back to the cannon room, cut the restraint rope with the cutlass,
             # then fire the unrestrained cannon: it backfires Guybrush out in the
             # closing cutscene that ends the demo (the stopping goal).
-            if await room() != 3:
-                await call("act", {"verb": "walk_to", "target1": "obj_321"})
-                await wait_room(3)
+            await go_through("obj_321", 3)
             await call(
                 "act",
                 {
