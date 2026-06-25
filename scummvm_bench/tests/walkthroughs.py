@@ -773,15 +773,26 @@ class SamnmaxRealHarness:
                 ):
                     break
                 await asyncio.sleep(1.2)
-            # Board the DeSoto, which drives off (room 10). The use-Max cutscene
-            # just played, so retry the boarding until the room actually flips.
-            for _ in range(8):
+            # Board the DeSoto, which drives off (room 9 -> room 10, the stopping
+            # goal). The use-Max cutscene that produced the tickets keeps
+            # animating for several seconds after the act returns; a boarding
+            # click during it lands while Sam is still mid-transition (pos 0,0)
+            # and is silently swallowed, so the car never drives off. Absorb the
+            # tail of the cutscene with a couple of benign probes (using Max on
+            # the kitten again only resolves once the street is interactive), then
+            # board, confirming the result actually reports the room change.
+            for _ in range(3):
                 if stop.is_set():
                     return
-                await call("act", {"verb": "use", "target1": "beat_up_desoto"})
-                if await wait_room(10, tries=8):
-                    break
+                await call("act", {"verb": "use", "target1": "max", "target2": 4})
                 await asyncio.sleep(1.0)
+            for _ in range(10):
+                if stop.is_set():
+                    return
+                res = await call("act", {"verb": "use", "target1": "beat_up_desoto"})
+                if res.get("room_changed") is not None or await wait_room(10, tries=6):
+                    break
+                await asyncio.sleep(1.5)
 
 
 SAMNMAX = Walkthrough(
