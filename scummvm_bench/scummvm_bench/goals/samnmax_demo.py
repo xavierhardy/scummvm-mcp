@@ -14,6 +14,7 @@ from .engine import (
     GoalSet,
     Predicate,
     all_of,
+    in_inventory,
     in_room,
     on_call,
     on_inventory_added,
@@ -92,7 +93,16 @@ GOALS = {
         _goal(
             "use_desoto",
             "Board the DeSoto and drive off",
-            on_room_changed(ROOM_DRIVING),
+            # Scored on the boarding *action* (with the tickets in hand), not the
+            # room change: the DeSoto's drive-away is a cutscene whose room flip
+            # to ROOM_DRIVING lands asynchronously, often after the act's settle
+            # window closes, so on_room_changed(10) raced the cutscene and was
+            # flaky. (Same reasoning as COMI's call-based escape_via_cannon.)
+            all_of(
+                on_call("act", verb="use", target1="beat_up_desoto"),
+                in_inventory("carnival_tickets"),
+            ),
+            kind="call",
             stopping=True,
         ),
     )
