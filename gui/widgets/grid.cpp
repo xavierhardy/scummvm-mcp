@@ -20,7 +20,7 @@
  */
 
 #include "common/system.h"
-#include "common/file.h"
+#include "common/stream.h"
 #include "common/language.h"
 #include "common/platform.h"
 #include "common/tokenizer.h"
@@ -270,13 +270,14 @@ void GridWidget::loadClosedGroups(const Common::U32String &groupName) {
 	// Recalls what groups were closed from the config
 	if (ConfMan.hasKey("group_" + groupName, ConfMan.kApplicationDomain)) {
 		const Common::String &val = ConfMan.get("group_" + groupName, ConfMan.kApplicationDomain);
-		Common::StringTokenizer hiddenGroups(val);
+		Common::U32StringTokenizer hiddenGroups(val.decode());
 
-		for (Common::String tok = hiddenGroups.nextToken(); tok.size(); tok = hiddenGroups.nextToken()) {
+		for (Common::U32String tok = hiddenGroups.nextToken(); tok.size(); tok = hiddenGroups.nextToken()) {
 			// See if the hidden group is in our group headers still, if so, hide it
 			for (Common::U32StringArray::size_type i = 0; i < _groupHeaders.size(); ++i) {
-				if (_groupHeaders[i] == tok || (tok == "unnamed" && _groupHeaders[i].size() == 0)) {
-					_groupExpanded[i] = false;
+				if (_groupHeaders[i] == tok || (tok == U"unnamed" && _groupHeaders[i].size() == 0)) {
+					uint groupID = _groupValueIndex[_groupHeaders[i]];
+					_groupExpanded[groupID] = false;
 					break;
 				}
 			}
@@ -291,7 +292,8 @@ void GridWidget::saveClosedGroups(const Common::U32String &groupName) {
 	// Save the hidden groups to the config
 	Common::String hiddenGroups;
 	for (Common::U32StringArray::size_type i = 0; i < _groupHeaders.size(); ++i) {
-		if (!_groupExpanded[i]) {
+		uint groupID = _groupValueIndex[_groupHeaders[i]];
+		if (!_groupExpanded[groupID]) {
 			if (_groupHeaders[i].size()) {
 				hiddenGroups += _groupHeaders[i];
 			} else {
@@ -537,6 +539,7 @@ GridWidget::GridWidget(GuiObject *boss, const Common::String &name)
 	_dragLastY = 0;
 
 	_fluidScroller = new FluidScroller();
+	_wasAnimating = false;
 
 	_filterMatcher = GridWidgetDefaultMatcher;
 	_filterMatcherArg = nullptr;
@@ -651,7 +654,10 @@ void GridWidget::sortGroups() {
 
 	if (_filter.empty()) {
 		// No filter -> display everything with group headers
-		Common::sort(_groupHeaders.begin(), _groupHeaders.end());
+		Common::sort(_groupHeaders.begin(), _groupHeaders.end(),
+			[](const Common::U32String &first, const Common::U32String &second) {
+				return first.empty() ? 0 : second.empty() ? 1 : first < second;
+			});
 
 		// Avoid reallocation during iteration: that would invalidate our _sortedEntryList items
 		_headerEntryList.reserve(_groupHeaders.size());
@@ -683,11 +689,10 @@ void GridWidget::sortGroups() {
 
 		Common::U32StringTokenizer tok(_filter);
 		Common::U32String tmp;
-		int n = 0;
 
 		_sortedEntryList.clear();
 
-		for (GridItemInfo *i = _dataEntryList.begin(); i != _dataEntryList.end(); ++i, ++n) {
+		for (GridItemInfo *i = _dataEntryList.begin(); i != _dataEntryList.end(); ++i) {
 			tmp = i->title;
 			tmp.toLowercase();
 			bool matches = true;
@@ -1041,6 +1046,7 @@ void GridWidget::handleMouseDown(int x, int y, int button, int clickCount) {
 		_dragLastY = y;
 	}
 	_selectionPending = true;
+	_wasAnimating = _fluidScroller->isAnimating();
 	_fluidScroller->stopAnimation();
 }
 
@@ -1052,7 +1058,7 @@ void GridWidget::handleMouseUp(int x, int y, int button, int clickCount) {
 	_isDragging = false;
 	_selectionPending = false;
 
-	if (wasPending && !wasDragging) {
+	if (wasPending && !wasDragging && !_wasAnimating) {
 		// Find which item was clicked and select it
 		Widget *w = findWidget(x, y);
 		if (w && w != this && w->getType() == kContainerWidget)
@@ -1061,6 +1067,7 @@ void GridWidget::handleMouseUp(int x, int y, int button, int clickCount) {
 
 	if (wasDragging)
 		_fluidScroller->startFling();
+	_wasAnimating = false;
 }
 
 void GridWidget::handleMouseMoved(int x, int y, int button) {
@@ -1089,7 +1096,7 @@ void GridWidget::applyScrollPos() {
 		reloadThumbnails();
 
 	assignEntriesToItems();
-	scrollBarRecalc();	
+	scrollBarRecalc();
 	markAsDirty();
 	if (_highlightedItem)
 		_highlightedItem->handleMouseLeft(0);
@@ -1112,6 +1119,7 @@ bool GridWidget::handleKeyUp(Common::KeyState state) {
 void GridWidget::lostFocusWidget() {
 	_isMouseDown = _isDragging = false;
 	_dragStartY = _dragLastY = 0;
+	_wasAnimating = false;
 }
 
 void GridWidget::handleCommand(CommandSender *sender, uint32 cmd, uint32 data) {

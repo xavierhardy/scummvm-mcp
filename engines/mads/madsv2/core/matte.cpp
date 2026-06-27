@@ -610,8 +610,6 @@ static void matte_special_effect(int special_effect, int full_screen) {
 		work_screen = &scr_work;
 	}
 
-	mouse_hide();
-
 	if (!timer_low_semaphore) {
 		if ((special_effect == MATTE_FX_FADE_FROM_BLACK) ||
 			(special_effect == MATTE_FX_FADE_THRU_BLACK)) {
@@ -708,8 +706,6 @@ static void matte_special_effect(int special_effect, int full_screen) {
 			work_screen->x, work_screen->y);
 		break;
 	}
-
-	mouse_show();
 }
 
 void matte_frame(int special_effect, int full_screen) {
@@ -893,9 +889,12 @@ void matte_frame(int special_effect, int full_screen) {
 	// Now, run through our depth list, and for each entry, draw the
 	// indicated sprite into the work buffer.
 	for (id = 0; id < depth_size; id++) {
-
 		// Get the index for the series for this depth list entry
 		id2 = depth_list_id[id];
+
+		// WORKAROUND: Invalid series_id
+		if (image_list[id2].series_id == (byte)-1)
+			continue;
 
 		// Draw the sprite into the work buffer at the appropriate depth
 		if (image_list[id2].scale >= 100) {

@@ -136,7 +136,10 @@ public:
 	void setNoHeldItem();
 	byte hasItem(int16 id) const;
 	byte getItemDisabledState(int16 id) const { return _flags.disabledItems[id]; }
-	void setItemDisabledState(int16 id, byte state) { _flags.disabledItems[id] = state; }
+	void setItemDisabledState(int16 id, byte state) {
+		if ((uint16)id < _flags.disabledItems.size())
+			_flags.disabledItems[id] = state;
+	}
 
 	void installInventorySoundOverride(byte command, const SoundDescription &sound, const Common::String &caption, uint16 itemID);
 	void playItemCantSound(int16 itemID = -1, bool notHoldingSound = false);
@@ -167,6 +170,12 @@ public:
 
 	Time getMovementTimeDelta(bool fast) const { return fast ? _sceneState.summary.fastMoveTimeDelta : _sceneState.summary.slowMoveTimeDelta; }
 
+	// Nancy 11+ AR 30/31. Toggles whether the player may scroll/pan the viewport.
+	// Backed by a reserved event flag (so it persists across scene changes and
+	// is saved/restored with the rest of the event flags).
+	void setPlayerScrolling(bool enabled);
+	bool getPlayerScrolling() const;
+
 	void registerGraphics();
 
 	void synchronize(Common::Serializer &serializer);
@@ -190,6 +199,9 @@ public:
 
 	void setActiveMovie(Action::PlaySecondaryMovie *activeMovie);
 	Action::PlaySecondaryMovie *getActiveMovie();
+
+	// Called when a PSM(isRandom) AR is loaded — drives stale-chain cleanup.
+	void notifyRandomMovieARLoaded() { _hadRandomMovieARThisScene = true; }
 	void setActiveConversation(Action::ConversationSound *activeConversation);
 	Action::ConversationSound *getActiveConversation();
 
@@ -235,10 +247,21 @@ private:
 	void run();
 	void handleInput();
 
+	// Nancy 11+ AR 69. Advances all running software timers (stored as TimerData
+	// puzzle data) and fires any whose configured duration has just elapsed.
+	void tickSoftwareTimers(uint32 deltaMs);
+	void fireSoftwareTimer(TimerData::Timer &timer);
+
+	// Rect of the open Nancy 10+ taskbar popup, or empty if none.
+	Common::Rect activePopupConfinement() const;
+
 	void initStaticData();
 
 	void clearSceneData();
 	void clearPuzzleData();
+
+	// Maps an event flag label to its index in the eventFlags array
+	int16 eventFlagToIndex(int16 label) const;
 
 	struct SceneState {
 		SceneSummary summary;
@@ -313,6 +336,10 @@ private:
 	Action::ActionManager _actionManager;
 	Action::PlaySecondaryMovie *_activeMovie;
 	Action::ConversationSound *_activeConversation;
+
+	// Set by notifyRandomMovieARLoaded; checked in clearSceneData to wind
+	// down a persistent random-movie whose scene chain is over.
+	bool _hadRandomMovieARThisScene = false;
 
 	// Contains a screenshot of the Scene state from the last time it was exited
 	Graphics::ManagedSurface _lastScreenshot;

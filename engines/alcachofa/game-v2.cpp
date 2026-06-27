@@ -107,7 +107,7 @@ static constexpr const ScriptKernelTask kScriptKernelTaskMap[] = {
 	ScriptKernelTask::AnimateTalking,
 	ScriptKernelTask::ClearInventory,
 	ScriptKernelTask::WaitForMouseClick,
-	ScriptKernelTask::ResetCharacter
+	ScriptKernelTask::KillProcesses
 };
 
 class GameWithVersion2 : public Game {
@@ -171,13 +171,19 @@ public:
 			kind == MainCharacterKind::Mortadelo ? "PistaMorta" : "PistaFile");
 	}
 
+	bool shouldMusicLoop() override {
+		// The credits cutscene is slightly longer than the
+		// so we just disable looping and keep the last couple seconds quiet
+		return !g_engine->player().currentRoom()->name().equalsIgnoreCase("CREDITOS");
+	}
+
 	bool hasMortadeloVoice(const Character *character) override {
 		return Game::hasMortadeloVoice(character) ||
 			character->name().equalsIgnoreCase("MORTA_ATADO");
 	}
 
 	bool shouldFilterTexturesByDefault() override {
-		return false;
+		return true;
 	}
 
 	bool shouldClipCamera() override {
@@ -212,26 +218,48 @@ public:
 		return !room->name().equalsIgnoreCase("Global");
 	}
 
-	String reencodePath(const String &path) override {
-		if (!_hasMessedUpEncoding)
-			return Game::reencodePath(path);
-
-		// Some of the Steam releases have wrong characters due to a messed up UTF8 conversion
-		U32String u32String = path.decode(Common::CodePage::kISO8859_1);
-		for (uint i = 0; i < u32String.size(); i++) {
-			const auto ch = u32String[i];
-			if (ch == 0xC1) // Á -> ╡
-				u32String[i] = 0x2561;
-			else if (ch == 0xD3) // Ó -> α
-				u32String[i] = 0x03B1;
-			else if (ch == 0xCD) // Í -> ╓
-				u32String[i] = 0x2553;
-		}
-		return u32String.encode();
+	String alternativeAnimationName(const String &path, int variant) override {
+		U32String u32String = path.decode(Common::CodePage::kUtf8);
+		bool hasChanges = false;
+		if (variant == 0) {
+			// SearchMan cannot find case-insensitive with non-ascii special characters
+			// (e.g. "autógrafo" is not found by "AUTÓGRAFO")
+			for (uint i = 0; i < u32String.size(); i++) {
+				const auto ch = u32String[i];
+				if (ch == 0xC1) {
+					u32String[i] = 0xE1; // Á -> á
+					hasChanges = true;
+				} else if (ch == 0xD3) {
+					u32String[i] = 0xF3; // Ó -> ó
+					hasChanges = true;
+				} else if (ch == 0xCD) {
+					u32String[i] = 0xED; // Í -> í
+					hasChanges = true;
+				} else if (ch == 0xD1) {
+					u32String[i] = 0xF1; // Ñ -> ñ
+					hasChanges = true;
+				}
+			}
+			return hasChanges ? u32String.encode() : String();
+		} else if (variant == 1) {
+			// Some of the Steam releases have wrong characters due to a messed up UTF8 conversion
+			for (uint i = 0; i < u32String.size(); i++) {
+				const auto ch = u32String[i];
+				if (ch == 0xC1) { // Á -> ╡
+					u32String[i] = 0x2561;
+					hasChanges = true;
+				} else if (ch == 0xD3) { // Ó -> α
+					u32String[i] = 0x03B1;
+					hasChanges = true;
+				} else if (ch == 0xCD) { // Í -> ╓
+					u32String[i] = 0x2553;
+					hasChanges = true;
+				}
+			}
+			return hasChanges ? u32String.encode() : String();
+		} else
+			return String();
 	}
-
-protected:
-	bool _hasMessedUpEncoding = false;
 };
 
 class GameWithVersion2_0 : public GameWithVersion2 {
@@ -257,12 +285,6 @@ public:
 		if (scumm_stricmp(name, "FILEMON"))
 			return Game::unknownCamLerpTarget(action, name);
 		return nullptr;
-	}
-
-	bool shouldMusicLoop() override {
-		// The credits cutscene is slightly longer than the
-		// so we just disable looping and keep the last couple seconds quiet
-		return !g_engine->player().currentRoom()->name().equalsIgnoreCase("CREDITOS");
 	}
 };
 
@@ -343,10 +365,6 @@ public:
 
 class GameEscarabajo : public GameWithVersion2_0 {
 public:
-	GameEscarabajo() {
-		_hasMessedUpEncoding = !SearchMan.hasFile(Path(reencode("Animaciones/M\xC1SCARA MUSEO_RECEPCI\xD3N.ANI")));
-	}
-
 	void onLoadedGameFiles() override {
 		g_engine->script().variable("EsJuegoCompleto") = 2;
 	}
@@ -366,8 +384,11 @@ public:
 
 class GameWithVersion2_1 : public GameWithVersion2 {
 public:
-	Path getVideoPath(int32 videoId) override {
-		return Path(String::format("Data/DATA%02d.BIN", videoId));
+	void onLoadedGameFiles() override {
+		GameWithVersion2::onLoadedGameFiles();
+
+		auto &script = g_engine->script();
+		script.fixNestedMenuPop(25096); // Filemon using phone in PRIMER_PLANO_TELEFONO
 	}
 
 	char getTextFileKey() override {
@@ -383,16 +404,53 @@ public:
 			return;
 		return GameWithVersion2::missingAnimation(fileName);
 	}
+
+	void missingSound(const Common::String &fileName) override {
+		// seems like in the last level, they didnt test anymore? Many missing sounds in the same area
+		if (fileName == "Sonidos/2147" ||
+			fileName == "Sonidos/2148" ||
+			fileName == "Sonidos/2149" ||
+			fileName == "Sonidos/2150" ||
+			fileName == "Sonidos/2151" ||
+			fileName == "Sonidos/2159" ||
+			fileName == "Sonidos/2160" ||
+			fileName == "Sonidos/2161" ||
+			fileName == "Sonidos/2162")
+			return;
+		GameWithVersion2::missingSound(fileName);
+	}
+
+	void unknownDropItem(const char *name) override {
+		// an original bug, the item will just stay in the inventory unusable
+		if (scumm_stricmp(name, "I_ELECTROCHOCK") == 0)
+			return;
+		return GameWithVersion2::unknownDropItem(name);
+	}
+
+	bool shouldTriggerDoor(const Door *door) override {
+		// an original bug, a door left active to a non-existant target
+		// probably the room layout was different during development
+		if (door->name().equalsIgnoreCase("a_SALA_DE_TROFEOS_desde_ENFERMERIA"))
+			return false;
+
+		return GameWithVersion2::shouldTriggerDoor(door);
+	}
 };
 
 class GameCorvino : public GameWithVersion2_1 {
 public:
 	void onLoadedGameFiles() override {
+		GameWithVersion2_1::onLoadedGameFiles();
+
 		g_engine->script().variable("EsJuegoCompleto") = 0;
 	}
 
 	const char *const *getMapFiles() override {
 		return kMapFilesCorvino;
+	}
+
+	Path getVideoPath(int32 videoId) override {
+		return Path(String::format("Data/DATA%02d.BIN", videoId));
 	}
 
 	bool isKnownBadVideo(int32 videoId) override {
@@ -403,31 +461,63 @@ public:
 
 class GameBalones : public GameWithVersion2_1 {
 public:
-	GameBalones() {
-		_hasMessedUpEncoding = !SearchMan.hasFile(Path(reencode("Animaciones/aut\xD3grafo.ani")));
-	}
-
 	void onLoadedGameFiles() override {
+		GameWithVersion2_1::onLoadedGameFiles();
+
 		g_engine->script().variable("EsJuegoCompleto") = 1;
 	}
 
 	const char *const *getMapFiles() override {
 		return kMapFilesBalones;
 	}
+
+	Path getVideoPath(int32 videoId) override {
+		return Path(String::format("Bin/DATA%02d.BIN", videoId));
+	}
+
+	void missingAnimation(const Common::String &filename) override {
+		if (filename.equalsIgnoreCase("DOCE EUROS.ANI") ||
+			filename.equalsIgnoreCase("ASPIRADORA_MANGUERA.ANI") ||
+			filename.equalsIgnoreCase("ASPIRADORA.ANI") ||
+			filename.equalsIgnoreCase("ASPIRADOR.ANI") ||
+			filename.equalsIgnoreCase("CABEZA.ANI") ||
+			filename.equalsIgnoreCase("CANICAS.ANI") ||
+			filename.equalsIgnoreCase("HUEVO.ANI") ||
+			filename.equalsIgnoreCase("NAVAJA.ANI") ||
+			filename.equalsIgnoreCase("PALANCA.ANI") ||
+			filename.equalsIgnoreCase("PELUCA MOJADA.ANI") ||
+			filename.equalsIgnoreCase("PERA.ANI") ||
+			filename.equalsIgnoreCase("PERA CON PITORRO.ANI") ||
+			filename.equalsIgnoreCase("PILA.ANI") ||
+			filename.equalsIgnoreCase("PINCEL.ANI") ||
+			filename.equalsIgnoreCase("PINCEL CON COSA REPUGNANTE.ANI") ||
+			filename.equalsIgnoreCase("PINCEL SIN CEL.ANI") ||
+			filename.equalsIgnoreCase("PELO.ANI") ||
+			filename.equalsIgnoreCase("PELO RESINA.ANI") ||
+			filename.equalsIgnoreCase("PINTAU\xC3\x91""AS.ANI") ||
+			filename.equalsIgnoreCase("TARJETA CRÉDITO.ANI") ||
+			filename.equalsIgnoreCase("MANGUERA.ANI") ||
+			filename.equalsIgnoreCase("VENTILADOR.ANI") ||
+			filename.equalsIgnoreCase("BISO\xC3\x91\xC3\x89.ANI"))
+			return;
+		GameWithVersion2_1::missingAnimation(filename);
+	}
 };
 
 class GameMamelucos : public GameWithVersion2_1 {
 public:
-	GameMamelucos() {
-		_hasMessedUpEncoding = !SearchMan.hasFile(Path(reencode("Animaciones/EST\xC1TICOS FILEM\xD3N.ANI")));
-	}
-
 	void onLoadedGameFiles() override {
+		GameWithVersion2_1::onLoadedGameFiles();
+
 		g_engine->script().variable("EsJuegoCompleto") = 2;
 	}
 
 	const char *const *getMapFiles() override {
 		return kMapFilesMamelucos;
+	}
+
+	Path getVideoPath(int32 videoId) override {
+		return Path(String::format("Bin/DATA%02d.BIN", videoId));
 	}
 };
 

@@ -19,15 +19,15 @@
  *
  */
 
-#include "mads/madsv2/core/digi.h"
+#include "mads/madsv2/forest/rooms/section1.h"
+#include "mads/madsv2/forest/mads/words.h"
+#include "mads/madsv2/forest/digi.h"
+#include "mads/madsv2/forest/global.h"
+#include "mads/madsv2/forest/midi.h"
 #include "mads/madsv2/core/game.h"
 #include "mads/madsv2/core/kernel.h"
 #include "mads/madsv2/core/matte.h"
-#include "mads/madsv2/core/midi.h"
 #include "mads/madsv2/core/player.h"
-#include "mads/madsv2/forest/global.h"
-#include "mads/madsv2/forest/rooms/section1.h"
-#include "mads/madsv2/forest/rooms/room211.h"
 
 namespace MADS {
 namespace MADSV2 {
@@ -56,8 +56,8 @@ static void room_211_init() {
 	global[player_score] = -1;
 	viewing_at_y = 22;
 	global[g009] = 0;
-	player.walker_visible = 0;
-	player.commands_allowed = 0;
+	player.walker_visible = false;
+	player.commands_allowed = false;
 
 	for (int i = 0; i < 10; i++) {
 		aainfo[i]._active = 0;

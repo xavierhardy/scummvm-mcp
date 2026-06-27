@@ -19,16 +19,16 @@
  *
  */
 
-#include "mads/madsv2/core/digi.h"
+#include "mads/madsv2/forest/rooms/section1.h"
+#include "mads/madsv2/forest/mads/words.h"
+#include "mads/madsv2/forest/digi.h"
+#include "mads/madsv2/forest/global.h"
+#include "mads/madsv2/forest/journal.h"
 #include "mads/madsv2/core/game.h"
 #include "mads/madsv2/core/global.h"
 #include "mads/madsv2/core/kernel.h"
 #include "mads/madsv2/core/matte.h"
 #include "mads/madsv2/core/player.h"
-#include "mads/madsv2/forest/global.h"
-#include "mads/madsv2/forest/journal.h"
-#include "mads/madsv2/forest/rooms/section1.h"
-#include "mads/madsv2/forest/rooms/room199.h"
 
 namespace MADS {
 namespace MADSV2 {
@@ -102,7 +102,7 @@ static void room_199_init1() {
 static void room_199_init() {
 	global[player_score] = 0;
 	global[g009] = -1;
-	global_digi_play(7);
+	global_midi_play(7);
 
 	aainfo[2]._val3 = -1;
 	aainfo[2]._val4 = 0;
@@ -113,13 +113,13 @@ static void room_199_init() {
 		if (global[g070] != 0) {
 			aainfo[2]._frame = 1;
 			ss[1] = kernel_load_series("*rm199z1", 0);
-			kernel_flip_hotspot(99, false);
-			kernel_flip_hotspot(174, false);
+			kernel_flip_hotspot(words_flowers, false);
+			kernel_flip_hotspot(words_fwt, false);
 			int16 slot = aainfo[2]._frame;
 			seq[6 + slot] = kernel_seq_stamp(ss[slot], false, 1);
 			kernel_seq_depth(seq[6 + slot], 1);
 			aainfo[2]._active = slot;
-			player.commands_allowed = 0;
+			player.commands_allowed = false;
 			kernel_timing_trigger(300, 111);
 			return;
 		}
@@ -129,13 +129,13 @@ static void room_199_init() {
 	} else if (previous_room == 503) {
 		aainfo[2]._frame = 3;
 		ss[3] = kernel_load_series("*rm199v1", 0);
-		kernel_flip_hotspot(99, false);
-		kernel_flip_hotspot(174, false);
+		kernel_flip_hotspot(words_flowers, false);
+		kernel_flip_hotspot(words_fwt, false);
 		int16 slot = aainfo[2]._frame;
 		seq[6 + slot] = kernel_seq_stamp(ss[slot], false, 1);
 		kernel_seq_depth(seq[6 + slot], 5);
 		aainfo[2]._active = slot;
-		player.commands_allowed = 0;
+		player.commands_allowed = false;
 		kernel_timing_trigger(2, 112);
 		return;
 	} else {
@@ -144,8 +144,8 @@ static void room_199_init() {
 		ss[0] = kernel_load_series("*rm199n1", 0);
 	}
 
-	kernel_flip_hotspot(99, false);
-	kernel_flip_hotspot(174, false);
+	kernel_flip_hotspot(words_flowers, false);
+	kernel_flip_hotspot(words_fwt, false);
 	int16 slot = aainfo[2]._frame;
 	seq[6 + slot] = kernel_seq_stamp(ss[slot], false, 1);
 	kernel_seq_depth(seq[6 + slot], 1);
@@ -377,14 +377,14 @@ static void room_199_daemon() {
 	} else if (trig == 111) {
 		global[g070] = 0;
 		leave_journal();
-		player.commands_allowed = -1;
+		player.commands_allowed = true;
 	} else if (trig == 112) {
 		aainfo[2]._val3 = 0;
 		aainfo[2]._val4 = -1;
 		digi_play_build(521, 'e', 1, 1);
 	} else if (trig == 113) {
 		leave_journal();
-		player.commands_allowed = -1;
+		player.commands_allowed = true;
 	} else if (trig == 114) {
 		int result = room_199_anim1();
 		global[g100] = result;
@@ -461,9 +461,9 @@ static void room_199_parser2() {
 
 static void room_199_parser1() {
 	if (aainfo[2]._active == 2)
-		kernel_flip_hotspot(99, 0);
+		kernel_flip_hotspot(words_flowers, false);
 	if (aainfo[2]._active == 3)
-		kernel_flip_hotspot(174, 0);
+		kernel_flip_hotspot(words_fwt, false);
 
 	int16 old_slot = aainfo[2]._active;
 	kernel_seq_delete(seq[6 + old_slot]);
@@ -483,11 +483,11 @@ static void room_199_parser1() {
 		break;
 	case 2:
 		ss[new_slot] = kernel_load_series("*rm199i1", 0);
-		kernel_flip_hotspot(99, -1);
+		kernel_flip_hotspot(words_flowers, true);
 		break;
 	case 3:
 		ss[new_slot] = kernel_load_series("*rm199v1", 0);
-		kernel_flip_hotspot(174, -1);
+		kernel_flip_hotspot(words_fwt, true);
 		break;
 	}
 
@@ -498,36 +498,36 @@ static void room_199_parser1() {
 }
 
 static void room_199_parser() {
-	if (player_parse(174, 121, 0)) { digi_play_build(521, 'e', 6, 2);  goto handled; }
-	if (player_parse(174, 164, 0)) { digi_play_build(521, 'e', 10, 2); goto handled; }
-	if (player_parse(174, 112, 0)) { digi_play_build(521, 'e', 3, 2);  goto handled; }
-	if (player_parse(174, 163, 0)) { digi_play_build(521, 'e', 8, 2);  goto handled; }
-	if (player_parse(174, 158, 0)) { digi_play_build(521, 'e', 9, 2);  goto handled; }
-	if (player_parse(174, 154, 0)) { digi_play_build(521, 'e', 20, 2); goto handled; }
-	if (player_parse(174, 96, 0))  { digi_play_build(521, 'e', 5, 2);  goto handled; }
-	if (player_parse(174, 132, 0)) { digi_play_build(521, 'e', 2, 2);  goto handled; }
-	if (player_parse(174, 113, 0)) { digi_play_build(521, 'e', 7, 2);  goto handled; }
-	if (player_parse(174, 105, 0)) { digi_play_build(521, 'e', 4, 2);  goto handled; }
-	if (player_parse(174, 145, 0)) { digi_play_build(521, 'e', 21, 2); goto handled; }
+	if (player_parse(words_fwt, words_needle, 0)) { digi_play_build(521, 'e', 6, 2);  goto handled; }
+	if (player_parse(words_fwt, words_wood, 0)) { digi_play_build(521, 'e', 10, 2); goto handled; }
+	if (player_parse(words_fwt, words_leaves, 0)) { digi_play_build(521, 'e', 3, 2);  goto handled; }
+	if (player_parse(words_fwt, words_web, 0)) { digi_play_build(521, 'e', 8, 2);  goto handled; }
+	if (player_parse(words_fwt, words_vine_weed, 0)) { digi_play_build(521, 'e', 9, 2);  goto handled; }
+	if (player_parse(words_fwt, words_twine, 0)) { digi_play_build(521, 'e', 20, 2); goto handled; }
+	if (player_parse(words_fwt, words_feather, 0))  { digi_play_build(521, 'e', 5, 2);  goto handled; }
+	if (player_parse(words_fwt, words_reeds, 0)) { digi_play_build(521, 'e', 2, 2);  goto handled; }
+	if (player_parse(words_fwt, words_lily_pad, 0)) { digi_play_build(521, 'e', 7, 2);  goto handled; }
+	if (player_parse(words_fwt, words_gears, 0)) { digi_play_build(521, 'e', 4, 2);  goto handled; }
+	if (player_parse(words_fwt, words_sticks, 0)) { digi_play_build(521, 'e', 21, 2); goto handled; }
 
-	if (player_parse(99, 82, 0))  { digi_play_build_ii('e', 9, 2);  goto handled; }
-	if (player_parse(99, 131, 0)) { digi_play_build_ii('e', 5, 2);  goto handled; }
-	if (player_parse(99, 142, 0)) { digi_play_build_ii('e', 3, 2);  goto handled; }
-	if (player_parse(99, 146, 0)) { digi_play_build_ii('e', 6, 2);  goto handled; }
-	if (player_parse(99, 150, 0)) { digi_play_build_ii('e', 8, 2);  goto handled; }
-	if (player_parse(99, 95, 0))  { digi_play_build_ii('e', 11, 2); goto handled; }
-	if (player_parse(99, 118, 0)) { digi_play_build_ii('e', 1, 2);  goto handled; }
-	if (player_parse(99, 103, 0)) { digi_play_build_ii('e', 4, 2);  goto handled; }
-	if (player_parse(99, 83, 0))  { digi_play_build_ii('e', 7, 2);  goto handled; }
-	if (player_parse(99, 172, 0)) { digi_play_build_ii('e', 12, 2); goto handled; }
-	if (player_parse(99, 77, 0))  { digi_play_build_ii('e', 2, 2);  goto handled; }
+	if (player_parse(words_flowers, words_comfrey, 0))  { digi_play_build_ii('e', 9, 2);  goto handled; }
+	if (player_parse(words_flowers, words_primrose, 0)) { digi_play_build_ii('e', 5, 2);  goto handled; }
+	if (player_parse(words_flowers, words_snapdragon, 0)) { digi_play_build_ii('e', 3, 2);  goto handled; }
+	if (player_parse(words_flowers, words_sunflower, 0)) { digi_play_build_ii('e', 6, 2);  goto handled; }
+	if (player_parse(words_flowers, words_thistle, 0)) { digi_play_build_ii('e', 8, 2);  goto handled; }
+	if (player_parse(words_flowers, words_eyebright, 0))  { digi_play_build_ii('e', 11, 2); goto handled; }
+	if (player_parse(words_flowers, words_mint, 0)) { digi_play_build_ii('e', 1, 2);  goto handled; }
+	if (player_parse(words_flowers, words_foxglove, 0)) { digi_play_build_ii('e', 4, 2);  goto handled; }
+	if (player_parse(words_flowers, words_dandelion, 0))  { digi_play_build_ii('e', 7, 2);  goto handled; }
+	if (player_parse(words_flowers, words_lungwort, 0)) { digi_play_build_ii('e', 12, 2); goto handled; }
+	if (player_parse(words_flowers, words_chicory, 0))  { digi_play_build_ii('e', 2, 2);  goto handled; }
 
-	if (player_parse(94, 0)) {
+	if (player_parse(words_exit_journal, 0)) {
 		leave_journal();
 		goto handled;
 	}
 
-	if (player_parse(156, 0)) {
+	if (player_parse(words_up_page, 0)) {
 		if (aainfo[2]._active != 3) {
 			aainfo[2]._active = aainfo[2]._frame;
 			aainfo[2]._frame++;
@@ -537,7 +537,7 @@ static void room_199_parser() {
 		goto handled;
 	}
 
-	if (player_parse(90, 0)) {
+	if (player_parse(words_down_page, 0)) {
 		if (aainfo[2]._active != 0) {
 			aainfo[2]._active = aainfo[2]._frame;
 			aainfo[2]._frame--;

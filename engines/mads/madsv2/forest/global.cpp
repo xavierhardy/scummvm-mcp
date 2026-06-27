@@ -20,13 +20,17 @@
  */
 
 #include "common/textconsole.h"
-#include "mads/madsv2/core/digi.h"
+#include "mads/madsv2/forest/digi.h"
+#include "mads/madsv2/core/object.h"
+#include "mads/madsv2/core/player.h"
+#include "mads/madsv2/core/text.h"
 #include "mads/madsv2/core/error.h"
 #include "mads/madsv2/core/game.h"
 #include "mads/madsv2/core/imath.h"
 #include "mads/madsv2/core/kernel.h"
-#include "mads/madsv2/core/midi.h"
+#include "mads/madsv2/forest/midi.h"
 #include "mads/madsv2/core/pal.h"
+#include "mads/madsv2/forest/mads/words.h"
 #include "mads/madsv2/forest/global.h"
 #include "mads/madsv2/forest/extra.h"
 
@@ -893,9 +897,105 @@ static void global_anim2_5(int arg_0, int arg_2, int16 *arg_4) {
 	}
 }
 
-void global_digi_play(int num) {
-	// TODO
-	warning("TODO: global_digi_play");
+void global_room_init() {
+	global[g133] = 1;
+	global[g143] = 1;
+	global[g132] = -1;
+	global[g137] = -1;
+	global[g142] = -1;
+	global[g147] = -1;
+	global[g151] = -1;
+	global[g152] = -1;
+	global[g153] = -1;
+	room_203_flag = true;
+	global[g131] = 0;
+	global[g130] = 0;
+	global[g135] = 0;
+	global[g136] = 0;
+	global[g134] = 0;
+	global[g141] = 0;
+	global[g140] = 0;
+	global[g145] = 0;
+	global[g146] = 0;
+	global[g144] = 0;
+	global[g148] = 0;
+	global[perform_displacements] = 0;
+	digi_flag1 = false;
+	digi_flag2 = false;
+	digi_val2 = 0;
+}
+
+void global_error_code() {
+	int16 randVal = imath_random(1, 1000);
+	int16 text_id = 0;
+
+	if (player_parse(words_take, 0)) {
+		if (player_has(object_named(player_main_noun)) && player.main_object_source != 4) {
+			text_id = 25;
+		} else {
+			if (randVal <= 333)      text_id = 1;
+			else if (randVal <= 666) text_id = 2;
+			else                     text_id = 3;
+		}
+	} else if (player_parse(words_push, 0)) {
+		text_id = (randVal < 750) ? 4 : 5;
+	} else if (player_parse(words_pull, 0)) {
+		text_id = (randVal < 750) ? 6 : 7;
+	} else if (player_parse(words_open, 0)) {
+		if (randVal <= 500)      text_id = 8;
+		else if (randVal <= 750) text_id = 9;
+		else                     text_id = 10;
+	} else if (player_parse(words_close, 0)) {
+		if (randVal <= 500)      text_id = 11;
+		else if (randVal <= 750) text_id = 12;
+		else                     text_id = 13;
+	} else if (player_parse(words_put, 0)) {
+		if (player_has(object_named(player_main_noun))) {
+			text_id = 26;
+		} else if (player.main_object_source == 4 && player.second_object_source == 4) {
+			text_id = 28;
+		} else {
+			text_id = (randVal < 500) ? 14 : 15;
+		}
+	} else if (player_parse(words_talk_to, 0)) {
+		text_id = (randVal <= 500) ? 16 : 17;
+	} else if (player_parse(words_give, 0)) {
+		if (player_has(object_named(player_main_noun))) {
+			text_id = 27;
+		} else if (player.main_object_source == 4 && player.second_object_source == 4) {
+			text_id = 28;
+		} else {
+			text_id = 18;
+		}
+	} else if (player_parse(words_throw, 0)) {
+		if (player_has(object_named(player_main_noun))) {
+			text_id = 19;
+		} else {
+			text_id = 28;
+		}
+	} else if (player_parse(words_look, 0)) {
+		object_named(player_main_noun);
+		if (randVal <= 333)      text_id = 20;
+		else if (randVal <= 666) text_id = 21;
+		else                     text_id = 22;
+	} else if (!player_parse(words_walk_to, 0) && !player_parse(words_walk_down, 0)) {
+		text_id = (randVal < 500) ? 23 : 24;
+	}
+
+	if (text_id)
+		text_show(text_id);
+}
+
+void global_midi_play(int num) {
+	static const char *NAMES[15] = {
+		"adven2", "foolarnd", "homeag", "humorus1", "humorus2", "pianogtr", "raindrop",
+		"xad", "xcarey", "xuspens1", "travels1", "xcarey2", "birdsong", "adventur", "action1"
+	};
+
+	assert(num >= 1 && num <= 15);
+	Common::String name = Common::String::format("*%s.hmi", NAMES[num - 1]);
+
+	midi_play(name.c_str());
 }
 
 void global_daemon_code() {
@@ -903,10 +1003,11 @@ void global_daemon_code() {
 
 	digi_read_another_chunk();
 
-	if (global[9]) midi_loop();  // please loop the damn music
+	if (global[9])
+		midi_loop();
 
 	if (section_id != 9) {
-		do_interface_for_ouaf();
+		do_interface();
 	}
 }
 

@@ -64,7 +64,7 @@ void ActionManager::handleInput(NancyInput &input) {
 			if (!setHoverCursor) {
 				// Hotspots may overlap, but we want the hover cursor for the first one we encounter
 				// This fixes the stairs in nancy3
-				g_nancy->_cursor->setCursorType(rec->getHoverCursor());
+				g_nancy->_cursor->setCursorType(rec->getHoverCursor(), rec->cursorSetFromScript());
 				setHoverCursor = true;
 			}
 
@@ -568,10 +568,14 @@ void ActionManager::processDependency(DependencyRecord &dep, ActionRecord &recor
 }
 
 void ActionManager::clearActionRecords() {
-	for (auto &r : _records) {
-		delete r;
+	for (auto it = _records.begin(); it != _records.end(); ) {
+		if ((*it)->isPersistentAcrossScenes()) {
+			++it;
+			continue;
+		}
+		delete *it;
+		it = _records.erase(it);
 	}
-	_records.clear();
 	_activatedRecordsThisFrame.clear();
 	_previousRecordWasExecuted = false;
 }

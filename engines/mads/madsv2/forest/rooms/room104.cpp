@@ -19,25 +19,24 @@
  *
  */
 
-#include "mads/madsv2/core/conv.h"
-#include "mads/madsv2/core/digi.h"
+#include "mads/madsv2/forest/mads/inventory.h"
+#include "mads/madsv2/forest/mads/sounds.h"
+#include "mads/madsv2/forest/mads/words.h"
+#include "mads/madsv2/forest/rooms/section1.h"
+#include "mads/madsv2/forest/digi.h"
+#include "mads/madsv2/forest/extra.h"
+#include "mads/madsv2/forest/global.h"
+#include "mads/madsv2/forest/midi.h"
 #include "mads/madsv2/core/game.h"
 #include "mads/madsv2/core/imath.h"
 #include "mads/madsv2/core/inter.h"
 #include "mads/madsv2/core/kernel.h"
 #include "mads/madsv2/core/matte.h"
-#include "mads/madsv2/core/midi.h"
 #include "mads/madsv2/core/mouse.h"
 #include "mads/madsv2/core/player.h"
 #include "mads/madsv2/core/sound.h"
 #include "mads/madsv2/core/text.h"
-#include "mads/madsv2/forest/mads/inventory.h"
-#include "mads/madsv2/forest/mads/sounds.h"
-#include "mads/madsv2/forest/mads/words.h"
-#include "mads/madsv2/forest/global.h"
-#include "mads/madsv2/forest/journal.h"
-#include "mads/madsv2/forest/rooms/section1.h"
-#include "mads/madsv2/forest/rooms/room104.h"
+#include "mads/madsv2/engine.h"
 
 namespace MADS {
 namespace MADSV2 {
@@ -97,8 +96,8 @@ static void room_104_init() {
 	}
 
 	if (previous_room != -2 && previous_room != 199) {
-		player.walker_visible = 0;
-		player.commands_allowed = 0;
+		player.walker_visible = false;
+		player.commands_allowed = false;
 		if (flags[4] != 3)
 			flags[4]++;
 	}
@@ -152,10 +151,10 @@ static void room_104_init() {
 static void room_104_init1() {
 	global[player_score] = 0;
 	global[g009] = -1;
-	global_digi_play(8);
+	global_midi_play(8);
 	viewing_at_y = 22;
-	player.walker_visible = 0;
-	player.commands_allowed = 0;
+	player.walker_visible = false;
+	player.commands_allowed = false;
 	mouse_hide();
 
 	for (int count = 0; count < 10; count++) {
@@ -172,8 +171,8 @@ static void room_104_init2() {
 	global[g009] = 0;
 	midi_stop();
 	viewing_at_y = 22;
-	player.walker_visible = 0;
-	player.commands_allowed = 0;
+	player.walker_visible = false;
+	player.commands_allowed = false;
 	mouse_hide();
 
 	for (int count = 0; count < 10; count++) {
@@ -187,7 +186,7 @@ static void room_104_init2() {
 
 static void room_104_init3() {
 	global[g009] = -1;
-	global_digi_play(8);
+	global_midi_play(8);
 	global[g131] = 0;
 	global[g141] = 0;
 
@@ -230,8 +229,8 @@ static void room_104_init3() {
 		global[g133] = 0;
 		global[g143] = 0;
 		restore_player();
-		player.commands_allowed = -1;
-		player.walker_visible = -1;
+		player.commands_allowed = true;
+		player.walker_visible = true;
 	} else {
 		if (global[g101] != 0) return;
 		global[g131] = -1;
@@ -240,8 +239,8 @@ static void room_104_init3() {
 		kernel_reset_animation(scratch._9c, 2);
 		global[g133] = 0;
 		global[g143] = 0;
-		player.commands_allowed = -1;
-		player.walker_visible = -1;
+		player.commands_allowed = true;
+		player.walker_visible = true;
 	}
 }
 
@@ -594,7 +593,7 @@ static void room_104_anim3() {
 			aainfo[8]._val3 = 8;
 			digi_play_build(104, 'e', 3, 1);
 			scratch._a2 = 84;
-			global_digi_play(14);
+			global_midi_play(14);
 			break;
 		case 89:
 			if (aainfo[8]._val3 == 8) {
@@ -804,8 +803,7 @@ static void room_104_daemon() {
 	}
 
 	if (global[g101] != 0 && global[player_hyperwalked] == -1) {
-		game_save_name(0);
-		kernel_save_game(save_game_buf);
+		g_engine->saveAutosaveIfEnabled();
 		new_room = 904;
 	}
 
@@ -813,8 +811,8 @@ static void room_104_daemon() {
 	case 7:
 		if (global[walker_converse_state] != 0) {
 			global[walker_converse_state] = 0;
-			close_journal(3);
-			player.commands_allowed = -1;
+			close_interface(CANDLE_FLY);
+			player.commands_allowed = true;
 		}
 		break;
 
@@ -858,11 +856,11 @@ static void room_104_daemon() {
 		kernel_synch(KERNEL_ANIM, scratch._9a, KERNEL_NOW, 0);
 		kernel_reset_animation(scratch._9c, 1);
 		kernel_synch(KERNEL_ANIM, scratch._9c, KERNEL_NOW, 0);
-		player.walker_visible = -1;
+		player.walker_visible = true;
 		global[g133] = 0;
 		global[g143] = 0;
 		kernel_synch(KERNEL_PLAYER, 0, KERNEL_NOW, 0);
-		player.commands_allowed = -1;
+		player.commands_allowed = true;
 		scratch._a0 = -1;
 		break;
 
@@ -872,7 +870,7 @@ static void room_104_daemon() {
 		kernel_reset_animation(scratch._9c, 1);
 		kernel_synch(KERNEL_ANIM, scratch._9c, KERNEL_NOW, 0);
 		global[g143] = 0;
-		player.commands_allowed = -1;
+		player.commands_allowed = true;
 		break;
 
 	case 102:
@@ -881,7 +879,7 @@ static void room_104_daemon() {
 		kernel_reset_animation(scratch._9a, 1);
 		kernel_synch(KERNEL_ANIM, scratch._9a, KERNEL_NOW, 0);
 		global[g133] = 0;
-		player.commands_allowed = -1;
+		player.commands_allowed = true;
 		break;
 	}
 
@@ -901,7 +899,7 @@ static void room_104_daemon() {
 }
 
 static void room_104_pre_parser() {
-	if (player_parse(13, 15, 0)) {
+	if (player_parse(words_walk_to, words_room_101, 0)) {
 		global[g009] = 0;
 		midi_stop();
 		player.walk_off_edge_to_room = 101;
@@ -910,7 +908,7 @@ static void room_104_pre_parser() {
 
 static void room_104_parser() {
 	if (global[walker_converse_state] != 0) {
-		player.commands_allowed = 0;
+		player.commands_allowed = false;
 		digi_play_build_ii('c', 1, 1);
 		goto handled;
 	}
@@ -919,22 +917,22 @@ static void room_104_parser() {
 		goto handled;
 	}
 
-	if (player_parse(114, 116, 0)) {
-		player.commands_allowed = 0;
+	if (player_parse(words_look_at, words_map, 0)) {
+		player.commands_allowed = false;
 		global[g145] = -1;
 		scratch._8e = 2;
 		goto handled;
 	}
 
-	if (player_parse(126, 99, 0)) {
-		player.commands_allowed = 0;
+	if (player_parse(words_pick_up, words_flowers, 0)) {
+		player.commands_allowed = false;
 		global[g135] = -1;
 		scratch._8c = 3;
 		goto handled;
 	}
 
-	if (player_parse(78, 119, 0)) {
-		player.commands_allowed = 0;
+	if (player_parse(words_click_on, words_moss, 0)) {
+		player.commands_allowed = false;
 		global[g135] = -1;
 		scratch._8c = 3;
 		goto handled;

@@ -137,7 +137,10 @@ MODULE_OBJS = \
 	lingo/xlibs/m/mazexobj.o \
 	lingo/xlibs/m/myfolder.o \
 	lingo/xlibs/g/getuinfo.o \
+	lingo/xlibs/g/getsoundxfcn.o \
+	lingo/xlibs/f/flushmousexfcn.o \
 	lingo/xlibs/o/openbleedwindowxcmd.o \
+	lingo/xlibs/s/stagectl.o \
  	lingo/xlibs/p/playsoundmoviexobj.o \
  	lingo/xlibs/s/savenrestorexobj.o \
  	lingo/xlibs/t/temnotaxobj.o \
@@ -174,7 +177,7 @@ MODULE_OBJS = \
 	lingo/xlibs/v/vmpresent.o \
 	lingo/xlibs/v/volumelist.o \
 	lingo/xlibs/v/voyagerxsound.o \
-	lingo/xlibs/w/widgetxobj.o \
+	lingo/xlibs/w/widget.o \
 	lingo/xlibs/w/window.o \
 	lingo/xlibs/w/winxobj.o \
 	lingo/xlibs/w/wininfo.o \
@@ -194,8 +197,13 @@ MODULE_OBJS = \
 	lingo/xtras/k/keypoll.o \
 	lingo/xtras/m/masterapp.o \
 	lingo/xtras/m/mui.o \
+	lingo/xtras/d/datetime.o \
+	lingo/xtras/n/netlingo.o \
+	lingo/xtras/f/filextra4.o \
 	lingo/xtras/o/openurl.o \
 	lingo/xtras/o/oscheck.o \
+	lingo/xtras/p/paintx.o \
+	lingo/xtras/s/setmouse.o \
 	lingo/xtras/q/qtvrxtra.o \
 	lingo/xtras/r/registryreader.o \
 	lingo/xtras/r/rtk.o \

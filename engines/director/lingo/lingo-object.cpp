@@ -72,12 +72,14 @@
 #include "director/lingo/xlibs/f/flushxobj.h"
 #include "director/lingo/xlibs/f/fplayxobj.h"
 #include "director/lingo/xlibs/f/fsutil.h"
+#include "director/lingo/xlibs/f/flushmousexfcn.h"
 #include "director/lingo/xlibs/g/genutils.h"
 #include "director/lingo/xlibs/g/getscreenrectsxfcn.h"
 #include "director/lingo/xlibs/g/getscreensizexfcn.h"
 #include "director/lingo/xlibs/g/getsoundinlevel.h"
 #include "director/lingo/xlibs/g/gpid.h"
 #include "director/lingo/xlibs/g/getuinfo.h"
+#include "director/lingo/xlibs/g/getsoundxfcn.h"
 #include "director/lingo/xlibs/h/henry.h"
 #include "director/lingo/xlibs/h/hitmap.h"
 #include "director/lingo/xlibs/i/inixobj.h"
@@ -132,6 +134,7 @@
 #include "director/lingo/xlibs/s/stagetc.h"
 #include "director/lingo/xlibs/s/syscolor.h"
 #include "director/lingo/xlibs/s/savenrestorexobj.h"
+#include "director/lingo/xlibs/s/stagectl.h"
 #include "director/lingo/xlibs/t/tengu.h"
 #include "director/lingo/xlibs/t/temnotaxobj.h"
 #include "director/lingo/xlibs/u/unittest.h"
@@ -142,7 +145,7 @@
 #include "director/lingo/xlibs/v/vmpresent.h"
 #include "director/lingo/xlibs/v/volumelist.h"
 #include "director/lingo/xlibs/v/voyagerxsound.h"
-#include "director/lingo/xlibs/w/widgetxobj.h"
+#include "director/lingo/xlibs/w/widget.h"
 #include "director/lingo/xlibs/w/window.h"
 #include "director/lingo/xlibs/w/wininfo.h"
 #include "director/lingo/xlibs/w/winxobj.h"
@@ -157,14 +160,17 @@
 #include "director/lingo/xtras/b/budapi.h"
 #include "director/lingo/xtras/d/directsound.h"
 #include "director/lingo/xtras/d/displayres.h"
+#include "director/lingo/xtras/d/datetime.h"
 #include "director/lingo/xtras/f/filextra.h"
+#include "director/lingo/xtras/f/filextra4.h"
 #include "director/lingo/xtras/g/getdir.h"
 #include "director/lingo/xtras/k/keypoll.h"
 #include "director/lingo/xtras/m/masterapp.h"
 #include "director/lingo/xtras/m/mui.h"
-#include "director/lingo/xtras/m/mui.h"
+#include "director/lingo/xtras/n/netlingo.h"
 #include "director/lingo/xtras/o/openurl.h"
 #include "director/lingo/xtras/o/oscheck.h"
+#include "director/lingo/xtras/p/paintx.h"
 #include "director/lingo/xtras/q/qtvrxtra.h"
 #include "director/lingo/xtras/r/registryreader.h"
 #include "director/lingo/xtras/r/rtk.h"
@@ -176,6 +182,7 @@
 #include "director/lingo/xtras/s/staytoonedhigh.h"
 #include "director/lingo/xtras/s/staytoonedober.h"
 #include "director/lingo/xtras/s/staytoonedtoon.h"
+#include "director/lingo/xtras/s/setmouse.h"
 #include "director/lingo/xtras/t/timextra.h"
 #include "director/lingo/xtras/x/xsound.h"
 
@@ -273,6 +280,7 @@ static const struct XLibProto {
 	XLIBDEF(DPWAVIXObj,			kXObj,			300),	// D3
 	XLIBDEF(DPWQTWXObj,			kXObj,			300),	// D3
 	XLIBDEF(DarkenScreen,		kXObj,			300),	// D3
+	XLIBDEF(DateTimeXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(DateUtilXObj,		kXObj,			400),	// D4
 	XLIBDEF(DeveloperStack,		kXObj,			300),	// D3
 	XLIBDEF(DialogsXObj,		kXObj,			400),	// D4
@@ -293,10 +301,12 @@ static const struct XLibProto {
 	XLIBDEF(FileExists,			kXObj,			300),	// D3
 	XLIBDEF(FileIO,				kXObj | kXtraObj,200),	// D2
 	XLIBDEF(FileXtra,			kXtraObj,		500),	// D5
+	XLIBDEF(FileXtra4Xtra,			kXtraObj,					500),	// D5
 	XLIBDEF(FindFolder,			kXObj,			300),	// D3
 	XLIBDEF(FindSys,			kXObj,			400),	// D4
 	XLIBDEF(FindWin,			kXObj,			400),	// D4
 	XLIBDEF(FinderEventsXCMD,	kXObj,			400),	// D4
+	XLIBDEF(FlushMouseXFCN,			kXObj,					300),	// D3
 	XLIBDEF(FlushXObj,			kXObj,			300),	// D3
 	XLIBDEF(FPlayXObj,			kXObj,			200),	// D2
 	XLIBDEF(GenUtilsXObj,		kXObj,			400),	// D4
@@ -304,6 +314,7 @@ static const struct XLibProto {
 	XLIBDEF(GetScreenRectsXFCN,	kXObj,			300),	// D3
 	XLIBDEF(GetScreenSizeXFCN,	kXObj,			300),	// D3
 	XLIBDEF(GetSoundInLevelXObj,kXObj,			400),	// D4
+	XLIBDEF(GetSoundXFCN,			kXObj,					300),	// D3
 	XLIBDEF(GetUInfoXObj,			kXObj,					400),	// D4
 	XLIBDEF(GpidXObj,			kXObj,			400),	// D4
 	XLIBDEF(HenryXObj,			kXObj,			400),	// D4
@@ -336,11 +347,13 @@ static const struct XLibProto {
 	XLIBDEF(MuiXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(MyFolderXObj,			kXObj,					400),	// D4
 	XLIBDEF(MystIsleXObj,		kXObj,			400),	// D4
+	XLIBDEF(NetLingoXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(OSCheckXtra,		kXtraObj,		400),	// D4
 	XLIBDEF(OpenBleedWindowXCMD,kXObj,			300),	// D3
 	XLIBDEF(OpenURLXtra,		kXtraObj,		500),	// D5
 	XLIBDEF(OrthoPlayXObj,		kXObj,			400),	// D4
 	XLIBDEF(PACoXObj,			kXObj,			300),	// D3
+	XLIBDEF(PaintXXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(PalXObj,			kXObj,			400),	// D4
 	XLIBDEF(PanelXObj,			kXObj,			200),	// D2
 	XLIBDEF(PharaohsXObj,		kXObj,			400),	// D4
@@ -357,7 +370,7 @@ static const struct XLibProto {
 	XLIBDEF(QTVR,				kXObj,			400),	// D4
 	XLIBDEF(QtvrxtraXtra,		kXtraObj,		500),	// D5
 	XLIBDEF(Quicktime,			kXObj,			300),	// D3
-	XLIBDEF(RearWindowXObj,		kXObj,			400),	// D4
+	XLIBDEF(RearWindowXObj,		kXObj,			300),	// D3
 	XLIBDEF(RegisterComponent,	kXObj,			400),	// D4
 	XLIBDEF(RegistryReaderXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(RemixXCMD,			kXObj,			300),	// D3
@@ -365,10 +378,12 @@ static const struct XLibProto {
 	XLIBDEF(SaveNRestoreXObj,			kXObj,					400),	// D4
 	XLIBDEF(ScrnUtilXtra,		kXtraObj,		500),	// D5
 	XLIBDEF(SerialPortXObj,		kXObj,			200),	// D2
+	XLIBDEF(SetMouseXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(SmackerXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(SmallUtilXObj,		kXObj,			400),	// D4
 	XLIBDEF(SoundJam,			kXObj,			400),	// D4
 	XLIBDEF(SpaceMgr,			kXObj,			400),	// D4
+	XLIBDEF(StageControlXObj,			kXObj,					300),	// D3
 	XLIBDEF(StageTCXObj,		kXObj,			400),	// D4
 	XLIBDEF(StayToonedBallXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(StayToonedGlopXtra,			kXtraObj,					500),	// D5
@@ -388,8 +403,8 @@ static const struct XLibProto {
 	XLIBDEF(VideodiscXObj,		kXObj,			200),	// D2
 	XLIBDEF(VolumeList,			kXObj,			300),	// D3
 	XLIBDEF(VoyagerXSoundXObj,	kXObj,			400),	// D4
+	XLIBDEF(WidgetXObj,			kXObj,					300),	// D3
 	XLIBDEF(WinInfoXObj,		kXObj,			400),	// D4
-	XLIBDEF(WidgetXObj, 		kXObj,			400),	// D4
 	XLIBDEF(WindowXObj,			kXObj,			200),	// D2
 	XLIBDEF(XCMDGlueXObj,		kXObj,			200),	// D2
 	XLIBDEF(XPlayPACoXFCN,		kXObj,			300),	// D3

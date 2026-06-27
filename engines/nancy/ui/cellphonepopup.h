@@ -105,7 +105,7 @@ private:
 	void drawConnectingSprite();
 	void drawDialedNumber();
 	void drawHelpButton(uint state);
-	void drawCloseButton(uint state);
+	void drawCloseButton(bool hovered);
 	void drawStatusLabels();
 	void drawDirectoryList();
 	void drawDirectoryArrows();
@@ -136,6 +136,14 @@ private:
 		return _screenState == kWebList ||
 				_screenState == kEmailList ||
 				_screenState == kContentView;
+	}
+
+	// True for screens that hide the status icons and "?" button so the
+	// top bar shows only the section heading and the up arrow.
+	bool isSubScreenState() const {
+		return _screenState == kDirectory ||
+				_screenState == kOnlineHub ||
+				isZoomedChromeState();
 	}
 
 	void resetDialPad();
@@ -193,6 +201,8 @@ private:
 	Graphics::ManagedSurface _spritesImage;
 
 	bool _closeButtonHovered = false;
+	bool _scrollUpHovered = false;
+	bool _scrollDownHovered = false;
 
 	ScreenState _screenState = kWelcome;
 

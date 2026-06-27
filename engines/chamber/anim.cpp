@@ -55,10 +55,16 @@ extern void loadLutinSprite(uint16 lutidx);
 void getScratchBuffer(byte mode) {
 	byte *buffer = scratch_mem2;
 	uint16 offs = 0;
+	// EGA decodes each lutin to CLUT8 (1 byte per pixel = 4 bytes per CGA byte),
+	// so a slot is twice the CGA footprint. Double the partition strides in EGA,
+	// otherwise a large lutin overruns its slot into the next one - and the top
+	// slot overruns the end of scratch_mem1 into the adjacent sprites_list[],
+	// corrupting it (later crashing in blitSpritesToBackBuffer/restoreImage).
+	uint16 slot = (g_vm->_videoMode == Common::kRenderEGA) ? 3200 : 1600;
 	if (mode & 0x80)
-		offs += 3200;
+		offs += slot * 2;
 	if (mode & 0x40)
-		offs += 1600;
+		offs += slot;
 	lutin_mem = buffer + offs;
 }
 
@@ -110,6 +116,36 @@ void clipSprite(byte *x, byte *y, byte *sprw, byte *sprh, byte **sprite, int8 dx
 
 void copyScreenBlockWithDotEffect(byte *source, byte x, byte y, byte width, byte height, byte *target) {
 	if (g_vm->_videoMode == Common::kRenderEGA) {
+		/* EGA: linear 1 byte/pixel. Reveal the block in the same scattered
+		   ("dot dissolve") order as the CGA path, blitting periodically so the
+		   transition is animated instead of an instant copy. */
+		uint16 xx = x * 4;
+		uint16 ww = width * 4;
+		uint32 end = (uint32)ww * height;
+		uint16 step = dot_effect_step ? dot_effect_step : 17;
+		uint32 offs = 0;
+		uint32 guard = 0;
+
+		if (target == SCREENBUFFER) {
+			do {
+				uint16 px = xx + offs % ww;
+				uint16 py = y + offs / ww;
+				uint16 ofs = py * EGA_BYTES_PER_LINE + px;
+				target[ofs] = source[ofs];
+
+				offs += step;
+				if (offs > end)
+					offs -= end;
+
+				/* blit roughly once per block-row's worth of dots */
+				if ((++guard % ww) == 0) {
+					g_vm->_renderer->blitToScreen(xx, y, ww, height);
+					waitVBlank();
+				}
+			} while (offs != 0 && guard <= end);
+		}
+
+		/* ensure the block is fully copied (the scatter may skip pixels) */
 		g_vm->_renderer->copyScreenBlock(source, width, height, target, g_vm->_renderer->calcXY_p(x, y));
 		return;
 	}

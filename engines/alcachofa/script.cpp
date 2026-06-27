@@ -654,20 +654,29 @@ private:
 	template<class TObject = ObjectBase>
 	TObject *getObjectArg(uint argI) {
 		const char *const name = getStringArg(argI);
+		if (!*name)
+			return nullptr;
 		auto *object = g_engine->world().getObjectByName(process().character(), name);
 		return dynamic_cast<TObject *>(object);
 	}
 
 	const Point kInvalidPoint = { INT16_MIN, INT16_MIN };
 	Point getCamLerpTargetArg(const char *action, uint argI) {
-		auto *pointObject = getObjectArg<PointObject>(argI);
+		auto *object = getObjectArg<ObjectBase>(argI);
+
+		auto *pointObject = dynamic_cast<PointObject *>(object);
 		if (pointObject != nullptr)
 			return pointObject->position();
 
 		// in V2 a main character (we can reduce to walking character) can be used instead
-		auto *character = getObjectArg<WalkingCharacter>(argI);
-		if (character != nullptr)
-			return character->position();
+		auto *walkingChar = dynamic_cast<WalkingCharacter *>(object);
+		if (walkingChar != nullptr)
+			return walkingChar->position();
+
+		// in corvino it might even be just a regular stationary character
+		auto stationaryChar = dynamic_cast<Character *>(object);
+		if (stationaryChar != nullptr)
+			return stationaryChar->interactionPoint();
 
 		pointObject = g_engine->game().unknownCamLerpTarget(action, getStringArg(argI));
 		return pointObject == nullptr ? kInvalidPoint : pointObject->position();
@@ -736,6 +745,8 @@ private:
 			auto duration = g_engine->isV1() ? 60 : getNumberArg(0);
 			return TaskReturn::waitFor(new ScriptTimerTask(process(), duration));
 		}
+		case ScriptKernelTask::WaitForMouseClick:
+			return TaskReturn::waitFor(g_engine->input().waitForInput(process()));
 		case ScriptKernelTask::Fork:
 			g_engine->scheduler().createProcess<ScriptTask>(process().character(), *this);
 			return TaskReturn::finish(0); // 0 means this is the forking process
@@ -1193,6 +1204,8 @@ void Script::fixNestedMenuPop(uint32 pc) {
 	 *   secta-win-es
 	 *   escarabajo-win-es
 	 *   moscu-win-es
+	 *   corvino-win-es
+	 *   mamelucos-win-es
 	 */
 	scumm_assert(pc < _instructions.size());
 	auto &instr = _instructions[pc];

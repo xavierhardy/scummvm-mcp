@@ -95,17 +95,7 @@ namespace MADSV2 {
 #define DEBUGGER_MAX_WATCH      12
 
 
-extern int int_sprite[6];
-
 extern int selected_intro;
-
-#define fx_int_journal          0
-#define fx_int_backpack         1
-#define fx_int_candle           2
-#define fx_int_exit             3
-#define fx_int_dooropen         4
-#define fx_int_candle_on        5
-
 
 #define EXTRA_MAX_INV_OBJECTS 18   /* 16, + background, + open backpack */
 
@@ -190,6 +180,7 @@ extern char config_file_name[20];
 extern char save_game_key[8];
 extern char restart_game_key[40];
 extern char save_game_buf[20];
+extern int last_keypressed;
 
 extern void (*game_menu_routine)();   /* Game Menu routines      */
 extern void (*game_menu_init)();

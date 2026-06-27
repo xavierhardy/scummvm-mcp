@@ -36,6 +36,8 @@
 #include "engines/nancy/state/scene.h"
 #include "engines/nancy/state/map.h"
 
+#include "engines/nancy/action/secondarymovie.h"
+
 #include "engines/nancy/ui/button.h"
 #include "engines/nancy/ui/ornaments.h"
 #include "engines/nancy/ui/clock.h"
@@ -249,14 +251,6 @@ void Scene::changeScene(const SceneChangeDescription &sceneDescription) {
 		g_nancy->getGameType() == kGameTypeNancy9 && sceneDescription.sceneID == 5651) {
 		return;
 	}
-
-	// HACK: The event flag for meeting Dave in the cellar is not set
-	// correctly in Nancy 10, so we hardcode the flag change here to
-	// avoid talking with him over and over again.
-	// TODO: Find out why this flag is not set correctly and implement a
-	// proper solution for it.
-	if (g_nancy->getGameType() == kGameTypeNancy10 && sceneDescription.sceneID == 3996)
-		NancySceneState.setEventFlag(314, g_nancy->_true);	// EV_Met_DG_Cellar
 
 	_sceneState.nextScene = sceneDescription;
 	_state = kLoad;
@@ -547,11 +541,22 @@ void Scene::playItemCantSound(int16 itemID, bool notHoldingSound) {
 	}
 }
 
-void Scene::setEventFlag(int16 label, byte flag) {
+int16 Scene::eventFlagToIndex(int16 label) const {
+	// Nancy3+ number their event flags from 1000. Nancy12 then split the flags
+	// into two ranges: the generic engine flags kept the 1xxx numbering, while
+	// the game-specific flags were renumbered from 2000. Subtracting a flat 1000
+	// from any 1xxx/2xxx label keeps the two ranges in separate, non-overlapping
+	// regions of the flags array (generic flags in [0, 1000), game-specific flags
+	// in [1000, ...)).
 	if (label >= 1000) {
-		// In nancy3 and onwards flags begin from 1000
 		label -= 1000;
 	}
+
+	return label;
+}
+
+void Scene::setEventFlag(int16 label, byte flag) {
+	label = eventFlagToIndex(label);
 
 	if (label > kEvNoEvent && (uint)label < g_nancy->getStaticData().numEventFlags) {
 		_flags.eventFlags[label] = flag;
@@ -563,10 +568,7 @@ void Scene::setEventFlag(FlagDescription eventFlag) {
 }
 
 bool Scene::getEventFlag(int16 label, byte flag) const {
-	if (label >= 1000) {
-		// In nancy3 and onwards flags begin from 1000
-		label -= 1000;
-	}
+	label = eventFlagToIndex(label);
 
 	if (label > kEvNoEvent && (uint)label < g_nancy->getStaticData().numEventFlags) {
 		return _flags.eventFlags[label] == flag;
@@ -577,6 +579,28 @@ bool Scene::getEventFlag(int16 label, byte flag) const {
 
 bool Scene::getEventFlag(FlagDescription eventFlag) const {
 	return getEventFlag(eventFlag.label, eventFlag.flag);
+}
+
+// Nancy 11+ AR 30/31 store the "player scrolling disabled" state in an event
+// flag (eventData[0x21] in the original). It persists across scenes and is
+// saved/restored together with the rest of the event flags. Nancy12 shifted the
+// engine's generic flag numbering up by 10, moving this flag from 1033 to 1043.
+static int16 playerScrollingDisabledFlag() {
+	return g_nancy->getGameType() >= kGameTypeNancy12 ? 1043 : 1033;
+}
+
+void Scene::setPlayerScrolling(bool enabled) {
+	setEventFlag(playerScrollingDisabledFlag(), enabled ? g_nancy->_false : g_nancy->_true);
+}
+
+bool Scene::getPlayerScrolling() const {
+	// Player-scrolling control only exists from Nancy 11; older games must not
+	// consult this flag, since they may use that event-flag index for something else
+	if (g_nancy->getGameType() < kGameTypeNancy11) {
+		return true;
+	}
+
+	return !getEventFlag(playerScrollingDisabledFlag(), g_nancy->_true);
 }
 
 void Scene::setLogicCondition(int16 label, byte flag) {
@@ -758,9 +782,11 @@ void Scene::synchronize(Common::Serializer &ser) {
 
 	ser.syncArray(_flags.eventFlags.data(), g_nancy->getStaticData().numEventFlags, Common::Serializer::Byte);
 
-	// Clear generic flags
-	for (uint16 id : g_nancy->getStaticData().genericEventFlags) {
-		_flags.eventFlags[id] = g_nancy->_false;
+	if (!ser.isSaving()) {
+		// Clear generic flags
+		for (uint16 id : g_nancy->getStaticData().genericEventFlags) {
+			_flags.eventFlags[id] = g_nancy->_false;
+		}
 	}
 
 	// Skip empty sceneCount array
@@ -789,6 +815,9 @@ void Scene::synchronize(Common::Serializer &ser) {
 	ser.syncAsUint16LE(_difficulty);
 	ser.syncArray<uint16>(_hintsRemaining.data(), _hintsRemaining.size(), Common::Serializer::Uint16LE);
 
+	// NOTE: These two variables are only used by the hint system in
+	// Nancy 1, so they can be freely repurposed by newer games to
+	// store new data, if needed, to avoid bumping the save version.
 	ser.syncAsSint16LE(_lastHintCharacter);
 	ser.syncAsSint16LE(_lastHintID);
 
@@ -1100,6 +1129,10 @@ void Scene::run() {
 
 	_timers.sceneTime += deltaTime;
 
+	// Advance the Nancy 11+ software timers before processing action records,
+	// so any flags they fire this frame are visible to record dependencies
+	tickSoftwareTimers((uint32)deltaTime);
+
 	// Calculate the in-game time (playerTime)
 	if (currentPlayTime > _timers.playerTimeNextMinute) {
 		auto *bootSummary = GetEngineData(BSUM);
@@ -1141,6 +1174,87 @@ void Scene::run() {
 	}
 }
 
+void Scene::tickSoftwareTimers(uint32 deltaMs) {
+	if (g_nancy->getGameType() < kGameTypeNancy11 || deltaMs == 0) {
+		return;
+	}
+
+	// getPuzzleData() below lazily creates (and thereafter persists) the TimerData
+	// chunk. This runs every frame, so without this guard every Nancy 11 save
+	// would carry an empty TimerData chunk even if no timer is ever used. The
+	// chunk only exists once a timer AR has configured a slot.
+	if (!_puzzleData.contains(TimerData::getTag())) {
+		return;
+	}
+
+	TimerData *timerData = (TimerData *)getPuzzleData(TimerData::getTag());
+
+	for (uint i = 0; i < TimerData::kNumTimers; ++i) {
+		TimerData::Timer &timer = timerData->timers[i];
+
+		if (timer.state != TimerData::Timer::kRunning &&
+			timer.state != TimerData::Timer::kOneShot &&
+			timer.state != TimerData::Timer::kRepeating) {
+			continue;
+		}
+
+		timer.currentTimeMs += deltaMs;
+
+		if ((timer.state == TimerData::Timer::kOneShot || timer.state == TimerData::Timer::kRepeating) &&
+			timer.durationMs > 0 && !timer.hasFired && timer.currentTimeMs >= timer.durationMs) {
+			fireSoftwareTimer(timer);
+
+			if (timer.state == TimerData::Timer::kOneShot) {
+				// One-shot timers clear themselves once they fire
+				timer.reset();
+			} else {
+				// Repeating timers keep counting up but will not fire again
+				timer.state = TimerData::Timer::kRunning;
+			}
+		}
+	}
+}
+
+void Scene::fireSoftwareTimer(TimerData::Timer &timer) {
+	timer.hasFired = true;
+
+	// Set the configured event flags
+	for (uint i = 0; i < ARRAYSIZE(timer.flags); ++i) {
+		if (timer.flags[i].label != kFlagNoLabel) {
+			setEventFlag(timer.flags[i]);
+		}
+	}
+
+	// Play the optional expiry sound
+	if (timer.sound.name != "NO SOUND") {
+		g_nancy->_sound->loadSound(timer.sound);
+		g_nancy->_sound->playSound(timer.sound);
+	}
+
+	// Show the optional caption, if captions are enabled
+	if (ConfMan.getBool("subtitles", ConfMan.getActiveDomainName())) {
+		if (!timer.autotextKey.empty()) {
+			const CVTX *autotext = (const CVTX *)g_nancy->getEngineData("AUTOTEXT");
+			if (autotext && autotext->texts.contains(timer.autotextKey)) {
+				_textbox.addTextLine(autotext->texts[timer.autotextKey]);
+			}
+		} else if (!timer.caption.empty()) {
+			_textbox.addTextLine(timer.caption);
+		}
+	}
+}
+
+Common::Rect Scene::activePopupConfinement() const {
+	// Pick the first visible Nancy 10+ popup; if more than one is open
+	// (shouldn't normally happen) the priority order matches the input
+	// order — conversation, inventory, notebook, cellphone.
+	if (_conversationPopup.isVisible()) return _conversationPopup.getScreenPosition();
+	if (_inventoryPopup.isVisible())    return _inventoryPopup.getScreenPosition();
+	if (_notebookPopup.isVisible())     return _notebookPopup.getScreenPosition();
+	if (_cellPhonePopup.isVisible())    return _cellPhonePopup.getScreenPosition();
+	return Common::Rect();
+}
+
 void Scene::handleInput() {
 	NancyInput input = g_nancy->_input->getInput();
 
@@ -1178,6 +1292,16 @@ void Scene::handleInput() {
 	// the popup that overlapped the textbox area could accidentally pick
 	// a conversation response.
 	if (g_nancy->getGameType() >= kGameTypeNancy10) {
+		// Confine the cursor to whichever popup is open so the player
+		// can't drag it into the underlying scene UI.
+		const Common::Rect confine = activePopupConfinement();
+		if (!confine.isEmpty() && !confine.contains(input.mousePos)) {
+			input.mousePos.x = CLIP<int16>(input.mousePos.x,
+											confine.left, confine.right - 1);
+			input.mousePos.y = CLIP<int16>(input.mousePos.y,
+											confine.top, confine.bottom - 1);
+			g_nancy->_cursor->warpCursor(input.mousePos);
+		}
 		_conversationPopup.handleInput(input);
 		_inventoryPopup.handleInput(input);
 		_notebookPopup.handleInput(input);
@@ -1383,6 +1507,16 @@ void Scene::clearSceneData() {
 	}
 
 	clearLogicConditions();
+
+	// Stop a leftover random movie if the outgoing scene didn't include
+	// its own PSM(isRandom) AR (so it doesn't bleed into the next scene).
+	if (_activeMovie && _activeMovie->isPersistentAcrossScenes() && !_hadRandomMovieARThisScene) {
+		_activeMovie->stopRandom();
+	}
+	_hadRandomMovieARThisScene = false;
+
+	bool clearActiveMovie = _activeMovie && !_activeMovie->isPersistentAcrossScenes();
+
 	_actionManager.clearActionRecords();
 
 	if (_lightning) {
@@ -1398,7 +1532,10 @@ void Scene::clearSceneData() {
 	}
 
 	_activeConversation = nullptr;
-	_activeMovie = nullptr;
+
+	if (clearActiveMovie) {
+		_activeMovie = nullptr;
+	}
 }
 
 void Scene::clearPuzzleData() {

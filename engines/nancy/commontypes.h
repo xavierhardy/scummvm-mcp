@@ -173,7 +173,7 @@ struct SceneChangeWithFlag {
 	SceneChangeDescription _sceneChange;
 	FlagDescription _flag;
 
-	void readData(Common::SeekableReadStream &stream, bool reverseFormat = false);
+	void readData(Common::SeekableReadStream &stream, bool reverseFormat = false, bool terse = false);
 	void execute();
 };
 
@@ -347,6 +347,16 @@ struct StaticData {
 	Common::Array<Common::String> eventFlagNames;
 
 	void readData(Common::SeekableReadStream &stream, Common::Language language, uint32 endPos, int8 majorVersion, int8 minorVersion);
+};
+
+// Source-rect order shared by the close button and slider widgets in the
+// Nancy 10+ popup header. The tab/filter strips use a different order, with
+// the active entry at index 0.
+enum UIButtonState {
+	kUIButtonIdle = 0,
+	kUIButtonHover = 1,
+	kUIButtonPressed = 2, // dragging, for sliders
+	kUIButtonDisabled = 3
 };
 
 // Reusable button widget embedded in Nancy 10+ popup UIs.

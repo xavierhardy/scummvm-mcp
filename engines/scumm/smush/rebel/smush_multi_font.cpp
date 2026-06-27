@@ -39,38 +39,45 @@ SmushMultiFont::~SmushMultiFont() {
 }
 
 NutRenderer *SmushMultiFont::getFont(int id) {
-	// Delegate to SmushPlayer to get the font
-	// SmushPlayer::getFont() handles font loading and caching
 	return _player->getFont(id);
 }
 
 NutRenderer *SmushMultiFont::getCurrentFont() const {
-	// We need a const version that doesn't trigger loading
-	// For const access, use _player's cached fonts directly
 	return const_cast<SmushMultiFont*>(this)->getFont(_currentFont);
 }
 
 Rebel2FontSet SmushMultiFont::getRebel2FontSet() {
-	static const char *ra2Fonts[] = {
+	// High-res mode uses dedicated larger-glyph font assets.
+	static const char *ra2FontsLo[] = {
 		"SYSTM/TALKFONT.NUT",
 		"SYSTM/SMALFONT.NUT",
 		"SYSTM/TITLFONT.NUT",
 		"SYSTM/POVFONT.NUT"
 	};
+	static const char *ra2FontsHi[] = {
+		"SYSTM/TKHIFONT.NUT",
+		"SYSTM/SMHIFONT.NUT",
+		"SYSTM/TIHIFONT.NUT",
+		"SYSTM/POHIFONT.NUT"
+	};
+	const bool highRes = _vm->_screenWidth >= 640 && _vm->_screenHeight >= 400;
+	const char *const *ra2Fonts = highRes ? ra2FontsHi : ra2FontsLo;
 
 	Rebel2FontSet fontSet;
-	fontSet.numFonts = ARRAYSIZE(ra2Fonts);
+	fontSet.numFonts = ARRAYSIZE(ra2FontsLo);
 	fontSet.defaultFont = CLIP<int>(_defaultFont, 0, fontSet.numFonts - 1);
 	for (int i = 0; i < fontSet.numFonts; i++) {
-		if (!_rebel2Fonts[i])
+		if (!_rebel2Fonts[i]) {
 			_rebel2Fonts[i] = makeRebel2Font(_vm, ra2Fonts[i]);
+			debugC(DEBUG_SMUSH, "SmushMultiFont::getRebel2FontSet: loaded RA2 font[%d]=%s (highRes=%d)",
+				i, ra2Fonts[i], (int)highRes);
+		}
 		fontSet.fonts[i] = _rebel2Fonts[i];
 	}
 	return fontSet;
 }
 
 void SmushMultiFont::drawString(const char *str, byte *buffer, Common::Rect &clipRect, int x, int y, int16 col, TextStyleFlags flags) {
-	// Reset to default font before drawing
 	_currentFont = _defaultFont;
 	if (_vm->_game.id == GID_REBEL2) {
 		Rebel2FontSet fontSet = getRebel2FontSet();
@@ -95,7 +102,6 @@ void SmushMultiFont::drawStringWrap(const char *str, byte *buffer, Common::Rect 
 }
 
 void SmushMultiFont::drawStringWrap(const char *str, byte *buffer, Common::Rect &clipRect, int x, int y, int pitch, int16 col, TextStyleFlags flags) {
-	// Reset to default font before drawing
 	_currentFont = _defaultFont;
 	if (_vm->_game.id == GID_REBEL2) {
 		Rebel2FontSet fontSet = getRebel2FontSet();
@@ -110,7 +116,6 @@ int SmushMultiFont::draw2byte(byte *buffer, Common::Rect &clipRect, int x, int y
 	if (!font)
 		return 0;
 
-	// Adjust color for CMI compatibility
 	int16 adjCol = col;
 	if (_vm->_game.id == GID_CMI)
 		adjCol = 255;
@@ -158,8 +163,6 @@ int SmushMultiFont::getFontHeight() const {
 }
 
 int SmushMultiFont::setFont(int id) {
-	// This is called by TextRenderer_v7 when it encounters ^fXX escape codes
-	// Actually switch the current font
 	int oldFont = _currentFont;
 
 	if (id >= 0 && id < MAX_FONTS) {

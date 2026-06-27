@@ -40,7 +40,12 @@
 
 namespace Chamber {
 
-byte scratch_mem1[8010];
+// 1500-byte spot-backup region, then the lutin/anim scratch (scratch_mem2).
+// The scratch holds up to four simultaneous lutin slots (see getScratchBuffer).
+// CGA needs 4*1600 = 6400 there; EGA decodes lutins to CLUT8 (4 bytes per CGA
+// byte) so it needs 4*3200 = 12800. Sized for the EGA worst case so a big lutin
+// can't overrun into the adjacent sprites_list[].
+byte scratch_mem1[14400];
 byte *scratch_mem2 = scratch_mem1 + 1500;
 
 rect_t room_bounds_rect = {0, 0, 0, 0};
@@ -1034,12 +1039,43 @@ void drawZoneSpots(void) {
 	drawPersons();
 }
 
+/*
+The line-wipe zone transition only plays while moving through the corridor-like
+areas: The Ring and the Passages. Normal room entries stay instant (or use their
+own scripted drawIcone effect).
+*/
+static bool zoneHasWalkTransition(byte area) {
+	switch (area) {
+	case kAreaTheRing1: case kAreaTheRing2: case kAreaTheRing3:
+	case kAreaTheRing4: case kAreaTheRing5: case kAreaTheRing6:
+	case kAreaPassage1: case kAreaPassage2: case kAreaPassage3:
+	case kAreaPassage4: case kAreaPassage5: case kAreaPassage6: case kAreaPassage7:
+		return true;
+	default:
+		return false;
+	}
+}
+
 void refreshZone(void) {
+	// Hide the mouse pointer while the new room is drawn and its entry
+	// animation plays. The game loop's selectCursor() re-shows it once it is
+	// waiting for player input again.
+	hideMouseCursor();
+
 	popDirtyRects(DirtyRectSprite);
 	popDirtyRects(DirtyRectBubble);
 	popDirtyRects(DirtyRectText);
 
-	g_vm->_renderer->backBufferToRealFull();
+	// Reveal the new room with an animated transition unless this change asked to
+	// skip it (e.g. entering through an already-animated door). skip_zone_transition
+	// is set by SCR_42_LoadZone; plain zone changes (walking around The Ring / through
+	// passages via SCR_36_ChangeZone) leave it 0 and so get the dot-dissolve reveal.
+	if (!skip_zone_transition && g_vm->_videoMode == Common::kRenderEGA
+	        && zoneHasWalkTransition(script_byte_vars.zone_area)) {
+		ega_zoneRevealWipe();
+	} else {
+		g_vm->_renderer->backBufferToRealFull();
+	}
 
 	in_de_profundis = 0;
 	IFGM_StopSample();
@@ -1309,7 +1345,7 @@ void prepareAspirant(void) {
 	if (aspirant_ptr->flags & PERSFLG_40)
 		return;
 
-	hostility = script_byte_vars.rand_value;
+	hostility = getRand();
 	appearance = getRand();
 	flags = 0;
 	/*
@@ -1568,11 +1604,13 @@ byte *loadMursmSprite(byte index) {
 			byte sprIdx = *pinfo++;
 			uint16 flags = *pinfo++;
 			flags |= (*pinfo++) << 8;
-			uint16 cgaOfs = flags & 0x3FFF; /* offset in CGA flat buffer (pitch=20, 2 bytes/unit) */
+			uint16 cgaOfs = flags & 0x3FFF; /* byte offset into the CGA flat buffer (pitch = 20 bytes = 80 px) */
 
-			/* Convert CGA flat offset → EGA flat offset */
-			uint16 row   = cgaOfs / (20 * 2);       /* 20 CGA bytes × 2 bytes/unit = 40 bytes/row */
-			uint16 colCga = (cgaOfs % (20 * 2)) / 2; /* column in CGA bytes */
+			/* Convert CGA flat offset → EGA flat offset. Mirror the CGA path,
+			   which places the sub-sprite at byte cgaOfs in a 20-byte-pitch
+			   buffer: row = cgaOfs / 20, column = cgaOfs % 20 CGA bytes (× 4 px). */
+			uint16 row    = cgaOfs / 20;
+			uint16 colCga = cgaOfs % 20;
 			uint16 egaBufOfs = row * egaPitch + colCga * 4;
 
 			Graphics::Surface *surf = ega_puzzl_res->getSprite(sprIdx & 0x7F);

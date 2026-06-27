@@ -23,21 +23,24 @@
 #define MADS_FOREST_H
 
 #include "mads/madsv2/engine.h"
+#include "mads/madsv2/forest/digi.h"
+#include "mads/madsv2/forest/midi.h"
 
 namespace MADS {
 namespace MADSV2 {
 namespace Forest {
 
 class ForestEngine : public MADSV2Engine {
-private:
-	static void global_object_examine();
+public:
+	DigiPlayer _digiPlayer = DigiPlayer(_mixer);
+	MidiPlayer _midiPlayer;
 
 public:
-	ForestEngine(OSystem *syst, const MADSGameDescription *gameDesc) :
-		MADSV2Engine(syst, gameDesc) {}
-	~ForestEngine() override {}
+	ForestEngine(OSystem *syst, const MADSGameDescription *gameDesc);
+	~ForestEngine() override;
 
 	Common::Error run() override;
+	bool canLoadGameStateCurrently(Common::U32String *msg) override;
 	void syncRoom(Common::Serializer &s) override;
 
 	void global_init_code() override;
@@ -50,6 +53,8 @@ public:
 	void global_room_init() override;
 	void global_sound_driver() override;
 };
+
+extern ForestEngine *g_engine;
 
 } // namespace Forest
 } // namespace MADSV2

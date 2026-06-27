@@ -633,7 +633,7 @@ void LB::b_integer(int nargs) {
 		//   put i & " = " & integer("12345" & numToChar(i))
 		// end repeat
 		if (endPtr && endPtr != src.c_str() && (
-			(*endPtr >= 0 && *endPtr < 45) ||
+			(*endPtr < 45) ||
 			(*endPtr == 47) ||
 			(*endPtr >= 58 && *endPtr < 65) ||
 			(*endPtr >= 91 && *endPtr < 95) ||
@@ -1976,7 +1976,10 @@ void LB::b_do(int nargs) {
 	if (code.empty())
 		return;
 
-	ScriptContext *sc = g_lingo->_compiler->compileAnonymous(code);
+	uint32 flags = 0;
+	flags |= g_director->getVersion() < 400 ? kLPPTrimGarbage : 0;
+
+	ScriptContext *sc = g_lingo->_compiler->compileAnonymous(code, flags);
 	if (!sc) {
 		warning("b_do(): compilation failed, ignoring");
 

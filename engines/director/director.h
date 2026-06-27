@@ -90,7 +90,6 @@ enum {
 	kDebugConsole,
 	kDebugXObj,
 	kDebugLingoThe,
-	kDebugImGui,
 	kDebugPaused,
 	kDebugPauseOnLoad,
 	kDebugSaving,
@@ -396,7 +395,8 @@ struct DirectorPlotData {
 	DirectorPlotData &operator=(const DirectorPlotData &);
 
 	~DirectorPlotData() {
-		delete ms;
+		if (ms)
+			delete ms;
 	}
 };
 

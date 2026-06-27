@@ -38,6 +38,7 @@ public:
 	void execute() override;
 
 	CursorManager::CursorType getHoverCursor() const override { return (CursorManager::CursorType)_cursorType; }
+	bool cursorSetFromScript() const override { return true; }
 
 protected:
 	Common::String getRecordTypeName() const override { return "TableIndexSetValueHS"; }
@@ -121,6 +122,7 @@ public:
 	void execute() override;
 
 	CursorManager::CursorType getHoverCursor() const override;
+	bool cursorSetFromScript() const override { return true; }
 
 	CursorManager::CursorType _hoverCursor = CursorManager::kHotspot;
 	Common::Array<HotspotDescription> _hotspots;
@@ -131,6 +133,18 @@ public:
 
 protected:
 	Common::String getRecordTypeName() const override { return _isCursor ? (_isTerse ? "EventFlagsHSTerse" : "EventFlagsCursorHS") : "EventFlagsMultiHS"; }
+};
+
+// Nancy 11+ AR 96. Sets each of a list of event flags to a random boolean value.
+class RandomizeEventFlags : public ActionRecord {
+public:
+	void readData(Common::SeekableReadStream &stream) override;
+	void execute() override;
+
+	Common::Array<int16> _flagLabels;
+
+protected:
+	Common::String getRecordTypeName() const override { return "RandomizeEventFlags"; }
 };
 
 // Sets the difficulty level for the current save. Only appears at the start of the game.

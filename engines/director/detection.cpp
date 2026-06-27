@@ -92,7 +92,6 @@ static const DebugChannelDef debugFlagList[] = {
 	{Director::kDebugText, "text", "Text rendering"},
 	{Director::kDebugXObj, "xobj", "XObjects"},
 	{Director::kDebugLingoThe, "lingothe", "Lingo \"the\" entities"},
-	{Director::kDebugImGui, "imgui", "Show ImGui debug window (if available)"},
 	{Director::kDebugPaused, "paused", "Pause first movie right after start"},
 	{Director::kDebugPauseOnLoad, "pauseonload", "Pause every movie right after loading"},
 	{Director::kDebugSaving, "saving", "Show Debug output while saving movies"},
@@ -404,6 +403,14 @@ ADDetectedGame DirectorMetaEngineDetection::fallbackDetect(const FileMap &allFil
 			} else {
 				f.seek(0);
 				uint32 initialTag = f.readUint32BE();
+
+				if (ConfMan.get("start_movie").hasPrefixIgnoreCase(".mmm")) {
+					desc->version = 200;
+				} else {
+					desc->version = 400; // We start from 400, and then the VWCF file will tell us the actual version
+				}
+
+				// Non-MacBinary files start from D3
 				switch (initialTag) {
 				case MKTAG('R', 'I', 'F', 'F'):
 				case MKTAG('R', 'I', 'F', 'X'):

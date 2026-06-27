@@ -39,6 +39,7 @@
 #include "engines/nancy/action/puzzle/beadpuzzle.h"
 #include "engines/nancy/action/puzzle/bulpuzzle.h"
 #include "engines/nancy/action/puzzle/bombpuzzle.h"
+#include "engines/nancy/action/puzzle/cardgamepuzzle.h"
 #include "engines/nancy/action/puzzle/collisionpuzzle.h"
 #include "engines/nancy/action/puzzle/cubepuzzle.h"
 #include "engines/nancy/action/puzzle/cuttingpuzzle.h"
@@ -74,6 +75,7 @@
 #include "engines/nancy/action/puzzle/towerpuzzle.h"
 #include "engines/nancy/action/puzzle/turningpuzzle.h"
 #include "engines/nancy/action/puzzle/twodialpuzzle.h"
+#include "engines/nancy/action/puzzle/typingquizpuzzle.h"
 #include "engines/nancy/action/puzzle/whalesurvivorpuzzle.h"
 
 #include "engines/nancy/state/scene.h"
@@ -179,20 +181,16 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		// Nancy 10+
 		return new ControlUIItems();
 	case 30:	// Nancy11
-		warning("StopPlayerScrolling");	// TODO
-		return nullptr;
+		return new StopPlayerScrolling();
 	case 31:	// Nancy11
-		warning("StartPlayerScrolling");	// TODO
-		return nullptr;
+		return new StartPlayerScrolling();
 	case 32:
 		// Nancy 10+
 		return new UIPopupPrepScene();
-	case 45:	// Nancy11
-		warning("PlayRandomMovie");	// TODO
-		return nullptr;
+	case 45:	// Nancy11 - random-movie variant of PlaySecondaryMovie
+		return new PlaySecondaryMovie(true);
 	case 46:	// Nancy11
-		warning("PlayRandomMovieControl");	// TODO
-		return nullptr;
+		return new PlayRandomMovieControl();
 	case 40:
 		if (g_nancy->getGameType() <= kGameTypeNancy1)
 			return new LightningOn();	// Only used in TVD
@@ -261,8 +259,7 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 68:
 		return new TextScroll(false);
 	case 69:	// Nancy11
-		warning("TimerControl");	// TODO
-		return nullptr;
+		return new TimerControl();
 	case 70:
 		return new TextScroll(true); // AutotextEntryList
 	case 71:
@@ -287,11 +284,19 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 79:
 		return new ValueTest();
 	case 81:	// Nancy11
-		//warning("AutotextTextBoxWrite");	// TODO
+		return new TextBoxWrite(true);
+	case 94:
+		// Nancy12: moved from 106
+		if (g_nancy->getGameType() >= kGameTypeNancy12)
+			return new EventFlagsMultiHS(false);
+		return nullptr;
+	case 95:
+		// Nancy12: moved from 107
+		if (g_nancy->getGameType() >= kGameTypeNancy12)
+			return new EventFlags();
 		return nullptr;
 	case 96:	// Nancy11
-		warning("UnknownAR96");	// TODO
-		return nullptr;
+		return new RandomizeEventFlags();
 	case 97:
 		return new EventFlags(true);
 	case 98:
@@ -371,18 +376,34 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 131:
 		// Nancy 10+
 		return new AddSearchLink();
-	case 140:
-		return new SetVolume();
-	case 147:	// Nancy11
-		warning("FadeSoundToSilence");	// TODO
+	case 132:
+		// ResourceUse ("UIResource Adjust") - adjusts a UI overlay resource (see the UIRC
+		// boot chunk) at runtime. Added in Nancy12.
+		// TODO: not implemented
 		return nullptr;
+	case 140:
+		if (g_nancy->getGameType() >= kGameTypeNancy12)
+			return new SetPlayerClock();	// Moved from 170 in Nancy12
+		else
+			return new SetVolume();			// Legacy SetVolume slot (used up to Nancy8)
+	case 141:
+		// MakeScreenFile, moved here from 148 in Nancy12.
+		// Saves a cropped image of the screen to a bitmap/TGA file.
+		// TODO: debug-only feature, not implemented
+		return nullptr;
+	case 147:	// Nancy11
+		return new FadeSoundToSilence();
 	case 148:
+		if (g_nancy->getGameType() >= kGameTypeNancy12)
+			return new SetVolume();	// Moved from 149 in Nancy12
 		// MakeScreenFile - seems to save a cropped image of the screen in a bitmap file?
-		// TODO: Used in Nancy 9, sand castle puzzle
+		// TODO: Used in Nancy 9, sand castle puzzle. Moved to 141 in Nancy12.
 		return nullptr;
 	case 149:
-		if (g_nancy->getGameType() >= kGameTypeNancy9)
-			return new SetVolume();	// Moved from 140 in Nancy9
+		if (g_nancy->getGameType() >= kGameTypeNancy12)
+			return new PlaySoundEventFlagTerse();	// Moved from 161 in Nancy12
+		else if (g_nancy->getGameType() >= kGameTypeNancy9)
+			return new SetVolume();	// Moved from 140 in Nancy9, then to 148 in Nancy12
 		else
 			return nullptr;
 	case 150:
@@ -402,8 +423,7 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 155:
 		return new StopSound(); // StopAndUnloadSound, but we always unload
 	case 156:	// Nancy11
-		warning("Update3DSound");	// TODO
-		return nullptr;
+		return new Update3DSound();
 	case 157:
 		return new PlaySoundCC();
 	case 158:
@@ -411,10 +431,43 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 159:
 		return new PlaySoundTerse();
 	case 160:
+		// In Nancy12 the hint system was removed (the HINT boot chunk is gone) and this
+		// slot was reused for a new driving/racing puzzle.
+		// TODO: Nancy12 DrivingPuzzle (new), not implemented
+		if (g_nancy->getGameType() >= kGameTypeNancy12)
+			return nullptr;
 		return new HintSystem();
 	case 161:
+		// PlaySoundEventFlagTerse moved to 149 in Nancy12; this slot was reused for a new puzzle.
+		// TODO: Nancy12 MinigolfPuzzle (new), not implemented
+		if (g_nancy->getGameType() >= kGameTypeNancy12)
+			return nullptr;
 		return new PlaySoundEventFlagTerse();
+	// -- Nancy 12 new puzzles/action records --
+	case 162:
+		// TODO: Nancy12 - new puzzle (reuses the AT_DRIVING_PUZZLE debug string), not implemented
+		return nullptr;
+	case 163:
+		// TODO: Nancy12 MirrorLightPuzzle (new), not implemented
+		return nullptr;
+	case 164:
+		// TODO: Nancy12 BoardGamePuzzle (new), not implemented
+		return nullptr;
+	case 165:
+		// TODO: Nancy12 MindPuzzle (new), not implemented
+		return nullptr;
+	case 166:
+		// OneBuildPuzzle, moved here from 234 in Nancy12.
+		// TODO: verify the Nancy12 data layout against OneBuildPuzzle::readData
+		return new OneBuildPuzzle();
+	case 167:
+		// TODO: Nancy12 ChasePuzzle (new), not implemented
+		return nullptr;
+	case 168:
+		// TODO: Nancy12 - new 3D-sound positioning action record, not implemented
+		return nullptr;
 	case 170:
+		// Moved to 140 in Nancy12
 		return new SetPlayerClock();
 	case 200:
 		return new SoundEqualizerPuzzle();
@@ -485,6 +538,7 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 233:
 		return new SoundMatchPuzzle();
 	case 234:
+		// Moved to 166 in Nancy12
 		return new OneBuildPuzzle();
 	case 235:
 		return new MultiBuildPuzzle();
@@ -504,12 +558,10 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 244:
 		return new GridMapPuzzle();
 	// -- Nancy 11 and up --
-	case 245:	// Nancy11
-		warning("TypingQuizPuzzle");	// TODO
-		return nullptr;
-	case 246:	// Nancy11
-		warning("MatchPuzzle246");	// TODO
-		return nullptr;
+	case 245:
+		return new TypingQuizPuzzle();
+	case 246:
+		return new CardGamePuzzle();
 	default:
 		warning("Unknown action record type %d", type);
 		return nullptr;

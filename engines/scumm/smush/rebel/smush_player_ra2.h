@@ -31,6 +31,7 @@ public:
 	SmushPlayerRebel2(ScummEngine_v7 *scumm, IMuseDigital *imuseDigital, Insane *insane);
 	~SmushPlayerRebel2() override;
 	bool ra2PromoteCurrentFrameToHiRes(int scrollX, int scrollY);
+	bool ra2PromoteHandler7PerspectiveToHiRes(int perspectiveX, int perspectiveY, int viewShift);
 
 protected:
 	void initGamePlayerFields() override;
@@ -38,6 +39,7 @@ protected:
 	void initGameVideoState() override;
 	void releaseGameVideoState() override;
 	bool shouldPreserveFrameBuffer() const override { return true; }
+	void handleFrameObject(int32 subSize, Common::SeekableReadStream &b) override;
 	bool handleGameFetch(int32 subSize, Common::SeekableReadStream &b) override;
 	bool handleGameTextResource(uint32 subType, int32 subSize, Common::SeekableReadStream &b) override;
 	bool handleGameTextRendering(const char *str, int fontId, int color, int pos_x, int pos_y, int left, int top, int width, int height, TextStyleFlags flg) override;
@@ -86,7 +88,6 @@ private:
 	void ra2HandleFrameAudioChunk(uint32 subType, int32 subSize, Common::SeekableReadStream &b);
 	void ra2FeedAudio(uint8 *srcBuf, int groupId, int volume, int pan, int16 flags);
 
-	// LOAD chunk streaming buffer (embedded resource data)
 	byte *_loadBuffer;
 	int32 _loadBufferSize;
 	int32 _loadBufferOffset;
@@ -110,6 +111,8 @@ private:
 	bool _ra2PendingAnimHeaderPalette;
 	byte _ra2Codec45Palette[0x300];
 	byte _ra2Codec45Lookup[0x8000];
+	byte _ra2SkipRemapTable[256];
+	bool _ra2SkipRemapValid;
 };
 
 } // End of namespace Scumm

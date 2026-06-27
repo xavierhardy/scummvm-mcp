@@ -36,9 +36,10 @@
 #include "mads/madsv2/core/sound.h"
 #include "mads/madsv2/core/text.h"
 #include "mads/madsv2/forest/forest.h"
+#include "mads/madsv2/forest/extra.h"
 #include "mads/madsv2/forest/global.h"
+#include "mads/madsv2/forest/inventory.h"
 #include "mads/madsv2/forest/main.h"
-#include "mads/madsv2/forest/sound_forest.h"
 #include "mads/madsv2/forest/rooms/section1.h"
 #include "mads/madsv2/forest/rooms/section2.h"
 #include "mads/madsv2/forest/rooms/section3.h"
@@ -54,6 +55,19 @@ namespace MADS {
 namespace MADSV2 {
 namespace Forest {
 
+ForestEngine *g_engine;
+
+ForestEngine::ForestEngine(OSystem *syst, const MADSGameDescription *gameDesc) :
+		MADSV2Engine(syst, gameDesc) {
+	g_engine = this;
+	init_extra();
+	init_inventory();
+}
+
+ForestEngine::~ForestEngine() {
+	g_engine = nullptr;
+}
+
 Common::Error ForestEngine::run() {
 	initGraphics(320, 200);
 	_screen = new Graphics::Screen();
@@ -68,10 +82,6 @@ Common::Error ForestEngine::run() {
 		if (arch)
 			SearchMan.add("mpslabs", arch);
 	}
-
-	// Set up sound manager
-	_soundManager = new ForestSoundManager(_mixer, _soundFlag);
-	_soundManager->validate();
 
 	// Run the game
 	Forest::forest_main();
@@ -105,6 +115,11 @@ void ForestEngine::global_section_constructor() {
 	Forest::global_section_constructor();
 }
 
+bool ForestEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	return game.going && !win_status && !kernel.activate_menu &&
+		inter_input_mode == INTER_LIMITED_SENTENCES && section_id != 9;
+}
+
 void ForestEngine::syncRoom(Common::Serializer &s) {
 	Forest::sync_room(s);
 }
@@ -114,18 +129,21 @@ void ForestEngine::global_daemon_code() {
 }
 
 void ForestEngine::global_pre_parser_code() {
+	if (player_said_1(look) || player_said_1(throw)) {
+		player.need_to_walk = false;
+	}
 }
 
 void ForestEngine::global_parser_code() {
-}
-
-void ForestEngine::global_object_examine() {
+	// No implementation
 }
 
 void ForestEngine::global_error_code() {
+	Forest::global_error_code();
 }
 
 void ForestEngine::global_room_init() {
+	Forest::global_room_init();
 }
 
 void ForestEngine::global_sound_driver() {
