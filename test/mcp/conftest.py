@@ -224,8 +224,16 @@ def comi_s4_client() -> McpClient:
 
 @pytest.fixture(scope="session")
 def atlantis_client() -> McpClient:
-    """Indiana Jones: Fate of Atlantis demo (no save support; intro-driven)."""
-    yield from _client("atlantis", "atlantis")
+    """Indiana Jones: Fate of Atlantis demo (no save support; intro-driven).
+
+    The demo's boot script overrides the configured talkspeed (it sets
+    VAR_CHARINC outside room 0, so the engine's room-0-only user override is
+    skipped), so force the max text speed at runtime via the mcp_debug-gated
+    set_talk_speed tool.
+    """
+    for client in _client("atlantis", "atlantis"):
+        client.set_talk_speed(255)
+        yield client
 
 
 @pytest.fixture(scope="session")

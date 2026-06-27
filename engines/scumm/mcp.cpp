@@ -1203,6 +1203,28 @@ void ScummMcpBridge::registerTools() {
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
+		// set_talk_speed — force the text/talk speed at runtime
+		{
+			Networking::McpServer::ToolSpec spec;
+			spec.name = "set_talk_speed";
+			spec.description =
+			    "Force the game's text/talk speed at runtime, the same way the "
+			    "in-game speech-speed control does. Takes 'speed' on the 0..255 "
+			    "scale used by the --talkspeed option (0 = slowest, 255 = fastest, "
+			    "instant text). Needed for titles that run a boot script which "
+			    "overrides the configured talkspeed (e.g. the Fate of Atlantis "
+			    "demo), where the startup setting never takes. Updates ConfMan and "
+			    "the live VAR_CHARINC so it sticks for the rest of the session. "
+			    "Engine-version-agnostic.";
+			Common::JSONObject props;
+			props.setVal("speed", mcpProp("integer",
+			    "Talk speed on the 0..255 scale (0 = slowest, 255 = fastest)."));
+			const char *req[] = {"speed"};
+			spec.inputSchema  = mcpObjectSchema(props, req, 1);
+			spec.outputSchema = nullptr;
+			spec.streaming    = false;
+			_server->registerTool(spec);
+		}
 	}
 }
 
@@ -1270,6 +1292,7 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 	}
 	if (name == "screenshot")   return toolScreenshot(args, errorOut);
 	if (name == "save_state")   return toolSaveState(args, errorOut);
+	if (name == "set_talk_speed") return toolSetTalkSpeed(args, errorOut);
 	errorOut = "Unknown tool: " + name;
 	return nullptr;
 }
@@ -3046,6 +3069,44 @@ Common::JSONValue *ScummMcpBridge::toolSaveState(const Common::JSONValue &args, 
 	return new Common::JSONValue(out);
 }
 
+Common::JSONValue *ScummMcpBridge::toolSetTalkSpeed(const Common::JSONValue &args, Common::String &errorOut) {
+	if (!args.isObject() || !args.asObject().contains("speed") ||
+	    !args.asObject()["speed"]->isIntegerNumber()) {
+		errorOut = "set_talk_speed: missing integer 'speed'";
+		return nullptr;
+	}
+	int speed = (int)args.asObject()["speed"]->asIntegerNumber();
+	if (speed < 0)   speed = 0;
+	if (speed > 255) speed = 255;
+
+	// Persist on the 0..255 ConfMan scale (identical to --talkspeed) so any
+	// later syncSoundSettings() keeps using it, then push it into the live
+	// engine the same way the in-game speech-speed control does. This is what
+	// makes the value stick on titles whose boot script clobbers the configured
+	// talkspeed outside room 0 (e.g. the Fate of Atlantis demo), where the
+	// VAR_CHARINC user-override in setVar() is skipped because _currentRoom != 0.
+	ConfMan.setInt("talkspeed", speed);
+	int ts = _vm->getTalkSpeed();              // 0..9, higher == faster text
+	_vm->_defaultTextSpeed = ts;
+	if (_vm->VAR_CHARINC != 0xFF)
+		_vm->VAR(_vm->VAR_CHARINC) = 9 - ts;
+
+	// Latch the value so a later intro/cutscene script can't override it (the
+	// FoA demo sets VAR_CHARINC outside room 0, where the writeVar() user
+	// override would otherwise be skipped). See ScummEngine::writeVar.
+	_vm->_mcpForceTalkSpeed = true;
+
+	debug(1, "mcp: set_talk_speed talkspeed=%d (text_speed=%d, charinc=%d)",
+	      speed, ts, 9 - ts);
+
+	Common::JSONObject out;
+	out.setVal("talkspeed", mcpJsonInt(speed));
+	out.setVal("text_speed", mcpJsonInt(ts));
+	if (_vm->VAR_CHARINC != 0xFF)
+		out.setVal("charinc", mcpJsonInt((int)_vm->VAR(_vm->VAR_CHARINC)));
+	return new Common::JSONValue(out);
+}
+
 Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Common::String &errorOut) {
 	(void)errorOut;
 
@@ -3102,6 +3163,14 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 	out.setVal("frame_counter", mcpJsonInt((int)_frameCounter));
 	out.setVal("streaming",     mcpJsonBool(_streaming));
 	out.setVal("in_loom_section", mcpJsonBool(isInLoomSection()));
+
+	// Talk/text speed, so callers can verify set_talk_speed took effect:
+	// 'talkspeed' is the 0..255 ConfMan value, 'text_speed' the engine's 0..9
+	// scale (9 == fastest), and 'charinc' the live per-char delay (0 == instant).
+	out.setVal("talkspeed",  mcpJsonInt(ConfMan.getInt("talkspeed")));
+	out.setVal("text_speed", mcpJsonInt(_vm->getTalkSpeed()));
+	if (_vm->VAR_CHARINC != 0xFF)
+		out.setVal("charinc", mcpJsonInt((int)_vm->VAR(_vm->VAR_CHARINC)));
 
 	Common::JSONObject mouse;
 	mouse.setVal("x", mcpJsonInt(_vm->_mouse.x));

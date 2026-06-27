@@ -101,6 +101,14 @@ class RealBackend:
         self._proc = proc
         self._client = wait_for_mcp("127.0.0.1", self.scummvm_port)
 
+        # The Fate of Atlantis demo's boot script overrides the configured
+        # talkspeed (it sets VAR_CHARINC outside room 0, so the engine's
+        # room-0-only user override is skipped). Force the max text speed at
+        # runtime via the mcp_debug-gated set_talk_speed tool so lingering
+        # subtitles don't stall the walkthrough.
+        if self.game_id == "atlantis":
+            self._client.call_tool("set_talk_speed", {"speed": 255})
+
     def state(self) -> dict[str, object]:
         return self._guard(lambda: self._require_client().state())
 

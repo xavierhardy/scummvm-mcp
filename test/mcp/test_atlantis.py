@@ -200,6 +200,58 @@ def _msgs(result: dict) -> str:
     return " ".join(m.get("text", "") for m in result.get("messages", []))
 
 
+def _debug(client: McpClient) -> dict:
+    """debug() on a fresh connection, patiently retried."""
+    deadline = time() + 60
+    last = None
+    while time() < deadline:
+        _fresh(client)
+        try:
+            return client.debug()
+        except Exception as exc:  # noqa: BLE001 - transient backlog, retry
+            last = exc
+            sleep(2.0)
+    raise AssertionError(f"debug() never responded: {last}")
+
+
+def _set_talk_speed(client: McpClient, speed: int = 255) -> dict:
+    """set_talk_speed() on a fresh connection, patiently retried."""
+    deadline = time() + 60
+    last = None
+    while time() < deadline:
+        _fresh(client)
+        try:
+            return client.set_talk_speed(speed)
+        except Exception as exc:  # noqa: BLE001 - transient backlog, retry
+            last = exc
+            sleep(2.0)
+    raise AssertionError(f"set_talk_speed() never responded: {last}")
+
+
+def test_atlantis_talk_speed_maxed(atlantis_client: McpClient) -> None:
+    """The session fixture forces max text speed via the mcp_debug-gated
+    set_talk_speed tool, because the demo's boot script otherwise overrides the
+    configured talkspeed (it sets VAR_CHARINC outside room 0, so the engine's
+    room-0-only user override is skipped). See conftest.atlantis_client.
+
+    Confirm the engine reflects the maximum, in the tool's own report and via
+    debug(). Placed before the walkthrough so it runs on the fresh instance.
+    """
+    client = atlantis_client
+
+    # The tool's own report (re-asserting is idempotent).
+    res = _set_talk_speed(client, 255)
+    assert res["talkspeed"] == 255
+    assert res["text_speed"] == 9  # 0..9 engine scale, 9 == fastest
+    assert res["charinc"] == 0  # live per-char delay, 0 == instant text
+
+    # ...and debug() independently reflects it.
+    dbg = _debug(client)
+    assert dbg["talkspeed"] == 255
+    assert dbg["text_speed"] == 9
+    assert dbg["charinc"] == 0
+
+
 def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     """Drive the whole Fate of Atlantis demo walkthrough in one sequential run."""
     client = atlantis_client

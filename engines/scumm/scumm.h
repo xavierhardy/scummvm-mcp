@@ -1624,6 +1624,12 @@ protected:
 	bool _haveActorSpeechMsg = false;
 	bool _useTalkAnims = false;
 	uint16 _defaultTextSpeed = 0;
+	// Set by the MCP set_talk_speed debug tool: when true, writeVar() forces
+	// every script write to VAR_CHARINC back to the user-configured talkspeed,
+	// regardless of room. Needed for titles whose intro script overrides the
+	// talkspeed outside room 0 (e.g. the Fate of Atlantis demo). Never set
+	// during normal play.
+	bool _mcpForceTalkSpeed = false;
 	int _saveSound = 0;
 	bool _native_mt32 = false;
 	bool _copyProtection = false;

@@ -45,6 +45,13 @@ id = "pass"
 path = "/home/pi/games/pass"
 save_slot = 2
 
+# Fate of Atlantis demo has no save support; it runs from its intro. Its boot
+# script overrides the configured talkspeed, so the bench forces the max text
+# speed at runtime via the mcp_debug-gated set_talk_speed tool (see RealBackend).
+[[games]]
+id = "atlantis"
+path = "/home/pi/games/Indy4Demo"
+
 # Local LM Studio models, only used with --local. The `key` is the lms download
 # key; params mirror `lms load` flags. `provider`/`model` are how the model is
 # registered in pi's models.json and selected by the harness.

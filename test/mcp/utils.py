@@ -164,6 +164,29 @@ class McpClient:
             raise RuntimeError(f"Debug error: {data['error']}")
         return self._extract_result(data)
 
+    def set_talk_speed(self, speed: int = 255) -> dict[str, Any]:
+        """Force the text/talk speed at runtime (sync call, gated by mcp_debug).
+
+        ``speed`` is on the 0..255 scale used by the --talkspeed option
+        (0 = slowest, 255 = fastest/instant text). Needed for titles whose boot
+        script overrides the configured talkspeed (e.g. the Fate of Atlantis
+        demo), where the startup setting never takes.
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {
+                "name": "set_talk_speed",
+                "arguments": {"speed": speed},
+            },
+        }
+        resp = self._client.post(self._url, json=payload, headers=self._headers())
+        data = resp.json()
+        if "error" in data:
+            raise RuntimeError(f"SetTalkSpeed error: {data['error']}")
+        return self._extract_result(data)
+
     def skip(self) -> dict[str, Any]:
         """Skip (equivalent to Escape)."""
         payload = {

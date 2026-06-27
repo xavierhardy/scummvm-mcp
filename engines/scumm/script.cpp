@@ -743,7 +743,11 @@ void ScummEngine::writeVar(uint var, int value) {
 			// Note: To determine whether there was a user override, we only
 			// look at the target specific settings, assuming that any global
 			// value is likely to be bogus. See also bug #4008.
-			if (_currentRoom == 0 && ConfMan.hasKey("talkspeed", _targetName)) {
+			if ((_currentRoom == 0 || _mcpForceTalkSpeed) && ConfMan.hasKey("talkspeed", _targetName)) {
+				// _mcpForceTalkSpeed: the MCP set_talk_speed debug tool latches
+				// the user value so a later intro/cutscene script (which may set
+				// VAR_CHARINC outside room 0, e.g. the Fate of Atlantis demo)
+				// can't clobber it for the rest of the session.
 				value = 9 - getTalkSpeed();
 			} else if (value >= 0 && value <= 9) {
 				// Save the new talkspeed value to ConfMan.
