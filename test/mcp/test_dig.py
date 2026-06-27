@@ -10,6 +10,7 @@ The fixture loads dig-demo.s01, which puts the player in canyon room 15 with
 Brink and Maggie present and 'look_at' / 'trowel' in inventory.
 """
 
+import pytest
 from utils import McpClient
 
 
@@ -114,6 +115,7 @@ def test_05_dig_interact_actor(dig_client: McpClient) -> None:
     _close_dialog(dig_client)
 
 
+@pytest.mark.slow
 def test_05b_dig_dialog_choices_distinct(dig_client: McpClient) -> None:
     """Each topic icon must dispatch a *different* conversation branch.
 
@@ -192,6 +194,7 @@ def test_10_dig_use_item_on_actor_male(dig_client: McpClient) -> None:
     ), f"Expected Low to refuse using the trowel on Brink, got: {msgs}"
 
 
+@pytest.mark.slow
 def test_08_dig_leave_scene(dig_client: McpClient) -> None:
     """Leaving room 15 plays a long cutscene that must NOT time out.
 

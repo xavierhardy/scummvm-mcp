@@ -100,6 +100,7 @@ def test_04_loom_egg_listen(loom_client: McpClient) -> None:
     ), f"expected Bobbin's listen line, got {texts}"
 
 
+@pytest.mark.slow
 def test_05_loom_egg_replay_hatches(loom_client: McpClient) -> None:
     """Replaying the Opening draft on the distaff hatches the egg.
 

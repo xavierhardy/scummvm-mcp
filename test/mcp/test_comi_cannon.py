@@ -9,6 +9,7 @@ reported back as ``boats_remaining`` (a sunk boat is an actor cluster vanishing,
 which never appears in ``objects_changed``), reaching 0 when the minigame is won.
 """
 
+import pytest
 from utils import McpClient
 
 
@@ -71,6 +72,7 @@ def test_03_cannon_shoot_sinks_targeted_boat(comi_s4_client: McpClient) -> None:
     )
 
 
+@pytest.mark.slow
 def test_04_cannon_shoot_all_boats(comi_s4_client: McpClient) -> None:
     """Aiming at each boat in turn must sink all four and win the minigame."""
     last_remaining = None

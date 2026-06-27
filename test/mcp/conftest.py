@@ -32,6 +32,18 @@ from utils import (
 
 PROC_KILL_TIMEOUT_SECS = 5
 
+_SKIP_SLOW = os.environ.get("SKIP_SLOW_TESTS", "").lower() in ("1", "true")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests marked ``slow`` when SKIP_SLOW_TESTS is true/1."""
+    if not _SKIP_SLOW:
+        return
+    skip_slow = pytest.mark.skip(reason="SKIP_SLOW_TESTS is set")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)
+
 # Stable per-fixture index (0..99) fed to get_mcp_port so each fixture gets a
 # distinct port within its worker's band. Never reorder/reuse these.
 _FIXTURE_INDEX = {

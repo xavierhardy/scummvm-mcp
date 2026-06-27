@@ -15,6 +15,7 @@ The tests follow the demo's storyline in order, on one session:
      to Ben's bike in a long cutscene.
 """
 
+import os
 from time import sleep
 
 import httpx
@@ -24,7 +25,16 @@ from utils import McpClient, get_state_with_retry
 # Full Throttle cannot save/load: the demo is one strictly-ordered storyline run
 # on a single instance. Pin every test in this file to one xdist worker so they
 # run in sequence (the session-scoped ft_client is shared across them).
-pytestmark = pytest.mark.xdist_group("ft")
+#
+# Set SKIP_SLOW_TESTS=1 to skip this whole file (and test_atlantis):
+# both are slow, no-save demo walkthroughs that some runs want to leave out.
+pytestmark = [
+    pytest.mark.xdist_group("ft"),
+    pytest.mark.skipif(
+        bool(os.environ.get("SKIP_SLOW_TESTS")),
+        reason="SKIP_SLOW_TESTS is set",
+    ),
+]
 
 
 FT_VERBS = {"fist", "kick", "mouth", "walk to", "interact", "use item"}

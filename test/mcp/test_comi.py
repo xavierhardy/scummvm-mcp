@@ -151,6 +151,7 @@ def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> No
     assert set(state["verbs"]) == {"walk to", "talk to", "pick up", "look at", "use"}
 
 
+@pytest.mark.slow
 def test_07b_comi_longest_pirate_exchange_no_timeout(comi_client: McpClient) -> None:
     """Stream the longest single Wally exchange without hitting MCP timeout.
 

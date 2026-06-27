@@ -354,6 +354,7 @@ def test_10_samnmax_no_phantom_carnival_ticket(samnmax_client: McpClient) -> Non
     assert "beat_up_desoto" in names, f"the DeSoto should be listed: {names}"
 
 
+@pytest.mark.slow
 def test_11_samnmax_use_desoto_triggers_cutscene(samnmax_client: McpClient) -> None:
     """Using the DeSoto must board the car and play the drive-away cutscene.
 

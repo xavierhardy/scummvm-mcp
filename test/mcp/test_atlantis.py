@@ -27,6 +27,7 @@ FRESH connection (forcing a clean connect/disconnect that lets the server drain
 its stream state) and is gently retried — never hammered.
 """
 
+import os
 import re
 from time import sleep, time
 
@@ -34,7 +35,15 @@ import httpx
 import pytest
 from utils import McpClient
 
-pytestmark = pytest.mark.xdist_group("atlantis")
+# Set SKIP_SLOW_TESTS=1 to skip this whole file (and test_ft):
+# both are slow, no-save demo walkthroughs that some runs want to leave out.
+pytestmark = [
+    pytest.mark.xdist_group("atlantis"),
+    pytest.mark.skipif(
+        bool(os.environ.get("SKIP_SLOW_TESTS")),
+        reason="SKIP_SLOW_TESTS is set",
+    ),
+]
 
 INTRO_POLL_SECS = 0.5
 ROOM_CANYON = 63

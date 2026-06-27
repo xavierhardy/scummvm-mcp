@@ -16,6 +16,7 @@ interactions.
 
 from time import sleep
 
+import pytest
 from utils import McpClient, find_object_by_name
 
 SETTLE_SECS = 0.5
@@ -44,6 +45,7 @@ def _question_choice_id(question: dict, label: str) -> int:
     return choices[0]["id"]
 
 
+@pytest.mark.slow
 def test_samnmax_s02_cat_courier_gives_carnival_tickets(
     samnmax_street_client: McpClient,
 ) -> None:

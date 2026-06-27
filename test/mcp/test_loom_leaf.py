@@ -75,6 +75,7 @@ def test_09_loom_pathway_named(loom_leaf_client) -> None:
     ), f"`pathway_460` should map to object id 460, got: {names['pathway_460']}"
 
 
+@pytest.mark.slow
 def test_10_loom_pathway_room_change(loom_leaf_client) -> None:
     """Repeated interacts with `pathway_460` walk Bobbin all the way left
     and trigger a room change from room 36 to room 39. The pathway
