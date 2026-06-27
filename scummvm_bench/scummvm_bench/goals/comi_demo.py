@@ -26,10 +26,12 @@ dialog goals are observable end-states (messages / inventory) independent of the
 path.
 
 Note there is no separate "treasure room": the whole demo plays out across
-rooms 3 (cannon), 4 (the minigame) and 5 (the gunport). The final escape is a
-``use cannon`` that triggers the closing cutscene *without* a room change, so it
-is scored as a tool call (``escape_via_cannon``), told apart from the minigame's
-``use cannon`` by the cutlass already being in hand by then.
+rooms 3 (cannon), 4 (the minigame) and 5 (the gunport). Cutting the restraint
+rope (``cut_restraint_rope``) is the *stopping* goal: it is the last controllable
+beat of the demo. Firing the unrestrained cannon afterwards only triggers the
+closing cutscene -- a non-interactive video that the engine never settles out of
+(it loops the demo's attract reel), so the run deliberately ends at the snip
+rather than chase a ``use cannon`` whose result never comes back.
 """
 
 from .engine import (
@@ -37,7 +39,6 @@ from .engine import (
     GoalSet,
     Predicate,
     all_of,
-    in_inventory,
     in_room,
     on_boats_remaining_at_most,
     on_call,
@@ -140,21 +141,14 @@ GOALS = {
             "Fish the debris out of the water to land a cutlass",
             on_inventory_added("cutlass"),
         ),
+        # Cutting the rope is the last controllable beat, so it is the stopping
+        # goal: firing the cannon next would only start the closing video, which
+        # never settles (it loops the attract reel), so the run ends at the snip.
         _goal(
             "cut_restraint_rope",
-            "Cut the cannon restraint rope with the cutlass",
+            "Cut the cannon restraint rope with the cutlass (ends the demo run)",
             on_call(
                 "act", verb="use", target1="cutlass", target2="cannon_restraint_rope"
-            ),
-            kind="call",
-        ),
-        _goal(
-            "escape_via_cannon",
-            "Fire the unrestrained cannon to backfire out and end the demo",
-            all_of(
-                on_call("act", verb="use", target1="cannon"),
-                in_room(ROOM_CANNON),
-                in_inventory("cutlass"),
             ),
             kind="call",
             stopping=True,

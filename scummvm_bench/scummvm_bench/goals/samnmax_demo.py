@@ -97,7 +97,7 @@ GOALS = {
             # room change: the DeSoto's drive-away is a cutscene whose room flip
             # to ROOM_DRIVING lands asynchronously, often after the act's settle
             # window closes, so on_room_changed(10) raced the cutscene and was
-            # flaky. (Same reasoning as COMI's call-based escape_via_cannon.)
+            # flaky. (Same reasoning as COMI's call-based cut_restraint_rope.)
             all_of(
                 on_call("act", verb="use", target1="beat_up_desoto"),
                 in_inventory("carnival_tickets"),
