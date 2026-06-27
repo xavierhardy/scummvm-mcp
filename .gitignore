@@ -333,3 +333,5 @@ scummvm.ini
 /test/mcp/play_*
 
 /tmp
+
+.coverage*

@@ -455,7 +455,7 @@ def launch_scummvm(
             ini_path,
             f"--save-slot={save_slot}",
             f"--savepath={save_path}",
-            "--talkspeed=1200",
+            "--talkspeed=255",
             game_id,
         ]
 

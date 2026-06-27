@@ -208,7 +208,7 @@ def launch_scummvm(
     save_path: str | None,
     stdout_path: str,
     stderr_path: str,
-    talkspeed: int = 1200,
+    talkspeed: int = 255,
 ) -> subprocess.Popen[bytes]:
     """Launch ScummVM headlessly with MCP enabled for ``game_id``."""
     args = [scummvm_binary, "-c", ini_path]
