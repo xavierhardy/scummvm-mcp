@@ -91,9 +91,9 @@ two projects. Typing rules: rely on `Any` as little as possible; never use
 ## Build & run tests
 
 ```bash
-# Build the engine (produces ./scummvm). First time: ./configure
-./configure          # only on a fresh checkout
-make                 # build ./scummvm
+# Build the engine (produces ./scummvm). First time:
+./configure --disable-all-engines --enable-engine=scumm --enable-engine=scumm-7-8
+make
 
 # C++ unit tests (CxxTest). Needs a `python` on PATH for cxxtestgen — if only
 # python3 exists, create a venv to provide one:  uv venv .venv && PATH=.venv/bin:$PATH make test
@@ -164,3 +164,27 @@ When working on the MCP server, its tests, or the MCP bench:
   behaviour behind the appropriate version/game checks rather than changing
   common paths. When in doubt, prefer an additive, narrowly-scoped branch.
 - Keep `scummvm_bench` free of any dependency on the `test/mcp` tree.
+
+## Conventions & attribution
+
+This repo follows the project's [`AI-GUIDELINES.md`](AI-GUIDELINES.md) — read it.
+Key points for any change made here:
+
+- **Code style.** C++ MUST match ScummVM's
+  [formatting and naming conventions](https://wiki.scummvm.org/index.php/Code_Formatting_Conventions)
+  and the surrounding file: tabs for indentation, `lowerCamelCase` methods,
+  `_camelCase` members, K&R braces. New changes should read like upstream engine
+  code. Python follows the `ruff`/`ty` rules above.
+- **Licensing.** All code is GPLv3+; new C++ source files carry the standard
+  ScummVM GPL header. Never paste in code that is not GPLv3+ compatible.
+- **Test before submitting.** Run `make test` and the relevant pytest suites,
+  and exercise your change. Only submit code you understand — no "vibe coding".
+- **Commit messages.** Follow ScummVM's conventions and the prefix style already
+  used here (`MCP:`, `MCP_BENCH:`, `SCUMM:` …). AI assistance MUST be disclosed
+  with an `Assisted-by:` trailer — and **not** a `Co-Authored-By:` trailer. The
+  human committer is the sole author; an AI agent must never be a (co-)author.
+
+  ```
+  Assisted-by: Claude:claude-opus-4-8
+  ```
+- **No AI for art.** Never generate media assets (logos, icons, sprites, audio).
