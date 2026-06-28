@@ -39,12 +39,14 @@ MONKEY_DEMO_PATH=/path/to/monkey uv run pytest --run-real \
     tests/test_full_run_real_monkey.py                       # Monkey Island
 ```
 
-Every registered game has both a **mock** full-run (`tests/test_games_mock.py`,
-replaying scripted backend responses) and a **real** full-run
-(`tests/test_games_real.py`, driving a live ScummVM); both replay the same
-captured walkthrough from `tests/walkthroughs.py` and must reach 100% of the
-game's goals. Monkey Island keeps its own dedicated pair
+Every game that has a captured walkthrough (`tests/walkthroughs.py`) gets both a
+**mock** full-run (`tests/test_games_mock.py`, replaying scripted backend
+responses) and a **real** full-run (`tests/test_games_real.py`, driving a live
+ScummVM); both replay the same walkthrough and must reach 100% of the game's
+goals. Monkey Island keeps its own dedicated pair
 (`tests/mock_harness.py:MONKEY_CALLS` + `tests/test_full_run_real_monkey.py`).
+See the **Games** table below for which sets have a 100% walkthrough vs. which
+are best-effort.
 Goals latch on a tool **call** (e.g. walking the plank, captured via `Goal.times`
 for the three indistinguishable bounces; or Indy3's three-punch combo) or on what
 a call **returned** (a new room, inventory item, or dialogue line).
@@ -109,16 +111,28 @@ call **returned**. Goals latch (reached once = reached forever); exactly one is 
 
 ## Games
 
-Six demo goal sets ship in `scummvm_bench/goals/`, each with a mock + real
-full-run that reaches 100%. The `pass` target (Passport to Adventure) carries two
-of them, disambiguated by save slot.
+Goal sets live in `scummvm_bench/goals/` and are registered in
+`goals/__init__.py`'s `GOAL_SETS`, keyed by `(game_id, save_slot)`. The `pass`
+target (Passport to Adventure) carries two of them, disambiguated by save slot.
 
-| `--game` | Game | Segment | Goals |
-|----------|------|---------|-------|
-| `monkey-ega-demo:1` | The Secret of Monkey Island | Mêlée Island → troll / fortune teller | 29 |
-| `maniac-c64:1` | Maniac Mansion | Get into the mansion | 6 |
-| `comi-demo:1` | The Curse of Monkey Island | Cannon-room pirate dialog | 6 |
-| `samnmax:1` | Sam & Max Hit the Road | Office → street → DeSoto | 9 |
-| `dig-demo:1` | The Dig | Canyon → dias → wreck → bone field | 8 |
-| `pass:2` | Loom | Tree clearing → village → dark clearing | 7 |
-| `pass:3` | Indiana Jones and the Last Crusade | Boxing gym sparring match | 7 |
+**Seven** have a mock + real full-run (`tests/walkthroughs.py`) that reaches
+100% of the goals:
+
+| `--game` | Game | Engine | Segment | Goals |
+|----------|------|:------:|---------|------:|
+| `monkey-ega-demo:1` | The Secret of Monkey Island | V4 | Mêlée Island → the troll bridge | 29 |
+| `maniac-c64:1` | Maniac Mansion | V0 | Outside → into the mansion → basement key | 29 |
+| `comi-demo:1` | The Curse of Monkey Island | V8 | Cannon room → cut the restraint rope | 15 |
+| `samnmax:1` | Sam & Max Hit the Road | V6 | Office → street → board the DeSoto | 10 |
+| `dig-demo:1` | The Dig | V7 | Canyon start → dig the trowel hole | 9 |
+| `pass:6` | Loom (Passport) | V3 | Cliff → village → leave the island | 25 |
+| `pass:3` | Indiana Jones and the Last Crusade (Passport) | V3 | Boxing gym → travel on to Venice | 30 |
+
+Three more goal sets are registered and runnable but **best-effort** — they have
+no captured walkthrough yet, so no full-run drives them to 100%:
+
+| `--game` | Game | Engine | Goals |
+|----------|------|:------:|------:|
+| `ft-demo` | Full Throttle | V7 | 11 |
+| `atlantis` | Indiana Jones and the Fate of Atlantis | V5 | 10 |
+| `monkey2-demo` | Monkey Island 2: LeChuck's Revenge | V5 | 5 |
