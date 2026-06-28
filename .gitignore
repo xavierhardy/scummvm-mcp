@@ -335,3 +335,6 @@ scummvm.ini
 /tmp
 
 .coverage*
+
+/_*.md
+/_*.py
