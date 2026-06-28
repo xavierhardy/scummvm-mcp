@@ -46,22 +46,22 @@ from .engine import (
     on_room_changed,
 )
 
-ROOM_FIRST = 36       # cliff with the sky (control starts here; leave point too)
+ROOM_FIRST = 36  # cliff with the sky (control starts here; leave point too)
 ROOM_VILLAGE = 39
-ROOM_TENTS = 41       # the tents hub
-ROOM_TENT_LEFT = 44   # the Elders' tent
-ROOM_COUNCIL = 45     # the High Council / egg / loom
-ROOM_FOREST = 40      # the owl-holes
+ROOM_TENTS = 41  # the tents hub
+ROOM_TENT_LEFT = 44  # the Elders' tent
+ROOM_COUNCIL = 45  # the High Council / egg / loom
+ROOM_FOREST = 40  # the owl-holes
 ROOM_OTHER_TENT = 38  # holds the "darkness"
-ROOM_DARKNESS = 42    # opened by casting the owls' draft on the darkness
-ROOM_BEACH = 46       # the beach / dock; the tree (pathway 625) appears here
-                      # once the sky is open and leads back to 36 (leaving)
+ROOM_DARKNESS = 42  # opened by casting the owls' draft on the darkness
+ROOM_BEACH = 46  # the beach / dock; the tree (pathway 625) appears here
+# once the sky is open and leads back to 36 (leaving)
 
-PATH_TO_VILLAGE = 460     # 36 -> 39
-PATH_TO_TENTS = 510       # 39 -> 41
-PATH_TO_TENT_LEFT = 541   # 41 -> 44
+PATH_TO_VILLAGE = 460  # 36 -> 39
+PATH_TO_TENTS = 510  # 39 -> 41
+PATH_TO_TENT_LEFT = 541  # 41 -> 44
 PATH_TO_OTHER_TENT = 539  # 41 -> 38
-ELDERS_ACTOR = 8          # walk to the Elders (room 44) -> council
+ELDERS_ACTOR = 8  # walk to the Elders (room 44) -> council
 EGG_OBJ = 609
 DARKNESS_OBJ = 952
 
@@ -189,7 +189,7 @@ GOALS = {
         ),
         _goal(
             "interact_dye_pot",
-            'Examine the dye pot (learns the dye draft)',
+            "Examine the dye pot (learns the dye draft)",
             on_message_contains("dye draft"),
         ),
         _goal(

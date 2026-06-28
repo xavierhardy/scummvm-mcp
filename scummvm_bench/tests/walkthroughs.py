@@ -264,7 +264,8 @@ MANIAC = Walkthrough(
         ScriptStep("act", {"verb": "open", "target1": 37}, _door("door")),
         ScriptStep("act", {"verb": "open", "target1": 93}, _door("door")),
         ScriptStep(
-            "act", {"verb": "open", "target1": 36},
+            "act",
+            {"verb": "open", "target1": 36},
             _msgs(("?", "There's no handle here!")),
         ),
         ScriptStep("act", {"verb": "walk_to", "target1": 35}, {"room_changed": 7}),
@@ -315,13 +316,15 @@ MANIAC = Walkthrough(
         _pickup("silver_key"),
         # Living: open the old radio for the tube Dave refused.
         ScriptStep(
-            "act", {"verb": "open", "target1": "old_fashion_radio"},
+            "act",
+            {"verb": "open", "target1": "old_fashion_radio"},
             _door("old fashion radio"),
         ),
         _pickup("radio_tube"),
         # Unlock the pantry's far door with the silver key, step out to the pool.
         ScriptStep(
-            "act", {"verb": "unlock", "target1": 92, "target2": "silver_key"},
+            "act",
+            {"verb": "unlock", "target1": 92, "target2": "silver_key"},
             _door("door", 4, 8),
         ),
     ],
@@ -506,7 +509,10 @@ class ComiRealHarness:
                 if not boats:
                     break
                 res = await call("shoot_cannon", {"x": boats[0][0], "y": boats[0][1]})
-                if res.get("boats_remaining") == 0 or res.get("room_changed") is not None:
+                if (
+                    res.get("boats_remaining") == 0
+                    or res.get("room_changed") is not None
+                ):
                     break
 
             # The minigame returns to the cannon room (room 3) behind a victory
@@ -563,7 +569,10 @@ COMI = Walkthrough(
             "act",
             {"verb": "use", "target1": "ramrod", "target2": "plastic_hook"},
         ),  # make_gaff
-        ("act", {"verb": "use", "target1": "gaff", "target2": "debris"}),  # fish cutlass
+        (
+            "act",
+            {"verb": "use", "target1": "gaff", "target2": "debris"},
+        ),  # fish cutlass
         # cut_restraint_rope (STOP) — last controllable beat; firing the cannon
         # afterwards only starts the unstoppable closing video, so we end here.
         (
@@ -1032,7 +1041,9 @@ class LoomRealHarness:
                 return r.get("id") if isinstance(r, dict) else None
 
             async def has_obj(oid: int) -> bool:
-                return any(o.get("id") == oid for o in (await state()).get("objects") or [])
+                return any(
+                    o.get("id") == oid for o in (await state()).get("objects") or []
+                )
 
             async def wait_room(target: int, tries: int = 20) -> bool:
                 for _ in range(tries):
@@ -1051,7 +1062,9 @@ class LoomRealHarness:
                     await asyncio.sleep(2.0)
                 return await room() == target
 
-            async def settle(target: int, want_egg: bool | None, max_s: int = 80) -> None:
+            async def settle(
+                target: int, want_egg: bool | None, max_s: int = 80
+            ) -> None:
                 # Wait out a cutscene until control returns to ``target`` (and,
                 # if given, the egg is present / consumed).
                 for _ in range(max_s):
@@ -1062,7 +1075,9 @@ class LoomRealHarness:
                     if rid == target:
                         if want_egg is None:
                             return
-                        present = any(o.get("id") == 609 for o in s.get("objects") or [])
+                        present = any(
+                            o.get("id") == 609 for o in s.get("objects") or []
+                        )
                         if present == want_egg:
                             return
                     await asyncio.sleep(1.0)
@@ -1077,7 +1092,9 @@ class LoomRealHarness:
                     await call("act", {"verb": "interact", "target1": target})
                     await asyncio.sleep(2.0)
                     data = await call("play_note", {"notes": notes})
-                    msgs = " ".join(m.get("text", "") for m in (data.get("messages") or []))
+                    msgs = " ".join(
+                        m.get("text", "") for m in (data.get("messages") or [])
+                    )
                     if "point at something" not in msgs:
                         return data
                 return data
@@ -1089,20 +1106,25 @@ class LoomRealHarness:
             await state()  # state_tents (41)
             await go_pathway(541, 44)  # reach_tent_left
             await state()  # state_tent (44)
+
             async def wait_input(max_s: int = 90) -> None:
                 # A cutscene is playing (input locked); poll a harmless probe (the
                 # loom) until the engine accepts input again.
                 for _ in range(max_s):
                     if stop.is_set():
                         return
-                    probe = await call("act", {"verb": "interact", "target1": 611}, tries=1)
+                    probe = await call(
+                        "act", {"verb": "interact", "target1": 611}, tries=1
+                    )
                     if not probe.get("error"):
                         return
                     await asyncio.sleep(1.0)
 
             # Walk to the Elders on the right -> the long High Council cutscene
             # leaves Bobbin in room 45 with Hetchel's egg.
-            await call("act", {"verb": "interact", "target1": 8})  # reach_council (->45)
+            await call(
+                "act", {"verb": "interact", "target1": 8}
+            )  # reach_council (->45)
             await settle(45, want_egg=True)
             await wait_input()  # the egg appears mid-cutscene; wait for control
             await state()
@@ -1116,7 +1138,9 @@ class LoomRealHarness:
             # because Bobbin holds the distaff.
             await call("walk", {"x": 40, "y": 130})
             await asyncio.sleep(2)
-            listen = await call("act", {"verb": "interact", "target1": 609})  # listen_egg
+            listen = await call(
+                "act", {"verb": "interact", "target1": 609}
+            )  # listen_egg
             opening = listen.get("notes") or ["e", "c", "e", "d"]
             await call("play_note", {"notes": opening})  # play_eced_egg
             await wait_input()  # wait out the hatch cutscene
@@ -1128,7 +1152,9 @@ class LoomRealHarness:
             # Hear all four owls; the last hole plays back the full darkness draft.
             darkness: list = ["d", "c", "c", "d"]
             for hid in (517, 518, 519, 520):
-                r = await call("act", {"verb": "interact", "target1": hid})  # owl_* messages
+                r = await call(
+                    "act", {"verb": "interact", "target1": hid}
+                )  # owl_* messages
                 if r.get("notes"):
                     darkness = r["notes"]
                 await asyncio.sleep(1.0)
@@ -1141,9 +1167,9 @@ class LoomRealHarness:
             await wait_room(42)
             # Read the book, learn the dye draft from the dye pot, dye the heap green.
             await call("act", {"verb": "interact", "target1": 548})  # interact_book
-            dye = (await call("act", {"verb": "interact", "target1": 544})).get("notes") or [
-                "d", "d", "c", "d"
-            ]  # interact_dye_pot
+            dye = (await call("act", {"verb": "interact", "target1": 544})).get(
+                "notes"
+            ) or ["d", "d", "c", "d"]  # interact_dye_pot
             await point_cast(549, dye)  # dye_green
             # Back to the cliff; open the sky (it is on the right) with the Opening draft.
             await go_pathway(543, 41)
@@ -1157,7 +1183,9 @@ class LoomRealHarness:
 
 
 def _note_step(target, notes, result):
-    return ScriptStep("act", {"verb": "interact", "target1": target}, {**result, "notes": notes})
+    return ScriptStep(
+        "act", {"verb": "interact", "target1": target}, {**result, "notes": notes}
+    )
 
 
 LOOM = Walkthrough(
@@ -1207,7 +1235,8 @@ LOOM = Walkthrough(
         ScriptStep("act", {"verb": "interact", "target1": 8}, {"room_changed": 45}),
         # Pick up the distaff first -- the prerequisite for every draft.
         ScriptStep(
-            "act", {"verb": "interact", "target1": 610},
+            "act",
+            {"verb": "interact", "target1": 610},
             _msgs(("bobbin", "distaff"), ("bobbin", "Feels heavier than it looks.")),
         ),
         _note_step(
@@ -1216,33 +1245,73 @@ LOOM = Walkthrough(
             _msgs(("bobbin", "egg"), ("bobbin", "It's trying to open!")),
         ),
         ScriptStep(
-            "play_note", {"notes": ["e", "c", "e", "d"]},
+            "play_note",
+            {"notes": ["e", "c", "e", "d"]},
             _msgs(
                 ("hetchel", "Thank goodness you're still here."),
                 ("hetchel", "You've already found the Elder's distaff."),
             ),
         ),
         ScriptStep("act", {"verb": "interact", "target1": 511}, {"room_changed": 40}),
-        ScriptStep("act", {"verb": "interact", "target1": 517}, _msgs(("bobbin", "There's an owl in there!"))),
-        ScriptStep("act", {"verb": "interact", "target1": 518}, _msgs(("bobbin", "This hole has an owl too."))),
-        ScriptStep("act", {"verb": "interact", "target1": 519}, _msgs(("bobbin", "Another owl! The woods must be full of 'em."))),
+        ScriptStep(
+            "act",
+            {"verb": "interact", "target1": 517},
+            _msgs(("bobbin", "There's an owl in there!")),
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "interact", "target1": 518},
+            _msgs(("bobbin", "This hole has an owl too.")),
+        ),
+        ScriptStep(
+            "act",
+            {"verb": "interact", "target1": 519},
+            _msgs(("bobbin", "Another owl! The woods must be full of 'em.")),
+        ),
         _note_step(
-            520, ["d", "c", "c", "d"],
+            520,
+            ["d", "c", "c", "d"],
             _msgs(("bobbin", "Looks as if all the holes are full.")),
         ),
         ScriptStep("act", {"verb": "interact", "target1": 539}, {"room_changed": 38}),
-        ScriptStep("act", {"verb": "interact", "target1": 952}, _msgs(("bobbin", "darkness"), ("bobbin", "I can't see a thing."))),
+        ScriptStep(
+            "act",
+            {"verb": "interact", "target1": 952},
+            _msgs(("bobbin", "darkness"), ("bobbin", "I can't see a thing.")),
+        ),
         ScriptStep("play_note", {"notes": ["d", "c", "c", "d"]}, {"room_changed": 42}),
-        ScriptStep("act", {"verb": "interact", "target1": 548}, _msgs(("bobbin", "This is the Book of Patterns that Hetchel lets me read sometimes."))),
+        ScriptStep(
+            "act",
+            {"verb": "interact", "target1": 548},
+            _msgs(
+                (
+                    "bobbin",
+                    "This is the Book of Patterns that Hetchel lets me read sometimes.",
+                )
+            ),
+        ),
         _note_step(
-            544, ["d", "d", "c", "d"],
+            544,
+            ["d", "d", "c", "d"],
             _msgs(("bobbin", "I wonder if this dye draft will work on the wool.")),
         ),
-        ScriptStep("act", {"verb": "interact", "target1": 549}, _msgs(("bobbin", "heap"))),
-        ScriptStep("play_note", {"notes": ["d", "d", "c", "d"]}, _msgs(("bobbin", "I changed the color!"))),
+        ScriptStep(
+            "act", {"verb": "interact", "target1": 549}, _msgs(("bobbin", "heap"))
+        ),
+        ScriptStep(
+            "play_note",
+            {"notes": ["d", "d", "c", "d"]},
+            _msgs(("bobbin", "I changed the color!")),
+        ),
         ScriptStep("act", {"verb": "interact", "target1": 509}, {"room_changed": 36}),
-        ScriptStep("act", {"verb": "interact", "target1": 463}, _msgs(("bobbin", "sky"))),
-        ScriptStep("play_note", {"notes": ["e", "c", "e", "d"]}, _msgs(("bobbin", "you should see the effects in the real game"))),
+        ScriptStep(
+            "act", {"verb": "interact", "target1": 463}, _msgs(("bobbin", "sky"))
+        ),
+        ScriptStep(
+            "play_note",
+            {"notes": ["e", "c", "e", "d"]},
+            _msgs(("bobbin", "you should see the effects in the real game")),
+        ),
         ScriptStep("act", {"verb": "interact", "target1": 512}, {"room_changed": 46}),
         ScriptStep("act", {"verb": "interact", "target1": 625}, {"room_changed": 36}),
     ],

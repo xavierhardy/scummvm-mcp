@@ -42,7 +42,6 @@ door 92. Interior doors all read "door" and are walked by id (kitchen 35, dining
 from .engine import (
     Goal,
     GoalSet,
-    Predicate,
     on_call,
     on_inventory_added,
     on_object_changed,
@@ -61,7 +60,11 @@ _ROOMS = [
     (36, "reach_pantry", "Reach the pantry"),
     (3, "reach_living", "Reach the living room"),
     (5, "reach_library", "Reach the library"),
-    (8, "reach_basement", "Hold the gargoyle and slip through the handleless basement door"),
+    (
+        8,
+        "reach_basement",
+        "Hold the gargoyle and slip through the handleless basement door",
+    ),
     (6, "reach_pool", "Unlock the pantry door with the silver key and reach the pool"),
 ]
 
@@ -74,39 +77,70 @@ _ITEMS = [
     ("get_pepsi", "Take the can of pepsi (inside the fridge)", "can_of_pepsi"),
     ("get_cheese", "Take the cheese (inside the fridge)", "cheese"),
     ("get_lettuce", "Take the lettuce (inside the fridge)", "lettuce"),
-    ("get_ketchup", "Take the broken bottles of ketchup (inside the fridge)", "broken_bottles_of_ketchup"),
+    (
+        "get_ketchup",
+        "Take the broken bottles of ketchup (inside the fridge)",
+        "broken_bottles_of_ketchup",
+    ),
     ("get_turkey", "Take the old rotting turkey (dining room)", "old_rotting_turkey"),
     ("get_roast", "Take the week-old roast (dining room)", "week_old_roast"),
     ("get_tentacle_chow", "Take the tentacle chow (pantry)", "tentacle_chow"),
     ("get_canned_goods", "Take the canned goods (pantry)", "canned_goods"),
     ("get_fruit_drinks", "Take the fruit drinks (pantry)", "fruit_drinks"),
     ("get_glass_jar", "Take the glass jar (pantry)", "glass_jar"),
-    ("get_radio_tube", "Take the radio tube (open the old radio; Bernard only)", "radio_tube"),
-    ("get_cassette_tape", "Take the cassette tape (behind the library loose panel)", "cassette_tape"),
+    (
+        "get_radio_tube",
+        "Take the radio tube (open the old radio; Bernard only)",
+        "radio_tube",
+    ),
+    (
+        "get_cassette_tape",
+        "Take the cassette tape (behind the library loose panel)",
+        "cassette_tape",
+    ),
     ("get_silver_key", "Take the silver key (basement, by the fuse box)", "silver_key"),
 ]
 
 
 def _build() -> dict:
     goals = [
-        _goal("pull_door_mat", "Pull the door mat (reveals the key)",
-              on_object_changed("door mat")),
-        _goal("enter_mansion", "Unlock the front door with the key and go inside",
-              on_room_changed(10)),
-        _goal("open_fridge", "Open the refrigerator (reveals its contents)",
-              on_object_changed("refrigerator")),
+        _goal(
+            "pull_door_mat",
+            "Pull the door mat (reveals the key)",
+            on_object_changed("door mat"),
+        ),
+        _goal(
+            "enter_mansion",
+            "Unlock the front door with the key and go inside",
+            on_room_changed(10),
+        ),
+        _goal(
+            "open_fridge",
+            "Open the refrigerator (reveals its contents)",
+            on_object_changed("refrigerator"),
+        ),
     ]
     goals += [
         _goal(gid, label, on_room_changed(rid), stopping=(rid == 6))
         for rid, gid, label in _ROOMS
     ]
     goals += [
-        _goal("turn_on_library_lamp", "Turn on the library lamp",
-              on_call("act", verb="turn_on", target1="lamp"), kind="call"),
-        _goal("turn_on_basement_light", "Turn on the light switch in the dark basement",
-              on_call("act", verb="turn_on", target1="light_switch"), kind="call"),
+        _goal(
+            "turn_on_library_lamp",
+            "Turn on the library lamp",
+            on_call("act", verb="turn_on", target1="lamp"),
+            kind="call",
+        ),
+        _goal(
+            "turn_on_basement_light",
+            "Turn on the light switch in the dark basement",
+            on_call("act", verb="turn_on", target1="light_switch"),
+            kind="call",
+        ),
     ]
-    goals += [_goal(gid, label, on_inventory_added(item)) for gid, label, item in _ITEMS]
+    goals += [
+        _goal(gid, label, on_inventory_added(item)) for gid, label, item in _ITEMS
+    ]
     return {g.goal_id: g for g in goals}
 
 

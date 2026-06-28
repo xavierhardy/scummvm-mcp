@@ -223,7 +223,9 @@ def in_inventory(item: str) -> Predicate:
     target = _norm(item)
 
     def predicate(event: GoalEvent) -> bool:
-        return any(target in _norm(i) for i in _as_list(event.state_before.get("inventory")))
+        return any(
+            target in _norm(i) for i in _as_list(event.state_before.get("inventory"))
+        )
 
     return predicate
 
