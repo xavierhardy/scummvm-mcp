@@ -13,6 +13,7 @@
 
 #include "common/array.h"
 #include "common/formats/json.h"
+#include "common/keyboard.h"
 #include "common/rect.h"
 #include "common/str.h"
 

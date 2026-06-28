@@ -59,7 +59,9 @@ endif
 
 ifeq ($(ENABLE_SCUMM), STATIC_PLUGIN)
 	TESTS += $(srcdir)/test/engines/scumm/*.h
-	TEST_LIBS += engines/scumm/libscumm.a
+	# normalizeActionName (mcp_actionname.o, pulled from libscumm.a) only needs
+	# the engine-independent MCP string helpers, not the whole engine runtime.
+	TEST_LIBS += engines/scumm/libscumm.a backends/networking/mcp/mcp_server.o
 endif
 
 #
