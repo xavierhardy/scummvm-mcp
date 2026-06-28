@@ -288,9 +288,16 @@ static Common::String summarizeResult(const Common::JSONValue &r) {
 	const Common::JSONObject &obj = r.asObject();
 	Common::String out;
 
-	// state result fields
-	if (obj.contains("room"))
-		out += "room=" + Common::String::format("%d", (int)obj["room"]->asIntegerNumber());
+	// state result fields. "room" is the object {"id":N}, not a bare integer, so
+	// reach into its id (falling back to a plain integer if a caller ever sets
+	// one) — asIntegerNumber() on the object itself prints union garbage.
+	if (obj.contains("room")) {
+		const Common::JSONValue *roomVal = obj["room"];
+		if (roomVal->isObject() && roomVal->asObject().contains("id"))
+			out += "room=" + Common::String::format("%d", (int)roomVal->asObject()["id"]->asIntegerNumber());
+		else if (roomVal->isIntegerNumber())
+			out += "room=" + Common::String::format("%d", (int)roomVal->asIntegerNumber());
+	}
 	if (obj.contains("position") && obj["position"]->isObject()) {
 		const Common::JSONObject &pos = obj["position"]->asObject();
 		out += " pos=(" + Common::String::format("%d", (int)pos["x"]->asIntegerNumber())

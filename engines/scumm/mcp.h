@@ -108,6 +108,12 @@ private:
 	uint32 _sseStuckAtFrame;
 	uint32 _sseLastEventFrame;  // Frame of most recent message received during stream
 	bool _sseEgoMoved;          // ego moved at any point during this stream
+	// Loom's play_note hatches the egg into a long cutscene that keeps streaming
+	// dialogue well past the usual pre-V7 timeout. Only that tool sets this, so
+	// the relaxed per-event deadline never applies to other games' streams (e.g.
+	// the Indy3 student-mob office, whose ambient argument would otherwise keep
+	// resetting the deadline). Reset to false by snapshotPreAction().
+	bool _sseAllowLongCutscene;
 	int _sseTargetObject;       // V0: primary object acted on; 0 if none or non-V0
 	Common::Array<uint16> _ssePreInventory;
 	// Names captured at snapshot time so removed items can still be

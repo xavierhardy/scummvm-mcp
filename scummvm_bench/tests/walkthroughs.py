@@ -1455,13 +1455,23 @@ class IndyRealHarness:
                 "fair for everyone",
             )
             resolve = "take down names"
-            await call("act", {"verb": "talk to", "target1": "students"})
-            for _ in range(8):
+            # Entering the office plays the mob-banging cutscene, which disables
+            # input (talk to students returns "not accepting input") for longer
+            # than a single call()'s retry budget. Keep re-opening the dialog
+            # until the question actually appears, then answer the diplomatic
+            # lines until the mob disperses into Indy's office (room 21) -- don't
+            # bail the instant no question is up yet, or the cutscene wins.
+            for _ in range(20):
                 if stop.is_set():
                     return
+                if await room() == 21:
+                    break
                 q = (await state()).get("question")
                 if not isinstance(q, dict):
-                    break
+                    # Cutscene still holding input / dialog not open yet: nudge it.
+                    await call("act", {"verb": "talk to", "target1": "students"})
+                    await asyncio.sleep(0.6)
+                    continue
                 cid = next(
                     (
                         c["id"]

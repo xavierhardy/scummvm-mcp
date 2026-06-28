@@ -251,6 +251,7 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 	  _sseStuckAtFrame(0),
 	  _sseLastEventFrame(0),
 	  _sseEgoMoved(false),
+	  _sseAllowLongCutscene(false),
 	  _sseTargetObject(0),
 	  _ssePreRoom(0),
 	  _ssePrePosX(0),
@@ -2947,6 +2948,11 @@ bool ScummMcpBridge::toolPlayNote(const Common::JSONValue &args, Common::String 
 	_sseStuckAtFrame = 0;
 	_sseLastEventFrame = 0;
 	_sseEgoMoved = false;
+	// Replaying the egg's draft can hatch it into a multi-minute cutscene whose
+	// dialogue streams past the start-anchored 600-frame deadline; let each line
+	// reset it (bounded by the absolute 3600-frame ceiling). See the timeout in
+	// pumpStream() and _sseAllowLongCutscene.
+	_sseAllowLongCutscene = true;
 	_sseMessages.clear();
 	_ssePendingSecondClick = false;
 	_ssePendingNotes = keys;
@@ -4233,17 +4239,21 @@ void ScummMcpBridge::pumpStream() {
 	}
 
 	// Hard timeout: 600 frames (~20 s) since the last event (or stream start).
-	// Anchor to _sseLastEventFrame whenever a notification (dialog line, Loom
-	// note) has streamed, so each new event resets the deadline and a long but
-	// actively-streaming cutscene isn't cut off mid-play. This holds for every
-	// engine version — e.g. Loom's (V3/V4) egg-hatch cutscene keeps emitting
-	// notes/dialogue well past 600 frames from the start. Pre-V7 games keep the
-	// absolute 3600-frame (~120 s) ceiling as the backstop against a genuine
-	// hang; V7/V8 cutscenes can run longer still, so for them the per-event
-	// 600-frame deadline (which fires 20 s after dialogue genuinely stalls) is
-	// the sole safety net.
+	// For V7 (Dig/FT) and V8 (CMI) — and for Loom's play_note hatch cutscene
+	// (_sseAllowLongCutscene) — anchor to _sseLastEventFrame so that each new
+	// dialog line resets the deadline: long exchanges and room-transition
+	// cutscenes (e.g. walking out of a scene while characters talk, or the
+	// egg-hatch's Hetchel/cygnet dialogue) don't time out between lines. Those
+	// can run far longer than two minutes, so the absolute 3600-frame (~120 s)
+	// ceiling only guards the older games; where the per-event deadline applies
+	// it (still firing 20 s after dialogue genuinely stalls) is the sole safety
+	// net. Other pre-V7 streams keep the start-anchored 600-frame deadline, so a
+	// scene with ambient looping dialogue (the Indy3 student-mob office) still
+	// terminates promptly instead of being held open by background chatter.
 	{
-		uint32 timeoutAnchor = (_sseLastEventFrame > 0) ? _sseLastEventFrame : _sseStartFrame;
+		bool perEventDeadline = (_vm->_game.version >= 7 || _sseAllowLongCutscene);
+		uint32 timeoutAnchor = (perEventDeadline && _sseLastEventFrame > 0)
+		    ? _sseLastEventFrame : _sseStartFrame;
 		bool absoluteTimeout = (_vm->_game.version < 7) && (_frameCounter - _sseStartFrame > 3600);
 		if (absoluteTimeout || _frameCounter - timeoutAnchor > 600) {
 			debug(1, "mcp: stream timeout (anchor=%u, start=%u, last=%u, now=%u)",
@@ -4661,6 +4671,7 @@ void ScummMcpBridge::pumpStream() {
 // ---------------------------------------------------------------------------
 
 void ScummMcpBridge::snapshotPreAction() {
+	_sseAllowLongCutscene = false;
 	_sseDigDeselectDone = false;
 	_ssePendingDialObjs.clear();
 	_sseLastDialFedFrame = 0;
