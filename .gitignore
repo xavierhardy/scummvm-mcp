@@ -313,7 +313,6 @@ __pycache__/
 /vcpkg_installed/
 
 #Ignore Claude instruction files
-CLAUDE.md
 .claude
 
 core.*
