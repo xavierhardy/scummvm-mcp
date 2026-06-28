@@ -4233,16 +4233,17 @@ void ScummMcpBridge::pumpStream() {
 	}
 
 	// Hard timeout: 600 frames (~20 s) since the last event (or stream start).
-	// For V7 (Dig/FT) and V8 (CMI), anchor to _sseLastEventFrame so that each
-	// new dialog line resets the deadline — long exchanges and room-transition
-	// cutscenes (e.g. walking out of a scene while characters talk) don't time
-	// out between lines. Those games can have cutscenes far longer than two
-	// minutes, so the absolute 3600-frame (~120 s) ceiling only guards the
-	// older games; for V7/V8 the per-event 600-frame deadline (which still
-	// fires 20 s after dialogue genuinely stalls) is the sole safety net.
+	// Anchor to _sseLastEventFrame whenever a notification (dialog line, Loom
+	// note) has streamed, so each new event resets the deadline and a long but
+	// actively-streaming cutscene isn't cut off mid-play. This holds for every
+	// engine version — e.g. Loom's (V3/V4) egg-hatch cutscene keeps emitting
+	// notes/dialogue well past 600 frames from the start. Pre-V7 games keep the
+	// absolute 3600-frame (~120 s) ceiling as the backstop against a genuine
+	// hang; V7/V8 cutscenes can run longer still, so for them the per-event
+	// 600-frame deadline (which fires 20 s after dialogue genuinely stalls) is
+	// the sole safety net.
 	{
-		uint32 timeoutAnchor = (_vm->_game.version >= 7 && _sseLastEventFrame > 0)
-		    ? _sseLastEventFrame : _sseStartFrame;
+		uint32 timeoutAnchor = (_sseLastEventFrame > 0) ? _sseLastEventFrame : _sseStartFrame;
 		bool absoluteTimeout = (_vm->_game.version < 7) && (_frameCounter - _sseStartFrame > 3600);
 		if (absoluteTimeout || _frameCounter - timeoutAnchor > 600) {
 			debug(1, "mcp: stream timeout (anchor=%u, start=%u, last=%u, now=%u)",
