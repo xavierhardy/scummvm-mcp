@@ -10,7 +10,7 @@ in test_maniac_c64.py (pytest-xdist --dist=loadgroup).
 from time import sleep
 
 import pytest
-from utils import McpClient, make_verbs, message_texts, object_names
+from utils import McpClient, bind_verb, message_texts, object_names
 
 PHONE_ROOM = 5
 DIAL_PAD_ROOM = 43
@@ -45,7 +45,7 @@ def test_11_maniac_use_phone_then_dial(maniac_phone_client: McpClient) -> None:
     button-grid mapping — and after the 4th digit the call resolves and the
     game returns to the phone room.
     """
-    (use,) = make_verbs(maniac_phone_client, "use")
+    use = bind_verb(maniac_phone_client, "use")
     use("phone")
     reached = _wait_for_room(maniac_phone_client, DIAL_PAD_ROOM)
     assert reached, "dial pad room never appeared after using the phone"

@@ -19,7 +19,7 @@ from assertions import (
     assert_message_present,
     assert_room,
 )
-from utils import McpClient, make_verbs
+from utils import McpClient, bind_verb, make_verbs
 
 
 def _talk_to_troll(client: McpClient) -> dict:
@@ -51,7 +51,7 @@ def test_01_monkey_initial_state(monkey_client: McpClient) -> None:
 def test_02_monkey_walk_to_troll(monkey_client: McpClient) -> None:
     """Walk to Troll."""
     assert_room(monkey_client.state(), 55)
-    (walk_to,) = make_verbs(monkey_client, "walk_to")
+    walk_to = bind_verb(monkey_client, "walk_to")
 
     # Walk towards the troll side of the bridge first so game scripts position
     # the troll actor and make the troll room object selectable.
@@ -118,7 +118,7 @@ def test_04_monkey_answer_troll_dialog(monkey_client: McpClient) -> None:
 def test_05_monkey_walk_to_door_1(monkey_client: McpClient) -> None:
     """Walk to door (first time)."""
     assert_room(monkey_client.state(), 55)
-    (walk_to,) = make_verbs(monkey_client, "walk_to")
+    walk_to = bind_verb(monkey_client, "walk_to")
 
     result = walk_to("door")
     expected = {"position": {"x": 361, "y": 132}}
@@ -128,7 +128,7 @@ def test_05_monkey_walk_to_door_1(monkey_client: McpClient) -> None:
 def test_06_monkey_open_door_1(monkey_client: McpClient) -> None:
     """Open door (first time)."""
     assert_room(monkey_client.state(), 55)
-    (open_,) = make_verbs(monkey_client, "open")
+    open_ = bind_verb(monkey_client, "open")
 
     result = open_("door")
     changed = result["objects_changed"]
@@ -152,7 +152,7 @@ def test_07_monkey_walk_to_door_2(monkey_client: McpClient) -> None:
 def test_08_monkey_pickup_bowl(monkey_bar_client: McpClient) -> None:
     """Pick up bowl o' mints (SCUMM bar checkpoint)."""
     assert_room(monkey_bar_client.state(), 52)
-    (pick_up,) = make_verbs(monkey_bar_client, "pick_up")
+    pick_up = bind_verb(monkey_bar_client, "pick_up")
 
     result = pick_up("bowl o' mints")
     assert_inventory_contains(result, "breath_mint")
@@ -163,7 +163,7 @@ def test_08_monkey_pickup_bowl(monkey_bar_client: McpClient) -> None:
 def test_09_monkey_open_door_2(monkey_bar_client: McpClient) -> None:
     """Open the far door behind the bar (SCUMM bar checkpoint)."""
     assert_room(monkey_bar_client.state(), 52)
-    (open_,) = make_verbs(monkey_bar_client, "open")
+    open_ = bind_verb(monkey_bar_client, "open")
 
     result = open_(354)
     changed = result["objects_changed"]
@@ -184,7 +184,7 @@ def test_10_monkey_walk_to_door_3(monkey_bar_client: McpClient) -> None:
 def test_11_monkey_pickup_meat(monkey_kitchen_client: McpClient) -> None:
     """Pick up hunk o' meat (kitchen checkpoint)."""
     assert_room(monkey_kitchen_client.state(), 51)
-    (pick_up,) = make_verbs(monkey_kitchen_client, "pick_up")
+    pick_up = bind_verb(monkey_kitchen_client, "pick_up")
 
     result = pick_up("hunk_o'_meat@@@@@@@")
     assert_inventory_contains(result, "hunk_o'_meat")
@@ -209,7 +209,7 @@ def test_13_monkey_give_breath_mint_to_prisoner(
 ) -> None:
     """Give the breath mint to the prisoner (prison checkpoint, mint in hand)."""
     assert_room(monkey_prison_client.state(), 54)
-    (give,) = make_verbs(monkey_prison_client, "give")
+    give = bind_verb(monkey_prison_client, "give")
 
     result = give("breath_mint", "prisoner")
     question = result["question"]

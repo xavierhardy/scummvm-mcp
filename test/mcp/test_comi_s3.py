@@ -10,7 +10,7 @@ only performed if the gaff is not already in inventory), so the tests do not
 depend on each other's ordering.
 """
 
-from utils import McpClient, make_verbs, object_names
+from utils import McpClient, bind_verb, object_names
 
 
 def _ensure_gaff(client: McpClient) -> None:
@@ -29,7 +29,7 @@ def test_08a_comi_s3_use_combines_inventory_items(comi_s3_client: McpClient) -> 
     Both source items must be removed from inventory and the new 'gaff' must
     be added — all in a single act() invocation.
     """
-    (use,) = make_verbs(comi_s3_client, "use")
+    use = bind_verb(comi_s3_client, "use")
     inv = comi_s3_client.state().get("inventory", [])
     assert "ramrod" in inv, f"setup: 'ramrod' should start in inventory: {inv}"
     assert "plastic_hook" in inv, f"setup: 'plastic_hook' should start in: {inv}"
@@ -55,7 +55,7 @@ def test_08b_comi_s3_use_gaff_on_debris(comi_s3_client: McpClient) -> None:
     so it does not depend on test_08a running first.
     """
     _ensure_gaff(comi_s3_client)
-    (use,) = make_verbs(comi_s3_client, "use")
+    use = bind_verb(comi_s3_client, "use")
 
     state = comi_s3_client.state()
     inv = state.get("inventory", [])

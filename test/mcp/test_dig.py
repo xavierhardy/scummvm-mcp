@@ -21,7 +21,7 @@ from utils import (
     McpClient,
     choice_labels,
     joined_message_text,
-    make_verbs,
+    bind_verb,
     object_names,
 )
 
@@ -91,7 +91,7 @@ def test_04_dig_inventory(dig_client: McpClient) -> None:
 
 def test_05_dig_interact_actor(dig_client: McpClient) -> None:
     """Interact on an actor opens the V7 dialog with the hero's intro line."""
-    (interact,) = make_verbs(dig_client, "interact")
+    interact = bind_verb(dig_client, "interact")
     result = interact("brink")
     assert result.get("messages"), f"no message after interacting with Brink: {result}"
     # Hero (actor 1, internal name "low") says the actor's name.
@@ -143,7 +143,7 @@ def test_05b_dig_dialog_choices_distinct(dig_client: McpClient) -> None:
 
 def test_06_dig_interact_scenery(dig_client: McpClient) -> None:
     """Interact on the plant scenery makes the hero comment on it."""
-    (interact,) = make_verbs(dig_client, "interact")
+    interact = bind_verb(dig_client, "interact")
     result = interact("plant")
     assert result.get("messages"), f"no hero comment on the plant: {result}"
     assert_message_contains(result, "respirating")
@@ -151,7 +151,7 @@ def test_06_dig_interact_scenery(dig_client: McpClient) -> None:
 
 def test_07_dig_use_item_on_scenery(dig_client: McpClient) -> None:
     """Using the trowel on the plant fires the item's verb-3 use-handler."""
-    (use_item,) = make_verbs(dig_client, "use item")
+    use_item = bind_verb(dig_client, "use item")
     result = use_item("trowel", "plant")
     assert result.get("messages"), f"expected a hero comment, got: {result}"
     assert_message_contains(result, "can't use these things together")
@@ -159,7 +159,7 @@ def test_07_dig_use_item_on_scenery(dig_client: McpClient) -> None:
 
 def test_09_dig_use_item_on_actor_female(dig_client: McpClient) -> None:
     """Using the trowel on Maggie produces the gendered female refusal."""
-    (use_item,) = make_verbs(dig_client, "use item")
+    use_item = bind_verb(dig_client, "use item")
     result = use_item("trowel", "maggie")
     assert result.get("messages"), f"expected a hero comment, got: {result}"
     assert_message_contains(result, "she'd want that")
@@ -167,7 +167,7 @@ def test_09_dig_use_item_on_actor_female(dig_client: McpClient) -> None:
 
 def test_10_dig_use_item_on_actor_male(dig_client: McpClient) -> None:
     """Using the trowel on Brink produces the gendered male refusal."""
-    (use_item,) = make_verbs(dig_client, "use item")
+    use_item = bind_verb(dig_client, "use item")
     result = use_item("trowel", "brink")
     assert result.get("messages"), f"expected a hero comment, got: {result}"
     assert_message_contains(result, "he'd want that")

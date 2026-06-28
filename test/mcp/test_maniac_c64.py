@@ -7,7 +7,7 @@ The phone/dial tests live in test_maniac_phone.py (save slot 2).
 
 import pytest
 from assertions import assert_has_position, assert_inventory_contains
-from utils import McpClient, make_verbs, object_names
+from utils import McpClient, bind_verb, make_verbs, object_names
 
 
 def _take_key(client: McpClient) -> None:
@@ -51,13 +51,13 @@ def test_01_maniac_initial_state(maniac_client: McpClient) -> None:
 
 def test_02_maniac_walk_to_front_door(maniac_client: McpClient) -> None:
     """Walk to front door."""
-    (walk_to,) = make_verbs(maniac_client, "walk_to")
+    walk_to = bind_verb(maniac_client, "walk_to")
     assert_has_position(walk_to("front_door"))
 
 
 def test_03_maniac_pull_door_mat(maniac_client: McpClient) -> None:
     """Pull door mat."""
-    (pull,) = make_verbs(maniac_client, "pull")
+    pull = bind_verb(maniac_client, "pull")
     result = pull("door mat")
     changed = result["objects_changed"]
     assert changed[0]["name"] == "door mat", f"door mat should change, got {changed}"
@@ -74,7 +74,7 @@ def test_04_maniac_pickup_key(maniac_client: McpClient) -> None:
 def test_05_maniac_use_key_on_door(maniac_client: McpClient) -> None:
     """Unlock front door with key."""
     _take_key(maniac_client)
-    (use,) = make_verbs(maniac_client, "use")
+    use = bind_verb(maniac_client, "use")
     changed = use("key", "front_door")["objects_changed"]
     assert changed[0]["name"] == "front door", f"front door unchanged: {changed}"
 
@@ -82,7 +82,7 @@ def test_05_maniac_use_key_on_door(maniac_client: McpClient) -> None:
 def test_06_maniac_walk_through_front_door(maniac_client: McpClient) -> None:
     """Walk through the unlocked front door into the mansion (room change)."""
     _unlock_front_door(maniac_client)
-    (walk_to,) = make_verbs(maniac_client, "walk_to")
+    walk_to = bind_verb(maniac_client, "walk_to")
     result = walk_to("front_door")
     assert result.get("room_changed"), f"unlocked door should change rooms: {result}"
 

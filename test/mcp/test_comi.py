@@ -5,6 +5,7 @@ from assertions import assert_message_present
 from utils import (
     McpClient,
     find_choice_id_containing,
+    bind_verb,
     make_verbs,
     message_texts,
     object_names,
@@ -60,20 +61,20 @@ def test_03_comi_objects_have_verbs(comi_client: McpClient) -> None:
 
 def test_04_comi_can_walk(comi_client: McpClient) -> None:
     """Verify walking works."""
-    (walk_to,) = make_verbs(comi_client, "walk_to")
+    walk_to = bind_verb(comi_client, "walk_to")
     position = walk_to("rope").get("position")
     assert position is not None, f"walk_to 'rope' reported no position: {position}"
 
 
 def test_05_comi_can_look_at_objects(comi_client: McpClient) -> None:
     """Verify looking at objects works."""
-    (look_at,) = make_verbs(comi_client, "look_at")
+    look_at = bind_verb(comi_client, "look_at")
     assert_message_present(look_at("cannon_balls"), "Nice cannon balls.")
 
 
 def test_06_comi_can_interact_with_objects(comi_client: McpClient) -> None:
     """Verify general interaction works."""
-    (pick_up,) = make_verbs(comi_client, "pick_up")
+    pick_up = bind_verb(comi_client, "pick_up")
     added = pick_up("ramrod")["inventory_added"]
     assert added == ["ramrod"], f"pick_up 'ramrod' should add it, got {added}"
 
@@ -93,7 +94,7 @@ def test_06a_comi_can_use_different_verbs(comi_client: McpClient) -> None:
 
 def test_07_comi_can_talk_to_pirate_and_get_dialog(comi_client: McpClient) -> None:
     """Verify talking to small pirate triggers a dialog."""
-    (talk_to,) = make_verbs(comi_client, "talk_to")
+    talk_to = bind_verb(comi_client, "talk_to")
     result = talk_to("small_pirate")
     first_line = result["messages"][0]["text"]
     assert first_line, "talk_to 'small_pirate' produced no spoken line"
@@ -151,7 +152,7 @@ def test_07b_comi_longest_pirate_exchange_no_timeout(comi_client: McpClient) -> 
     Testing just this one exchange keeps the suite fast while still soaking
     the long-stream path; the other topics are 2-7 lines each.
     """
-    (talk_to,) = make_verbs(comi_client, "talk_to")
+    talk_to = bind_verb(comi_client, "talk_to")
     question = talk_to("small_pirate").get("question")
     assert question, "talking to the pirate should open the topic list"
 
@@ -177,7 +178,7 @@ def test_09_comi_can_change_rooms(comi_client: McpClient) -> None:
     """Verify changing rooms works via room transitions."""
     state = comi_client.state()
     initial_room = state.get("room", {}).get("id")
-    (walk_to,) = make_verbs(comi_client, "walk_to")
+    walk_to = bind_verb(comi_client, "walk_to")
 
     pathway = pathways(state)[0]
     result = walk_to(pathway["name"])

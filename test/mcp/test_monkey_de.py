@@ -20,7 +20,7 @@ and the dialog answer with the eszett-bearing troll line — round-trip ß and �
 from time import sleep
 
 from assertions import assert_has_position, assert_room
-from utils import McpClient, make_verbs, object_by_id, object_names
+from utils import McpClient, bind_verb, make_verbs, object_by_id, object_names
 
 
 def _talk_to_troll(client: McpClient) -> dict:
@@ -94,7 +94,7 @@ def test_01_de_initial_state(monkey_de_client: McpClient) -> None:
 def test_02_de_walk_to_troll(monkey_de_client: McpClient) -> None:
     """Walk to Troll. The troll greets in German."""
     assert_room(monkey_de_client.state(), 55)
-    (geh_zu,) = make_verbs(monkey_de_client, "geh zu")
+    geh_zu = bind_verb(monkey_de_client, "geh zu")
 
     result = monkey_de_client.walk(120, 132)
     assert_has_position(result)
@@ -175,7 +175,7 @@ def test_05_de_walk_to_door(monkey_de_client: McpClient) -> None:
     """Walk to the door — target name 'tür' is sent as UTF-8 and matched
     against the game's CP-850 'Tür' label."""
     assert_room(monkey_de_client.state(), 55)
-    (geh_zu,) = make_verbs(monkey_de_client, "geh zu")
+    geh_zu = bind_verb(monkey_de_client, "geh zu")
 
     result = geh_zu("tür")
     expected = {"position": {"x": 361, "y": 132}}
@@ -194,7 +194,7 @@ def test_06_de_open_door_lowercase(monkey_de_client: McpClient) -> None:
     too, so the lowercase form now resolves and the door opens (state 0 -> 1).
     """
     assert_room(monkey_de_client.state(), 55)
-    (oeffne,) = make_verbs(monkey_de_client, "öffne")
+    oeffne = bind_verb(monkey_de_client, "öffne")
 
     door = object_by_id(monkey_de_client.state(), 422)
     assert door["name"] == "tür", f"expected the door named 'tür', got {door}"
@@ -211,7 +211,7 @@ def test_07_de_close_door(monkey_de_client: McpClient) -> None:
     """Dispatch the 'schließe' verb (with ß) on the German door. This
     proves the inbound UTF-8 verb name resolves to the correct verb id."""
     assert_room(monkey_de_client.state(), 55)
-    (schliesse,) = make_verbs(monkey_de_client, "schließe")
+    schliesse = bind_verb(monkey_de_client, "schließe")
 
     # Open the door first so this test is self-contained (the closed door does
     # not advertise "schließe"; only an open one can be closed).
@@ -263,7 +263,7 @@ def test_09_de_seagull_blocks_red_herring(monkey_de_client: McpClient) -> None:
     "roter_hering" against the game's '@'-padded label.
     """
     _navigate_to_dock(monkey_de_client)
-    (nimm,) = make_verbs(monkey_de_client, "nimm")
+    nimm = bind_verb(monkey_de_client, "nimm")
 
     result = nimm("roter_hering")
     inventory = monkey_de_client.state()["inventory"]
@@ -284,7 +284,7 @@ def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> No
     """
     client = monkey_de_client
     _navigate_to_dock(client)
-    (nimm,) = make_verbs(client, "nimm")
+    nimm = bind_verb(client, "nimm")
 
     _bounce_plank(client, 3)
     nimm("roter_hering")

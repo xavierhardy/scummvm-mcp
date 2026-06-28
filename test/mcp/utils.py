@@ -589,7 +589,7 @@ def require_save_slot(game_id: str, slot: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _bind_verb(client: McpClient, verb: str):
+def bind_verb(client: McpClient, verb: str):
     """Return a callable invoking ``client.act(verb, *targets)``."""
     return lambda *targets: client.act(verb, *targets)
 
@@ -600,9 +600,9 @@ def make_verbs(client: McpClient, *verb_names: str) -> tuple:
     ``make_verbs(client, "pick_up", "use")`` returns two callables where
     ``use(*targets)`` is exactly ``client.act("use", *targets)``. It always
     returns a tuple so call sites stay verb-first regardless of how many verbs
-    are bound (``(give,) = make_verbs(client, "give")``).
+    are bound (``give = bind_verb(client, "give")``).
     """
-    return tuple(_bind_verb(client, name) for name in verb_names)
+    return tuple(bind_verb(client, name) for name in verb_names)
 
 
 def find_id(state: dict, name: str) -> int | None:

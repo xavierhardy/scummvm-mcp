@@ -24,7 +24,7 @@ from utils import (
     find_choice_id,
     find_object_by_name,
     joined_message_text,
-    make_verbs,
+    bind_verb,
     message_texts,
 )
 
@@ -141,7 +141,7 @@ def test_samnmax_s02_cat_courier_gives_carnival_tickets(
     _wait_dialog_closed(client)
 
     # Step 3: use Max on the kitten to retrieve the swallowed carnival tickets.
-    (use,) = make_verbs(client, "use")
+    use = bind_verb(client, "use")
     result = use("max", actor_4)
     messages = result.get("messages", [])
     assert_no_talkie_garbage(messages)

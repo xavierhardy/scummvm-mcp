@@ -18,7 +18,7 @@ from utils import (
     McpClient,
     find_id,
     get_state_with_retry,
-    make_verbs,
+    bind_verb,
     require_interactive,
     skip_unless,
 )
@@ -178,7 +178,7 @@ def test_08_loom_interact_object(loom_client: McpClient) -> None:
     assert loom_id is not None, f"loom not in room: {objects}"
     initial_pos = state.get("position", {})
 
-    (interact,) = make_verbs(loom_client, "interact")
+    interact = bind_verb(loom_client, "interact")
     result = interact(loom_id)
     moved = result.get("position", initial_pos) != initial_pos
     assert moved or result.get("messages"), f"loom interaction did nothing: {result}"

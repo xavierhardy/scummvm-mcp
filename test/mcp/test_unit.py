@@ -53,7 +53,7 @@ def test_make_verbs_binds_each_name() -> None:
 
 
 def test_make_verbs_single_name_returns_one_tuple() -> None:
-    (give,) = make_verbs(_FakeClient(), "give")
+    give = bind_verb(_FakeClient(), "give")
     assert give("mint", "prisoner") == {"verb": "give", "targets": ("mint", "prisoner")}
 
 

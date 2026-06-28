@@ -7,7 +7,7 @@ parallel with the canyon tests in test_dig.py (pytest-xdist --dist=loadgroup).
 """
 
 from assertions import assert_no_message_contains
-from utils import McpClient, find_id, make_verbs, object_names
+from utils import McpClient, find_id, bind_verb, object_names
 
 
 def _close_dialog(client: McpClient) -> None:
@@ -31,7 +31,7 @@ def test_11_dig_pickup_deposits_item(dig_wreck_client: McpClient) -> None:
     the inventory and restore the default cursor.
     """
     client = dig_wreck_client
-    (interact,) = make_verbs(client, "interact")
+    interact = bind_verb(client, "interact")
     state = client.state()
     assert state["room"]["id"] == 19, f"Expected wreck room 19, got {state['room']}"
 
