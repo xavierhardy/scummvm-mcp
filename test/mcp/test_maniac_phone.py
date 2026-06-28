@@ -10,6 +10,7 @@ in test_maniac_c64.py (pytest-xdist --dist=loadgroup).
 from time import sleep
 
 import pytest
+
 from utils import McpClient, bind_verb, message_texts, object_names
 
 PHONE_ROOM = 5

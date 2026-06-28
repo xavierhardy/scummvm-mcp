@@ -10,6 +10,7 @@ which never appears in ``objects_changed``), reaching 0 when the minigame is won
 """
 
 import pytest
+
 from utils import McpClient
 
 

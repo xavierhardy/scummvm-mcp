@@ -8,6 +8,7 @@ with the distaff tests in test_loom.py (pytest-xdist --dist=loadgroup).
 from time import sleep
 
 import pytest
+
 from assertions import assert_messages_contain
 from utils import (
     McpClient,

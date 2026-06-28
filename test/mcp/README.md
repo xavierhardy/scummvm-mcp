@@ -10,7 +10,7 @@ Integration tests for the ScummVM MCP server, covering three classic adventure g
 
 - ScummVM built with MCP support (`./scummvm` in the repo root)
 - Game data files in the expected locations (see Game Paths below)
-- Python 3.7+ with `pytest` and `httpx`
+- Python 3.11+ and [`uv`](https://github.com/astral-sh/uv) (manages `pytest`/`httpx`)
 
 ## Game Paths
 
@@ -24,48 +24,43 @@ Tests look for game data in these locations (or environment variables):
 
 Tests automatically **skip** if the game files are not found (using `pytest.skip()`).
 
-## Installation
-
-Create a Python venv and install dependencies:
+## Installation / dev
 
 ```bash
-python3 -m venv venv
-. venv/bin/activate
-pip install pytest pytest-xdist httpx
+cd test/mcp
+uv sync
+uv run ruff format . && uv run ruff check . && uv run ty check
 ```
 
-Or use the existing ScummVM TUI venv:
-
-```bash
-/home/pi/scummvm-tui-venv/bin/python -m pip install pytest httpx
-```
+`uv sync` creates `.venv/` and installs `pytest`, `pytest-xdist` and `httpx`.
+Linting/formatting is `ruff`; type-checking is `ty` (both via `uv run`).
 
 ## Running Tests
 
 ### All tests
 ```bash
-cd /home/pi/monkey/scummvm/test/mcp
-python -m pytest
+cd test/mcp
+uv run pytest
 ```
 
 ### Specific test file
 ```bash
-python -m pytest test_atlantis.py -v
+uv run pytest test_atlantis.py -v
 ```
 
 ### Specific parallelize by file
 ```bash
-python -m pytest -n3 --dist=loadfile -v
+uv run pytest -n3 --dist=loadfile -v
 ```
 
 ### With custom game paths
 ```bash
-ATLANTIS_DEMO_PATH=/path/to/indy4 python -m pytest test_atlantis.py -v
+ATLANTIS_DEMO_PATH=/path/to/indy4 uv run pytest test_atlantis.py -v
 ```
 
 ### Run with detailed output
 ```bash
-python -m pytest -vv -s
+uv run pytest -vv -s
 ```
 
 ## Test Structure

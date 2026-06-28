@@ -7,7 +7,7 @@ parallel with the canyon tests in test_dig.py (pytest-xdist --dist=loadgroup).
 """
 
 from assertions import assert_no_message_contains
-from utils import McpClient, find_id, bind_verb, object_names
+from utils import McpClient, bind_verb, find_id, object_names
 
 
 def _close_dialog(client: McpClient) -> None:

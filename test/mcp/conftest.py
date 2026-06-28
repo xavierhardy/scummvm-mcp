@@ -18,6 +18,7 @@ many concurrent instances never collide.
 import os
 
 import pytest
+
 from utils import (
     GAME_PATHS,
     MCP_CONNECT_TIMEOUT_SECS,

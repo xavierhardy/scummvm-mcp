@@ -12,6 +12,7 @@ from __future__ import annotations
 from time import sleep
 
 import pytest
+
 from utils import (
     McpClient,
     _find_object,
@@ -82,9 +83,9 @@ def _assert_fight_hud_valid(state: dict) -> None:
     if fight is None:
         return
     assert isinstance(fight["indy"]["health"], int), f"indy health not int: {fight}"
-    assert isinstance(
-        fight["opponent"]["health"], int
-    ), f"opponent health not int: {fight}"
+    assert isinstance(fight["opponent"]["health"], int), (
+        f"opponent health not int: {fight}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -104,9 +105,9 @@ def test_01_indy3_initial_state(indy3_client: McpClient) -> None:
     # Gym scene exposes the standard V3 verb bar.
     verbs = set(state.get("verbs", []))
     sorted_verbs = sorted(verbs)
-    assert {"walk to", "look", "use", "push", "pull"}.issubset(
-        verbs
-    ), f"V3 bar: {sorted_verbs}"
+    assert {"walk to", "look", "use", "push", "pull"}.issubset(verbs), (
+        f"V3 bar: {sorted_verbs}"
+    )
 
 
 def test_02_indy3_locker_room_visible(indy3_client: McpClient) -> None:

@@ -13,12 +13,13 @@ the player picks up the staff in the Loom mini-game.
 from time import sleep
 
 import pytest
+
 from assertions import assert_messages_contain
 from utils import (
     McpClient,
+    bind_verb,
     find_id,
     get_state_with_retry,
-    bind_verb,
     require_interactive,
     skip_unless,
 )

@@ -22,11 +22,11 @@ from assertions import (
     assert_text_contains,
 )
 from utils import (
+    bind_verb,
     choice_labels,
     find_choice_id,
     find_choice_id_containing,
     find_id,
-    bind_verb,
     make_verbs,
     object_by_id,
     object_names,

@@ -242,7 +242,8 @@ def main() -> int:
             "Commands: state | debug [--vars FROM-TO] | act <verb> [t1] [t2] | "
             "walk X Y | skip | note <c|d|e|...|C> | answer <id> | "
             "keystroke <key> [--ctrl --shift --alt] | "
-            "mouse_move X Y | mouse_click X Y [--button left|right|middle] [--double] | "
+            "mouse_move X Y | "
+            "mouse_click X Y [--button left|right|middle] [--double] | "
             "q to quit."
         )
         while True:

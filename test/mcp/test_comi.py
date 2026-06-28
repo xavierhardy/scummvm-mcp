@@ -1,11 +1,12 @@
 """Integration tests for Curse of Monkey Island demo (SCUMM V8)."""
 
 import pytest
+
 from assertions import assert_message_present
 from utils import (
     McpClient,
-    find_choice_id_containing,
     bind_verb,
+    find_choice_id_containing,
     make_verbs,
     message_texts,
     object_names,

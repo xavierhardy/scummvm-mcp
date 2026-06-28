@@ -13,6 +13,7 @@ from __future__ import annotations
 from time import sleep
 
 import pytest
+
 from utils import (
     McpClient,
     _state_or_skip,
@@ -156,9 +157,9 @@ def test_13_indy3_hidden_objects_not_selectable(
 
     names = object_names(state)
     hidden = {"old_book", "sticky_tape", "chest"}
-    assert hidden.isdisjoint(
-        names
-    ), f"hidden objects leaked into state: {hidden & names}"
+    assert hidden.isdisjoint(names), (
+        f"hidden objects leaked into state: {hidden & names}"
+    )
 
     # The room may still be settling after the travel cutscene; retry while
     # the engine reports input locked, then assert the hidden target fails.

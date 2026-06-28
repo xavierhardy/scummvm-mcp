@@ -17,14 +17,15 @@ interactions.
 from time import sleep
 
 import pytest
+
 from assertions import assert_no_talkie_garbage
 from utils import (
     McpClient,
+    bind_verb,
     choice_labels,
     find_choice_id,
     find_object_by_name,
     joined_message_text,
-    bind_verb,
     message_texts,
 )
 

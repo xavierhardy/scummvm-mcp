@@ -24,6 +24,7 @@ Regression focus:
 from time import sleep
 
 import pytest
+
 from assertions import (
     assert_message_contains,
     assert_no_message_contains,

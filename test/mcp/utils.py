@@ -99,7 +99,9 @@ class McpClient:
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError as exc:
-                raise RuntimeError(f"Failed to decode JSON (error: {exc}): '{raw}'")
+                raise RuntimeError(
+                    f"Failed to decode JSON (error: {exc}): '{raw}'"
+                ) from exc
 
             if "result" in msg:
                 return self._extract_result(msg)
@@ -107,7 +109,8 @@ class McpClient:
                 if "message" in msg["error"]:
                     if "code" in msg["error"]:
                         raise RuntimeError(
-                            f"{tool} error: {msg['error']['message']} (code: {msg['error']['code']})"
+                            f"{tool} error: {msg['error']['message']} "
+                            f"(code: {msg['error']['code']})"
                         )
                     else:
                         raise RuntimeError(f"{tool} error: {msg['error']['message']}")
@@ -406,7 +409,8 @@ def wait_for_mcp(
             last_error = e
             time.sleep(0.5)
     raise TimeoutError(
-        f"MCP server at {host}:{port} did not respond within {connect_timeout}s: {last_error}"
+        f"MCP server at {host}:{port} did not respond "
+        f"within {connect_timeout}s: {last_error}"
     )
 
 
@@ -492,7 +496,7 @@ def launch_scummvm(
     with open(log_file, "w") as logf:
         # Write header with command line
         logf.write(f"Command: {' '.join(args)}\n")
-        logf.write(f"Environment: SDL_AUDIODRIVER=dummy\n")
+        logf.write("Environment: SDL_AUDIODRIVER=dummy\n")
         logf.write(f"Config: {ini_path}\n")
         logf.write("=" * 80 + "\n\n")
         logf.flush()

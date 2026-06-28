@@ -6,6 +6,7 @@ The phone/dial tests live in test_maniac_phone.py (save slot 2).
 """
 
 import pytest
+
 from assertions import assert_has_position, assert_inventory_contains
 from utils import McpClient, bind_verb, make_verbs, object_names
 

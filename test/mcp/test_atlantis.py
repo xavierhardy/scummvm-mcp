@@ -33,6 +33,7 @@ from time import sleep, time
 
 import httpx
 import pytest
+
 from assertions import assert_text_contains
 from utils import McpClient
 
@@ -477,16 +478,16 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     sleep(0.5)
     _pick(client, "Yes, of course", result)
     sleep(2.0)
-    assert _wait_room(
-        client, ROOM_BOAT
-    ), f"[captain] expected the boat (room {ROOM_BOAT})"
+    assert _wait_room(client, ROOM_BOAT), (
+        f"[captain] expected the boat (room {ROOM_BOAT})"
+    )
 
     # --- Patch and don the diving suit (goal: patch_diving_suit) -----------
     sleep(1.0)
     _open_storage_locker(client)
-    assert "punctured_diving_suit" in _objects(
-        client
-    ), "[suit] locker never revealed the suit"
+    assert "punctured_diving_suit" in _objects(client), (
+        "[suit] locker never revealed the suit"
+    )
     result = _act(client, "use", "tire_repair_kit", "punctured_diving_suit")
     used_kit = _removed(result, "tire_repair_kit") or not _in_inventory(
         client, "tire_repair_kit"
@@ -519,9 +520,9 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     sleep(1.0)
     _act(client, "use", "ladder", RUBBLE)
     sleep(2.0)
-    assert _wait_object(
-        client, STONE_BOX, 30
-    ), "[airlock] climbing never exposed the stone box"
+    assert _wait_object(client, STONE_BOX, 30), (
+        "[airlock] climbing never exposed the stone box"
+    )
     result = _act(client, "open", STONE_BOX)
     sleep(1.5)
     opened = _says(result, "it opens") or _wait_object(client, ROD, 15)

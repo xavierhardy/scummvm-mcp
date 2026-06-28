@@ -20,6 +20,7 @@ from time import sleep
 
 import httpx
 import pytest
+
 from assertions import assert_message_contains, assert_text_contains
 from utils import (
     McpClient,
@@ -167,9 +168,9 @@ def _assert_ascii_content(messages: list) -> None:
     """Every message must carry at least one ASCII alphanumeric character."""
     for m in messages:
         text = m.get("text", "")
-        assert any(
-            c.isalnum() and ord(c) < 128 for c in text
-        ), f"garbage message: {text!r}"
+        assert any(c.isalnum() and ord(c) < 128 for c in text), (
+            f"garbage message: {text!r}"
+        )
 
 
 def _pathways_advertising_coin_verbs(state: dict) -> list:
@@ -311,15 +312,15 @@ def test_ft_walkthrough(ft_client: McpClient) -> None:
     # Kicking the door bursts it open (object state 0 -> 1).
     kick = _act_retry(ft_client, "kick", "door")
     door_opened = {"name": "door", "old_state": 0, "new_state": 1}
-    assert door_opened in kick.get(
-        "objects_changed", []
-    ), f"door did not open on kick: {kick}"
+    assert door_opened in kick.get("objects_changed", []), (
+        f"door did not open on kick: {kick}"
+    )
 
     # Once kicked open, punching cannot affect the door any further.
     punch2 = _act_retry(ft_client, "fist", "door")
-    assert not punch2.get(
-        "objects_changed"
-    ), f"punching the open door must not change it: {punch2}"
+    assert not punch2.get("objects_changed"), (
+        f"punching the open door must not change it: {punch2}"
+    )
     door = _find(get_state_with_retry(ft_client), "door")
     assert door is not None and door["state"] == 1, f"door must remain open, got {door}"
 

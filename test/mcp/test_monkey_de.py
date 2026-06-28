@@ -137,7 +137,7 @@ def test_03_de_talk_to_troll(monkey_de_client: McpClient) -> None:
     # heißt contains an eszett — confirm at the byte level.
     troll_line = result["messages"][1]["text"]
     assert "heißt" in troll_line, f"expected 'heißt' in {troll_line!r}"
-    assert "ß".encode("utf-8") in troll_line.encode("utf-8"), "eszett byte missing"
+    assert "ß".encode() in troll_line.encode("utf-8"), "eszett byte missing"
 
     question = monkey_de_client.state().get("question")
     assert question is not None, "expected a dialog question after talking to Troll"

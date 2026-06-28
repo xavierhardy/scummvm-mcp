@@ -84,7 +84,11 @@ def test_03_monkey_talk_to_troll(monkey_client: McpClient) -> None:
         "messages": [
             {"text": "Hi. I'm Guybrush Threepwood and--", "actor": "guybrush"},
             {
-                "text": "I don't care who you are or what your business is, you snivelling slimy sliver of scumm! No one gets by me until they say the magic words.",
+                "text": (
+                    "I don't care who you are or what your business is, you "
+                    "snivelling slimy sliver of scumm! No one gets by me until "
+                    "they say the magic words."
+                ),
                 "actor": "troll",
             },
         ],
@@ -107,7 +111,10 @@ def test_04_monkey_answer_troll_dialog(monkey_client: McpClient) -> None:
         "messages": [
             {"text": "Pretty please?", "actor": "guybrush"},
             {
-                "text": "Not those magic words, you pedantic putrefied pinhead, the MAGIC words! --sigh--",
+                "text": (
+                    "Not those magic words, you pedantic putrefied pinhead, "
+                    "the MAGIC words! --sigh--"
+                ),
                 "actor": "troll",
             },
         ]

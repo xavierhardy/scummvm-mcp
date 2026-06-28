@@ -1,0 +1,43 @@
+[project]
+name = "scummvm-mcp-tests"
+version = "0.1.0"
+description = "Integration tests for the ScummVM MCP server"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "pytest>=8.0",
+    "pytest-xdist>=3.8.0",
+]
+
+# Flat collection of test scripts driven by pytest, not a distributable package.
+[tool.uv]
+package = false
+
+# Pin public PyPI: the machine's global pip/uv config points at a private index
+# that 403s for these packages. Keep resolution deterministic for this project.
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["."]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --dist=loadgroup"
+markers = [
+    "xdist_group: pin all tests sharing the group name to one xdist worker, run in sequence (for no-save games like FT/Atlantis)",
+    "slow: long-running test, skipped when SKIP_SLOW_TESTS is true/1",
+]

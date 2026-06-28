@@ -11,6 +11,7 @@ Brink and Maggie present and 'look_at' / 'trowel' in inventory.
 """
 
 import pytest
+
 from assertions import (
     assert_actor_spoke,
     assert_message_contains,
@@ -19,9 +20,9 @@ from assertions import (
 )
 from utils import (
     McpClient,
+    bind_verb,
     choice_labels,
     joined_message_text,
-    bind_verb,
     object_names,
 )
 

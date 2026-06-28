@@ -230,13 +230,10 @@ def capture_pass(port: int = 23992) -> None:
         act("open", "package")  # grail_diary
         act("open", "window")
         go("window", 24)  # climb out to the outside
-        saw = False
         for _ in range(80):
             s = client.state()
             rid = (s.get("room") or {}).get("id")
-            if rid == 29:
-                saw = True
-            elif rid == 24 and "travel" in (s.get("verbs") or []):
+            if rid == 24 and "travel" in (s.get("verbs") or []):
                 break
             time.sleep(1.0)
 
