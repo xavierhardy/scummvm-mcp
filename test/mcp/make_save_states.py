@@ -106,9 +106,9 @@ def capture_monkey(port: int = 23991) -> None:
             except RuntimeError:
                 pass
             time.sleep(0.8)
-        assert (
-            _room(client) == 54
-        ), f"expected the prison (room 54), got {_room(client)}"
+        assert _room(client) == 54, (
+            f"expected the prison (room 54), got {_room(client)}"
+        )
         _save(client, 8, "monkey prison (room 54), mint in inventory")
 
         client.close()
@@ -188,9 +188,9 @@ def capture_pass(port: int = 23992) -> None:
 
     try:
         client = wait_for_mcp(MCP_HOST, port, timeout=30)
-        assert _wait_room(
-            client, 25
-        ), f"expected the gym (room 25), got {_room(client)}"
+        assert _wait_room(client, 25), (
+            f"expected the gym (room 25), got {_room(client)}"
+        )
 
         # Faster route: straight to the office via door 103 (never open the left
         # door / go outside first -- the outside is reached via the window).
@@ -219,9 +219,9 @@ def capture_pass(port: int = 23992) -> None:
                 break
             client.answer(cid)
             time.sleep(0.6)
-        assert _wait_room(
-            client, 21, tries=8
-        ), f"expected Indy's office (21), got {_room(client)}"
+        assert _wait_room(client, 21, tries=8), (
+            f"expected Indy's office (21), got {_room(client)}"
+        )
 
         # Mail chain -> grail diary, then open the window (only once we have the
         # diary) and climb out -- first time out plays the Donovan cutscene.
@@ -260,9 +260,9 @@ def capture_pass(port: int = 23992) -> None:
         act("pick_up", "old_book")  # last Grail item -> unlocks Venice
         go(231, 24)  # out to the travel hub
 
-        assert (
-            _room(client) == 24
-        ), f"expected the travel hub (room 24), got {_room(client)}"
+        assert _room(client) == 24, (
+            f"expected the travel hub (room 24), got {_room(client)}"
+        )
         inv = client.state().get("inventory")
         print(f"  inventory before save: {inv}")
         _save(

@@ -44,6 +44,7 @@ def pytest_collection_modifyitems(config, items):
         if "slow" in item.keywords:
             item.add_marker(skip_slow)
 
+
 # Stable per-fixture index (0..99) fed to get_mcp_port so each fixture gets a
 # distinct port within its worker's band. Never reorder/reuse these.
 _FIXTURE_INDEX = {
