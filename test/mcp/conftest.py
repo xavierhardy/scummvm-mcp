@@ -16,6 +16,8 @@ many concurrent instances never collide.
 """
 
 import os
+from collections.abc import Iterator
+from typing import TextIO
 
 import pytest
 
@@ -74,7 +76,7 @@ _FIXTURE_INDEX = {
 
 def _client(
     game_id: str, fixture_key: str, save_slot: int = 1, checkpoint: bool = False
-):
+) -> Iterator[McpClient]:
     """Launch ScummVM for *game_id*, yield a connected McpClient, then tear down.
 
     Shared by every fixture. The port is unique per (worker, fixture); the
@@ -101,11 +103,11 @@ def _client(
         client.close()
         proc.kill()
         proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
-        # Close log file handles opened by launch_scummvm.
-        if hasattr(proc, "_stdout_file"):
-            proc._stdout_file.close()
-        if hasattr(proc, "_stderr_file"):
-            proc._stderr_file.close()
+        # Close log file handles stashed on the process by launch_scummvm.
+        handles: tuple[TextIO, TextIO] | None = getattr(proc, "_log_handles", None)
+        if handles is not None:
+            for handle in handles:
+                handle.close()
 
 
 # ---------------------------------------------------------------------------
@@ -114,13 +116,13 @@ def _client(
 
 
 @pytest.fixture
-def monkey_client() -> McpClient:
+def monkey_client() -> Iterator[McpClient]:
     """Monkey Island 1 EGA demo (office room, slot 1)."""
     yield from _client("monkey-ega-demo", "monkey")
 
 
 @pytest.fixture
-def monkey_de_client() -> McpClient:
+def monkey_de_client() -> Iterator[McpClient]:
     """German Monkey Island 1 EGA demo (slot 1)."""
     yield from _client("monkey-ega-demo-de", "monkey_de")
 
@@ -130,13 +132,13 @@ def monkey_de_client() -> McpClient:
 # by make_save_states.py (slots 6/7/8). Until those are captured on a machine
 # with the demo data, these fixtures skip via require_save_slot.
 @pytest.fixture
-def monkey_bar_client() -> McpClient:
+def monkey_bar_client() -> Iterator[McpClient]:
     """Monkey 1 EGA demo checkpoint: the SCUMM bar (room 52), bowl o' mints present."""
     yield from _client("monkey-ega-demo", "monkey_bar", save_slot=6, checkpoint=True)
 
 
 @pytest.fixture
-def monkey_kitchen_client() -> McpClient:
+def monkey_kitchen_client() -> Iterator[McpClient]:
     """Monkey 1 EGA demo checkpoint: the kitchen (room 51), hunk o' meat present,
     breath mint already in inventory."""
     yield from _client(
@@ -145,87 +147,87 @@ def monkey_kitchen_client() -> McpClient:
 
 
 @pytest.fixture
-def monkey_prison_client() -> McpClient:
+def monkey_prison_client() -> Iterator[McpClient]:
     """Monkey 1 EGA demo checkpoint: the prison (room 54) with the breath mint
     in inventory, ready to give to the prisoner."""
     yield from _client("monkey-ega-demo", "monkey_prison", save_slot=8, checkpoint=True)
 
 
 @pytest.fixture
-def maniac_client() -> McpClient:
+def maniac_client() -> Iterator[McpClient]:
     """Maniac Mansion C64 demo (slot 1, outside the mansion)."""
     yield from _client("maniac-c64", "maniac")
 
 
 @pytest.fixture
-def maniac_phone_client() -> McpClient:
+def maniac_phone_client() -> Iterator[McpClient]:
     """Maniac Mansion C64 demo (slot 2, next to the phone)."""
     yield from _client("maniac-c64", "maniac_phone", save_slot=2)
 
 
 @pytest.fixture
-def samnmax_client() -> McpClient:
+def samnmax_client() -> Iterator[McpClient]:
     """Sam & Max Hit the Road demo (slot 1, the office, room 7)."""
     yield from _client("samnmax", "samnmax")
 
 
 @pytest.fixture
-def samnmax_street_client() -> McpClient:
+def samnmax_street_client() -> Iterator[McpClient]:
     """Sam & Max Hit the Road demo (slot 2, the street, room 9) with Max exposed
     as 'max_the_object' in the inventory for two-target interactions."""
     yield from _client("samnmax", "samnmax_street", save_slot=2)
 
 
 @pytest.fixture
-def indy3_client() -> McpClient:
+def indy3_client() -> Iterator[McpClient]:
     """Passport to Adventure, Indy3 segment (slot 3, the boxing gym)."""
     yield from _client("pass", "indy3", save_slot=3)
 
 
 @pytest.fixture
-def indy3_travel_client() -> McpClient:
+def indy3_travel_client() -> Iterator[McpClient]:
     """Passport to Adventure, Indy3 segment (slot 4, the Pan Am clipper, room 24)."""
     yield from _client("pass", "indy3_travel", save_slot=4)
 
 
 @pytest.fixture
-def loom_client() -> McpClient:
+def loom_client() -> Iterator[McpClient]:
     """Passport to Adventure, Loom segment (slot 1)."""
     yield from _client("pass", "loom")
 
 
 @pytest.fixture
-def loom_leaf_client() -> McpClient:
+def loom_leaf_client() -> Iterator[McpClient]:
     """Passport to Adventure, Loom segment (slot 2, the leaf/pathway scene, room 36)."""
     yield from _client("pass", "loom_leaf", save_slot=2)
 
 
 @pytest.fixture
-def dig_client() -> McpClient:
+def dig_client() -> Iterator[McpClient]:
     """The Dig demo (slot 1, canyon room 15 with Brink and Maggie)."""
     yield from _client("dig-demo", "dig")
 
 
 @pytest.fixture
-def dig_wreck_client() -> McpClient:
+def dig_wreck_client() -> Iterator[McpClient]:
     """The Dig demo (slot 5, the wreck interior, room 19)."""
     yield from _client("dig-demo", "dig_wreck", save_slot=5)
 
 
 @pytest.fixture
-def comi_client() -> McpClient:
+def comi_client() -> Iterator[McpClient]:
     """Curse of Monkey Island demo (slot 1, the cannon beach)."""
     yield from _client("comi-demo", "comi")
 
 
 @pytest.fixture
-def comi_s3_client() -> McpClient:
+def comi_s3_client() -> Iterator[McpClient]:
     """Curse of Monkey Island demo (slot 3, ramrod + plastic hook in inventory)."""
     yield from _client("comi-demo", "comi_s3", save_slot=3)
 
 
 @pytest.fixture
-def comi_s4_client() -> McpClient:
+def comi_s4_client() -> Iterator[McpClient]:
     """Curse of Monkey Island demo (slot 4, the cannon minigame)."""
     yield from _client("comi-demo", "comi_s4", save_slot=4)
 
@@ -237,7 +239,7 @@ def comi_s4_client() -> McpClient:
 
 
 @pytest.fixture(scope="session")
-def atlantis_client() -> McpClient:
+def atlantis_client() -> Iterator[McpClient]:
     """Indiana Jones: Fate of Atlantis demo (no save support; intro-driven).
 
     The demo's boot script overrides the configured talkspeed (it sets
@@ -251,6 +253,6 @@ def atlantis_client() -> McpClient:
 
 
 @pytest.fixture(scope="session")
-def ft_client() -> McpClient:
+def ft_client() -> Iterator[McpClient]:
     """Full Throttle demo (no save support; ordered storyline walkthrough)."""
     yield from _client("ft-demo", "ft")

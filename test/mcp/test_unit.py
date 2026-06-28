@@ -35,12 +35,22 @@ from utils import (
 
 
 class _FakeClient:
-    """Records every act(...) call so make_verbs bindings can be asserted."""
+    """Records every act(...) call so make_verbs bindings can be asserted.
+
+    Mirrors :meth:`utils.McpClient.act` (verb + up to two targets) so it
+    structurally satisfies :class:`utils.VerbActor`.
+    """
 
     def __init__(self) -> None:
-        self.calls: list = []
+        self.calls: list[tuple[str, tuple[str | int, ...]]] = []
 
-    def act(self, verb, *targets):
+    def act(
+        self,
+        verb: str,
+        target1: str | int | None = None,
+        target2: str | int | None = None,
+    ) -> dict[str, object]:
+        targets = tuple(t for t in (target1, target2) if t is not None)
         self.calls.append((verb, targets))
         return {"verb": verb, "targets": targets}
 
@@ -153,7 +163,8 @@ def test_find_id_missing_returns_none() -> None:
 
 
 def test_object_by_id_returns_object() -> None:
-    assert object_by_id(_STATE, 10)["name"] == "door"
+    obj = object_by_id(_STATE, 10)
+    assert obj is not None and obj["name"] == "door"
 
 
 def test_object_by_id_missing_returns_none() -> None:

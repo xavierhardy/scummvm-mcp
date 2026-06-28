@@ -133,6 +133,7 @@ def test_samnmax_s02_cat_courier_gives_carnival_tickets(
 
     # Step 2: ask the "question" topic — the kitten admits swallowing the orders.
     qid = find_choice_id(question, "question")
+    assert qid is not None, "expected a 'question' topic to ask the kitten"
     ask_result = client.answer(qid)
     assert_no_talkie_garbage(ask_result.get("messages", []))
     ask_texts = message_texts(ask_result)

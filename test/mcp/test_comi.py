@@ -161,6 +161,7 @@ def test_07b_comi_longest_pirate_exchange_no_timeout(comi_client: McpClient) -> 
     assert question, "the first topic should reopen the menu"
 
     hook_id = find_choice_id_containing(question, "hook")
+    assert hook_id is not None, "expected a 'hook' topic in the reopened menu"
     result = comi_client.answer(hook_id)
     messages = message_texts(result)
     assert messages[0] == "Is that hook for real?", f"unexpected first line: {messages}"

@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -513,9 +513,10 @@ def launch_scummvm(
         stderr=stderr_fh,
     )
 
-    # Store file handles so they don't get garbage collected
-    proc._stdout_file = stdout_file
-    proc._stderr_file = stderr_fh
+    # Keep the log file handles alive for the process lifetime so they are not
+    # garbage-collected; the fixture teardown closes them (see conftest.py).
+    # setattr (not attribute assignment) because Popen has no typed slot for it.
+    setattr(proc, "_log_handles", (stdout_file, stderr_fh))  # noqa: B010
 
     # Print log file locations for reference
     print(f"[MCP] {game_id} stdout: {log_file}", flush=True)
@@ -593,12 +594,27 @@ def require_save_slot(game_id: str, slot: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def bind_verb(client: McpClient, verb: str):
+class VerbActor(Protocol):
+    """Anything with an ``act(verb, target1, target2)`` method (e.g. McpClient).
+
+    Lets :func:`bind_verb` / :func:`make_verbs` be type-checked against test
+    doubles that record calls, not just the live :class:`McpClient`.
+    """
+
+    def act(
+        self,
+        verb: str,
+        target1: str | int | None = ...,
+        target2: str | int | None = ...,
+    ) -> dict[str, Any]: ...
+
+
+def bind_verb(client: VerbActor, verb: str):
     """Return a callable invoking ``client.act(verb, *targets)``."""
     return lambda *targets: client.act(verb, *targets)
 
 
-def make_verbs(client: McpClient, *verb_names: str) -> tuple:
+def make_verbs(client: VerbActor, *verb_names: str) -> tuple:
     """Bind verb names to *client* so tests read ``use(a, b)`` for ``act("use", a, b)``.
 
     ``make_verbs(client, "pick_up", "use")`` returns two callables where
@@ -643,7 +659,7 @@ def joined_message_text(result: dict) -> str:
     return " ".join(message_texts(result))
 
 
-def choice_labels(question: dict) -> list:
+def choice_labels(question: dict | None) -> list:
     """Return the label of every choice in *question*."""
     return [choice.get("label") for choice in (question or {}).get("choices", [])]
 

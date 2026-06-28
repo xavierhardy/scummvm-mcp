@@ -92,7 +92,7 @@ def _assert_clean_look_at(client: McpClient, names: list) -> None:
         assert_no_talkie_garbage(result.get("messages", []))
 
 
-def _open_max_conversation(client: McpClient) -> dict:
+def _open_max_conversation(client: McpClient) -> dict | None:
     """Talk to Max and return the pending dialog question (with icon choices)."""
     _office_state(client)
     result = _act_retry(client, "talk_to", "max", attempts=10)
@@ -235,6 +235,7 @@ def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -
     """
     question = _open_max_conversation(samnmax_client)
     skip_unless(question is not None, "conversation did not open in this build")
+    assert question is not None
     try:
         # The fresh menu shows the four base topics.
         base_choices = question["choices"]
@@ -253,6 +254,7 @@ def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -
 
         # Selecting the Max topic must reach the real script, not click a blank.
         max_id = find_choice_id(follow_up, "max")
+        assert max_id is not None, "expected the 'max' topic in the follow-up menu"
         result = samnmax_client.answer(max_id)
         texts = message_texts(result)
         assert_no_talkie_garbage(result.get("messages", []))

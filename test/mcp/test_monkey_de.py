@@ -49,7 +49,7 @@ def _navigate_to_dock(client: McpClient) -> dict:
     return client.state()
 
 
-def _ensure_door_open(client: McpClient) -> dict:
+def _ensure_door_open(client: McpClient) -> dict | None:
     """Open the troll-clearing door (id 422) if it is closed; return the door."""
     door = object_by_id(client.state(), 422)
     if door and door["state"] == 0:
@@ -197,6 +197,7 @@ def test_06_de_open_door_lowercase(monkey_de_client: McpClient) -> None:
     oeffne = bind_verb(monkey_de_client, "öffne")
 
     door = object_by_id(monkey_de_client.state(), 422)
+    assert door is not None, "expected the door object (id 422) in the state"
     assert door["name"] == "tür", f"expected the door named 'tür', got {door}"
     assert door["state"] == 0, "door should start closed in a fresh demo"
 
@@ -216,6 +217,7 @@ def test_07_de_close_door(monkey_de_client: McpClient) -> None:
     # Open the door first so this test is self-contained (the closed door does
     # not advertise "schließe"; only an open one can be closed).
     door = _ensure_door_open(monkey_de_client)
+    assert door is not None, "expected the door object (id 422) in the state"
     assert door["name"] == "tür", f"expected the door named 'tür', got {door}"
     assert "schließe" in door["compatible_verbs"], f"missing 'schließe': {door}"
 

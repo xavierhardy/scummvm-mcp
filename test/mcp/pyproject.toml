@@ -32,6 +32,9 @@ python-version = "3.11"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
+# Put this dir on sys.path so the flat test modules can `import utils` / etc.
+# when driven by the `uv run pytest` console script (no implicit cwd on path).
+pythonpath = ["."]
 testpaths = ["."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
