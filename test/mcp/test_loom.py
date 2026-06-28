@@ -13,10 +13,14 @@ the player picks up the staff in the Loom mini-game.
 from time import sleep
 
 import pytest
+from assertions import assert_messages_contain
 from utils import (
     McpClient,
+    find_id,
     get_state_with_retry,
-    wait_for_interactive,
+    make_verbs,
+    require_interactive,
+    skip_unless,
 )
 
 
@@ -28,7 +32,7 @@ def _listen_to_egg(client: McpClient):
     replaying it to hatch the egg, so tests that replay call this first.
     """
     state = get_state_with_retry(client)
-    egg_id = _find_id(state, "egg")
+    egg_id = find_id(state, "egg")
     if egg_id is None:
         return None, None
     client.walk(40, 130)
@@ -37,6 +41,24 @@ def _listen_to_egg(client: McpClient):
         "act", {"verb": "interact", "target1": egg_id}
     )
     return notes, messages
+
+
+def _play_note_or_skip(client: McpClient, note) -> dict:
+    """Play a single note, skipping the test if the game is mid-cutscene."""
+    try:
+        return client.play_note(note)
+    except RuntimeError as e:
+        if "not accepting input" in str(e):
+            pytest.skip(f"Game in cutscene during play_note({note!r})")
+        raise
+
+
+def _play_notes(client: McpClient, notes) -> None:
+    """Play each note in *notes* in turn, asserting each call returns a dict."""
+    for note in notes:
+        result = _play_note_or_skip(client, note)
+        assert isinstance(result, dict), f"play_note({note!r}) returned: {result!r}"
+        sleep(0.5)
 
 
 # ---------------------------------------------------------------------------
@@ -49,19 +71,17 @@ def test_01_loom_initial_state(loom_client: McpClient) -> None:
 
     Loading from a save bypasses the intro, so no skip_intros needed.
     """
-    if not wait_for_interactive(loom_client):
-        pytest.skip("Save did not reach interactive state in time")
+    require_interactive(loom_client, "Save did not reach interactive state in time")
     state = get_state_with_retry(loom_client)
     assert state.get("room") is not None, "Expected room in state"
 
 
 def test_02_loom_verbs_exposed(loom_client: McpClient) -> None:
     """Only 'interact' and 'use item' should be exposed in the Loom segment."""
-    state = get_state_with_retry(loom_client)
-    verbs = set(state.get("verbs", []))
-    expected = {"interact", "use item"}
-    missing = expected - verbs
-    assert not missing, f"Missing expected Loom verbs: {missing}, got: {sorted(verbs)}"
+    verbs = set(get_state_with_retry(loom_client).get("verbs", []))
+    sorted_verbs = sorted(verbs)
+    missing = {"interact", "use item"} - verbs
+    assert not missing, f"Missing expected Loom verbs: {missing}, got: {sorted_verbs}"
     assert "walk to" not in verbs, "walk to should not appear in Loom verb list"
     assert "look at" not in verbs, "look at should not appear in Loom verb list"
     assert "pick up" not in verbs, "pick up should not appear in Loom verb list"
@@ -72,7 +92,8 @@ def test_03_loom_objects_in_room(loom_client: McpClient) -> None:
     """At least one object should be visible."""
     state = get_state_with_retry(loom_client)
     objects = state.get("objects", [])
-    assert objects, f"Expected room objects, got empty list (room={state.get('room')})"
+    room = state.get("room")
+    assert objects, f"Expected room objects, got empty list (room={room})"
 
 
 def test_04_loom_egg_listen(loom_client: McpClient) -> None:
@@ -84,20 +105,15 @@ def test_04_loom_egg_listen(loom_client: McpClient) -> None:
     with the room — clicking the egg or the loom first disturbs the listen
     flow (which is why the old object-loop test made this one flaky).
     """
-    if not wait_for_interactive(loom_client):
-        pytest.skip("Save did not reach interactive state")
+    require_interactive(loom_client, "Save did not reach interactive state")
 
     state = get_state_with_retry(loom_client)
-    assert (
-        _find_id(state, "egg") is not None
-    ), f"egg not in room: {state.get('objects')}"
+    objects = state.get("objects")
+    assert find_id(state, "egg") is not None, f"egg not in room: {objects}"
 
     notes, messages = _listen_to_egg(loom_client)
     assert notes == ["e", "c", "e", "d"], f"expected the Opening draft, got {notes}"
-    texts = [m.get("text") for m in messages]
-    assert (
-        "It's trying to open!" in texts
-    ), f"expected Bobbin's listen line, got {texts}"
+    assert_messages_contain(messages, "It's trying to open!")
 
 
 @pytest.mark.slow
@@ -110,14 +126,15 @@ def test_05_loom_egg_replay_hatches(loom_client: McpClient) -> None:
     slow because the game is, not the bridge). Afterwards the egg object is
     consumed and gone from the room.
     """
-    if not wait_for_interactive(loom_client):
-        pytest.skip("Save did not reach interactive state")
+    require_interactive(loom_client, "Save did not reach interactive state")
 
     # Hearing the egg's draft is the prerequisite for replaying it (self-contained
     # so this runs on its own fresh instance, not after test_04).
     listened, _ = _listen_to_egg(loom_client)
-    if listened != ["e", "c", "e", "d"]:
-        pytest.skip(f"could not hear the Opening draft to replay (got {listened})")
+    skip_unless(
+        listened == ["e", "c", "e", "d"],
+        f"could not hear the Opening draft to replay (got {listened})",
+    )
 
     notes = ["e", "c", "e", "d"]
     replay_notes, messages, result = loom_client.call_capturing(
@@ -125,43 +142,22 @@ def test_05_loom_egg_replay_hatches(loom_client: McpClient) -> None:
     )
     assert result is not None, "replay stream errored before the cutscene finished"
     assert replay_notes == notes, f"watcher re-emitted {replay_notes} for {notes}"
-
-    texts = [m.get("text") for m in messages]
-    assert (
-        "To follow the swans!" in texts
-    ), f"expected the hatching cutscene dialogue, got: {texts}"
+    assert_messages_contain(messages, "To follow the swans!")
 
     state = get_state_with_retry(loom_client)
-    assert _find_id(state, "egg") is None, "egg should be consumed after hatching"
+    assert find_id(state, "egg") is None, "egg should be consumed after hatching"
 
 
 def test_06_loom_play_notes_c_d_e(loom_client: McpClient) -> None:
     """play_note c/d/e (the first 3 notes unlocked by the distaff) all succeed."""
-    if not wait_for_interactive(loom_client):
-        pytest.skip("Game in cutscene")
-
-    for note in ("c", "d", "e"):
-        try:
-            result = loom_client.play_note(note)
-        except RuntimeError as e:
-            if "not accepting input" in str(e):
-                pytest.skip(f"Game in cutscene during play_note('{note}')")
-            raise
-        assert isinstance(result, dict), f"play_note('{note}') returned: {result!r}"
-        sleep(0.5)
+    require_interactive(loom_client, "Game in cutscene")
+    _play_notes(loom_client, ("c", "d", "e"))
 
 
 def test_07_loom_play_unknown_note(loom_client: McpClient) -> None:
     """play_note('C') (high-C, likely not yet unlocked) is still accepted by MCP."""
-    if not wait_for_interactive(loom_client):
-        pytest.skip("Game in cutscene")
-
-    try:
-        result = loom_client.play_note("C")
-    except RuntimeError as e:
-        if "not accepting input" in str(e):
-            pytest.skip("Game in cutscene")
-        raise
+    require_interactive(loom_client, "Game in cutscene")
+    result = _play_note_or_skip(loom_client, "C")
     assert isinstance(result, dict), f"play_note('C') returned: {result!r}"
 
 
@@ -174,23 +170,15 @@ def test_08_loom_interact_object(loom_client: McpClient) -> None:
     over every object in the room — ~50 s of blind clicking that disturbed
     the egg-listen flow; it now runs after the egg tests, on one target.)
     """
-    if not wait_for_interactive(loom_client):
-        pytest.skip("Game stuck in cutscene")
+    require_interactive(loom_client, "Game stuck in cutscene")
 
     state = get_state_with_retry(loom_client)
-    loom_id = _find_id(state, "loom")
-    assert loom_id is not None, f"loom not in room: {state.get('objects')}"
+    loom_id = find_id(state, "loom")
+    objects = state.get("objects")
+    assert loom_id is not None, f"loom not in room: {objects}"
     initial_pos = state.get("position", {})
 
-    result = loom_client.act("interact", loom_id)
+    (interact,) = make_verbs(loom_client, "interact")
+    result = interact(loom_id)
     moved = result.get("position", initial_pos) != initial_pos
-    assert moved or result.get(
-        "messages"
-    ), f"interacting with the loom produced no observable change: {result}"
-
-
-def _find_id(state: dict, name: str) -> int | None:
-    for obj in state.get("objects", []):
-        if obj["name"] == name:
-            return obj["id"]
-    return None
+    assert moved or result.get("messages"), f"loom interaction did nothing: {result}"

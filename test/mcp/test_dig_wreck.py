@@ -6,7 +6,17 @@ Brink present. Runs against its own fixture/instance so it can execute in
 parallel with the canyon tests in test_dig.py (pytest-xdist --dist=loadgroup).
 """
 
-from utils import McpClient
+from assertions import assert_no_message_contains
+from utils import McpClient, find_id, make_verbs, object_names
+
+
+def _close_dialog(client: McpClient) -> None:
+    """Leave any open conversation by clicking its last (bye) icon."""
+    for _ in range(10):
+        q = client.state().get("question")
+        if not q:
+            break
+        client.answer(len(q["choices"]))
 
 
 def test_11_dig_pickup_deposits_item(dig_wreck_client: McpClient) -> None:
@@ -21,15 +31,15 @@ def test_11_dig_pickup_deposits_item(dig_wreck_client: McpClient) -> None:
     the inventory and restore the default cursor.
     """
     client = dig_wreck_client
+    (interact,) = make_verbs(client, "interact")
     state = client.state()
     assert state["room"]["id"] == 19, f"Expected wreck room 19, got {state['room']}"
 
-    wire = next((o for o in state["objects"] if o["name"] == "wire"), None)
-    assert (
-        wire is not None
-    ), f"No 'wire' object in scene: {[o['name'] for o in state['objects']]}"
+    wire_id = find_id(state, "wire")
+    names = sorted(object_names(state))
+    assert wire_id is not None, f"No 'wire' object in scene: {names}"
 
-    result = client.act("interact", wire["id"])
+    result = interact(wire_id)
     inv = client.state().get("inventory", [])
     assert "wire" in inv, f"Wire was not deposited into inventory: {inv} ({result})"
 
@@ -37,21 +47,11 @@ def test_11_dig_pickup_deposits_item(dig_wreck_client: McpClient) -> None:
     # conversation), not try to use the just-grabbed wire on him. If the wire
     # were still held, this would instead produce a use-on-actor refusal and no
     # dialog.
-    talk = client.act("interact", "brink")
-    talk_text = " ".join(m["text"].lower() for m in talk.get("messages", []))
-    assert (
-        "these things together" not in talk_text
-    ), f"Cursor still stuck holding the wire: {talk.get('messages')}"
-    assert (
-        "want that" not in talk_text
-    ), f"Cursor still stuck holding the wire: {talk.get('messages')}"
-    assert (
-        client.state().get("question") is not None
-    ), "Expected talking to Brink to open a dialog once the cursor was freed"
+    talk = interact("brink")
+    assert_no_message_contains(talk, "these things together")
+    assert_no_message_contains(talk, "want that")
+    question = client.state().get("question")
+    assert question is not None, "talking to Brink should open a dialog"
 
     # Clean up: leave the conversation so the session fixture ends cleanly.
-    for _ in range(10):
-        q = client.state().get("question")
-        if not q:
-            break
-        client.answer(len(q["choices"]))
+    _close_dialog(client)

@@ -33,6 +33,7 @@ from time import sleep, time
 
 import httpx
 import pytest
+from assertions import assert_text_contains
 from utils import McpClient
 
 # Set SKIP_SLOW_TESTS=1 to skip this whole file (and test_ft):
@@ -65,7 +66,13 @@ DIR_FROM_CITY = {
     "north": "South of Thera.",
 }
 
-PERMANENT = ("unknown verb", "unknown target", "must be", "out of bounds", "is negative")
+PERMANENT = (
+    "unknown verb",
+    "unknown target",
+    "must be",
+    "out of bounds",
+    "is negative",
+)
 
 
 def _fresh(client: McpClient) -> None:
@@ -209,6 +216,26 @@ def _msgs(result: dict) -> str:
     return " ".join(m.get("text", "") for m in result.get("messages", []))
 
 
+def _says(result: dict, needle: str) -> bool:
+    """True if *result*'s spoken text contains *needle* (case-insensitive)."""
+    return needle.lower() in _msgs(result).lower()
+
+
+def _added(result: dict, item: str) -> bool:
+    """True if *item* appears in *result*'s inventory_added list."""
+    return any(item in i for i in result.get("inventory_added", []))
+
+
+def _removed(result: dict, item: str) -> bool:
+    """True if *item* appears in *result*'s inventory_removed list."""
+    return any(item in i for i in result.get("inventory_removed", []))
+
+
+def _in_inventory(client: McpClient, item: str) -> bool:
+    """True if *item* is in the live inventory."""
+    return item in (_state(client).get("inventory") or [])
+
+
 def _debug(client: McpClient) -> dict:
     """debug() on a fresh connection, patiently retried."""
     deadline = time() + 60
@@ -235,6 +262,121 @@ def _set_talk_speed(client: McpClient, speed: int = 255) -> dict:
             last = exc
             sleep(2.0)
     raise AssertionError(f"set_talk_speed() never responded: {last}")
+
+
+# ---------------------------------------------------------------------------
+# Walkthrough step helpers — each owns the polling/retry loop for one beat so
+# the test body stays a flat sequence of steps and single-line assertions.
+# ---------------------------------------------------------------------------
+
+
+def _skip_intro(client: McpClient):
+    """Skip the SMUSH/scripted intro until the opening dock dialog is pending."""
+    result = _skip(client)
+    for _ in range(60):
+        if "room_changed" in result:
+            break
+        sleep(INTRO_POLL_SECS)
+        result = _skip(client)
+    old_room = result.get("room_changed")
+    for _ in range(60):  # wait past the first post-skip screen
+        if _room(client) != old_room:
+            old_room = _room(client)
+            break
+        sleep(INTRO_POLL_SECS)
+    for _ in range(60):  # ...and the second
+        if _room(client) != old_room:
+            break
+        sleep(INTRO_POLL_SECS)
+    _skip(client)
+    return _wait_question(client, timeout=60.0)
+
+
+def _find_jeep_behind_mountain(client: McpClient) -> None:
+    """Walk through the mountain opening (notch/cleft/gap) to reveal the jeep."""
+    for opening in ("notch in mountain", "cleft in mountain", "gap in mountain"):
+        if _room(client) != ROOM_CANYON:
+            break
+        _act(client, "walk_to", opening)
+        sleep(1.5)
+
+
+def _read_heading_page(client: McpClient) -> str:
+    """Turn to the Lost Dialogue's heading page (page_3) and return its text."""
+    page_text = ""
+    for _ in range(8):
+        result = _act(client, "look_at", "page_3")
+        page_text = _msgs(result)
+        if "Lesser" in page_text and "of the City" in page_text:
+            break
+        sleep(2.0)
+    return page_text
+
+
+def _open_storage_locker(client: McpClient) -> None:
+    """Open the storage locker until the punctured diving suit appears."""
+    for _ in range(8):  # arrival cutscene holds input; wait for the locker to open
+        _act(client, "open", "storage_locker")
+        if _wait_object(client, 491, 6) or "punctured_diving_suit" in _objects(client):
+            break
+        sleep(1.5)
+
+
+def _cave_ids_nearest_first(client: McpClient) -> list:
+    """Return the room-82 cave doorway ids ordered by distance from Indy."""
+    s = _state(client)
+    ego_x = (s.get("position") or {}).get("x", 160)
+    caves = [
+        (o["id"], o.get("x", 0))
+        for o in s.get("objects", [])
+        if o["name"] == "cave" and o.get("id") in CAVE_IDS
+    ]
+    caves.sort(key=lambda t: abs((t[1] or 0) - ego_x))
+    return [cid for cid, _ in caves]
+
+
+def _search_caves_for_atlantis(client: McpClient, timeout: float = 240) -> None:
+    """Try caves nearest-first (before the air runs out) until room 48 is reached."""
+    deadline = time() + timeout
+    tried: set[int] = set()
+    while time() < deadline and _room(client) != ROOM_ATLANTIS:
+        if _room(client) != ROOM_GATEWAY:
+            sleep(2.5)  # betrayal cutscene (air-free); wait it out
+            continue
+        remaining = [c for c in _cave_ids_nearest_first(client) if c not in tried]
+        if not remaining:
+            tried.clear()
+            sleep(2.0)
+            continue
+        cave_id = remaining[0]
+        tried.add(cave_id)
+        result = _act(client, "walk_to", cave_id)
+        if (
+            result.get("room_changed") == ROOM_ATLANTIS
+            or _room(client) == ROOM_ATLANTIS
+        ):
+            break
+        sleep(1.0)
+
+
+def _step_through_bronze_door(client: McpClient, timeout: float = 60) -> str:
+    """Walk through the open bronze door until the demo's final line appears."""
+    final = ""
+    deadline = time() + timeout
+    while time() < deadline:
+        result = _act(client, "walk_to", BRONZE_DOOR)
+        final = _msgs(result)
+        if "ancient secrets" in final.lower():
+            break
+        # the door may still be swinging open / input held — try again shortly
+        state_text = " ".join(
+            m.get("text", "") for m in _state(client).get("messages", [])
+        )
+        if "ancient secrets" in state_text.lower():
+            final = "ancient secrets"
+            break
+        sleep(2.0)
+    return final
 
 
 def test_atlantis_talk_speed_maxed(atlantis_client: McpClient) -> None:
@@ -266,34 +408,14 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     client = atlantis_client
 
     # --- Skip the intro until the opening dock dialog is pending -----------
-    # The intro is SMUSH/scripted screens that skip() advances (it returns the
-    # room change each time); after a couple of screens Sophia opens the
-    # "what's the plan?" dialog on the dock. This mirrors _run_atlantis_end.py.
-    result = _skip(client)
-    for _ in range(60):
-        if "room_changed" in result:
-            break
-        sleep(INTRO_POLL_SECS)
-        result = _skip(client)
-    old_room = result.get("room_changed")
-    for _ in range(60):  # wait past the first post-skip screen
-        if _room(client) != old_room:
-            old_room = _room(client)
-            break
-        sleep(INTRO_POLL_SECS)
-    for _ in range(60):  # ...and the second
-        if _room(client) != old_room:
-            break
-        sleep(INTRO_POLL_SECS)
-    _skip(client)
-    question = _wait_question(client, timeout=60.0)
-    assert question is not None, "[intro] opening dialog never appeared after skipping the intro"
+    question = _skip_intro(client)
+    assert question is not None, "[intro] opening dialog never appeared"
 
     # --- Answer the opening dialog (goal: answer_opening) ------------------
     result = _pick(client, "look around", {"question": question})
-    assert "look around" in _msgs(result).lower() or _room(client) == 49, (
-        f"[opening] expected Indy's 'take a look around' line, got {result.get('messages')}"
-    )
+    messages = result.get("messages")
+    saw_line = _says(result, "look around") or _room(client) == 49
+    assert saw_line, f"[opening] no look-around line, got {messages}"
 
     # --- Walk up the path; look for Kerner -> canyon (goal: reach_canyon) --
     # (No need to talk to Sophia first; walking off the dock triggers her
@@ -301,140 +423,119 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     sleep(1.0)
     result = _act(client, "walk_to", "path_away_from_dock")
     result = _pick(client, "Kerner", result)
-    assert _wait_room(client, ROOM_CANYON), f"[canyon] expected room {ROOM_CANYON}, got {_room(client)}"
+    reached_canyon = _wait_room(client, ROOM_CANYON)
+    room = _room(client)
+    assert reached_canyon, f"[canyon] expected room {ROOM_CANYON}, got {room}"
 
     # --- Find the jeep behind the mountain (goal: get_tire_repair_kit) ------
-    for opening in ("notch in mountain", "cleft in mountain", "gap in mountain"):
-        if _room(client) != ROOM_CANYON:
-            break
-        _act(client, "walk_to", opening)
-        sleep(1.5)
-    assert _room(client) != ROOM_CANYON, "[mountain] none of notch/cleft/gap revealed the jeep"
+    _find_jeep_behind_mountain(client)
+    room = _room(client)
+    assert room != ROOM_CANYON, "[mountain] none of notch/cleft/gap revealed the jeep"
     result = _act(client, "pick_up", "tire repair kit")
-    assert any("tire_repair_kit" in i for i in result.get("inventory_added", [])) or (
-        "tire_repair_kit" in (_state(client).get("inventory") or [])
-    ), "[tire kit] expected the tire repair kit in inventory"
+    got_kit = _added(result, "tire_repair_kit") or _in_inventory(
+        client, "tire_repair_kit"
+    )
+    assert got_kit, "[tire kit] expected the tire repair kit in inventory"
 
     # --- Back to the dock --------------------------------------------------
-    _act(client, "walk_to", "path_to_landscape"); sleep(1.5)
-    _act(client, "walk_to", "path_back_to_the_dock"); sleep(1.5)
+    _act(client, "walk_to", "path_to_landscape")
+    sleep(1.5)
+    _act(client, "walk_to", "path_back_to_the_dock")
+    sleep(1.5)
     assert _wait_room(client, 49), "[dock] expected to return to the dock (room 49)"
 
     # --- Read the Lost Dialogue's heading (goal: read_dialogue) -------------
-    _act(client, "look_at", "lost_dialogue_of_plato"); sleep(1.5)
-    page_text = ""
-    for _ in range(8):
-        result = _act(client, "look_at", "page_3")  # turn to the heading page
-        page_text = _msgs(result)
-        if "Lesser" in page_text and "of the City" in page_text:
-            break
-        sleep(2.0)
-    _skip(client); sleep(2.0)
-    assert "of the City" in page_text, f"[book] page 3 should give Atlantis's bearing, got {page_text!r}"
+    _act(client, "look_at", "lost_dialogue_of_plato")
+    sleep(1.5)
+    page_text = _read_heading_page(client)
+    _skip(client)
+    sleep(2.0)
+    assert "of the City" in page_text, f"[book] no bearing on page 3: {page_text!r}"
     miles = re.search(r"Lesser\s+(\d+)\s+miles", page_text)
     direction = re.search(r"(northeast|northwest|north)\s+of the City", page_text)
     assert miles and direction, f"[book] could not parse heading from {page_text!r}"
-    distance_label = f"{int(miles.group(1)) // 10} miles from here."
+    tenths = int(miles.group(1)) // 10
+    distance_label = f"{tenths} miles from here."
     direction_label = DIR_FROM_CITY[direction.group(1)]
 
     # --- Tell the captain the course (goal: board_salvage_boat) ------------
-    _act(client, "walk_to", "salvage_boat"); sleep(1.0)
-    result = _act(client, "talk_to", "captain"); sleep(0.5)
-    result = _pick(client, "Atlantis", result); sleep(0.5)
-    result = _pick(client, "take us", result); sleep(0.5)
-    result = _pick(client, distance_label, result); sleep(0.5)
-    result = _pick(client, direction_label, result); sleep(0.5)
-    result = _pick(client, "I knew that", result); sleep(0.5)
-    result = _pick(client, "borrow your diving", result); sleep(0.5)
-    _pick(client, "Yes, of course", result); sleep(2.0)
-    assert _wait_room(client, ROOM_BOAT), f"[captain] expected to arrive on the boat (room {ROOM_BOAT})"
+    _act(client, "walk_to", "salvage_boat")
+    sleep(1.0)
+    result = _act(client, "talk_to", "captain")
+    sleep(0.5)
+    result = _pick(client, "Atlantis", result)
+    sleep(0.5)
+    result = _pick(client, "take us", result)
+    sleep(0.5)
+    result = _pick(client, distance_label, result)
+    sleep(0.5)
+    result = _pick(client, direction_label, result)
+    sleep(0.5)
+    result = _pick(client, "I knew that", result)
+    sleep(0.5)
+    result = _pick(client, "borrow your diving", result)
+    sleep(0.5)
+    _pick(client, "Yes, of course", result)
+    sleep(2.0)
+    assert _wait_room(
+        client, ROOM_BOAT
+    ), f"[captain] expected the boat (room {ROOM_BOAT})"
 
     # --- Patch and don the diving suit (goal: patch_diving_suit) -----------
     sleep(1.0)
-    for _ in range(8):  # arrival cutscene holds input; wait for the locker to open
-        _act(client, "open", "storage_locker")
-        if _wait_object(client, 491, 6) or "punctured_diving_suit" in _objects(client):
-            break
-        sleep(1.5)
-    assert "punctured_diving_suit" in _objects(client), "[suit] storage locker never revealed the suit"
+    _open_storage_locker(client)
+    assert "punctured_diving_suit" in _objects(
+        client
+    ), "[suit] locker never revealed the suit"
     result = _act(client, "use", "tire_repair_kit", "punctured_diving_suit")
-    assert any("tire_repair_kit" in i for i in result.get("inventory_removed", [])) or (
-        "tire_repair_kit" not in (_state(client).get("inventory") or [])
-    ), "[patch suit] the tire repair kit should be used up patching the suit"
+    used_kit = _removed(result, "tire_repair_kit") or not _in_inventory(
+        client, "tire_repair_kit"
+    )
+    assert used_kit, "[patch suit] tire kit should be consumed"
     _wait_object(client, 491, 20)  # repaired_suit
-    _act(client, "use", "air_hose", "repaired_suit"); sleep(1.0)
-    _act(client, "use", "repaired_diving_suit_with_hose"); sleep(1.0)
+    _act(client, "use", "air_hose", "repaired_suit")
+    sleep(1.0)
+    _act(client, "use", "repaired_diving_suit_with_hose")
+    sleep(1.0)
 
     # --- Hoist Indy into the sea toward Atlantis (goal: dive_to_atlantis) ---
-    _act(client, "pull", "air_compressor_switch"); sleep(1.5)
-    result = _act(client, "use", "hoist", "indy_in_diving_suit"); sleep(2.0)
-    assert result.get("room_changed") == ROOM_GATEWAY or _wait_room(client, ROOM_GATEWAY), (
-        f"[hoist] correct heading should sink Indy toward the Lost Kingdom (room {ROOM_GATEWAY})"
+    _act(client, "pull", "air_compressor_switch")
+    sleep(1.5)
+    result = _act(client, "use", "hoist", "indy_in_diving_suit")
+    sleep(2.0)
+    sank = result.get("room_changed") == ROOM_GATEWAY or _wait_room(
+        client, ROOM_GATEWAY
     )
+    assert sank, f"[hoist] the correct heading should sink Indy (room {ROOM_GATEWAY})"
 
     # --- Find the Atlantis cave before the air runs out (goal: reach_atlantis) -
-    def cave_ids_nearest_first() -> list[int]:
-        s = _state(client)
-        ego_x = (s.get("position") or {}).get("x", 160)
-        caves = [
-            (o["id"], o.get("x", 0))
-            for o in s.get("objects", [])
-            if o["name"] == "cave" and o.get("id") in CAVE_IDS
-        ]
-        caves.sort(key=lambda t: abs((t[1] or 0) - ego_x))
-        return [cid for cid, _ in caves]
-
-    deadline = time() + 240
-    tried: set[int] = set()
-    while time() < deadline and _room(client) != ROOM_ATLANTIS:
-        if _room(client) != ROOM_GATEWAY:
-            sleep(2.5)  # betrayal cutscene (air-free); wait it out
-            continue
-        remaining = [c for c in cave_ids_nearest_first() if c not in tried]
-        if not remaining:
-            tried.clear()
-            sleep(2.0)
-            continue
-        cave_id = remaining[0]
-        tried.add(cave_id)
-        result = _act(client, "walk_to", cave_id)
-        if result.get("room_changed") == ROOM_ATLANTIS or _room(client) == ROOM_ATLANTIS:
-            break
-        sleep(1.0)
-    assert _room(client) == ROOM_ATLANTIS, f"[caves] never reached the Atlantis airlock (room {ROOM_ATLANTIS})"
+    _search_caves_for_atlantis(client)
+    room = _room(client)
+    assert room == ROOM_ATLANTIS, f"[caves] never reached the airlock ({ROOM_ATLANTIS})"
 
     # --- Solve the airlock (goal: open_airlock_box) ------------------------
     # Dark room: stand the ladder on the rubble to climb, then open the stone box.
-    _act(client, "pick_up", LADDER); sleep(1.0)
-    _act(client, "use", "ladder", RUBBLE); sleep(2.0)
-    assert _wait_object(client, STONE_BOX, 30), "[airlock] climbing never exposed the stone box"
-    result = _act(client, "open", STONE_BOX); sleep(1.5)
-    assert "it opens" in _msgs(result).lower() or _wait_object(client, ROD, 15), (
-        "[airlock] the stone box should open and reveal the rod"
-    )
+    _act(client, "pick_up", LADDER)
+    sleep(1.0)
+    _act(client, "use", "ladder", RUBBLE)
+    sleep(2.0)
+    assert _wait_object(
+        client, STONE_BOX, 30
+    ), "[airlock] climbing never exposed the stone box"
+    result = _act(client, "open", STONE_BOX)
+    sleep(1.5)
+    opened = _says(result, "it opens") or _wait_object(client, ROD, 15)
+    assert opened, "[airlock] the stone box should open and reveal the rod"
 
     # Take the rod, light it with a bead, then use a bead on the statue's mouth
     # to swing the bronze door open.
-    _act(client, "pick_up", ROD); sleep(1.0)
-    _act(client, "use", BEAD, ROD); sleep(2.0)  # light the airlock
-    _act(client, "use", BEAD, STATUE); sleep(3.0)  # open the bronze door
+    _act(client, "pick_up", ROD)
+    sleep(1.0)
+    _act(client, "use", BEAD, ROD)
+    sleep(2.0)  # light the airlock
+    _act(client, "use", BEAD, STATUE)
+    sleep(3.0)  # open the bronze door
 
     # --- Step through the open door (goal: enter_atlantis = demo end) ------
-    final = ""
-    deadline = time() + 60
-    while time() < deadline:
-        result = _act(client, "walk_to", BRONZE_DOOR)
-        final = _msgs(result)
-        if "ancient secrets" in final.lower():
-            break
-        # the door may still be swinging open / input held — try again shortly
-        if "ancient secrets" in " ".join(
-            m.get("text", "") for m in _state(client).get("messages", [])
-        ).lower():
-            final = "ancient secrets"
-            break
-        sleep(2.0)
-    assert "ancient secrets" in final.lower(), (
-        "[airlock] stepping through the bronze door should end the demo with "
-        "Indy's 'What ancient secrets lie beyond this portal' line"
-    )
+    final = _step_through_bronze_door(client)
+    assert_text_contains(final, "ancient secrets")

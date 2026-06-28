@@ -19,8 +19,8 @@ and the dialog answer with the eszett-bearing troll line — round-trip ß and �
 
 from time import sleep
 
-from assertions import assert_inventory_contains, assert_inventory_does_not_contain
-from utils import McpClient
+from assertions import assert_has_position, assert_room
+from utils import McpClient, make_verbs, object_by_id, object_names
 
 
 def _talk_to_troll(client: McpClient) -> dict:
@@ -49,51 +49,67 @@ def _navigate_to_dock(client: McpClient) -> dict:
     return client.state()
 
 
+def _ensure_door_open(client: McpClient) -> dict:
+    """Open the troll-clearing door (id 422) if it is closed; return the door."""
+    door = object_by_id(client.state(), 422)
+    if door and door["state"] == 0:
+        client.act("öffne", "tür")
+        door = object_by_id(client.state(), 422)
+    return door
+
+
+def _bounce_plank(client: McpClient, times: int = 3) -> None:
+    """Step on the loose plank (307) *times*, pausing for each bounce script."""
+    for _ in range(times):
+        client.act("geh zu", 307)
+        sleep(1.5)  # let the plank-bounce script finish before the next step
+
+
 def test_01_de_initial_state(monkey_de_client: McpClient) -> None:
     """Verify initial game state and that the German door surfaces as 'tür'."""
     state = monkey_de_client.state()
-    assert "room" in state
-    assert state["room"]["id"] == 55
-    assert state.get("objects") is not None
-    assert isinstance(state.get("objects"), list)
-    assert len(state.get("objects", [])) > 0
-    assert len(state.get("inventory", [])) == 0
-    assert "position" in state
-    assert state["position"] == {"y": 132, "x": 235}
-    assert len(state.get("messages", [])) == 0
+    assert_room(state, 55)
+    objects = state.get("objects")
+    assert isinstance(objects, list), f"expected 'objects' to be a list, got {objects}"
+    assert len(objects) > 0, "expected at least one object in room 55"
+    inventory = state.get("inventory", [])
+    assert inventory == [], f"expected an empty starting inventory, got {inventory}"
+    position = state.get("position")
+    assert position == {"x": 235, "y": 132}, f"unexpected start position: {position}"
+    messages = state.get("messages", [])
+    assert messages == [], f"expected no pending messages at start, got {messages}"
 
     # German object names with umlauts must transit MCP as UTF-8 (no U+FFFD).
-    names = {o["name"] for o in state["objects"]}
-    assert names == {"torbogen", "tür"}, f"Unexpected objects: {sorted(names)}"
+    names = object_names(state)
+    sorted_names = sorted(names)
+    assert names == {"torbogen", "tür"}, f"unexpected objects: {sorted_names}"
 
     # German verb bar must round-trip ß and ü intact.
-    assert "schließe" in state["verbs"]
-    assert "drücke" in state["verbs"]
-    assert "rede mit" in state["verbs"]
+    verbs = state["verbs"]
+    assert "schließe" in verbs, f"missing 'schließe' verb: {verbs}"
+    assert "drücke" in verbs, f"missing 'drücke' verb: {verbs}"
+    assert "rede mit" in verbs, f"missing 'rede mit' verb: {verbs}"
 
 
 def test_02_de_walk_to_troll(monkey_de_client: McpClient) -> None:
     """Walk to Troll. The troll greets in German."""
-    state = monkey_de_client.state()
-    assert state["room"]["id"] == 55
+    assert_room(monkey_de_client.state(), 55)
+    (geh_zu,) = make_verbs(monkey_de_client, "geh zu")
 
     result = monkey_de_client.walk(120, 132)
-    assert "x" in result["position"]
-    assert "y" in result["position"]
-    assert result["messages"] == [{"actor": "troll", "text": "Keiner kommt vorbei!"}]
+    assert_has_position(result)
+    messages = result["messages"]
+    expected = [{"actor": "troll", "text": "Keiner kommt vorbei!"}]
+    assert messages == expected, f"unexpected approach messages: {messages}"
 
-    monkey_de_client.act("geh zu", "troll")
-
-    state = monkey_de_client.state()
-    assert (
-        state["position"]["x"] < 200
-    ), f"Expected Guybrush near troll, got {state['position']}"
+    geh_zu("troll")
+    position = monkey_de_client.state()["position"]
+    assert position["x"] < 200, f"expected Guybrush near troll (x<200), got {position}"
 
 
 def test_03_de_talk_to_troll(monkey_de_client: McpClient) -> None:
     """Talk to Troll to trigger German dialog with eszett and umlauts."""
-    state = monkey_de_client.state()
-    assert state["room"]["id"] == 55
+    assert_room(monkey_de_client.state(), 55)
 
     result = _talk_to_troll(monkey_de_client)
     expected = {
@@ -116,27 +132,26 @@ def test_03_de_talk_to_troll(monkey_de_client: McpClient) -> None:
             },
         ],
     }
-    assert result == expected
+    assert result == expected, f"unexpected troll dialog: {result}"
 
     # heißt contains an eszett — confirm at the byte level.
     troll_line = result["messages"][1]["text"]
-    assert "heißt" in troll_line
-    assert "ß".encode("utf-8") in troll_line.encode("utf-8")
+    assert "heißt" in troll_line, f"expected 'heißt' in {troll_line!r}"
+    assert "ß".encode("utf-8") in troll_line.encode("utf-8"), "eszett byte missing"
 
-    state = monkey_de_client.state()
-    assert state.get("question") is not None
+    question = monkey_de_client.state().get("question")
+    assert question is not None, "expected a dialog question after talking to Troll"
 
 
 def test_04_de_answer_troll_dialog(monkey_de_client: McpClient) -> None:
     """Answer dialog choice 3 (Bitte, bitte?)."""
-    state = monkey_de_client.state()
-    assert state["room"]["id"] == 55
+    assert_room(monkey_de_client.state(), 55)
 
     # Open the troll dialog first so this test stands alone.
     _talk_to_troll(monkey_de_client)
 
     result = monkey_de_client.answer(3)
-    assert result == {
+    expected = {
         "messages": [
             {"text": "Bitte, bitte?", "actor": "guybrush"},
             {
@@ -149,19 +164,22 @@ def test_04_de_answer_troll_dialog(monkey_de_client: McpClient) -> None:
             },
         ]
     }
+    assert result == expected, f"unexpected answer(3) result: {result}"
 
     # Höflichkeit carries an umlaut — confirm round-trip.
-    assert "Höflichkeit" in result["messages"][1]["text"]
+    troll_line = result["messages"][1]["text"]
+    assert "Höflichkeit" in troll_line, f"expected 'Höflichkeit' in {troll_line!r}"
 
 
 def test_05_de_walk_to_door(monkey_de_client: McpClient) -> None:
     """Walk to the door — target name 'tür' is sent as UTF-8 and matched
     against the game's CP-850 'Tür' label."""
-    state = monkey_de_client.state()
-    assert state["room"]["id"] == 55
+    assert_room(monkey_de_client.state(), 55)
+    (geh_zu,) = make_verbs(monkey_de_client, "geh zu")
 
-    result = monkey_de_client.act("geh zu", "tür")
-    assert result == {"position": {"y": 132, "x": 361}}
+    result = geh_zu("tür")
+    expected = {"position": {"x": 361, "y": 132}}
+    assert result == expected, f"unexpected walk-to-door position: {result}"
 
 
 def test_06_de_open_door_lowercase(monkey_de_client: McpClient) -> None:
@@ -175,47 +193,37 @@ def test_06_de_open_door_lowercase(monkey_de_client: McpClient) -> None:
     capitalised "Öffne" resolved fine. The fix folds Latin-1 uppercase letters
     too, so the lowercase form now resolves and the door opens (state 0 -> 1).
     """
-    state = monkey_de_client.state()
-    assert state["room"]["id"] == 55
+    assert_room(monkey_de_client.state(), 55)
+    (oeffne,) = make_verbs(monkey_de_client, "öffne")
 
-    door = next(o for o in state["objects"] if o["id"] == 422)
-    assert door["name"] == "tür"
+    door = object_by_id(monkey_de_client.state(), 422)
+    assert door["name"] == "tür", f"expected the door named 'tür', got {door}"
     assert door["state"] == 0, "door should start closed in a fresh demo"
 
     # Must not raise "unknown verb 'öffne'": the leading umlaut is folded so
     # the lowercase client verb matches the game's "Öffne" label.
-    result = monkey_de_client.act("öffne", "tür")
-    assert result["objects_changed"] == [
-        {"name": "tür", "old_state": 0, "new_state": 1}
-    ]
+    changed = oeffne("tür")["objects_changed"]
+    expected = [{"name": "tür", "old_state": 0, "new_state": 1}]
+    assert changed == expected, f"unexpected door change: {changed}"
 
 
 def test_07_de_close_door(monkey_de_client: McpClient) -> None:
     """Dispatch the 'schließe' verb (with ß) on the German door. This
     proves the inbound UTF-8 verb name resolves to the correct verb id."""
-    state = monkey_de_client.state()
-    assert state["room"]["id"] == 55
+    assert_room(monkey_de_client.state(), 55)
+    (schliesse,) = make_verbs(monkey_de_client, "schließe")
 
     # Open the door first so this test is self-contained (the closed door does
     # not advertise "schließe"; only an open one can be closed).
-    door = next(o for o in state["objects"] if o["id"] == 422)
-    if door["state"] == 0:
-        monkey_de_client.act("öffne", "tür")
-        state = monkey_de_client.state()
-        door = next(o for o in state["objects"] if o["id"] == 422)
-
-    # The German EGA demo door exposes "schließe" and "geh zu" as compatible
-    # verbs — confirm the listing and that the verb dispatches without an
-    # "unknown verb" error.
-    assert door["name"] == "tür"
-    assert "schließe" in door["compatible_verbs"]
+    door = _ensure_door_open(monkey_de_client)
+    assert door["name"] == "tür", f"expected the door named 'tür', got {door}"
+    assert "schließe" in door["compatible_verbs"], f"missing 'schließe': {door}"
 
     # Closing the open door is a real state change (1 -> 0) and proves the
     # eszett-bearing "Schließe" label resolves.
-    result = monkey_de_client.act("schließe", "tür")
-    assert result["objects_changed"] == [
-        {"name": "tür", "old_state": 1, "new_state": 0}
-    ]
+    changed = schliesse("tür")["objects_changed"]
+    expected = [{"name": "tür", "old_state": 1, "new_state": 0}]
+    assert changed == expected, f"unexpected door change: {changed}"
 
 
 # ---------------------------------------------------------------------------
@@ -226,25 +234,26 @@ def test_07_de_close_door(monkey_de_client: McpClient) -> None:
 def test_08_de_navigate_to_scumm_bar_dock(monkey_de_client: McpClient) -> None:
     """Walk from the troll clearing through the bar and kitchen onto the back
     dock, where the seagull guards the red herring (object 306)."""
-    state = monkey_de_client.state()
-    assert state["room"]["id"] == 55
+    assert_room(monkey_de_client.state(), 55)
+    oeffne, geh_zu = make_verbs(monkey_de_client, "öffne", "geh zu")
 
-    monkey_de_client.act("öffne", "tür")  # door starts closed in a fresh demo
-    result = monkey_de_client.act("geh zu", "tür")
+    oeffne("tür")  # door starts closed in a fresh demo
+    result = geh_zu("tür")
     assert result.get("room_changed") == 52, f"expected the SCUMM bar, got {result}"
 
-    monkey_de_client.act("öffne", 354)  # far door behind the bar
-    result = monkey_de_client.act("geh zu", 354)
+    oeffne(354)  # far door behind the bar
+    result = geh_zu(354)
     assert result.get("room_changed") == 51, f"expected the kitchen, got {result}"
 
-    monkey_de_client.act("öffne", 304)  # back door onto the dock
-    monkey_de_client.act("geh zu", 304)  # same room — it scrolls to the dock
+    oeffne(304)  # back door onto the dock
+    geh_zu(304)  # same room — it scrolls to the dock
 
-    objects = {o["id"]: o["name"] for o in monkey_de_client.state()["objects"]}
-    assert 306 in objects, f"red herring not in view, objects: {objects}"
     # The game pads the name with trailing '@' bytes ("roter Hering@@@@@...");
     # the MCP server must emit it padding-free.
-    assert objects[306] == "roter_hering", f"name not padding-free: {objects[306]!r}"
+    herring = object_by_id(monkey_de_client.state(), 306)
+    assert herring is not None, "red herring (306) not in view"
+    name = herring["name"]
+    assert name == "roter_hering", f"name not padding-free: {name!r}"
 
 
 def test_09_de_seagull_blocks_red_herring(monkey_de_client: McpClient) -> None:
@@ -254,14 +263,12 @@ def test_09_de_seagull_blocks_red_herring(monkey_de_client: McpClient) -> None:
     "roter_hering" against the game's '@'-padded label.
     """
     _navigate_to_dock(monkey_de_client)
+    (nimm,) = make_verbs(monkey_de_client, "nimm")
 
-    result = monkey_de_client.act("nimm", "roter_hering")
-    assert (
-        "roter_hering" not in monkey_de_client.state()["inventory"]
-    ), "grabbing the herring while the seagull guards it must fail"
-    assert result.get(
-        "messages"
-    ), f"expected Guybrush to comment on the seagull, got {result}"
+    result = nimm("roter_hering")
+    inventory = monkey_de_client.state()["inventory"]
+    assert "roter_hering" not in inventory, "grabbing the guarded herring must fail"
+    assert result.get("messages"), f"expected a seagull comment, got {result}"
 
 
 def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> None:
@@ -277,10 +284,9 @@ def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> No
     """
     client = monkey_de_client
     _navigate_to_dock(client)
-    for _ in range(3):
-        client.act("geh zu", 307)
-        sleep(1.5)  # let the plank-bounce script finish before the next step
-    client.act("nimm", "roter_hering")
-    assert (
-        "roter_hering" in client.state()["inventory"]
-    ), "red herring should be in inventory after 3 plank bounces + quick grab"
+    (nimm,) = make_verbs(client, "nimm")
+
+    _bounce_plank(client, 3)
+    nimm("roter_hering")
+    inventory = client.state()["inventory"]
+    assert "roter_hering" in inventory, "herring not in inventory after bounces"

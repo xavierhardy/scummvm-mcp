@@ -24,10 +24,25 @@ Regression focus:
 from time import sleep
 
 import pytest
-from utils import McpClient, find_object_by_name
+from assertions import (
+    assert_message_contains,
+    assert_no_message_contains,
+    assert_no_talkie_garbage,
+)
+from utils import (
+    McpClient,
+    choice_labels,
+    find_choice_id,
+    find_object_by_name,
+    joined_message_text,
+    message_texts,
+    object_names,
+    skip_unless,
+)
 
 SETTLE_SECS = 0.5
 OFFICE_ROOM = 7
+STREET_ROOM = 9
 
 
 def _office_state(client: McpClient) -> dict:
@@ -56,21 +71,24 @@ def _act_retry(client: McpClient, *args, attempts: int = 6):
     raise AssertionError(f"act{args} never accepted input: {last}")
 
 
-def _has_letters(text: str, n: int = 1) -> bool:
-    """True if *text* contains at least *n* ASCII letters."""
-    return sum(1 for c in text if c.isascii() and c.isalpha()) >= n
+def _lookable_objects(state: dict, limit: int = 4) -> list:
+    """Return up to *limit* non-pathway object names that advertise 'look at'."""
+    names = [
+        o["name"]
+        for o in state.get("objects", [])
+        if "look at" in o.get("compatible_verbs", []) and not o.get("pathway")
+    ]
+    return names[:limit]
 
 
-def _assert_no_garbage(messages: list) -> None:
-    """Every emitted message must be readable text, not a sound-code fragment.
-
-    The talkie prefix decodes (via the game code page) to a non-breaking space
-    (U+00A0) plus stray bytes. A clean line always carries real letters.
-    """
-    for m in messages:
-        t = m.get("text", "")
-        assert " " not in t, f"talkie-code garbage leaked into a message: {t!r}"
-        assert _has_letters(t), f"message has no readable letters: {t!r}"
+def _assert_clean_look_at(client: McpClient, names: list) -> None:
+    """look_at each name and assert no talkie-code garbage in the replies."""
+    for name in names:
+        try:
+            result = client.act("look_at", name)
+        except RuntimeError:
+            continue
+        assert_no_talkie_garbage(result.get("messages", []))
 
 
 def _open_max_conversation(client: McpClient) -> dict:
@@ -99,6 +117,20 @@ def _close_conversation(client: McpClient) -> None:
         sleep(0.8)
 
 
+def _has_goodbye(result: dict) -> bool:
+    """True if *result* carries one of Sam's conversation-ending goodbye lines."""
+    blob = joined_message_text(result).lower()
+    return "never mind" in blob or "that's all" in blob
+
+
+def _wait_dialog_closed(client: McpClient, tries: int = 6) -> None:
+    """Poll until no dialog question remains pending."""
+    for _ in range(tries):
+        if client.state().get("question") is None:
+            return
+        sleep(SETTLE_SECS)
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -107,46 +139,34 @@ def _close_conversation(client: McpClient) -> None:
 def test_01_samnmax_initial_state(samnmax_client: McpClient) -> None:
     """The save slot drops us straight into the office (room 7)."""
     state = _office_state(samnmax_client)
-    assert state.get("room") is not None
-    assert (
-        state["room"].get("id") == OFFICE_ROOM
-    ), f"Expected office room 7, got {state['room']}"
+    room = state.get("room")
+    assert room is not None, f"expected a room, got {state}"
+    assert room.get("id") == OFFICE_ROOM, f"Expected office room 7, got {room}"
 
 
 def test_02_samnmax_v6_verbs_exposed(samnmax_client: McpClient) -> None:
     """V6 icon actions must be translated to MCP verbs."""
-    state = _office_state(samnmax_client)
-    verbs = set(state.get("verbs", []))
+    verbs = set(_office_state(samnmax_client).get("verbs", []))
     expected = {"walk to", "look at", "use", "talk to", "pick up"}
     missing = expected - verbs
-    assert not missing, f"Missing expected V6 verbs: {missing}, got: {sorted(verbs)}"
+    sorted_verbs = sorted(verbs)
+    assert not missing, f"Missing expected V6 verbs: {missing}, got: {sorted_verbs}"
 
 
 def test_03_samnmax_max_available(samnmax_client: McpClient) -> None:
     """Max must be addressable as a scene actor named 'max'."""
     state = _office_state(samnmax_client)
-    assert (
-        find_object_by_name(state, "max") is not None
-    ), f"Max not found; objects={[o['name'] for o in state.get('objects', [])]}"
+    names = sorted(object_names(state))
+    max_obj = find_object_by_name(state, "max")
+    assert max_obj is not None, f"Max not found; objects={names}"
 
 
 def test_04_samnmax_messages_are_clean(samnmax_client: McpClient) -> None:
     """Interacting with office objects must never surface talkie-code garbage."""
     _office_state(samnmax_client)
-    state = samnmax_client.state()
-    targets = [
-        o["name"]
-        for o in state.get("objects", [])
-        if "look at" in o.get("compatible_verbs", []) and not o.get("pathway")
-    ][:4]
-    if not targets:
-        pytest.skip("No look-at objects in the office")
-    for name in targets:
-        try:
-            result = samnmax_client.act("look_at", name)
-        except RuntimeError:
-            continue
-        _assert_no_garbage(result.get("messages", []))
+    targets = _lookable_objects(samnmax_client.state())
+    skip_unless(bool(targets), "No look-at objects in the office")
+    _assert_clean_look_at(samnmax_client, targets)
 
 
 def test_05_samnmax_talk_to_max_opens_dialog(samnmax_client: McpClient) -> None:
@@ -158,13 +178,9 @@ def test_05_samnmax_talk_to_max_opens_dialog(samnmax_client: McpClient) -> None:
         assert len(choices) >= 4, f"expected the office topic icons, got: {choices}"
         # The icon objects map to semantic labels (?, !, golden duck, waving
         # hand) instead of opaque icon_<num> placeholders.
-        labels = [c.get("label") for c in choices]
-        assert labels == [
-            "question",
-            "exclamation",
-            "tease",
-            "bye",
-        ], f"expected semantic icon labels, got: {labels}"
+        labels = choice_labels(question)
+        expected = ["question", "exclamation", "tease", "bye"]
+        assert labels == expected, f"expected semantic icon labels, got: {labels}"
     finally:
         _close_conversation(samnmax_client)
 
@@ -177,15 +193,12 @@ def test_06_samnmax_dialog_topic_speaks_exact_lines(samnmax_client: McpClient) -
     and the icon `answer()` click reach the real conversation script.
     """
     question = _open_max_conversation(samnmax_client)
-    if question is None:
-        pytest.skip("conversation did not open in this build")
+    skip_unless(question is not None, "conversation did not open in this build")
     try:
         result = samnmax_client.answer(1)
-        texts = [m.get("text", "") for m in result.get("messages", [])]
-        _assert_no_garbage(result.get("messages", []))
-        blob = " ".join(texts)
-        assert "Are you as confused as I am?" in blob, f"got: {texts}"
-        assert "Moreso." in blob, f"got: {texts}"
+        assert_no_talkie_garbage(result.get("messages", []))
+        assert_message_contains(result, "Are you as confused as I am?")
+        assert_message_contains(result, "Moreso.")
     finally:
         _close_conversation(samnmax_client)
 
@@ -197,21 +210,15 @@ def test_07_samnmax_dialog_goodbye_closes(samnmax_client: McpClient) -> None:
     been discussed it becomes "Well, that's all." — either ends the dialog.
     """
     question = _open_max_conversation(samnmax_client)
-    if question is None:
-        pytest.skip("conversation did not open in this build")
+    skip_unless(question is not None, "conversation did not open in this build")
 
     # The 4th icon (the waving hand) is the goodbye topic.
     result = samnmax_client.answer(4)
-    texts = [m.get("text", "") for m in result.get("messages", [])]
-    assert any(
-        p in t.lower() for t in texts for p in ("never mind", "that's all")
-    ), f"expected a goodbye line, got: {texts}"
+    texts = message_texts(result)
+    assert _has_goodbye(result), f"expected a goodbye line, got: {texts}"
 
     # After the goodbye, no dialog must remain pending.
-    for _ in range(6):
-        if samnmax_client.state().get("question") is None:
-            break
-        sleep(0.5)
+    _wait_dialog_closed(samnmax_client)
     assert samnmax_client.state().get("question") is None, "conversation did not close"
 
 
@@ -226,34 +233,30 @@ def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -
     the first selection and selecting it must produce its spoken exchange.
     """
     question = _open_max_conversation(samnmax_client)
-    if question is None:
-        pytest.skip("conversation did not open in this build")
+    skip_unless(question is not None, "conversation did not open in this build")
     try:
         # The fresh menu shows the four base topics.
-        assert (
-            len(question["choices"]) == 4
-        ), f"expected 4 base topics, got: {question['choices']}"
+        base_choices = question["choices"]
+        assert len(base_choices) == 4, f"expected 4 base topics, got: {base_choices}"
 
         # The first selection reveals the fifth topic icon.
         result = samnmax_client.answer(2)
-        _assert_no_garbage(result.get("messages", []))
+        assert_no_talkie_garbage(result.get("messages", []))
         follow_up = result.get("question") or samnmax_client.state().get("question")
         assert follow_up is not None, "conversation closed unexpectedly"
-        labels = [c.get("label") for c in follow_up["choices"]]
-        assert (
-            len(labels) == 5
-        ), f"the fifth topic should appear after a selection, got: {labels}"
+        labels = choice_labels(follow_up)
+        assert len(labels) == 5, f"fifth topic should appear: {labels}"
         assert len(set(labels)) == 5, f"duplicate choice in: {labels}"
         # The revealed icon is the Max head (object 1067) — labelled "max".
         assert "max" in labels, f"expected the 'max' topic icon, got: {labels}"
 
         # Selecting the Max topic must reach the real script, not click a blank.
-        max_id = next(c["id"] for c in follow_up["choices"] if c["label"] == "max")
+        max_id = find_choice_id(follow_up, "max")
         result = samnmax_client.answer(max_id)
-        texts = [m.get("text", "") for m in result.get("messages", [])]
-        _assert_no_garbage(result.get("messages", []))
+        texts = message_texts(result)
+        assert_no_talkie_garbage(result.get("messages", []))
         assert texts, "selecting the fifth topic produced no spoken line (click missed)"
-        assert "coffee achiever" in " ".join(texts).lower(), f"got: {texts}"
+        assert_message_contains(result, "coffee achiever")
     finally:
         _close_conversation(samnmax_client)
 
@@ -261,8 +264,6 @@ def test_08_samnmax_fifth_topic_appears_and_selects(samnmax_client: McpClient) -
 # ---------------------------------------------------------------------------
 # Street scene (room 9): icon-verb mapping, phantom objects, vehicle cutscene
 # ---------------------------------------------------------------------------
-
-STREET_ROOM = 9
 
 
 def _room_id(state: dict):
@@ -277,8 +278,13 @@ def _wait_room(client: McpClient, target: int, tries: int = 30) -> bool:
     return False
 
 
-def _act_texts(result: dict) -> str:
-    return " ".join(m.get("text", "") for m in (result or {}).get("messages", []))
+def _wait_leave_room(client: McpClient, room: int, tries: int = 30) -> bool:
+    """Poll until the client is no longer in *room*; return True if it left."""
+    for _ in range(tries):
+        if _room_id(client.state()) != room:
+            return True
+        sleep(SETTLE_SECS)
+    return False
 
 
 def _goto_street(client: McpClient) -> bool:
@@ -329,14 +335,13 @@ def test_09_samnmax_look_and_pick_up_not_reversed(samnmax_client: McpClient) -> 
     """
     _office_state(samnmax_client)
     look_result = _act_retry(samnmax_client, "look_at", "roach_farm")
-    _assert_no_garbage(look_result.get("messages", []))
-    look = _act_texts(look_result)
-    assert "roach farm" in look.lower(), f"look_at should examine, got: {look!r}"
-    assert "pick" not in look.lower(), f"look_at ran the pick-up action: {look!r}"
+    assert_no_talkie_garbage(look_result.get("messages", []))
+    assert_message_contains(look_result, "roach farm")
+    assert_no_message_contains(look_result, "pick")
 
-    pick = _act_texts(_act_retry(samnmax_client, "pick_up", "roach_farm"))
-    assert "pick" in pick.lower(), f"pick_up should try to take it, got: {pick!r}"
-    assert "roach farm" not in pick.lower(), f"pick_up ran the look action: {pick!r}"
+    pick_result = _act_retry(samnmax_client, "pick_up", "roach_farm")
+    assert_message_contains(pick_result, "pick")
+    assert_no_message_contains(pick_result, "roach farm")
 
 
 def test_10_samnmax_no_phantom_carnival_ticket(samnmax_client: McpClient) -> None:
@@ -346,12 +351,14 @@ def test_10_samnmax_no_phantom_carnival_ticket(samnmax_client: McpClient) -> Non
     later places it, so the player can never click it. It used to leak into the
     object list as a phantom, pickable target.
     """
-    if not _goto_street(samnmax_client):
-        pytest.skip("could not reach the street scene (room 9)")
-    names = [o.get("name") for o in samnmax_client.state().get("objects", [])]
-    assert "carnival_tickets" not in names, f"phantom ticket still listed: {names}"
+    skip_unless(
+        _goto_street(samnmax_client), "could not reach the street scene (room 9)"
+    )
+    names = object_names(samnmax_client.state())
+    sorted_names = sorted(names)
+    assert "carnival_tickets" not in names, f"phantom ticket listed: {sorted_names}"
     # The real, placed scenery is still there.
-    assert "beat_up_desoto" in names, f"the DeSoto should be listed: {names}"
+    assert "beat_up_desoto" in names, f"the DeSoto should be listed: {sorted_names}"
 
 
 @pytest.mark.slow
@@ -363,14 +370,11 @@ def test_11_samnmax_use_desoto_triggers_cutscene(samnmax_client: McpClient) -> N
     context cursor; the bridge now cycles the cursor there and clicks, leaving the
     street (room 9) for the driving cutscene.
     """
-    if not _goto_street(samnmax_client):
-        pytest.skip("could not reach the street scene (room 9)")
-    assert _room_id(samnmax_client.state()) == STREET_ROOM
+    skip_unless(
+        _goto_street(samnmax_client), "could not reach the street scene (room 9)"
+    )
+    room_id = _room_id(samnmax_client.state())
+    assert room_id == STREET_ROOM, "expected to be on the street"
     _act_retry(samnmax_client, "use", "beat_up_desoto")
-    left_street = False
-    for _ in range(30):
-        if _room_id(samnmax_client.state()) != STREET_ROOM:
-            left_street = True
-            break
-        sleep(SETTLE_SECS)
-    assert left_street, "using the DeSoto did not trigger the drive-away cutscene"
+    left = _wait_leave_room(samnmax_client, STREET_ROOM)
+    assert left, "using the DeSoto did not trigger the drive-away cutscene"

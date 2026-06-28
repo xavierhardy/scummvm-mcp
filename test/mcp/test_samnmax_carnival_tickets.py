@@ -17,32 +17,88 @@ interactions.
 from time import sleep
 
 import pytest
-from utils import McpClient, find_object_by_name
+from assertions import assert_no_talkie_garbage
+from utils import (
+    McpClient,
+    choice_labels,
+    find_choice_id,
+    find_object_by_name,
+    joined_message_text,
+    make_verbs,
+    message_texts,
+)
 
 SETTLE_SECS = 0.5
 STREET_ROOM = 9
 
 
-def _assert_no_garbage(messages: list) -> None:
-    """Every emitted message must be readable text, not a sound-code fragment.
-
-    The talkie prefix decodes (via the game code page) to a non-breaking space
-    (U+00A0) plus stray bytes. A clean line always carries real letters.
-    """
-    for m in messages:
-        t = m.get("text", "")
-        assert "\u00a0" not in t, f"talkie-code garbage leaked into a message: {t!r}"
-        alpha_count = sum(1 for c in t if c.isascii() and c.isalpha())
-        assert alpha_count >= 1, f"message has no readable letters: {t!r}"
+def _wait_street_with_inventory(client: McpClient, tries: int = 10) -> dict:
+    """Poll until the street room is loaded with a populated inventory."""
+    for _ in range(tries):
+        state = client.state()
+        if state.get("room", {}).get("id") == STREET_ROOM and state.get("inventory"):
+            return state
+        sleep(SETTLE_SECS)
+    return client.state()
 
 
-def _question_choice_id(question: dict, label: str) -> int:
-    """Return the choice id whose label matches *label*, else the first choice."""
-    choices = question.get("choices", [])
-    for c in choices:
-        if c.get("label") == label:
-            return c["id"]
-    return choices[0]["id"]
+def _open_kitten_dialog(client: McpClient, actor, tries: int = 10) -> dict | None:
+    """Talk to the kitten until its topic dialog opens; return the question."""
+    for _ in range(tries):
+        result = client.act("talk_to", actor)
+        question = result.get("question") or client.state().get("question")
+        if question:
+            return question
+        sleep(SETTLE_SECS)
+    return None
+
+
+def _wait_dialog_closed(client: McpClient, tries: int = 10) -> None:
+    """Poll until no dialog question remains pending."""
+    for _ in range(tries):
+        if client.state().get("question") is None:
+            return
+        sleep(SETTLE_SECS)
+
+
+def _wait_inventory_has(client: McpClient, item: str, tries: int = 20) -> list:
+    """Poll the live inventory until it contains *item*; return the inventory."""
+    inventory = client.state().get("inventory", [])
+    for _ in range(tries):
+        if item in inventory:
+            return inventory
+        sleep(SETTLE_SECS)
+        inventory = client.state().get("inventory", [])
+    return inventory
+
+
+def _admits_swallowing(result: dict) -> bool:
+    """True if the kitten admits swallowing the Commissioner's orders."""
+    blob = joined_message_text(result).lower()
+    return "commissioner" in blob or "swallowed" in blob
+
+
+def _mentions_reaction(result: dict) -> bool:
+    """True if Sam/Max react to shaking the kitten (any of several lines)."""
+    blob = joined_message_text(result).lower()
+    phrases = ("gives me an idea", "carnival", "inside-out", "inside out", "this guy")
+    return any(p in blob for p in phrases)
+
+
+def _carnival_change(objects_changed: list) -> dict | None:
+    """Return the carnival_tickets object-change record, if present."""
+    for oc in objects_changed:
+        if "carnival" in oc.get("name", "").lower():
+            return oc
+    return None
+
+
+def _assert_carnival_state_flip(change: dict | None) -> None:
+    """If the carnival_tickets object change is present, it must flip 0 -> 1."""
+    if change is None:
+        return
+    assert change["old_state"] == 0, f"carnival_tickets old_state should be 0: {change}"
+    assert change["new_state"] == 1, f"carnival_tickets new_state should be 1: {change}"
 
 
 @pytest.mark.slow
@@ -58,103 +114,52 @@ def test_samnmax_s02_cat_courier_gives_carnival_tickets(
     client = samnmax_street_client
 
     # Verify we're in the street room with Max available in inventory.
-    for _ in range(10):
-        state = client.state()
-        if state.get("room", {}).get("id") == STREET_ROOM and state.get("inventory"):
-            break
-        sleep(SETTLE_SECS)
-
-    state = client.state()
-    assert (
-        state["room"]["id"] == STREET_ROOM
-    ), f"Expected street room 9, got {state['room']}"
-    assert "max_the_object" in state.get(
-        "inventory", []
-    ), f"Max must be in inventory for the two-target action, got: {state.get('inventory')}"
+    state = _wait_street_with_inventory(client)
+    room = state["room"]
+    inventory = state.get("inventory", [])
+    assert room["id"] == STREET_ROOM, f"Expected street room 9, got {room}"
+    assert "max_the_object" in inventory, f"Max must be in inventory, got: {inventory}"
 
     # Find actor_4 (the kitten / cat courier on the left).
     actor_4 = find_object_by_name(state, "actor_4")
     assert actor_4 is not None, "actor_4 (kitten) not found in objects"
 
     # Step 1: talk to the kitten to open its topic dialog.
-    question = None
-    for _ in range(10):
-        result = client.act("talk_to", actor_4)
-        question = result.get("question") or client.state().get("question")
-        if question:
-            break
-        sleep(SETTLE_SECS)
+    question = _open_kitten_dialog(client, actor_4)
     assert question is not None, "talking to the kitten should open its topic dialog"
-    labels = [c.get("label") for c in question.get("choices", [])]
+    labels = choice_labels(question)
     assert "question" in labels, f"expected a 'question' topic, got: {labels}"
 
     # Step 2: ask the "question" topic — the kitten admits swallowing the orders.
-    qid = _question_choice_id(question, "question")
+    qid = find_choice_id(question, "question")
     ask_result = client.answer(qid)
-    ask_messages = ask_result.get("messages", [])
-    _assert_no_garbage(ask_messages)
-    ask_blob = " ".join(m.get("text", "") for m in ask_messages).lower()
-    assert "commissioner" in ask_blob or "swallowed" in ask_blob, (
-        f"expected the kitten to admit swallowing the Commissioner's orders, got: "
-        f"{[m.get('text') for m in ask_messages]}"
-    )
+    assert_no_talkie_garbage(ask_result.get("messages", []))
+    ask_texts = message_texts(ask_result)
+    assert _admits_swallowing(ask_result), f"no admission: {ask_texts}"
 
     # The dialog should have closed before the next action.
-    for _ in range(10):
-        if client.state().get("question") is None:
-            break
-        sleep(SETTLE_SECS)
+    _wait_dialog_closed(client)
 
     # Step 3: use Max on the kitten to retrieve the swallowed carnival tickets.
-    result = client.act("use", "max", actor_4)
-
+    (use,) = make_verbs(client, "use")
+    result = use("max", actor_4)
     messages = result.get("messages", [])
-    _assert_no_garbage(messages)
-    texts = [m.get("text", "") for m in messages]
-    combined = " ".join(texts).lower()
-    assert (
-        len(texts) > 0
-    ), "Expected dialog messages from using Max on the kitten, got none"
+    assert_no_talkie_garbage(messages)
+    texts = message_texts(result)
+    assert texts, "Expected dialog messages from using Max on the kitten, got none"
     # The interaction produces Sam/Max's reaction lines, e.g.
-    # "Ooh, that gives me an idea!" / "...something bizarre is happening at the carnival."
-    assert (
-        "gives me an idea" in combined
-        or "carnival" in combined
-        or "inside-out" in combined
-        or "inside out" in combined
-        or "this guy" in combined
-    ), f"Expected Sam & Max's reaction about the kitten, got: {texts}"
+    # "Ooh, that gives me an idea!" / "...bizarre is happening at the carnival."
+    assert _mentions_reaction(result), f"Expected Sam & Max's reaction, got: {texts}"
 
     # Verify the inventory now contains carnival_tickets. The inventory_added in
     # the result may lag, so also poll the live state.
     inventory_added = result.get("inventory_added", [])
-    current_inventory = client.state().get("inventory", [])
-    for _ in range(20):
-        if (
-            "carnival_tickets" in inventory_added
-            or "carnival_tickets" in current_inventory
-        ):
-            break
-        sleep(SETTLE_SECS)
-        current_inventory = client.state().get("inventory", [])
-
-    assert (
+    current_inventory = _wait_inventory_has(client, "carnival_tickets")
+    acquired = (
         "carnival_tickets" in inventory_added or "carnival_tickets" in current_inventory
-    ), (
-        f"carnival_tickets not acquired; inventory_added={inventory_added}, "
-        f"current={current_inventory}"
     )
+    assert acquired, f"no tickets; added={inventory_added} cur={current_inventory}"
 
     # Verify the carnival_tickets object state changed from 0 to 1.
     objects_changed = result.get("objects_changed", [])
-    carnival_obj_change = next(
-        (oc for oc in objects_changed if "carnival" in oc.get("name", "").lower()),
-        None,
-    )
-    if carnival_obj_change:
-        assert (
-            carnival_obj_change["old_state"] == 0
-        ), f"carnival_tickets old_state should be 0, got {carnival_obj_change}"
-        assert (
-            carnival_obj_change["new_state"] == 1
-        ), f"carnival_tickets new_state should be 1, got {carnival_obj_change}"
+    _assert_carnival_state_flip(_carnival_change(objects_changed))

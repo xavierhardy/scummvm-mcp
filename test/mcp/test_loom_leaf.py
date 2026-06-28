@@ -8,16 +8,40 @@ with the distaff tests in test_loom.py (pytest-xdist --dist=loadgroup).
 from time import sleep
 
 import pytest
+from assertions import assert_messages_contain
 from utils import (
+    McpClient,
+    find_id,
     get_state_with_retry,
-    wait_for_interactive,
+    object_names,
+    require_interactive,
+    skip_unless,
 )
 
 
-def _find_id(state: dict, name: str) -> int | None:
-    for obj in state.get("objects", []):
-        if obj["name"] == name:
-            return obj["id"]
+def _drive_pathway(
+    client: McpClient, pathway: str, initial_room: int, attempts: int = 6
+) -> int | None:
+    """Interact with *pathway* until the room changes; return the new room or None.
+
+    The pathway requires multiple steps because Bobbin's walk is interrupted at
+    intermediate stand points, so retry up to *attempts* times.
+    """
+    for _ in range(attempts):
+        cur = get_state_with_retry(client)
+        if cur["room"]["id"] != initial_room:
+            return cur["room"]["id"]
+        try:
+            result = client.act("interact", pathway)
+        except RuntimeError:
+            sleep(1)
+            continue
+        if result.get("room_changed"):
+            return result["room_changed"]
+        sleep(1)
+    cur = get_state_with_retry(client)
+    if cur["room"]["id"] != initial_room:
+        return cur["room"]["id"]
     return None
 
 
@@ -26,7 +50,7 @@ def _find_id(state: dict, name: str) -> int | None:
 # ---------------------------------------------------------------------------
 
 
-def test_08_loom_leaf_fall(loom_leaf_client) -> None:
+def test_08_loom_leaf_fall(loom_leaf_client: McpClient) -> None:
     """Interacting with the `leaf` in room 36 makes Bobbin say his line
     and the leaf disappears from the room (state change).
 
@@ -35,82 +59,48 @@ def test_08_loom_leaf_fall(loom_leaf_client) -> None:
     runs Bobbin's walk-arrival script, which prints the actor line and
     removes the leaf from the room.
     """
-    if not wait_for_interactive(loom_leaf_client):
-        pytest.skip("Save did not reach interactive state")
+    require_interactive(loom_leaf_client, "Save did not reach interactive state")
 
     state = get_state_with_retry(loom_leaf_client)
-    assert state["room"]["id"] == 36, f"Expected room 36, got {state['room']}"
-    leaf = _find_id(state, "leaf")
+    room = state["room"]
+    assert room["id"] == 36, f"Expected room 36, got {room}"
+    leaf = find_id(state, "leaf")
     assert leaf is not None, "Expected `leaf` object in room 36"
 
     notes, messages, result = loom_leaf_client.call_capturing(
         "act", {"verb": "interact", "target1": leaf}
     )
-
-    texts = [m.get("text") for m in messages]
-    assert (
-        "Last leaf of the year." in texts
-    ), f"Expected Bobbin's leaf line, got messages: {messages}"
+    assert_messages_contain(messages, "Last leaf of the year.")
 
     # Wait for the falling animation to complete and the leaf to be removed.
     sleep(2)
-    new_state = get_state_with_retry(loom_leaf_client)
-    names_after = [o["name"] for o in new_state.get("objects", [])]
-    assert (
-        "leaf" not in names_after
-    ), f"leaf should have fallen and left the room object list, got: {names_after}"
+    names_after = sorted(object_names(get_state_with_retry(loom_leaf_client)))
+    assert "leaf" not in names_after, f"leaf should have fallen, got: {names_after}"
 
 
-def test_09_loom_pathway_named(loom_leaf_client) -> None:
+def test_09_loom_pathway_named(loom_leaf_client: McpClient) -> None:
     """Loom/PASS exclusive: pathway objects with no OBNA name are renamed
     `pathway_<id>` in the MCP state, so the agent can target them by name.
     """
     state = get_state_with_retry(loom_leaf_client)
-    names = {o["name"]: o["id"] for o in state.get("objects", [])}
-    assert (
-        "pathway_460" in names
-    ), f"Expected `pathway_460` (renamed from unnamed obj 460) in room 36, got: {list(names)}"
-    assert (
-        names["pathway_460"] == 460
-    ), f"`pathway_460` should map to object id 460, got: {names['pathway_460']}"
+    sorted_names = sorted(object_names(state))
+    pathway_id = find_id(state, "pathway_460")
+    assert "pathway_460" in sorted_names, f"pathway_460 missing: {sorted_names}"
+    assert pathway_id == 460, f"`pathway_460` should map to id 460, got: {pathway_id}"
 
 
 @pytest.mark.slow
-def test_10_loom_pathway_room_change(loom_leaf_client) -> None:
+def test_10_loom_pathway_room_change(loom_leaf_client: McpClient) -> None:
     """Repeated interacts with `pathway_460` walk Bobbin all the way left
-    and trigger a room change from room 36 to room 39. The pathway
-    requires multiple steps because Bobbin's walk is interrupted at
-    intermediate stand points.
+    and trigger a room change from room 36 to room 39.
     """
-    if not wait_for_interactive(loom_leaf_client):
-        pytest.skip("Save did not reach interactive state")
+    require_interactive(loom_leaf_client, "Save did not reach interactive state")
 
     state = get_state_with_retry(loom_leaf_client)
-    if not any(o["name"] == "pathway_460" for o in state.get("objects", [])):
-        pytest.skip("pathway_460 not present in current room")
+    skip_unless(
+        "pathway_460" in object_names(state), "pathway_460 not present in current room"
+    )
 
     initial_room = state["room"]["id"]
-    changed_to: int | None = None
-    for _ in range(6):
-        cur = get_state_with_retry(loom_leaf_client)
-        if cur["room"]["id"] != initial_room:
-            changed_to = cur["room"]["id"]
-            break
-        try:
-            result = loom_leaf_client.act("interact", "pathway_460")
-        except RuntimeError:
-            sleep(1)
-            continue
-        if result.get("room_changed"):
-            changed_to = result["room_changed"]
-            break
-        sleep(1)
-
-    if changed_to is None:
-        cur = get_state_with_retry(loom_leaf_client)
-        if cur["room"]["id"] != initial_room:
-            changed_to = cur["room"]["id"]
-
-    assert (
-        changed_to == 39
-    ), f"Expected pathway to lead to room 39, got room {changed_to} from {initial_room}"
+    changed_to = _drive_pathway(loom_leaf_client, "pathway_460", initial_room)
+    assert changed_to == 39, f"expected room 39, got {changed_to} from {initial_room}"

@@ -13,7 +13,28 @@ from __future__ import annotations
 from time import sleep
 
 import pytest
-from utils import McpClient, _state_or_skip, _wait_until
+from utils import (
+    McpClient,
+    _state_or_skip,
+    _wait_until,
+    choice_labels,
+    find_choice_id_containing,
+    make_verbs,
+    object_names,
+    wait_until_or_skip,
+)
+
+
+def _open_destination_dialog(client: McpClient) -> dict | None:
+    """Open the clipper's travel destination dialog and return its question."""
+    question = client.state().get("question")
+    if question is None:
+        if (client.state().get("room") or {}).get("id") != 24:
+            pytest.skip("not in clipper room")
+        client.act("travel")
+        _wait_until(lambda: client.state().get("question") is not None, timeout=10.0)
+        question = client.state().get("question")
+    return question
 
 
 def _ensure_henrys_house(client: McpClient) -> dict:
@@ -24,20 +45,12 @@ def _ensure_henrys_house(client: McpClient) -> dict:
     Skips if Henry's house can't be reached.
     """
     state = _state_or_skip(client)
-    room = state.get("room", {}).get("id")
+    room = (state.get("room") or {}).get("id")
     if room == 24:  # in the clipper — drive the travel flow to Henry's house
-        if client.state().get("question") is None:
-            client.act("travel")
-            _wait_until(
-                lambda: client.state().get("question") is not None, timeout=10.0
-            )
-        question = client.state().get("question")
+        question = _open_destination_dialog(client)
         if question is None:
             pytest.skip("destination dialog did not appear")
-        henry_id = next(
-            (c["id"] for c in question["choices"] if "henry" in c["label"].lower()),
-            None,
-        )
+        henry_id = find_choice_id_containing(question, "henry")
         if henry_id is None:
             pytest.skip("no 'Henry' destination offered")
         client.answer(henry_id)
@@ -46,10 +59,31 @@ def _ensure_henrys_house(client: McpClient) -> dict:
             timeout=15.0,
         )
         state = _state_or_skip(client)
-        room = state.get("room", {}).get("id")
+        room = (state.get("room") or {}).get("id")
     if room is None or room == 24:
         pytest.skip("could not reach Henry's house")
     return state
+
+
+def _act_error_when_settled(
+    client: McpClient, verb: str, target: str, attempts: int = 20
+) -> str:
+    """Retry act(verb, target) past 'not accepting input'; return the error text.
+
+    Raises AssertionError if the action unexpectedly succeeds on a hidden target.
+    """
+    last = ""
+    for _ in range(attempts):
+        try:
+            client.act(verb, target)
+            raise AssertionError(f"acting on hidden {target!r} unexpectedly succeeded")
+        except RuntimeError as e:
+            last = str(e)
+            if "not accepting input" in last:
+                sleep(1.0)
+                continue
+            break
+    return last
 
 
 # ---------------------------------------------------------------------------
@@ -58,61 +92,38 @@ def _ensure_henrys_house(client: McpClient) -> dict:
 
 
 def test_10_indy3_travel_initial_state(indy3_travel_client: McpClient) -> None:
-    """Save slot 4 loads the airplane scene (room 24) with 'travel' on the verb bar."""
-    if not _wait_until(lambda: indy3_travel_client.state().get("room") is not None):
-        pytest.skip("save did not reach interactive state")
+    """Save slot 4 loads the airplane scene (room 24) with 'travel' on the bar."""
+    wait_until_or_skip(
+        lambda: indy3_travel_client.state().get("room") is not None,
+        "save did not reach interactive state",
+    )
 
     state = _state_or_skip(indy3_travel_client)
-    assert state["room"]["id"] == 24, f"expected room 24 (clipper), got {state['room']}"
+    room = state["room"]
+    assert room["id"] == 24, f"expected room 24 (clipper), got {room}"
     verbs = set(state.get("verbs", []))
-    assert "travel" in verbs, f"expected 'travel' verb, got: {sorted(verbs)}"
+    sorted_verbs = sorted(verbs)
+    assert "travel" in verbs, f"expected 'travel' verb, got: {sorted_verbs}"
 
 
 def test_11_indy3_travel_opens_destination_dialog(
     indy3_travel_client: McpClient,
 ) -> None:
     """`act('travel')` opens the destination dialog (To Henry's House / Cancel)."""
-    state = _state_or_skip(indy3_travel_client)
-    if state.get("question") is not None:
-        # Already in a dialog from an earlier test — nothing to assert here.
-        return
-    if state.get("room", {}).get("id") != 24:
-        pytest.skip("not in clipper room")
-
-    result = indy3_travel_client.act("travel")
-    question = result.get("question") or _state_or_skip(indy3_travel_client).get(
-        "question"
-    )
-    assert question is not None, f"expected destination dialog, got result={result}"
-    labels = [c["label"].lower() for c in question.get("choices", [])]
-    assert any("henry" in l for l in labels), f"expected 'Henry' choice, got {labels}"
-    assert any("cancel" in l for l in labels), f"expected 'Cancel' choice, got {labels}"
+    question = _open_destination_dialog(indy3_travel_client)
+    assert question is not None, "expected the destination dialog"
+    labels = choice_labels(question)
+    henry_id = find_choice_id_containing(question, "henry")
+    cancel_id = find_choice_id_containing(question, "cancel")
+    assert henry_id is not None, f"expected a 'Henry' choice, got {labels}"
+    assert cancel_id is not None, f"expected a 'Cancel' choice, got {labels}"
 
 
 def test_12_indy3_travel_to_henrys_house(indy3_travel_client: McpClient) -> None:
     """Choosing 'To Henry's House' transports Indy to the new room."""
-    state = _state_or_skip(indy3_travel_client)
-    if state.get("question") is None:
-        if state.get("room", {}).get("id") != 24:
-            pytest.skip("not in clipper, can't restart travel flow")
-        indy3_travel_client.act("travel")
-        if not _wait_until(
-            lambda: indy3_travel_client.state().get("question") is not None,
-            timeout=10.0,
-        ):
-            pytest.skip("destination dialog did not appear")
-
-    state = _state_or_skip(indy3_travel_client)
-    question = state.get("question")
-    assert (
-        question is not None
-    ), f"expected the travel destination dialog to be pending, got state: {state}"
-
-    henry_id = None
-    for choice in question["choices"]:
-        if "henry" in choice["label"].lower():
-            henry_id = choice["id"]
-            break
+    question = _open_destination_dialog(indy3_travel_client)
+    assert question is not None, "expected the travel destination dialog to be pending"
+    henry_id = find_choice_id_containing(question, "henry")
     assert henry_id is not None, f"no Henry choice in {question}"
 
     result = indy3_travel_client.answer(henry_id)
@@ -121,17 +132,13 @@ def test_12_indy3_travel_to_henrys_house(indy3_travel_client: McpClient) -> None
     assert new_room != 24, "expected to leave the clipper"
 
     state = _state_or_skip(indy3_travel_client)
-    assert (
-        state["room"]["id"] == new_room
-    ), f"state room ({state['room']['id']}) should match the room_changed value ({new_room})"
+    room_id = state["room"]["id"]
+    assert room_id == new_room, f"state room {room_id} != room_changed {new_room}"
     # Henry's House contains study furniture; verify a couple of those names appear.
-    object_names = {o["name"] for o in state.get("objects", [])}
-    assert object_names & {
-        "typewriter",
-        "desk",
-        "bookcase",
-        "refrigerator",
-    }, f"new room doesn't look like Henry's House: {sorted(object_names)}"
+    names = object_names(state)
+    sorted_names = sorted(names)
+    furniture = {"typewriter", "desk", "bookcase", "refrigerator"}
+    assert names & furniture, f"not Henry's House: {sorted_names}"
 
 
 def test_13_indy3_hidden_objects_not_selectable(
@@ -145,8 +152,9 @@ def test_13_indy3_hidden_objects_not_selectable(
     bridge must mirror that. Self-contained: travels to Henry's house first.
     """
     state = _ensure_henrys_house(indy3_travel_client)
+    pick_up, pull = make_verbs(indy3_travel_client, "pick up", "pull")
 
-    names = {o["name"] for o in state.get("objects", [])}
+    names = object_names(state)
     hidden = {"old_book", "sticky_tape", "chest"}
     assert hidden.isdisjoint(
         names
@@ -154,27 +162,16 @@ def test_13_indy3_hidden_objects_not_selectable(
 
     # The room may still be settling after the travel cutscene; retry while
     # the engine reports input locked, then assert the hidden target fails.
-    last = ""
-    for _ in range(20):
-        try:
-            indy3_travel_client.act("look", "old_book")
-            raise AssertionError("acting on hidden 'old_book' unexpectedly succeeded")
-        except RuntimeError as e:
-            last = str(e)
-            if "not accepting input" in last:
-                sleep(1.0)
-                continue
-            break
+    last = _act_error_when_settled(indy3_travel_client, "look", "old_book")
     assert "unknown target1" in last, f"unexpected error: {last}"
 
     # Reveal chain: move the plant off the cloth, pull the cloth — the chest
     # becomes selectable. The chest is locked, so the book inside stays hidden.
-    indy3_travel_client.act("pick up", "plant")
+    pick_up("plant")
     sleep(1)
-    indy3_travel_client.act("pull", "table_cloth")
+    pull("table_cloth")
     sleep(1)
-    names = {o["name"] for o in indy3_travel_client.state().get("objects", [])}
-    assert (
-        "chest" in names
-    ), f"chest not revealed after pulling the cloth: {sorted(names)}"
+    names = object_names(indy3_travel_client.state())
+    sorted_names = sorted(names)
+    assert "chest" in names, f"chest not revealed: {sorted_names}"
     assert "old_book" not in names, "book inside the locked chest must stay hidden"

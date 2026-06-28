@@ -10,7 +10,7 @@ only performed if the gaff is not already in inventory), so the tests do not
 depend on each other's ordering.
 """
 
-from utils import McpClient
+from utils import McpClient, make_verbs, object_names
 
 
 def _ensure_gaff(client: McpClient) -> None:
@@ -19,49 +19,32 @@ def _ensure_gaff(client: McpClient) -> None:
     Keeps the gaff-fishing test self-contained: it works whether or not the
     combine test has already run on the shared session fixture.
     """
-    if "gaff" in client.state().get("inventory", []):
-        return
-    client.act("use", "ramrod", "plastic_hook")
+    if "gaff" not in client.state().get("inventory", []):
+        client.act("use", "ramrod", "plastic_hook")
 
 
-def test_08a_comi_s3_use_combines_inventory_items(
-    comi_s3_client: McpClient,
-) -> None:
+def test_08a_comi_s3_use_combines_inventory_items(comi_s3_client: McpClient) -> None:
     """Save slot 3: 'use ramrod with plastic_hook' must combine them into a gaff.
 
     Both source items must be removed from inventory and the new 'gaff' must
     be added — all in a single act() invocation.
     """
-    state = comi_s3_client.state()
-    inv = state.get("inventory", [])
-    assert "ramrod" in inv, f"setup: 'ramrod' should start in inventory, got: {inv}"
-    assert (
-        "plastic_hook" in inv
-    ), f"setup: 'plastic_hook' should start in inventory, got: {inv}"
-    assert (
-        "gaff" not in inv
-    ), f"setup: 'gaff' should not exist before combining, got: {inv}"
+    (use,) = make_verbs(comi_s3_client, "use")
+    inv = comi_s3_client.state().get("inventory", [])
+    assert "ramrod" in inv, f"setup: 'ramrod' should start in inventory: {inv}"
+    assert "plastic_hook" in inv, f"setup: 'plastic_hook' should start in: {inv}"
+    assert "gaff" not in inv, f"setup: 'gaff' present before combine: {inv}"
 
-    result = comi_s3_client.act("use", "ramrod", "plastic_hook")
-    assert sorted(result.get("inventory_added", [])) == ["gaff"], (
-        f"combining ramrod+plastic_hook should add exactly 'gaff', "
-        f"got inventory_added={result.get('inventory_added')}"
-    )
-    assert sorted(result.get("inventory_removed", [])) == ["plastic_hook", "ramrod"], (
-        f"combining should consume both source items, "
-        f"got inventory_removed={result.get('inventory_removed')}"
-    )
+    result = use("ramrod", "plastic_hook")
+    added = sorted(result.get("inventory_added", []))
+    removed = sorted(result.get("inventory_removed", []))
+    assert added == ["gaff"], f"combining should add exactly 'gaff', got {added}"
+    assert removed == ["plastic_hook", "ramrod"], f"should consume both: {removed}"
 
     after = comi_s3_client.state().get("inventory", [])
-    assert (
-        "gaff" in after
-    ), f"'gaff' should be in inventory after combining, got: {after}"
-    assert (
-        "ramrod" not in after
-    ), f"'ramrod' should be consumed by the combine, got: {after}"
-    assert (
-        "plastic_hook" not in after
-    ), f"'plastic_hook' should be consumed by the combine, got: {after}"
+    assert "gaff" in after, f"'gaff' missing after combine: {after}"
+    assert "ramrod" not in after, f"'ramrod' not consumed: {after}"
+    assert "plastic_hook" not in after, f"'plastic_hook' not consumed: {after}"
 
 
 def test_08b_comi_s3_use_gaff_on_debris(comi_s3_client: McpClient) -> None:
@@ -72,30 +55,22 @@ def test_08b_comi_s3_use_gaff_on_debris(comi_s3_client: McpClient) -> None:
     so it does not depend on test_08a running first.
     """
     _ensure_gaff(comi_s3_client)
+    (use,) = make_verbs(comi_s3_client, "use")
 
     state = comi_s3_client.state()
     inv = state.get("inventory", [])
-    room_names = {obj["name"] for obj in state.get("objects", [])}
-    assert (
-        "gaff" in inv
-    ), f"setup: 'gaff' should be in inventory before fishing, got: {inv}"
-    assert (
-        "debris" in room_names
-    ), f"setup: 'debris' should be in the room, got: {sorted(room_names)}"
+    room_list = sorted(object_names(state))
+    assert "gaff" in inv, f"setup: 'gaff' not in inventory before fishing: {inv}"
+    assert "debris" in room_list, f"setup: 'debris' not in the room: {room_list}"
 
-    result = comi_s3_client.act("use", "gaff", "debris")
-    assert sorted(result.get("inventory_added", [])) == ["cutlass", "skeleton_arm"], (
-        f"fishing the debris should add 'cutlass' and 'skeleton_arm', "
-        f"got inventory_added={result.get('inventory_added')}"
-    )
+    result = use("gaff", "debris")
+    added = sorted(result.get("inventory_added", []))
+    assert added == ["cutlass", "skeleton_arm"], f"fishing should add both, got {added}"
 
     after = comi_s3_client.state()
     inv = set(after.get("inventory", []))
-    assert {"cutlass", "skeleton_arm", "gaff"}.issubset(
-        inv
-    ), f"after fishing, inventory should hold cutlass, skeleton_arm and gaff, got: {sorted(inv)}"
+    inv_list = sorted(inv)
+    assert {"cutlass", "skeleton_arm", "gaff"}.issubset(inv), f"got {inv_list}"
     # Debris is consumed by the action and disappears from the room.
-    after_names = {obj["name"] for obj in after.get("objects", [])}
-    assert (
-        "debris" not in after_names
-    ), f"'debris' should be removed from the room after fishing, got: {sorted(after_names)}"
+    after_list = sorted(object_names(after))
+    assert "debris" not in after_list, f"'debris' not removed: {after_list}"
