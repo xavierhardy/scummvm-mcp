@@ -25,20 +25,32 @@ struct ObjectData;
 
 class ScummMcpBridge : public Networking::McpServer::IToolHandler {
 public:
+	// Factory: pick the bridge subclass for the running game. Games with their
+	// own specialisation get a dedicated leaf class; every other game falls back
+	// to the base class for its SCUMM engine version (McpBridgeV0 / McpBridgeClassic
+	// / McpBridgeV6 / McpBridgeV7 / McpBridgeV8). The returned object is already
+	// init()'d (tools registered) and ready to use.
+	static ScummMcpBridge *create(ScummEngine *vm);
+
 	explicit ScummMcpBridge(ScummEngine *vm);
 	~ScummMcpBridge() override;
 
-	void pump();
+	// Finish construction: register tools with the server. Must run after the
+	// object is fully constructed (it dispatches through virtual hooks that a
+	// base constructor could not reach). Called by create().
+	void init();
 
-	void onActorLine(int actorId, const Common::String &text);
-	void onSystemLine(const Common::String &text);
-	void onDialogPrompt(const Common::String &text);
+	virtual void pump();
+
+	virtual void onActorLine(int actorId, const Common::String &text);
+	virtual void onSystemLine(const Common::String &text);
+	virtual void onDialogPrompt(const Common::String &text);
 
 	// V7-only: invoked once per frame, just before the engine draws/clears the
 	// blast text queue. The bridge snapshots dialog-choice text + click target
 	// coordinates so toolState can expose the real labels and toolAnswer /
 	// pumpStream can route the click to the correct screen position.
-	void onV7BlastTextSnapshot();
+	virtual void onV7BlastTextSnapshot();
 
 	static Common::String normalizeActionName(const Common::String &action);
 
@@ -51,7 +63,7 @@ public:
 	                             Common::String &errorOut) override;
 	void pumpStream() override;
 
-private:
+protected:
 	struct MessageEntry {
 		uint64 seq;
 		uint32 frame;
@@ -85,6 +97,94 @@ private:
 		int y;
 		int objNumber = 0;
 	};
+
+	// A verb exposed to the agent: numeric id plus its normalized name and the
+	// human-readable label shown in state.verbs.
+	struct VerbInfo { int verbId; Common::String name; Common::String label; };
+
+	// --- Game/version hooks ------------------------------------------------
+	// Called by the shared base implementations at the points where behaviour
+	// used to branch on _vm->_game.id. Each leaf class (per game) overrides the
+	// ones it needs; the base versions preserve the engine-generic behaviour.
+
+	// Register any tools specific to this game (shoot_cannon, ride_bike, dial,
+	// switch_character, play_note, …). Called at the end of registerTools().
+	virtual void registerGameTools() {}
+	// Add game-specific fields to the `state` tool's output schema.
+	virtual void augmentStateSchema(Common::JSONObject &outputProps) { (void)outputProps; }
+	// Handle a tool call the base callTool() did not recognise. Set handled=true
+	// if consumed. Return value follows the IToolHandler contract (null for
+	// streaming/void tools).
+	virtual Common::JSONValue *dispatchGameTool(const Common::String &name,
+	                                            const Common::JSONValue &args,
+	                                            Common::String &errorOut, bool &handled) {
+		(void)name; (void)args; (void)errorOut; handled = false; return nullptr;
+	}
+	// Replace/augment the active verb list in toolState (e.g. a fixed fallback
+	// verb set for single-cursor games). questionPending mirrors toolState's.
+	virtual void applyGameVerbs(Common::JSONArray &verbsArr,
+	                            Common::Array<VerbInfo> &activeVerbs, bool questionPending) {
+		(void)verbsArr; (void)activeVerbs; (void)questionPending;
+	}
+	// Append synthetic scene objects to state.objects (e.g. CMI cannon boats).
+	virtual void augmentStateObjects(Common::JSONArray &objects) { (void)objects; }
+	// Append game-specific top-level fields to the state result (e.g. fight HUD).
+	virtual void augmentState(Common::JSONObject &out) { (void)out; }
+	// Append game-specific diagnostics to the debug tool result.
+	virtual void augmentDebug(Common::JSONObject &out) { (void)out; }
+	// Append game-specific fields to a streaming action's state-change result.
+	virtual void augmentStateChanges(Common::JSONObject &changes) const { (void)changes; }
+	// Dispatch a game-specific verb action inside toolAct's verb chain. Return
+	// true if the action was handled (skips the default doSentence path).
+	virtual bool dispatchGameAct(int verbId, int targetA, int targetB) {
+		(void)verbId; (void)targetA; (void)targetB; return false;
+	}
+	// Dispatch a dialog-choice selection (toolAnswer) the game's own way (e.g.
+	// CMI clicks the on-screen choice line). Return true if handled, else the
+	// base runs the default verb-click input script. slotRect/verbid identify
+	// the chosen verb slot.
+	virtual bool dispatchGameAnswer(const Common::Rect &slotRect, int verbid) {
+		(void)slotRect; (void)verbid; return false;
+	}
+	// Resolve a game-specific verb name to its engine verb id. Return true if
+	// matched. `normalized` is the lower-cased, normalized verb name.
+	virtual bool resolveGameVerb(const Common::String &normalized, int &verbId) const {
+		(void)normalized; (void)verbId; return false;
+	}
+	// Per-frame game-specific streaming step (state machines: cannon aim, bike
+	// fight, context-cursor clicks, …). Called from pumpStream().
+	virtual void pumpStreamGame() {}
+	// Classify an entity for buildEntityMap (e.g. mark exit hotspots as pathway).
+	// numId is the object/actor id; set isPathway to flag a navigable exit.
+	virtual void classifyGameEntity(int numId, bool &isPathway) const { (void)numId; (void)isPathway; }
+
+	// --- Protected accessors for ScummEngine internals ---------------------
+	// The base class is the sole `friend` of ScummEngine; friendship is not
+	// inherited, so subclasses reach the engine's protected members only through
+	// these wrappers. (Public engine members — VAR(), _objs, _verbs, _virtscr,
+	// _currentRoom, _screenWidth/Height, _system, … — are used directly.)
+	// All const: they act through the _vm pointer, so the bridge's own const-ness
+	// does not restrict calling (even non-const) engine methods on the pointee.
+	int8 vmUserPut() const;
+	Actor *vmActor(int i) const;
+	// Null-safe + bounds-checked actor fetch (returns nullptr if the actor array
+	// is unallocated or i is out of range).
+	Actor *vmActorOrNull(int i) const;
+	int vmNumActors() const;
+	int vmNumVariables() const;
+	int vmGetOwner(int obj) const;
+	int vmGetObjX(int obj) const;
+	int vmGetObjY(int obj) const;
+	int vmGetObjectIndex(int obj) const;
+	int vmGetVerbEntrypoint(int obj, int entry) const;
+	int vmActorToObj(int actor) const;
+	void vmDoSentence(int verb, int objA, int objB) const;
+	void vmRunInputScript(int clickArea, int val, int mode) const;
+	Common::Point &vmMouse() const;
+	Common::Point &vmVirtualMouse() const;
+	uint32 &vmLastInputScriptTime() const;
+	byte &vmLeftBtnPressed() const;
+	byte &vmRightBtnPressed() const;
 
 	// Sam & Max (V6): conversation topic icons are a row of floating objects in
 	// the bottom verb strip, not blast objects. Refresh the dialog-choice list
@@ -142,11 +242,6 @@ private:
 	Common::Array<int> _ssePendingDialObjs;
 	int _sseDialVerbId = 0;
 	uint32 _sseLastDialFedFrame = 0;
-	// CMI cannon minigame aim (see pumpStream / toolShootCannon). _sseCannonAimX
-	// is the barrel's target column, _sseCannonAimY the elevation index 0..12.
-	bool _sseCannonAiming = false;
-	int _sseCannonAimX = 0, _sseCannonAimY = 0;
-	uint32 _sseCannonGiveUpFrame = 0; // safety cap on the barrel swing before firing
 	// Full Throttle bike fight (ride_bike): the fight runs inside INSANE's own
 	// loop and is auto-played by Insane::_mcpAutoPilot. While this is set the
 	// stream stays open (suppressing the usual room-change/settle close) until the
@@ -244,7 +339,6 @@ private:
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolShootCannon(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolRideBike(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolDial(const Common::JSONValue &args, Common::String &errorOut);
@@ -257,13 +351,6 @@ private:
 	bool toolMouseMove(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseClick(const Common::JSONValue &args, Common::String &errorOut);
 	Common::JSONValue *toolScreenshot(const Common::JSONValue &args, Common::String &errorOut);
-
-	// CMI cannon minigame (room 4): cluster the war-canoe actor sprites into the
-	// boats still afloat, ordered left-to-right. Fills each cluster's centre
-	// point and a representative object id. Used by toolState (to expose the
-	// boat_N aim targets) and buildStateChanges (to report boats_remaining).
-	void collectCmiCannonBoats(Common::Array<Common::Point> &centers,
-	                           Common::Array<int> &repObjs) const;
 
 	// Loom segment detection (full Loom or the Loom mini-game in Passport to Adventure)
 	bool isInLoomSection() const;
@@ -287,6 +374,9 @@ private:
 
 	// Register all tools with the server.
 	void registerTools();
+	// Shared output schema for streaming tools (act/answer/walk/…); also used by
+	// leaf classes that register their own streaming tools.
+	Common::JSONValue *buildChangesSchema() const;
 
 	// Streaming helpers
 	void snapshotPreAction();

@@ -18,6 +18,7 @@
 #include "scumm/scumm_v0.h"
 #include "scumm/detection.h"
 #include "scumm/mcp.h"
+#include "scumm/mcp_subclasses.h"
 #include "scumm/object.h"
 #include "scumm/scumm.h"
 #include "scumm/verbs.h"
@@ -279,8 +280,75 @@ ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
 		return;
 	}
 	_server->setToolHandler(this);
-	registerTools();
 }
+
+void ScummMcpBridge::init() {
+	// registerTools() dispatches through virtual hooks, so it must run after the
+	// object is fully constructed — never from a base constructor.
+	if (_server)
+		registerTools();
+}
+
+ScummMcpBridge *ScummMcpBridge::create(ScummEngine *vm) {
+	ScummMcpBridge *bridge = nullptr;
+	if (!vm) {
+		bridge = new ScummMcpBridge(vm);
+	} else {
+		switch (vm->_game.id) {
+		case GID_MANIAC:     bridge = new McpBridgeManiac(vm);      break;
+		case GID_LOOM:       bridge = new McpBridgeLoom(vm);        break;
+		case GID_INDY3:      bridge = new McpBridgeIndy3(vm);       break;
+		case GID_INDY4:      bridge = new McpBridgeIndy4(vm);       break;
+		case GID_MONKEY_EGA:
+		case GID_MONKEY_VGA:
+		case GID_MONKEY:     bridge = new McpBridgeMonkey(vm);      break;
+		case GID_PASS:       bridge = new McpBridgePassport(vm);    break;
+		case GID_SAMNMAX:    bridge = new McpBridgeSamnMax(vm);     break;
+		case GID_DIG:        bridge = new McpBridgeDig(vm);         break;
+		case GID_FT:         bridge = new McpBridgeFullThrottle(vm); break;
+		case GID_CMI:        bridge = new McpBridgeComi(vm);        break;
+		default:
+			// Unsupported game: fall back to the bridge for its SCUMM version.
+			switch (vm->_game.version) {
+			case 0:
+			case 1:
+			case 2:  bridge = new McpBridgeV0(vm);      break;
+			case 6:  bridge = new McpBridgeV6(vm);      break;
+			case 7:  bridge = new McpBridgeV7(vm);      break;
+			case 8:  bridge = new McpBridgeV8(vm);      break;
+			default: bridge = new McpBridgeClassic(vm); break; // V3–V5
+			}
+			break;
+		}
+	}
+	bridge->init();
+	return bridge;
+}
+
+// ---------------------------------------------------------------------------
+// Protected accessors for ScummEngine's protected internals (see mcp.h). The
+// base bridge is the sole friend of ScummEngine; these wrappers let subclasses
+// reach the members they need without each being befriended.
+// ---------------------------------------------------------------------------
+
+int8 ScummMcpBridge::vmUserPut() const                     { return _vm->_userPut; }
+Actor *ScummMcpBridge::vmActor(int i) const                { return _vm->_actors[i]; }
+Actor *ScummMcpBridge::vmActorOrNull(int i) const          { return (_vm->_actors && i >= 0 && i < _vm->_numActors) ? _vm->_actors[i] : nullptr; }
+int ScummMcpBridge::vmNumActors() const                    { return _vm->_numActors; }
+int ScummMcpBridge::vmNumVariables() const                 { return _vm->_numVariables; }
+int ScummMcpBridge::vmGetOwner(int obj) const              { return _vm->getOwner(obj); }
+int ScummMcpBridge::vmGetObjX(int obj) const               { return _vm->getObjX(obj); }
+int ScummMcpBridge::vmGetObjY(int obj) const               { return _vm->getObjY(obj); }
+int ScummMcpBridge::vmGetObjectIndex(int obj) const        { return _vm->getObjectIndex(obj); }
+int ScummMcpBridge::vmGetVerbEntrypoint(int obj, int entry) const { return _vm->getVerbEntrypoint(obj, entry); }
+int ScummMcpBridge::vmActorToObj(int actor) const          { return _vm->actorToObj(actor); }
+void ScummMcpBridge::vmDoSentence(int verb, int objA, int objB) const { _vm->doSentence(verb, objA, objB); }
+void ScummMcpBridge::vmRunInputScript(int clickArea, int val, int mode) const { _vm->runInputScript(clickArea, val, mode); }
+Common::Point &ScummMcpBridge::vmMouse() const             { return _vm->_mouse; }
+Common::Point &ScummMcpBridge::vmVirtualMouse() const      { return _vm->_virtualMouse; }
+uint32 &ScummMcpBridge::vmLastInputScriptTime() const      { return _vm->_lastInputScriptTime; }
+byte &ScummMcpBridge::vmLeftBtnPressed() const             { return _vm->_leftBtnPressed; }
+byte &ScummMcpBridge::vmRightBtnPressed() const            { return _vm->_rightBtnPressed; }
 
 ScummMcpBridge::~ScummMcpBridge() {
 	delete _server;
@@ -783,6 +851,24 @@ const byte *ScummMcpBridge::callGetObjOrActorName(int obj) const {
 // Tool registration
 // ---------------------------------------------------------------------------
 
+Common::JSONValue *ScummMcpBridge::buildChangesSchema() const {
+	Common::JSONObject props;
+	props.setVal("inventory_added", mcpProp("array",   "Names of items added to inventory"));
+	props.setVal("room_changed",    mcpProp("integer", "New room number (only present if room changed)"));
+	Common::JSONObject posProps;
+	posProps.setVal("x", mcpProp("integer", "X coordinate"));
+	posProps.setVal("y", mcpProp("integer", "Y coordinate"));
+	Common::JSONObject posSchema;
+	posSchema.setVal("type",       mcpJsonString("object"));
+	posSchema.setVal("properties", new Common::JSONValue(posProps));
+	props.setVal("position",        new Common::JSONValue(posSchema));
+	props.setVal("objects_changed", mcpProp("array",  "Objects whose state changed: [{name, old_state, new_state}]"));
+	props.setVal("messages",        mcpProp("array",  "Dialog/narration lines spoken during the action: [{text, actor?}]"));
+	props.setVal("question",        mcpProp("object", "Pending dialog question if action ended with one: {choices:[{id,label}]}"));
+	props.setVal("boats_remaining", mcpProp("integer", "CMI cannon minigame only: war-canoes still afloat after the shot (drops by one per boat sunk; 0 means the minigame is won)."));
+	return mcpObjectSchema(props);
+}
+
 void ScummMcpBridge::registerTools() {
 	// --- state ---
 	{
@@ -877,24 +963,9 @@ void ScummMcpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
-	// Shared output schema factory for streaming tools.
-	auto makeChangesSchema = []() -> Common::JSONValue * {
-		Common::JSONObject props;
-		props.setVal("inventory_added", mcpProp("array",   "Names of items added to inventory"));
-		props.setVal("room_changed",    mcpProp("integer", "New room number (only present if room changed)"));
-		Common::JSONObject posProps;
-		posProps.setVal("x", mcpProp("integer", "X coordinate"));
-		posProps.setVal("y", mcpProp("integer", "Y coordinate"));
-		Common::JSONObject posSchema;
-		posSchema.setVal("type",       mcpJsonString("object"));
-		posSchema.setVal("properties", new Common::JSONValue(posProps));
-		props.setVal("position",        new Common::JSONValue(posSchema));
-		props.setVal("objects_changed", mcpProp("array",  "Objects whose state changed: [{name, old_state, new_state}]"));
-		props.setVal("messages",        mcpProp("array",  "Dialog/narration lines spoken during the action: [{text, actor?}]"));
-		props.setVal("question",        mcpProp("object", "Pending dialog question if action ended with one: {choices:[{id,label}]}"));
-		props.setVal("boats_remaining", mcpProp("integer", "CMI cannon minigame only: war-canoes still afloat after the shot (drops by one per boat sunk; 0 means the minigame is won)."));
-		return mcpObjectSchema(props);
-	};
+	// Shared output schema factory for streaming tools (used here and by leaf
+	// classes registering their own streaming tools).
+	auto makeChangesSchema = [this]() -> Common::JSONValue * { return buildChangesSchema(); };
 
 	// --- act ---
 	{
@@ -995,34 +1066,6 @@ void ScummMcpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
-	// --- shoot_cannon (CMI cannon minigame only) ---
-	if (_vm->_game.id == GID_CMI) {
-		Common::JSONObject props;
-		props.setVal("x", mcpProp("integer",
-		    "Screen X coordinate to aim the cannon at (0–639). Pass a boat's x "
-		    "from state.objects (entries named boat_1, boat_2, … carry the exact "
-		    "aim point)."));
-		props.setVal("y", mcpProp("integer",
-		    "Screen Y coordinate to aim the cannon at (0–479). Pass a boat's y "
-		    "from state.objects."));
-		const char *req[] = {"x", "y"};
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "shoot_cannon";
-		spec.description =
-		    "Aim the cannon at screen position (x, y) and fire a cannonball. "
-		    "Only available in the Curse of Monkey Island cannon minigame. The "
-		    "skeleton war-canoes to sink are listed in state as boat_N objects "
-		    "with their (x, y); aim at one of those points. Moves the mouse "
-		    "cursor to (x, y) and left-clicks to fire. Blocks until the shot "
-		    "resolves — cannonball flight, explosion, and any resulting speech "
-		    "(e.g. the skeleton crew jeering on a miss) — then returns state "
-		    "changes; a sunk boat disappears from state.objects.";
-		spec.inputSchema  = mcpObjectSchema(props, req, 2);
-		spec.outputSchema = makeChangesSchema();
-		spec.streaming    = true;
-		_server->registerTool(spec);
-	}
-
 	// --- ride_bike (Full Throttle highway bike fight) ---
 	if (_vm->_game.id == GID_FT) {
 		Networking::McpServer::ToolSpec spec;
@@ -1087,6 +1130,9 @@ void ScummMcpBridge::registerTools() {
 		spec.streaming    = true;
 		_server->registerTool(spec);
 	}
+
+	// Game-specific tools (registered only for the games that provide them).
+	registerGameTools();
 
 	// --- debug tools (gated by mcp_debug ini option) ---
 	if (_debugToolsEnabled) {
@@ -1262,10 +1308,6 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 		if (!toolPlayNote(args, errorOut)) return nullptr;
 		return nullptr;
 	}
-	if (name == "shoot_cannon") {
-		if (!toolShootCannon(args, errorOut)) return nullptr;
-		return nullptr;
-	}
 	if (name == "ride_bike") {
 		if (!toolRideBike(args, errorOut)) return nullptr;
 		return nullptr;
@@ -1294,6 +1336,11 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 	if (name == "screenshot")   return toolScreenshot(args, errorOut);
 	if (name == "save_state")   return toolSaveState(args, errorOut);
 	if (name == "set_talk_speed") return toolSetTalkSpeed(args, errorOut);
+	// Game-specific tools (shoot_cannon, …) handled by the leaf class.
+	bool handled = false;
+	Common::JSONValue *gameResult = dispatchGameTool(name, args, errorOut, handled);
+	if (handled)
+		return gameResult;
 	errorOut = "Unknown tool: " + name;
 	return nullptr;
 }
@@ -1352,7 +1399,6 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	// the choices into 'question' instead.
 	bool questionPending = hasPendingQuestion();
 
-	struct VerbInfo { int verbId; Common::String name; Common::String label; };
 	Common::Array<VerbInfo> activeVerbs;
 	Common::JSONArray verbsArr;
 	if (!questionPending) {
@@ -1503,31 +1549,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 	}
 
-	// Curse of Monkey Island (V8) uses a single-cursor model similar to The Dig
-	// and Full Throttle, with no persistent verb bar. Expose the 5 core verbs.
-	// Always clear whatever the text-slot scan may have picked up (e.g. lingering
-	// dialog-choice slots after a conversation ends) and replace with the fixed set.
-	if (_vm->_game.id == GID_CMI && !questionPending) {
-		verbsArr.clear();
-		activeVerbs.clear();
-		struct FallbackVerb { int id; const char *name; const char *label; };
-		static const FallbackVerb kCMIFallback[] = {
-			{13, "walk_to", "walk to"},
-			{6,  "talk_to", "talk to"},
-			{14, "pick_up", "pick up"},
-			{5,  "look_at", "look at"},
-			{7,  "use", "use"},
-			{0, nullptr, nullptr}
-		};
-		for (int i = 0; kCMIFallback[i].name; ++i) {
-			verbsArr.push_back(mcpJsonString(kCMIFallback[i].label));
-			VerbInfo vi;
-			vi.verbId = kCMIFallback[i].id;
-			vi.name = kCMIFallback[i].name;
-			vi.label = kCMIFallback[i].label;
-			activeVerbs.push_back(vi);
-		}
-	}
+	// Game-specific verb-list overrides (e.g. CMI's fixed single-cursor verb set).
+	applyGameVerbs(verbsArr, activeVerbs, questionPending);
 
 	out.setVal("verbs", new Common::JSONValue(verbsArr));
 
@@ -1687,32 +1710,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 		}
 	}
-	// CMI cannon minigame (the demo's room 4): the skeleton war-canoes you have
-	// to sink are drawn as clusters of unnamed actor sprites (a hull plus crew),
-	// not as background objects, so the loop above never lists them and the MCP
-	// client has nothing to aim at. Surface each boat as a synthetic room object
-	// carrying the cluster centre (x, y) — exactly the point to pass to
-	// shoot_cannon. Boats are the in-room actors in the sea band wearing the
-	// war-canoe costumes (18-24, determined live); the muzzle-splash sprites
-	// (costume 15) and the fort defenders (higher up, costume 29) are excluded.
-	if (_vm->_game.id == GID_CMI && _vm->_currentRoom == 4) {
-		Common::Array<Common::Point> boatCenters;
-		Common::Array<int> boatObjs;
-		collectCmiCannonBoats(boatCenters, boatObjs);
-		for (uint c = 0; c < boatCenters.size(); ++c) {
-			Common::JSONObject boat;
-			boat.setVal("id",               mcpJsonInt(boatObjs[c]));
-			boat.setVal("name",             mcpJsonString(Common::String::format("boat_%u", c + 1)));
-			boat.setVal("state",            mcpJsonInt(0));
-			boat.setVal("x",                mcpJsonInt(boatCenters[c].x));
-			boat.setVal("y",                mcpJsonInt(boatCenters[c].y));
-			boat.setVal("pathway",          mcpJsonBool(false));
-			Common::JSONArray bv;
-			bv.push_back(mcpJsonString("shoot cannon"));
-			boat.setVal("compatible_verbs", new Common::JSONValue(bv));
-			objects.push_back(new Common::JSONValue(boat));
-		}
-	}
+	// Game-specific synthetic scene objects (e.g. CMI cannon boat_N targets).
+	augmentStateObjects(objects);
 
 	// Fate of Atlantis "Lost Dialogue" close-up: the book is a full-screen tabbed
 	// reference whose pages are not ordinary selectable objects. Surface each page
@@ -2469,54 +2468,8 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		// input script directly, the same way the engine handles a click on
 		// the verb bar slot.
 		_vm->runInputScript(kVerbClickArea, verbId, 1);
-	} else if (_vm->_game.id == GID_CMI && verbId == 7 && targetA != 0 && targetB != 0) {
-		// CMI "use A on B": the engine's sentence dispatcher uses verb id 5
-		// (the same id the engine raises when the player clicks an armed
-		// inventory item on a target). doSentence(7, ...) does nothing —
-		// the combination table and scripted use-handlers are wired to verb 5.
-		// This works uniformly for inv-on-inv (combine table → new item) and
-		// inv-on-room (target's verb-5 entrypoint runs with VAR_USE_OBJECT set).
-		const int kCmiUseVerb = 5;
-		_vm->doSentence(kCmiUseVerb, targetA, targetB);
-	} else if (_vm->_game.id == GID_CMI && verbId == 13) {
-		// CMI walk_to: verb 13 has no entrypoint in the game, so doSentence(13,...)
-		// produces a "No." response. For objects with action handlers, startWalkActor
-		// to the stand position is correct. For exit/pathway objects (no action handlers),
-		// the game internally uses verb=1 (the walk/click verb) via doSentence — this
-		// goes through the sentence script which handles room transitions. Mirror that here.
-		bool hasActionHandler = (targetA != 0) &&
-		    (_vm->getVerbEntrypoint(targetA, 6) != 0 ||  // look_at
-		     _vm->getVerbEntrypoint(targetA, 7) != 0 ||  // pick_up / use
-		     _vm->getVerbEntrypoint(targetA, 8) != 0);   // talk_to
-		if (!hasActionHandler && targetA != 0) {
-			// Exit/pathway: CMI exit hotspots are activated by the game's scene-click
-			// handler, which detects objects by bounding box. Simulate a left click at
-			// the object's bbox center — the scene script then walks ego there and
-			// triggers the room transition, exactly as a real player click would.
-			int idx = _vm->getObjectIndex(targetA);
-			if (idx >= 0) {
-				const ObjectData &od = _vm->_objs[idx];
-				int clickX = od.x_pos + od.width  / 2;
-				int clickY = od.y_pos + od.height / 2;
-				_vm->_mouse.x        = clickX;
-				_vm->_mouse.y        = clickY;
-				_vm->_virtualMouse.x = clickX;
-				_vm->_virtualMouse.y = clickY;
-				if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = clickX;
-				if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = clickY;
-				if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = clickX;
-				if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = clickY;
-				_vm->_lastInputScriptTime = _vm->_system->getMillis();
-				_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
-			}
-		} else {
-			Actor *ego = getEgoActor();
-			if (ego) {
-				int objX = _vm->getObjX(targetA);
-				int objY = _vm->getObjY(targetA);
-				ego->startWalkActor(objX, objY, -1);
-			}
-		}
+	} else if (dispatchGameAct(verbId, targetA, targetB)) {
+		// Handled by the game-specific leaf (e.g. CMI use-on / walk-to exits).
 	} else if (_vm->_game.id == GID_FT && verbId == -3 && targetA != 0) {
 		// Full Throttle walk_to: walking is a scene-click in-game, and exit
 		// hotspots (scene pathways, and doors once opened — e.g. the room 6 door
@@ -2734,30 +2687,10 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
 	_sseInitialVerbScript = _sseVerbScript;
 	_sseVerbScriptChanged = false;
-	// CMI (V8) dialog choices are rendered as text lines on the screen. To
-	// dispatch a choice we replicate a real click on the choice line: place the
-	// mouse inside the verb slot's rect and run the verb-click input script
-	// (mode 1 = activate / select).
-	if (_vm->_game.id == GID_CMI) {
-		const Common::Rect &rc = vs.curRect;
-		int mouseX = (rc.left + rc.right) / 2;
-		int mouseY = (rc.top + rc.bottom) / 2;
-		if (mouseX < 0) mouseX = 0;
-		if (mouseX > _vm->_screenWidth - 1) mouseX = _vm->_screenWidth - 1;
-		if (mouseY < 0) mouseY = 0;
-		if (mouseY > _vm->_screenHeight - 1) mouseY = _vm->_screenHeight - 1;
-		_vm->_mouse.x = mouseX;
-		_vm->_mouse.y = mouseY;
-		_vm->_virtualMouse.x = mouseX;
-		_vm->_virtualMouse.y = mouseY;
-		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = mouseX;
-		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = mouseY;
-		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
-		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
+	// Game-specific dialog-choice dispatch (e.g. CMI clicks the on-screen choice
+	// line); otherwise run the default verb-click input script.
+	if (!dispatchGameAnswer(vs.curRect, vs.verbid))
 		_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
-	} else {
-		_vm->runInputScript(kVerbClickArea, vs.verbid, 1);
-	}
 	_server->startStreaming();
 	return true;
 }
@@ -3434,98 +3367,10 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 			out.setVal("verb_script", mcpJsonInt((int)_vm->VAR(_vm->VAR_VERB_SCRIPT)));
 	}
 
-	// Debug-only: CMI cannon-minigame aim state. The fire script (room-4 local
-	// 2008) reads var234 (barrel target column, slewed by the mouse's X offset
-	// from centre), var235 (elevation index 0..15, slewed by mouse Y / 30) and
-	// var237 (which cannonball costume), and launches the ball straight up from
-	// the barrel's current X. Surfacing them makes the aim observable.
-	if (_vm->_game.id == GID_CMI && _vm->_currentRoom == 4) {
-		out.setVal("cannon_barrel_target_x", mcpJsonInt((int)_vm->VAR(234)));
-		out.setVal("cannon_elevation",       mcpJsonInt((int)_vm->VAR(235)));
-		out.setVal("cannon_ball_costume",    mcpJsonInt((int)_vm->VAR(237)));
-		if (_vm->_actors && _vm->_numActors > 3 && _vm->_actors[3])
-			out.setVal("cannon_barrel_x", mcpJsonInt(_vm->_actors[3]->getRealPos().x));
-	}
+	// Game-specific diagnostics (e.g. CMI cannon-minigame aim state).
+	augmentDebug(out);
 
 	return new Common::JSONValue(out);
-}
-
-// ---------------------------------------------------------------------------
-// Tool: shoot_cannon (CMI cannon minigame)
-// ---------------------------------------------------------------------------
-
-bool ScummMcpBridge::toolShootCannon(const Common::JSONValue &args, Common::String &errorOut) {
-	if (_streaming) {
-		errorOut = "shoot_cannon: another action is already in progress";
-		return false;
-	}
-	if (_vm->_game.id != GID_CMI) {
-		errorOut = "shoot_cannon: only available in Curse of Monkey Island";
-		return false;
-	}
-	// The aim drives the room-4 cannon's own control globals (VAR 234/235); those
-	// indices mean other things elsewhere, so only fire inside the minigame room.
-	if (_vm->_currentRoom != 4) {
-		errorOut = "shoot_cannon: only available in the cannon minigame (use the "
-		           "cannon from the cannon room to enter it)";
-		return false;
-	}
-	if (_vm->_userPut <= 0) {
-		errorOut = "shoot_cannon: game is not accepting input right now";
-		return false;
-	}
-	if (!args.isObject()) {
-		errorOut = "shoot_cannon: arguments must be an object";
-		return false;
-	}
-	const Common::JSONObject &a = args.asObject();
-	if (!a.contains("x") || !a["x"]->isIntegerNumber() ||
-	    !a.contains("y") || !a["y"]->isIntegerNumber()) {
-		errorOut = "shoot_cannon: integer 'x' and 'y' coordinates are required";
-		return false;
-	}
-
-	int x = (int)a["x"]->asIntegerNumber();
-	int y = (int)a["y"]->asIntegerNumber();
-	int maxX = (_vm->_screenWidth  > 0 ? _vm->_screenWidth  : 640) - 1;
-	int maxY = (_vm->_screenHeight > 0 ? _vm->_screenHeight : 480) - 1;
-	x = CLIP<int>(x, 0, maxX);
-	y = CLIP<int>(y, 0, maxY);
-
-	snapshotPreAction();
-	_streaming = true;
-	_sseAnswerStream = false;
-	_sseStartFrame = _frameCounter;
-	_sseDoneAtFrame = 0;
-	_sseStuckAtFrame = 0;
-	_sseLastEventFrame = 0;
-	_sseEgoMoved = false;
-	_sseMessages.clear();
-	_ssePendingSecondClick = false;
-	_ssePendingNotes.clear();
-	_sseButtonClearFrame = 0; // set when the deferred fire actually clicks
-	_ssePendingV7Choice = 0;
-	_ssePendingV7UseClick = false;
-	_sseVerbScript = 0;
-	_sseInitialVerbScript = 0;
-	_sseVerbScriptChanged = false;
-	_sseTargetObject = 0;
-	// Map the target screen point (x, y) — a boat_N centre from state — onto the
-	// cannon's two control parameters, derived from the room-4 fire script:
-	// the ball launches straight up from the barrel column and lands at
-	//     (barrelColumn, 320 - elevation*18),   elevation in 0..12.
-	// So the barrel column equals the target X (clamped to the barrel's travel
-	// range 140..520), and the elevation is the index whose landing row is
-	// closest to the target Y. pumpStream drives the cannon to these and fires.
-	int barrelTarget = CLIP<int>(x, 140, 520);
-	int elevIndex = (320 - y + 9) / 18;          // round((320 - y) / 18)
-	elevIndex = CLIP<int>(elevIndex, 0, 12);
-	_sseCannonAimX = barrelTarget;
-	_sseCannonAimY = elevIndex;
-	_sseCannonAiming = true;
-	_sseCannonGiveUpFrame = _frameCounter + 240; // safety cap on the barrel swing
-	_server->startStreaming();
-	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -4068,49 +3913,8 @@ void ScummMcpBridge::pumpStream() {
 		_ssePendingSecondClick = false;
 	}
 
-	// CMI cannon minigame aim. The room-4 control script (local 2008/2007) aims
-	// the cannon through two of its own globals: VAR(234) is the barrel's target
-	// column (the barrel actor walks toward it) and VAR(235) is the elevation
-	// index 0..12. The fire script samples getObjectX(3) for the launch column
-	// and shoots the ball straight up, so it lands at
-	//     (barrelColumn, 320 - elevation*18).
-	// Script 2007 normally slews those two globals from the mouse: it nudges
-	// VAR(234) by +/-10 while the cursor X sits outside a +/-10 px deadzone of
-	// screen centre (320), and slews VAR(235) toward VAR_VIRT_MOUSE_Y / 30.
-	// Rather than fight that velocity-style control, we park the cursor in the
-	// centre/elevation deadzone (so 2007 leaves the globals alone) and write the
-	// exact target column and elevation ourselves. _sseCannonAimX is the desired
-	// barrel column and _sseCannonAimY the elevation index (see toolShootCannon).
-	if (_sseCannonAiming) {
-		Actor *cannon = (_vm->_actors && _vm->_numActors > 3) ? _vm->_actors[3] : nullptr;
-		int barrelX = cannon ? cannon->getRealPos().x : _sseCannonAimX;
-		// Park the cursor: X in the centre deadzone (no var234 drift); Y on the
-		// elevation row (y/30 == target so var235 does not slew).
-		int holdX = 320;
-		int holdY = _sseCannonAimY * 30 + 15;
-		_vm->_mouse.x        = holdX;
-		_vm->_mouse.y        = holdY;
-		_vm->_virtualMouse.x = holdX;
-		_vm->_virtualMouse.y = holdY;
-		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = holdX;
-		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = holdY;
-		_vm->_lastInputScriptTime = _vm->_system->getMillis();
-		// Force the exact aim (the room-4 fire/aim globals are confirmed to live
-		// at 234/235 for this game; gated to GID_CMI room 4 by toolShootCannon).
-		if (_vm->_numVariables > 235) {
-			_vm->VAR(234) = _sseCannonAimX;   // barrel target column
-			_vm->VAR(235) = _sseCannonAimY;   // elevation index
-		}
-		_sseLastEventFrame = _frameCounter; // not "stuck" while aiming
-		// Fire once the barrel has actually reached the target column (the fire
-		// script samples its live X) — or after a safety cap on the swing.
-		if (ABS(_sseCannonAimX - barrelX) <= 3 || !cannon ||
-		    _frameCounter >= _sseCannonGiveUpFrame) {
-			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown — fire
-			_sseButtonClearFrame = _frameCounter + 2;
-			_sseCannonAiming = false;
-		}
-	}
+	// Per-frame game-specific streaming step (e.g. CMI cannon aim machine).
+	pumpStreamGame();
 
 	// Feed the next pending note by invoking the engine's verb script
 	// directly (kKeyClickArea). Each runInputScript invocation runs Script 97
@@ -4715,60 +4519,6 @@ void ScummMcpBridge::snapshotPreAction() {
 	}
 }
 
-void ScummMcpBridge::collectCmiCannonBoats(Common::Array<Common::Point> &centers,
-                                           Common::Array<int> &repObjs) const {
-	centers.clear();
-	repObjs.clear();
-	if (_vm->_game.id != GID_CMI || _vm->_currentRoom != 4 || !_vm->_actors)
-		return;
-	struct BoatCluster { int sumX; int sumY; int n; int repObj; };
-	Common::Array<BoatCluster> boats;
-	for (int i = 1; i < _vm->_numActors; ++i) {
-		Actor *a = _vm->_actors[i];
-		if (!a || !a->isInCurrentRoom() || !a->_visible)
-			continue;
-		int ax = a->getRealPos().x, ay = a->getRealPos().y;
-		if (ax <= 0 || ay <= 0)
-			continue;
-		if (ay < 150 || ay > 360)                 // the sea band
-			continue;
-		if (a->_costume < 18 || a->_costume > 24) // war-canoe hull/crew sprites
-			continue;
-		bool placed = false;
-		for (uint c = 0; c < boats.size(); ++c) {
-			int cx = boats[c].sumX / boats[c].n;
-			int cy = boats[c].sumY / boats[c].n;
-			if (ABS(cx - ax) <= 45 && ABS(cy - ay) <= 60) {
-				boats[c].sumX += ax;
-				boats[c].sumY += ay;
-				boats[c].n++;
-				placed = true;
-				break;
-			}
-		}
-		if (!placed) {
-			BoatCluster bc;
-			bc.sumX = ax;
-			bc.sumY = ay;
-			bc.n = 1;
-			bc.repObj = _vm->actorToObj(a->_number);
-			boats.push_back(bc);
-		}
-	}
-	// Stable left-to-right ordering so boat_1 is always the leftmost.
-	for (uint p = 0; p + 1 < boats.size(); ++p)
-		for (uint q = 0; q + 1 < boats.size() - p; ++q)
-			if (boats[q].sumX / boats[q].n > boats[q + 1].sumX / boats[q + 1].n) {
-				BoatCluster t = boats[q];
-				boats[q] = boats[q + 1];
-				boats[q + 1] = t;
-			}
-	for (uint c = 0; c < boats.size(); ++c) {
-		centers.push_back(Common::Point(boats[c].sumX / boats[c].n, boats[c].sumY / boats[c].n));
-		repObjs.push_back(boats[c].repObj);
-	}
-}
-
 Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 	Common::JSONObject changes;
 
@@ -4955,18 +4705,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		}
 	}
 
-	// CMI cannon minigame: report how many war-canoes are still afloat after the
-	// action resolves. A sunk boat is an actor cluster vanishing, which never
-	// shows up in objects_changed, so this is the signal a bench/agent needs to
-	// know a shot connected (the count drops by one per boat sunk). Gate on the
-	// room the action *started* in: sinking the last boat triggers the win
-	// sequence and leaves room 4, and we still want to report the final 0.
-	if (_vm->_game.id == GID_CMI && _ssePreRoom == 4) {
-		Common::Array<Common::Point> boatCenters;
-		Common::Array<int> boatObjs;
-		collectCmiCannonBoats(boatCenters, boatObjs);
-		changes.setVal("boats_remaining", mcpJsonInt((int)boatCenters.size()));
-	}
+	// Game-specific state-change fields (e.g. CMI cannon boats_remaining).
+	augmentStateChanges(changes);
 
 	return changes;
 }
@@ -5367,13 +5107,8 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 			}
 			if (hasWalkTo && !hasOther) e.isPathway = true;
 		}
-		// CMI (V8): exit hotspots have no action handlers (ep 6/7/8 all 0) — mark as pathway.
-		if (!e.isPathway && _vm->_game.id == GID_CMI &&
-		    _vm->getVerbEntrypoint(e.numId, 6) == 0 &&
-		    _vm->getVerbEntrypoint(e.numId, 7) == 0 &&
-		    _vm->getVerbEntrypoint(e.numId, 8) == 0) {
-			e.isPathway = true;
-		}
+		// Game-specific entity classification (e.g. CMI exit-hotspot pathways).
+		classifyGameEntity(e.numId, e.isPathway);
 		if (!name.empty()) {
 			bool hasCtrl = false;
 			for (uint ci = 0; ci < e.baseName.size(); ++ci)
@@ -5670,36 +5405,10 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		}
 	}
 
-	// Curse of Monkey Island (V8) verb IDs differ from V6. Empirically determined:
-	//   verb 6 -> look_at  (e.g. "Nice cannon balls.")
-	//   verb 7 -> pick_up  (e.g. "They're too heavy to carry.")
-	//   verb 8 -> talk_to  (opens dialog wheel)
-	//   verb 13 -> walk_to (default cursor action)
-	// Must be checked before the V6+ canonical lookup which would otherwise map
-	// look_at to verb 5 (the V6 canonical id, which is wrong for V8).
-	if (_vm->_game.id == GID_CMI) {
-		// Debug helper (gated by mcp_debug): accept "v_N"/"verb_N" to dispatch
-		// arbitrary verb IDs for testing.
-		if (_debugToolsEnabled && (normalized.hasPrefix("v_") || normalized.hasPrefix("verb_"))) {
-			const char *p = normalized.c_str() + (normalized.hasPrefix("v_") ? 2 : 5);
-			int id = atoi(p);
-			if (id > 0) {
-				verbId = id;
-				return true;
-			}
-		}
-		static const struct { const char *name; int id; } kCMIVerbs[] = {
-			{"walk_to", 13}, {"look_at", 6}, {"pick_up", 7},
-			{"talk_to",  8}, {"use",     7}, {nullptr,   0}
-		};
-		for (int ci = 0; kCMIVerbs[ci].name; ++ci) {
-			if (normalized == kCMIVerbs[ci].name) {
-				verbId = kCMIVerbs[ci].id;
-				debug(1, "mcp: resolveVerb CMI '%s' -> verbid=%d", normalized.c_str(), verbId);
-				return true;
-			}
-		}
-	}
+	// Game-specific verb mapping (e.g. CMI's V8 verb ids differ from V6 and must
+	// be checked before the V6+ canonical lookup below).
+	if (resolveGameVerb(normalized, verbId))
+		return true;
 
 	// V6+: standard action verbs are image-based. Resolve by verbid directly.
 	if (_vm->_game.version >= 6) {

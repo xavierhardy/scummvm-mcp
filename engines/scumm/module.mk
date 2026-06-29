@@ -53,6 +53,11 @@ MODULE_OBJS := \
 	macgui/macgui_widgets.o \
 	mcp.o \
 	mcp_actionname.o \
+	mcp_v0.o \
+	mcp_classic.o \
+	mcp_v6.o \
+	mcp_v7.o \
+	mcp_v8.o \
 	metaengine.o \
 	midiparser_ro.o \
 	object.o \

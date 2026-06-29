@@ -461,7 +461,7 @@ ScummEngine::ScummEngine(OSystem *syst, const DetectorResult &dr)
 	// Create the MCP bridge before the menu dialog so the MCP server starts
 	// listening on its TCP port even if the GUI manager blocks on first redraw
 	// (which happens on macOS when running headlessly with no real display).
-	_mcpBridge = new ScummMcpBridge(this);
+	_mcpBridge = ScummMcpBridge::create(this);
 
 #ifndef DISABLE_HELP
 	// Create custom GMM dialog providing a help subdialog
