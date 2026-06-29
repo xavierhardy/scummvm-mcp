@@ -159,6 +159,12 @@ protected:
 	// (e.g. Full Throttle's bike fight, which runs inside INSANE's own loop and
 	// only wants to wait for the section to resolve). Default does nothing.
 	virtual bool pumpStreamGameEarly() { return false; }
+	// Reset any game-specific per-stream state. Called from snapshotPreAction().
+	virtual void resetGameStream() {}
+	// True while a game-specific streaming state machine is still working (e.g.
+	// Maniac Mansion still has queued dial-pad presses); keeps isActionDone()
+	// from closing the stream early. Called from isActionDone().
+	virtual bool gameStreamBusy() const { return false; }
 	// Classify an entity for buildEntityMap (e.g. mark exit hotspots as pathway).
 	// numId is the object/actor id; set isPathway to flag a navigable exit.
 	virtual void classifyGameEntity(int numId, bool &isPathway) const { (void)numId; (void)isPathway; }
@@ -183,8 +189,19 @@ protected:
 	int vmGetObjectIndex(int obj) const;
 	int vmGetVerbEntrypoint(int obj, int entry) const;
 	int vmActorToObj(int actor) const;
+	int vmNumLocalObjects() const;
 	void vmDoSentence(int verb, int objA, int objB) const;
 	void vmRunInputScript(int clickArea, int val, int mode) const;
+	void vmResetSentence() const;
+	void vmActorFollowCamera(int actor) const;
+	// V0 (Maniac C64) engine state — wraps ScummEngine_v0's protected members.
+	// Only valid when _vm->_game.version == 0.
+	bool v0InNormalMode() const;
+	bool v0InKeypadMode() const;
+	void v0SwitchActor(int slot) const;
+	// Display name of an object/actor (empty if unnamed); wraps the protected
+	// getObjOrActorName so leaf classes can use it.
+	Common::String objName(int obj) const;
 	Common::Point &vmMouse() const;
 	Common::Point &vmVirtualMouse() const;
 	uint32 &vmLastInputScriptTime() const;
@@ -242,11 +259,6 @@ protected:
 	bool _ssePendingSecondClick;
 	int _sseClickMouseX, _sseClickMouseY;
 	Common::Array<Common::KeyCode> _ssePendingNotes;
-	// Maniac Mansion dial pad: queued button object ids to press one at a
-	// time, the verb id used to press them, and the frame of the last press.
-	Common::Array<int> _ssePendingDialObjs;
-	int _sseDialVerbId = 0;
-	uint32 _sseLastDialFedFrame = 0;
 	// Last value seen in the Loom note variable (var 259). Used in pumpStream
 	// to detect 0 -> note transitions and emit them as MCP notifications.
 	int32 _ssePrevNoteValue;
@@ -338,8 +350,6 @@ protected:
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolDial(const Common::JSONValue &args, Common::String &errorOut);
 
 	// Debug tools (gated by mcp_debug ini option). Engine-version-agnostic.
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut);
@@ -394,17 +404,6 @@ protected:
 	// (id 3) or as the inventory tool "max_the_object"? Used to route a two-target
 	// "use Max on Y" through the give sentence.
 	bool snmIsMaxEntity(int obj) const;
-
-	// Maniac Mansion: the playable kids. Slot is the F1-F3 index V0's
-	// switchActor() takes; the actor id comes from VAR(97 + slot). The V1/V2
-	// ports switch kids in-game via the "New Kid" verb, but the same ego/kid
-	// vars drive the switch, so the tool replicates it for them directly.
-	struct ManiacKid {
-		int slot;
-		int actorId;
-		Common::String name;
-	};
-	void collectManiacKids(Common::Array<ManiacKid> &out) const;
 
 	// Convert raw text in the game's native dialog code page (e.g. CP-850, CP-1252)
 	// to UTF-8 so non-ASCII labels round-trip correctly through MCP JSON.

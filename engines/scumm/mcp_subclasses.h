@@ -33,6 +33,36 @@ public:
 class McpBridgeManiac : public McpBridgeV0 {
 public:
 	explicit McpBridgeManiac(ScummEngine *vm) : McpBridgeV0(vm) {}
+
+protected:
+	void registerGameTools() override;
+	Common::JSONValue *dispatchGameTool(const Common::String &name,
+	                                    const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override;
+	void augmentStateSchema(Common::JSONObject &outputProps) override;
+	void augmentState(Common::JSONObject &out) override;
+	void pumpStreamGame() override;
+	void resetGameStream() override;
+	bool gameStreamBusy() const override;
+
+private:
+	// The playable kids. Slot is the F1-F3 index V0's switchActor() takes; the
+	// actor id comes from VAR(97 + slot). The V1/V2 ports switch kids in-game via
+	// the "New Kid" verb, but the same ego/kid vars drive the switch.
+	struct ManiacKid {
+		int slot;
+		int actorId;
+		Common::String name;
+	};
+	void collectManiacKids(Common::Array<ManiacKid> &out) const;
+	bool toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut);
+	bool toolDial(const Common::JSONValue &args, Common::String &errorOut);
+
+	// Phone dial pad: queued button object ids to press one at a time, the verb
+	// id used to press them, and the frame of the last press.
+	Common::Array<int> _ssePendingDialObjs;
+	int _sseDialVerbId = 0;
+	uint32 _sseLastDialFedFrame = 0;
 };
 
 // --- V3–V5: classic verb-bar SCUMM -----------------------------------------
