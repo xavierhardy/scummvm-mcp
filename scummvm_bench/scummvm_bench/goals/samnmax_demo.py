@@ -14,10 +14,12 @@ from .engine import (
     GoalSet,
     Predicate,
     all_of,
+    any_of,
     in_inventory,
     in_room,
     on_call,
     on_inventory_added,
+    on_inventory_present,
     on_message_contains,
     on_question_appeared,
     on_room_changed,
@@ -88,7 +90,18 @@ GOALS = {
         _goal(
             "use_max_on_cat",
             "Use Max on the kitten to retrieve the swallowed carnival tickets",
-            all_of(in_room(ROOM_STREET), on_inventory_added("carnival_tickets")),
+            # Acquiring the tickets happens asynchronously inside the use-Max
+            # cutscene, so the engine's per-action ``inventory_added`` diff often
+            # returns (empty) before the pickup lands and the tickets only
+            # surface in a later ``state`` poll's full inventory. Latch on either
+            # signal so the goal tracks the acquisition, not the cutscene timing.
+            all_of(
+                in_room(ROOM_STREET),
+                any_of(
+                    on_inventory_added("carnival_tickets"),
+                    on_inventory_present("carnival_tickets"),
+                ),
+            ),
         ),
         _goal(
             "use_desoto",

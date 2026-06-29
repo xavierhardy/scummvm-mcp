@@ -125,6 +125,23 @@ def on_inventory_added(item: str) -> Predicate:
     return predicate
 
 
+def on_inventory_present(item: str) -> Predicate:
+    """Result-based: ``item`` is in the result's full ``inventory`` snapshot.
+
+    Unlike :func:`on_inventory_added` (which fires only on the one call whose
+    per-action delta reported the pickup), this latches on any result that
+    carries the whole inventory list — chiefly ``state`` reads. Use it when the
+    acquisition happens asynchronously inside a cutscene, so the engine's
+    per-action ``inventory_added`` diff can miss it and the item only surfaces in
+    a later ``state`` poll."""
+    target = _norm(item)
+
+    def predicate(event: GoalEvent) -> bool:
+        return any(target in _norm(i) for i in _result_list(event, "inventory"))
+
+    return predicate
+
+
 def on_inventory_removed(item: str) -> Predicate:
     """Result-based: ``item`` appeared in ``inventory_removed``."""
     target = _norm(item)
