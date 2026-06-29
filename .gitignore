@@ -324,7 +324,6 @@ scummvm.ini
 /test/mcp/PROMPT.md
 /test/mcp/debug_*
 /test/mcp/logs/
-/test/mcp/save_slots/maniac-c64/maniac-c64.s00
 /test/debug
 /test/mcp/_*
 /test/mcp/probe_*
@@ -337,3 +336,11 @@ scummvm.ini
 
 /_*.md
 /_*.py
+
+# ScummVM-generated save byproducts under the MCP fixtures: the autosave slot
+# (slot 0, getAutosaveSlot()) and the save manager's sync metadata file. Both
+# are rewritten by the engine on every run and are never loaded as fixtures
+# (tests use slots >= 1), so keep them out of the tree.
+/test/mcp/save_slots/**/*.s00
+/test/mcp/save_slots/timestamps
+/test/mcp/save_slots/**/timestamps
