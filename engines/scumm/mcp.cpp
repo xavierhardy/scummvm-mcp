@@ -336,6 +336,9 @@ Actor *ScummMcpBridge::vmActor(int i) const                { return _vm->_actors
 Actor *ScummMcpBridge::vmActorOrNull(int i) const          { return (_vm->_actors && i >= 0 && i < _vm->_numActors) ? _vm->_actors[i] : nullptr; }
 int ScummMcpBridge::vmNumActors() const                    { return _vm->_numActors; }
 int ScummMcpBridge::vmNumVariables() const                 { return _vm->_numVariables; }
+int ScummMcpBridge::vmNumVerbs() const                     { return _vm->_numVerbs; }
+int32 ScummMcpBridge::vmVar(int i) const                   { return _vm->_scummVars ? _vm->_scummVars[i] : 0; }
+void ScummMcpBridge::vmConvertMessageToString(const byte *msg, byte *dst, int dstSize) const { _vm->convertMessageToString(msg, dst, dstSize); }
 int ScummMcpBridge::vmGetOwner(int obj) const              { return _vm->getOwner(obj); }
 int ScummMcpBridge::vmGetObjX(int obj) const               { return _vm->getObjX(obj); }
 int ScummMcpBridge::vmGetObjY(int obj) const               { return _vm->getObjY(obj); }
@@ -472,120 +475,6 @@ void ScummMcpBridge::pump() {
 		_v7DialogChoices.clear();
 
 	_server->pump();
-}
-
-// ---------------------------------------------------------------------------
-// Loom segment detection
-// ---------------------------------------------------------------------------
-
-// True when the engine is running the Loom mini-game. For full Loom this is
-// always true; for Passport to Adventure (3 mini-games) we detect Loom by the
-// empty text verb bar — Indy3 and MI1 populate the standard V3 verb slots
-// (Open / Look at / Pick up / etc.), but Loom uses a single-cursor + distaff
-// interface and leaves them empty.
-// True when an Indy3 fist-fight is active. Indy3's fight HUD is driven by a
-// stable set of script vars (322..327) that hold each fighter's punch-power
-// gauge and health. Outside of a fight these vars are 0 (or unused for
-// non-Indy3 games), so a non-zero opponent health on the right game is a
-// reliable signal. We restrict to GID_INDY3 and GID_PASS (the Passport demo
-// containing Indy3) to avoid colliding with var indices used by other games.
-bool ScummMcpBridge::isInIndy3Fight() const {
-	if (!_vm || !_vm->_scummVars) return false;
-	if (_vm->_game.id != GID_INDY3 && _vm->_game.id != GID_PASS) return false;
-	if (_vm->_numVariables <= 327) return false;
-	// Both health values should be non-zero AND not stale (heuristic: max
-	// health ~1000, current health is in 1..1000 range during a fight).
-	int32 indyHealth = _vm->_scummVars[325];
-	int32 oppHealth  = _vm->_scummVars[327];
-	return indyHealth > 0 && oppHealth > 0 && indyHealth <= 2000 && oppHealth <= 2000;
-}
-
-bool ScummMcpBridge::isInAtlantisBook() const {
-	// The "Lost Dialogue" close-up is a dedicated full-screen room whose two page
-	// halves are room objects 1103 (left) and 1104 (right). They are only loaded
-	// while the book is open, so their presence pins the close-up without hard-
-	// coding the room id. Gated on Fate of Atlantis so no other game is affected.
-	if (!_vm || _vm->_game.id != GID_INDY4) return false;
-	return _vm->getObjectIndex(1103) != -1 && _vm->getObjectIndex(1104) != -1;
-}
-
-int ScummMcpBridge::atlantisBookPageFromName(const Common::String &name) {
-	// Accept "page_N" (1..kAtlantisBookPages); return 0 for anything else.
-	Common::String n = name;
-	n.toLowercase();
-	if (!n.hasPrefix("page_")) return 0;
-	Common::String num = n;
-	num.erase(0, 5);
-	if (num.empty()) return 0;
-	int page = 0;
-	for (uint i = 0; i < num.size(); ++i) {
-		if (num[i] < '0' || num[i] > '9') return 0;
-		page = page * 10 + (num[i] - '0');
-	}
-	return (page >= 1 && page <= kAtlantisBookPages) ? page : 0;
-}
-
-bool ScummMcpBridge::turnAtlantisBookPage(int page, Common::String &errorOut) {
-	if (page < 1 || page > kAtlantisBookPages) {
-		errorOut = "act: invalid book page";
-		return false;
-	}
-	// Each page is rendered by local script (200 + page) — the very script the
-	// in-game page tab starts. Running it redraws the page and prints its lines,
-	// which the bridge captures as messages. Stream like any other action so the
-	// printed text settles before the result is returned.
-	snapshotPreAction();
-	_streaming = true;
-	_sseAnswerStream = false;
-	_sseStartFrame = _frameCounter;
-	_sseDoneAtFrame = 0;
-	_sseStuckAtFrame = 0;
-	_sseLastEventFrame = 0;
-	_sseEgoMoved = false;
-	_sseMessages.clear();
-	_ssePendingSecondClick = false;
-	_ssePendingNotes.clear();
-	_sseTargetObject = 0;
-	_sseButtonClearFrame = 0;
-	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
-	_sseInitialVerbScript = _sseVerbScript;
-	_sseVerbScriptChanged = false;
-	_vm->runScript(200 + page, false, false, nullptr);
-	_server->startStreaming();
-	return true;
-}
-
-bool ScummMcpBridge::isInLoomSection() const {
-	if (!_vm) return false;
-	if (_vm->_game.id == GID_LOOM) return true;
-	if (_vm->_game.id != GID_PASS) return false;
-	// Loom in Passport renders its distaff as the verb bar: every slot's label
-	// is a single-character glyph (note icons), e.g. 'z', '{', '^'. Indy3 and
-	// MI1 segments populate the bar with multi-character English verbs
-	// ("Open", "Look at", etc.). Detect by examining slot label lengths.
-	bool sawAnyVerb = false;
-	bool sawWordLabel = false;
-	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
-		const VerbSlot &vs = _vm->_verbs[slot];
-		if (!vs.verbid) continue;
-		if (vs.saveid != 0) continue;
-		if (_vm->_game.version > 0 && vs.verbid == 1) continue; // OBIM slot
-		if (vs.curmode != 0 && vs.curmode != 1) continue;
-		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
-		if (!ptr) continue;
-		byte textBuf[256] = {};
-		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
-		const char *label = (const char *)textBuf;
-		if (!label[0]) continue;
-		sawAnyVerb = true;
-		// Word-length English labels (>= 3 chars starting with a letter) are
-		// the hallmark of Indy3 / MI1 verb bars.
-		size_t len = strlen(label);
-		if (len >= 3 && Common::isAlpha((byte)label[0]))
-			sawWordLabel = true;
-	}
-	// Loom: many populated slots, none with word labels (or no slots at all).
-	return sawAnyVerb && !sawWordLabel;
 }
 
 // ---------------------------------------------------------------------------
@@ -1057,25 +946,6 @@ void ScummMcpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
-	// --- play_note (Loom only) ---
-	{
-		Common::JSONObject props;
-		props.setVal("note", mcpProp("string",
-		    "Single note to play on the Loom distaff. One of: c d e f g a b C "
-		    "(C is the high octave)."));
-		props.setVal("notes", mcpProp("array",
-		    "Optional sequence of note strings to play in order, e.g. ['e','c','e','d']."));
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "play_note";
-		spec.description =
-		    "Play Loom distaff notes. Accepts either {note:'c'} for one note, or "
-		    "{notes:['e','c','e','d']} to play a full sequence in one call. "
-		    "Only valid in the Loom segment of Passport to Adventure (and full Loom).";
-		spec.inputSchema  = mcpObjectSchema(props);
-		spec.outputSchema = makeChangesSchema();
-		spec.streaming    = true;
-		_server->registerTool(spec);
-	}
 
 	// Game-specific tools (registered only for the games that provide them).
 	registerGameTools();
@@ -1250,10 +1120,6 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 		if (!toolSkip(args, errorOut)) return nullptr;
 		return nullptr;
 	}
-	if (name == "play_note") {
-		if (!toolPlayNote(args, errorOut)) return nullptr;
-		return nullptr;
-	}
 	if (name == "debug")        return toolDebug(args, errorOut);
 	if (name == "keystroke")    {
 		if (!toolKeystroke(args, errorOut)) return nullptr;
@@ -1377,31 +1243,6 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 
 	// Sam & Max (V6) does not populate the classic text verb slots; expose a
 	// stable MCP verb set even when _verbs[] is empty.
-	// Loom (full game) and the Loom mini-game inside Passport to Adventure use
-	// a single-cursor model + distaff instead of the V3 text verb bar. Discard
-	// any V3 verbs that the text-slot extraction may have populated and expose
-	// only 'interact' (left-click) and 'use_item' (inventory-on-object). Note
-	// input goes through the separate 'play_note' tool. The Indy3 and MI1
-	// segments of Passport to Adventure keep the standard V3 verb bar.
-	if (isInLoomSection() && !questionPending) {
-		verbsArr.clear();
-		activeVerbs.clear();
-		struct FallbackVerb { int id; const char *name; const char *label; };
-		static const FallbackVerb kLoomFallback[] = {
-			{11, "interact", "interact"},
-			{11, "use_item", "use item"},
-			{0,  nullptr,    nullptr}
-		};
-		for (int i = 0; kLoomFallback[i].name; ++i) {
-			verbsArr.push_back(mcpJsonString(kLoomFallback[i].label));
-			VerbInfo vi;
-			vi.verbId = kLoomFallback[i].id;
-			vi.name   = kLoomFallback[i].name;
-			vi.label  = kLoomFallback[i].label;
-			activeVerbs.push_back(vi);
-		}
-	}
-
 	if (_vm->_game.id == GID_SAMNMAX && !questionPending && activeVerbs.empty()) {
 		struct FallbackVerb { int id; const char *name; const char *label; };
 		static const FallbackVerb kSamnMaxFallback[] = {
@@ -1586,50 +1427,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	// Game-specific synthetic scene objects (e.g. CMI cannon boat_N targets).
 	augmentStateObjects(objects);
 
-	// Fate of Atlantis "Lost Dialogue" close-up: the book is a full-screen tabbed
-	// reference whose pages are not ordinary selectable objects. Surface each page
-	// as a synthetic "page_N" object so an MCP client can turn to it with
-	// `act look_at page_N`; the page's lines then stream back as messages (the
-	// same text the book prints on-screen). This is how the randomised Thera ->
-	// Atlantis heading on page 3 is read without the mouse/screenshot debug tools.
-	if (isInAtlantisBook()) {
-		for (int p = 1; p <= kAtlantisBookPages; ++p) {
-			Common::JSONObject page;
-			page.setVal("id",               mcpJsonInt(0));
-			page.setVal("name",             mcpJsonString(Common::String::format("page_%d", p)));
-			page.setVal("state",            mcpJsonInt(0));
-			page.setVal("x",                mcpJsonInt(0));
-			page.setVal("y",                mcpJsonInt(0));
-			page.setVal("pathway",          mcpJsonBool(false));
-			Common::JSONArray pv;
-			pv.push_back(mcpJsonString("look at"));
-			page.setVal("compatible_verbs", new Common::JSONValue(pv));
-			objects.push_back(new Common::JSONValue(page));
-		}
-	}
-
 	out.setVal("inventory", new Common::JSONValue(inventory));
 	out.setVal("objects",   new Common::JSONValue(objects));
-
-	// Indy3 fist-fight HUD — surface each fighter's health and punch-power
-	// gauge so the MCP client can mirror what the in-game HUD shows
-	// ("Indiana Jones' Health" / "Punch power" / "Boxing Coach's Health" /
-	// "Punch power"). Driven by Indy3's script vars 322..327.
-	if (isInIndy3Fight()) {
-		Common::JSONObject fight;
-
-		Common::JSONObject indy;
-		indy.setVal("health",      mcpJsonInt((int)_vm->_scummVars[325]));
-		indy.setVal("punch_power", mcpJsonInt((int)_vm->_scummVars[322]));
-		fight.setVal("indy", new Common::JSONValue(indy));
-
-		Common::JSONObject opponent;
-		opponent.setVal("health",      mcpJsonInt((int)_vm->_scummVars[327]));
-		opponent.setVal("punch_power", mcpJsonInt((int)_vm->_scummVars[323]));
-		fight.setVal("opponent", new Common::JSONValue(opponent));
-
-		out.setVal("fight", new Common::JSONValue(fight));
-	}
 
 	Common::JSONArray msgsArr;
 	for (uint i = 0; i < _messages.size(); ++i) {
@@ -1808,15 +1607,10 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	}
 	Common::String verbStr = a["verb"]->asString();
 
-	// Fate of Atlantis "Lost Dialogue": while the book close-up is open, a
-	// "page_N" target turns to that page (see toolState / isInAtlantisBook). This
-	// is a synthetic target rather than a real verb script, so handle it up front,
-	// before verb/target resolution. Any verb is accepted (the page just opens).
-	if (isInAtlantisBook() && a.contains("target1") && a["target1"]->isString()) {
-		int page = atlantisBookPageFromName(a["target1"]->asString());
-		if (page > 0)
-			return turnAtlantisBookPage(page, errorOut);
-	}
+	// Game-specific whole-act interception before verb/target resolution (e.g.
+	// Fate of Atlantis turning a "page_N" of the Lost Dialogue book).
+	if (interceptGameAct(a, errorOut))
+		return true;
 
 	int verbId = -1;
 	if (!resolveVerb(verbStr, verbId)) {
@@ -2650,103 +2444,6 @@ bool ScummMcpBridge::toolSkip(const Common::JSONValue &args, Common::String &err
 
 	// Simulate Escape key press to skip/cancel
 	_vm->_keyPressed = Common::KeyCode(27); // ESC key
-	return true;
-}
-
-// ---------------------------------------------------------------------------
-// Tool: play_note (Loom distaff)
-// ---------------------------------------------------------------------------
-
-bool ScummMcpBridge::toolPlayNote(const Common::JSONValue &args, Common::String &errorOut) {
-	if (_streaming) {
-		errorOut = "play_note: another action is already in progress";
-		return false;
-	}
-	if (!isInLoomSection()) {
-		errorOut = "play_note: only available in the Loom segment";
-		return false;
-	}
-	if (_vm->_userPut <= 0) {
-		errorOut = "play_note: game is not accepting input right now";
-		return false;
-	}
-	if (hasPendingQuestion()) {
-		errorOut = "play_note: a dialog question is pending — use 'answer' first";
-		return false;
-	}
-	if (!args.isObject()) {
-		errorOut = "play_note: arguments must be an object with 'note' or 'notes'";
-		return false;
-	}
-	const Common::JSONObject &a = args.asObject();
-
-	struct NoteEntry { const char *name; char key; };
-	static const NoteEntry kNotes[] = {
-		{"c",  'c'}, {"d",  'd'}, {"e",  'e'}, {"f",  'f'},
-		{"g",  'g'}, {"a",  'a'}, {"b",  'b'}, {"C",  'C'},
-		{nullptr, 0}
-	};
-	auto mapNote = [&](const Common::String &s) -> char {
-		for (int i = 0; kNotes[i].name; ++i)
-			if (s == kNotes[i].name) return kNotes[i].key;
-		return 0;
-	};
-
-	Common::Array<Common::KeyCode> keys;
-	if (a.contains("notes") && a["notes"]->isArray()) {
-		const Common::JSONArray &arr = a["notes"]->asArray();
-		for (uint i = 0; i < arr.size(); ++i) {
-			if (!arr[i] || !arr[i]->isString()) {
-				errorOut = "play_note: 'notes' must be an array of strings";
-				return false;
-			}
-			Common::String noteStr = arr[i]->asString();
-			noteStr.trim();
-			char key = mapNote(noteStr);
-			if (!key) {
-				errorOut = "play_note: unknown note '" + noteStr + "'. Use one of: c d e f g a b C";
-				return false;
-			}
-			keys.push_back((Common::KeyCode)(byte)key);
-		}
-		if (keys.empty()) {
-			errorOut = "play_note: 'notes' must not be empty";
-			return false;
-		}
-	} else if (a.contains("note") && a["note"]->isString()) {
-		Common::String noteStr = a["note"]->asString();
-		noteStr.trim();
-		char key = mapNote(noteStr);
-		if (!key) {
-			errorOut = "play_note: unknown note '" + noteStr + "'. Use one of: c d e f g a b C";
-			return false;
-		}
-		keys.push_back((Common::KeyCode)(byte)key);
-	} else {
-		errorOut = "play_note: provide 'note' (string) or 'notes' (array of strings)";
-		return false;
-	}
-
-	snapshotPreAction();
-	_streaming = true;
-	_sseStartFrame = _frameCounter;
-	_sseDoneAtFrame = 0;
-	_sseStuckAtFrame = 0;
-	_sseLastEventFrame = 0;
-	_sseEgoMoved = false;
-	// Replaying the egg's draft can hatch it into a multi-minute cutscene whose
-	// dialogue streams past the start-anchored 600-frame deadline; let each line
-	// reset it (bounded by the absolute 3600-frame ceiling). See the timeout in
-	// pumpStream() and _sseAllowLongCutscene.
-	_sseAllowLongCutscene = true;
-	_sseMessages.clear();
-	_ssePendingSecondClick = false;
-	_ssePendingNotes = keys;
-	_sseTargetObject = 0;
-
-	// pumpStream() will dispatch the queued notes via runInputScript on
-	// subsequent frames; nothing else to do here.
-	_server->startStreaming();
 	return true;
 }
 

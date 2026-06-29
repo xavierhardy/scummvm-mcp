@@ -183,6 +183,10 @@ protected:
 	Actor *vmActorOrNull(int i) const;
 	int vmNumActors() const;
 	int vmNumVariables() const;
+	int vmNumVerbs() const;
+	// Null-safe SCUMM script variable read (0 if the var array is unallocated).
+	int32 vmVar(int i) const;
+	void vmConvertMessageToString(const byte *msg, byte *dst, int dstSize) const;
 	int vmGetOwner(int obj) const;
 	int vmGetObjX(int obj) const;
 	int vmGetObjY(int obj) const;
@@ -349,7 +353,6 @@ protected:
 	bool toolAnswer(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
 
 	// Debug tools (gated by mcp_debug ini option). Engine-version-agnostic.
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut);
@@ -360,25 +363,30 @@ protected:
 	bool toolMouseClick(const Common::JSONValue &args, Common::String &errorOut);
 	Common::JSONValue *toolScreenshot(const Common::JSONValue &args, Common::String &errorOut);
 
-	// Loom segment detection (full Loom or the Loom mini-game in Passport to Adventure)
-	bool isInLoomSection() const;
+	// Loom segment detection (full Loom or the Loom mini-game in Passport to
+	// Adventure). Overridden by the Loom / Passport leaves.
+	virtual bool isInLoomSection() const { return false; }
 
 	// Indy3 fist-fight detection (full Indy3 or the Indy3 mini-game in Passport).
 	// When true, toolState exposes a 'fight' object with both fighters' health
-	// and punch-power gauges so an MCP client can react to the HUD.
-	bool isInIndy3Fight() const;
+	// and punch-power gauges so an MCP client can react to the HUD. Overridden by
+	// the Indy3 / Passport leaves.
+	virtual bool isInIndy3Fight() const { return false; }
 
 	// Fate of Atlantis "Lost Dialogue" close-up (Indy4): a full-screen, tabbed
 	// reference book. When it is open toolState exposes its pages as synthetic
 	// "page_N" objects and toolAct turns to a page (running its page script) so
 	// an MCP client can read every page — including the randomised Thera ->
 	// Atlantis heading — using only the standard tools (no mouse/screenshot).
-	static const int kAtlantisBookPages = 5;
-	bool isInAtlantisBook() const;
-	// 1..kAtlantisBookPages for a "page_N" target name, 0 otherwise.
-	static int atlantisBookPageFromName(const Common::String &name);
-	// Turn the open book to page (1..kAtlantisBookPages) and stream its lines.
-	bool turnAtlantisBookPage(int page, Common::String &errorOut);
+	// Overridden by the Indy4 leaf.
+	virtual bool isInAtlantisBook() const { return false; }
+
+	// Intercept a whole act() call before verb resolution (e.g. Fate of Atlantis
+	// turning a book page). Return true if the call was fully handled (streaming
+	// started). Default does nothing.
+	virtual bool interceptGameAct(const Common::JSONObject &args, Common::String &errorOut) {
+		(void)args; (void)errorOut; return false;
+	}
 
 	// Register all tools with the server.
 	void registerTools();

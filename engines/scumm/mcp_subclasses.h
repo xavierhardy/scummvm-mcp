@@ -71,21 +71,61 @@ private:
 class McpBridgeClassic : public ScummMcpBridge {
 public:
 	explicit McpBridgeClassic(ScummEngine *vm) : ScummMcpBridge(vm) {}
+
+protected:
+	// Shared helpers reused by the Loom / Indy3 / Passport leaves.
+	bool indy3FightActive() const;          // Indy3 fight-HUD var heuristic
+	bool loomSectionByVerbLabels() const;   // Loom-in-Passport verb-bar detection
+	void applyLoomVerbs(Common::JSONArray &verbsArr, Common::Array<VerbInfo> &activeVerbs,
+	                    bool questionPending);
+	void addIndy3FightHud(Common::JSONObject &out) const;
+	void registerPlayNoteTool();
+	Common::JSONValue *dispatchPlayNote(const Common::String &name, const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled);
+	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
 };
 
 class McpBridgeLoom : public McpBridgeClassic {
 public:
 	explicit McpBridgeLoom(ScummEngine *vm) : McpBridgeClassic(vm) {}
+
+protected:
+	bool isInLoomSection() const override { return true; }
+	void registerGameTools() override { registerPlayNoteTool(); }
+	Common::JSONValue *dispatchGameTool(const Common::String &name, const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override {
+		return dispatchPlayNote(name, args, errorOut, handled);
+	}
+	void applyGameVerbs(Common::JSONArray &verbsArr, Common::Array<VerbInfo> &activeVerbs,
+	                    bool questionPending) override {
+		applyLoomVerbs(verbsArr, activeVerbs, questionPending);
+	}
 };
 
 class McpBridgeIndy3 : public McpBridgeClassic {
 public:
 	explicit McpBridgeIndy3(ScummEngine *vm) : McpBridgeClassic(vm) {}
+
+protected:
+	bool isInIndy3Fight() const override { return indy3FightActive(); }
+	void augmentState(Common::JSONObject &out) override { addIndy3FightHud(out); }
 };
 
 class McpBridgeIndy4 : public McpBridgeClassic {
 public:
 	explicit McpBridgeIndy4(ScummEngine *vm) : McpBridgeClassic(vm) {}
+
+protected:
+	bool isInAtlantisBook() const override;
+	void augmentStateObjects(Common::JSONArray &objects) override;
+	bool interceptGameAct(const Common::JSONObject &args, Common::String &errorOut) override;
+
+private:
+	static const int kAtlantisBookPages = 5;
+	// 1..kAtlantisBookPages for a "page_N" target name, 0 otherwise.
+	static int atlantisBookPageFromName(const Common::String &name);
+	// Turn the open book to page (1..kAtlantisBookPages) and stream its lines.
+	bool turnAtlantisBookPage(int page, Common::String &errorOut);
 };
 
 class McpBridgeMonkey : public McpBridgeClassic {
@@ -96,6 +136,20 @@ public:
 class McpBridgePassport : public McpBridgeClassic {
 public:
 	explicit McpBridgePassport(ScummEngine *vm) : McpBridgeClassic(vm) {}
+
+protected:
+	bool isInLoomSection() const override { return loomSectionByVerbLabels(); }
+	bool isInIndy3Fight() const override { return indy3FightActive(); }
+	void registerGameTools() override { registerPlayNoteTool(); }
+	Common::JSONValue *dispatchGameTool(const Common::String &name, const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override {
+		return dispatchPlayNote(name, args, errorOut, handled);
+	}
+	void applyGameVerbs(Common::JSONArray &verbsArr, Common::Array<VerbInfo> &activeVerbs,
+	                    bool questionPending) override {
+		applyLoomVerbs(verbsArr, activeVerbs, questionPending);
+	}
+	void augmentState(Common::JSONObject &out) override { addIndy3FightHud(out); }
 };
 
 // --- V6: image-verb SCUMM (Sam & Max) --------------------------------------
