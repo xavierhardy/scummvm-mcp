@@ -154,6 +154,11 @@ protected:
 	// Per-frame game-specific streaming step (state machines: cannon aim, bike
 	// fight, context-cursor clicks, …). Called from pumpStream().
 	virtual void pumpStreamGame() {}
+	// Early per-frame streaming hook, run at the very top of pumpStream (before
+	// the generic settle/close logic). Return true to end the frame immediately
+	// (e.g. Full Throttle's bike fight, which runs inside INSANE's own loop and
+	// only wants to wait for the section to resolve). Default does nothing.
+	virtual bool pumpStreamGameEarly() { return false; }
 	// Classify an entity for buildEntityMap (e.g. mark exit hotspots as pathway).
 	// numId is the object/actor id; set isPathway to flag a navigable exit.
 	virtual void classifyGameEntity(int numId, bool &isPathway) const { (void)numId; (void)isPathway; }
@@ -242,12 +247,6 @@ protected:
 	Common::Array<int> _ssePendingDialObjs;
 	int _sseDialVerbId = 0;
 	uint32 _sseLastDialFedFrame = 0;
-	// Full Throttle bike fight (ride_bike): the fight runs inside INSANE's own
-	// loop and is auto-played by Insane::_mcpAutoPilot. While this is set the
-	// stream stays open (suppressing the usual room-change/settle close) until the
-	// fight resolves to Mo's shack (room 17) or a frame cap is hit.
-	bool _sseFtRide = false;
-	uint32 _sseFtRideGiveUpFrame = 0;
 	// Last value seen in the Loom note variable (var 259). Used in pumpStream
 	// to detect 0 -> note transitions and emit them as MCP notifications.
 	int32 _ssePrevNoteValue;
@@ -339,7 +338,6 @@ protected:
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolRideBike(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolDial(const Common::JSONValue &args, Common::String &errorOut);
 

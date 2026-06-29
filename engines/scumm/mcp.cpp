@@ -1066,26 +1066,6 @@ void ScummMcpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
-	// --- ride_bike (Full Throttle highway bike fight) ---
-	if (_vm->_game.id == GID_FT) {
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "ride_bike";
-		spec.description =
-		    "Play the Full Throttle motorcycle minigame. Only available in Full "
-		    "Throttle once Ben has the bike keys (from the bartender) and is at his "
-		    "bike at the bar front. Mounts the bike and rides onto the highway, "
-		    "where a rival Rottwheeler biker attacks; the fight runs as a real-time "
-		    "action sequence steered by the mouse with left-click punches, so this "
-		    "tool auto-plays it — steering Ben alongside the enemy and punching in "
-		    "their direction until the fight resolves. Blocks until the section "
-		    "ends (Ben wipes out and wakes at the mechanic's shack), then returns "
-		    "state changes. Takes no arguments.";
-		spec.inputSchema  = nullptr;  // No input required
-		spec.outputSchema = makeChangesSchema();
-		spec.streaming    = true;
-		_server->registerTool(spec);
-	}
-
 	// --- switch_character (Maniac Mansion only) ---
 	// V0 (C64/Apple II) maps F1-F3 to switchActor(slot)/VAR(97+slot); the
 	// V1/V2 ports use the in-game "New Kid" verb but share the same ego/kid
@@ -1308,10 +1288,6 @@ Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
 		if (!toolPlayNote(args, errorOut)) return nullptr;
 		return nullptr;
 	}
-	if (name == "ride_bike") {
-		if (!toolRideBike(args, errorOut)) return nullptr;
-		return nullptr;
-	}
 	if (name == "switch_character") {
 		if (!toolSwitchCharacter(args, errorOut)) return nullptr;
 		return nullptr;
@@ -1452,53 +1428,6 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			vi2.name   = entry->name;
 			vi2.label  = entry->label;
 			activeVerbs.push_back(vi2);
-		}
-	}
-
-	// The Dig and Full Throttle (both V7) use single-cursor / pie-menu interfaces
-	// with no persistent verb bar. Expose 'interact' (universal context action)
-	// and 'use_item' (inventory item on room object) — both map to verb ID 7 internally.
-	if (_vm->_game.id == GID_DIG && !questionPending && activeVerbs.empty()) {
-		struct FallbackVerb { int id; const char *name; const char *label; };
-		static const FallbackVerb kV7Fallback[] = {
-			{7, "interact", "interact"},
-			{7, "use_item", "use item"},
-			{0, nullptr,    nullptr}
-		};
-		for (int i = 0; kV7Fallback[i].name; ++i) {
-			verbsArr.push_back(mcpJsonString(kV7Fallback[i].label));
-			VerbInfo vi;
-			vi.verbId = kV7Fallback[i].id;
-			vi.name   = kV7Fallback[i].name;
-			vi.label  = kV7Fallback[i].label;
-			activeVerbs.push_back(vi);
-		}
-	}
-
-	// Full Throttle uses a verb-coin: holding over a hotspot pops up three icons
-	// around Ben's head — fist (grab/punch/use), kick (boot), mouth (talk/look) —
-	// plus a generic single-click action. Expose the three coin verbs, a generic
-	// 'interact', and 'use item' (inventory item on a target). Each maps to a real
-	// per-object verb script (fist=9, mouth=8, kick=5); 'interact' picks the
-	// object's best available action at dispatch time.
-	if (_vm->_game.id == GID_FT && !questionPending && activeVerbs.empty()) {
-		struct FallbackVerb { int id; const char *name; const char *label; };
-		static const FallbackVerb kFtFallback[] = {
-			{9,  "fist",     "fist"},
-			{5,  "kick",     "kick"},
-			{8,  "mouth",    "mouth"},
-			{-3, "walk_to",  "walk to"},
-			{-1, "interact", "interact"},
-			{-1, "use_item", "use item"},
-			{0,  nullptr,    nullptr}
-		};
-		for (int i = 0; kFtFallback[i].name; ++i) {
-			verbsArr.push_back(mcpJsonString(kFtFallback[i].label));
-			VerbInfo vi;
-			vi.verbId = kFtFallback[i].id;
-			vi.name   = kFtFallback[i].name;
-			vi.label  = kFtFallback[i].label;
-			activeVerbs.push_back(vi);
 		}
 	}
 
@@ -2470,26 +2399,6 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		_vm->runInputScript(kVerbClickArea, verbId, 1);
 	} else if (dispatchGameAct(verbId, targetA, targetB)) {
 		// Handled by the game-specific leaf (e.g. CMI use-on / walk-to exits).
-	} else if (_vm->_game.id == GID_FT && verbId == -3 && targetA != 0) {
-		// Full Throttle walk_to: walking is a scene-click in-game, and exit
-		// hotspots (scene pathways, and doors once opened — e.g. the room 6 door
-		// after it has been kicked open) only transition when the scene-click
-		// input script runs, not via startWalkActor. Simulate a left click at the
-		// target's location so the verb script walks Ben there and fires any
-		// exit/room-transition handler — the same proven path toolWalk() uses for
-		// the dumpster climb-out.
-		int clickX = _vm->getObjX(targetA);
-		int clickY = _vm->getObjY(targetA);
-		_vm->_mouse.x        = clickX;
-		_vm->_mouse.y        = clickY;
-		_vm->_virtualMouse.x = clickX;
-		_vm->_virtualMouse.y = clickY;
-		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = clickX;
-		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = clickY;
-		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = clickX;
-		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = clickY;
-		_vm->_leftBtnPressed |= 0x03;       // msClicked | msDown
-		_debugButtonReleaseFrame = _frameCounter + 2;
 	} else {
 		_vm->doSentence(verbId, targetA, targetB);
 	}
@@ -3377,73 +3286,6 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 // Tool: ride_bike (Full Throttle highway bike fight)
 // ---------------------------------------------------------------------------
 
-bool ScummMcpBridge::toolRideBike(const Common::JSONValue &args, Common::String &errorOut) {
-	(void)args;
-	if (_streaming) {
-		errorOut = "ride_bike: another action is already in progress";
-		return false;
-	}
-	if (_vm->_game.id != GID_FT) {
-		errorOut = "ride_bike: only available in Full Throttle";
-		return false;
-	}
-	if (_vm->_userPut <= 0) {
-		errorOut = "ride_bike: game is not accepting input right now";
-		return false;
-	}
-	// The bike is object 55 at the bar front (room 6); riding it needs the keys
-	// (object 54, picked up from the bartender). Without them the bike just says
-	// "Some joker took my keys." rather than starting the ride.
-	if (_vm->_currentRoom != 6) {
-		errorOut = "ride_bike: go to Ben's bike at the bar front (walk back out of the bar) first";
-		return false;
-	}
-	int ego = (_vm->VAR_EGO != 0xFF) ? (int)_vm->VAR(_vm->VAR_EGO) : 1;
-	if (_vm->getOwner(54) != ego) {
-		errorOut = "ride_bike: Ben needs his bike keys first — punch the bartender to get them";
-		return false;
-	}
-	ScummEngine_v7 *v7 = static_cast<ScummEngine_v7 *>(_vm);
-	Insane *insane = v7->getInsane();
-	if (!insane) {
-		errorOut = "ride_bike: the action engine is not available";
-		return false;
-	}
-
-	// Enable the INSANE auto-pilot so the bike fight (which runs inside INSANE's
-	// own loop, out of reach of the MCP server's per-frame pump) plays itself.
-	insane->_mcpAutoPilot = true;
-	insane->_mcpAutoPilotFrame = 0;
-
-	snapshotPreAction();
-	_streaming = true;
-	_sseAnswerStream = false;
-	_sseStartFrame = _frameCounter;
-	_sseDoneAtFrame = 0;
-	_sseStuckAtFrame = 0;
-	_sseLastEventFrame = 0;
-	_sseEgoMoved = false;
-	_sseMessages.clear();
-	_ssePendingSecondClick = false;
-	_ssePendingNotes.clear();
-	_sseTargetObject = 0;
-	_sseButtonClearFrame = 0;
-	_ssePendingV7Choice = 0;
-	_ssePendingV7UseClick = false;
-	_sseFtRide = true;
-	// Frame cap is a safety net only; _frameCounter does not advance while INSANE
-	// owns the loop, so this counts real (non-INSANE) pump frames before/after.
-	_sseFtRideGiveUpFrame = _frameCounter + 1200;
-
-	// Mount the bike: dispatch the fist coin-verb on object 55, exactly as a
-	// player clicking it does. resolveVerb keeps the verb id correct across builds.
-	int fistVerb = 9;
-	resolveVerb("fist", fistVerb);
-	_vm->doSentence(fistVerb, 55, 0);
-	_server->startStreaming();
-	return true;
-}
-
 // ---------------------------------------------------------------------------
 // Tool: switch_character (Maniac Mansion)
 // ---------------------------------------------------------------------------
@@ -3834,34 +3676,10 @@ void ScummMcpBridge::pumpStream() {
 
 	emitPendingMessages();
 
-	// Full Throttle bike fight (ride_bike): the ride + fight run inside INSANE's
-	// own loop, during which pumpStream is not ticked at all. So we only reach
-	// here before the ride starts (still room 6) or after the whole section has
-	// resolved. The demo resolves the highway either to its closing narration
-	// (room 48, after Ben wins the fight) or to the mechanic's shack (room 17,
-	// after a wipe-out), so keep the stream open — suppressing the usual
-	// room-change/settle close — until one of those is reached, then disable the
-	// auto-pilot and finish. A frame cap (real, non-INSANE frames) is a safety net.
-	if (_sseFtRide) {
-		bool resolved = (_vm->_currentRoom == 48 || _vm->_currentRoom == 17);
-		bool capped = (_frameCounter >= _sseFtRideGiveUpFrame);
-		if (resolved || capped) {
-			ScummEngine_v7 *v7 = (ScummEngine_v7 *)_vm;
-			if (v7->getInsane())
-				v7->getInsane()->_mcpAutoPilot = false;
-			_sseFtRide = false;
-			debug(1, "mcp: ride_bike finished (resolved=%d capped=%d room=%d)",
-			      resolved, capped, _vm->_currentRoom);
-			Common::JSONObject changes = buildStateChanges();
-			_streaming = false;
-			_server->endStream(new Common::JSONValue(changes), true);
-			return;
-		}
-		// Still waiting for INSANE to run/resolve; do not let the generic close
-		// logic below fire on the pre-ride frames.
-		_sseLastEventFrame = _frameCounter;
+	// Game-specific early streaming step (e.g. Full Throttle's INSANE bike
+	// fight): may end the frame before the generic settle/close logic runs.
+	if (pumpStreamGameEarly())
 		return;
-	}
 
 	// On the first pump of a new stream, snapshot the Loom note variable so
 	// the watcher below only emits transitions occurring during this action.
@@ -5328,41 +5146,6 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 			return true;
 		}
 	}
-	// The Dig and Full Throttle (V7) use a single-cursor click / pie-menu model.
-	// Map interact / use_item to a click sentinel and let toolAct dispatch via a
-	// simulated scene click — the doSentence path used for V6 does not reliably
-	// trigger the per-object scripts for V7 games.
-	if ((_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT) && normalized == "use") {
-		verbId = -1;
-		debug(1, "mcp: resolveVerb V7 interact/use_item -> click dispatch sentinel");
-		return true;
-	}
-
-	// Full Throttle verb-coin verbs: fist (grab/punch/use), kick (boot), mouth
-	// (talk/look) map to the per-object verb scripts 9/5/8; the generic 'interact'
-	// uses the click-dispatch sentinel (-1), resolved to the object's best
-	// available coin verb in toolAct().
-	if (_vm->_game.id == GID_FT) {
-		if (normalized == "fist")     { verbId = 9;  return true; }
-		if (normalized == "kick")     { verbId = 5;  return true; }
-		if (normalized == "mouth")    { verbId = 8;  return true; }
-		if (normalized == "walk_to")  { verbId = -3; return true; }
-		if (normalized == "interact") { verbId = -1; return true; }
-	}
-
-	// Full Throttle verb-coin actions dispatched via doSentence (objects carry
-	// real per-verb entrypoints, unlike The Dig). Debug helper: "v_N"/"verb_N"
-	// dispatches an arbitrary verb id for empirical mapping.
-	if (_vm->_game.id == GID_FT && _debugToolsEnabled &&
-	    (normalized.hasPrefix("v_") || normalized.hasPrefix("verb_"))) {
-		const char *p = normalized.c_str() + (normalized.hasPrefix("v_") ? 2 : 5);
-		int id = atoi(p);
-		if (id > 0) {
-			verbId = id;
-			return true;
-		}
-	}
-
 	// Sam & Max: talk_to has no verb id — it is the "mouth" cursor reached by
 	// cycling the right-click verb. Map it to a sentinel that toolAct dispatches
 	// via the verb-cycle-then-click state machine in pumpStream.

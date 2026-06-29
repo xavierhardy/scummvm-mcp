@@ -88,11 +88,37 @@ public:
 class McpBridgeDig : public McpBridgeV7 {
 public:
 	explicit McpBridgeDig(ScummEngine *vm) : McpBridgeV7(vm) {}
+
+protected:
+	void applyGameVerbs(Common::JSONArray &verbsArr,
+	                    Common::Array<VerbInfo> &activeVerbs, bool questionPending) override;
+	bool resolveGameVerb(const Common::String &normalized, int &verbId) const override;
 };
 
 class McpBridgeFullThrottle : public McpBridgeV7 {
 public:
 	explicit McpBridgeFullThrottle(ScummEngine *vm) : McpBridgeV7(vm) {}
+
+protected:
+	void registerGameTools() override;
+	Common::JSONValue *dispatchGameTool(const Common::String &name,
+	                                    const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override;
+	void applyGameVerbs(Common::JSONArray &verbsArr,
+	                    Common::Array<VerbInfo> &activeVerbs, bool questionPending) override;
+	bool resolveGameVerb(const Common::String &normalized, int &verbId) const override;
+	bool dispatchGameAct(int verbId, int targetA, int targetB) override;
+	bool pumpStreamGameEarly() override;
+
+private:
+	bool toolRideBike(const Common::JSONValue &args, Common::String &errorOut);
+
+	// Bike fight (ride_bike): the fight runs inside INSANE's own loop and is
+	// auto-played by Insane::_mcpAutoPilot. While this is set the stream stays
+	// open (suppressing the usual room-change/settle close) until the fight
+	// resolves (room 17 or 48) or a frame cap is hit.
+	bool _sseFtRide = false;
+	uint32 _sseFtRideGiveUpFrame = 0;
 };
 
 // --- V8: verb-slot SCUMM (Curse of Monkey Island) --------------------------
