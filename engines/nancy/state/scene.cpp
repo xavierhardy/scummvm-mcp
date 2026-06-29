@@ -581,6 +581,42 @@ bool Scene::getEventFlag(FlagDescription eventFlag) const {
 	return getEventFlag(eventFlag.label, eventFlag.flag);
 }
 
+// On first use, seed each resource value from the UIRC boot chunk (record id =
+// initial value). After a save is loaded `seeded` is already true, so the
+// restored values are kept.
+static void seedUIResourceData(UIResourceData *data) {
+	if (!data || data->seeded) {
+		return;
+	}
+
+	const UIRC *uirc = GetEngineData(UIRC)
+
+	data->seeded = true;
+	if (uirc) {
+		data->values.resize(uirc->items.size());
+		for (uint i = 0; i < uirc->items.size(); ++i) {
+			data->values[i] = uirc->items[i].id;
+		}
+	}
+}
+
+int32 Scene::getUIResource(uint index) {
+	UIResourceData *data = (UIResourceData *)getPuzzleData(UIResourceData::getTag());
+	seedUIResourceData(data);
+	if (!data || index >= data->values.size()) {
+		return 0;
+	}
+	return data->values[index];
+}
+
+void Scene::setUIResource(uint index, int32 value) {
+	UIResourceData *data = (UIResourceData *)getPuzzleData(UIResourceData::getTag());
+	seedUIResourceData(data);
+	if (data && index < data->values.size()) {
+		data->values[index] = value;
+	}
+}
+
 // Nancy 11+ AR 30/31 store the "player scrolling disabled" state in an event
 // flag (eventData[0x21] in the original). It persists across scenes and is
 // saved/restored together with the rest of the event flags. Nancy12 shifted the
@@ -871,8 +907,8 @@ UI::Clock *Scene::getClock() {
 }
 
 void Scene::init() {
-	auto *bootSummary = GetEngineData(BSUM);
-	auto *hintData = GetEngineData(HINT);
+	auto *bootSummary = GetEngineData(BSUM)
+	auto *hintData = GetEngineData(HINT)
 	assert(bootSummary);
 
 	_flags.eventFlags.resize(g_nancy->getStaticData().numEventFlags, g_nancy->_false);
@@ -1215,6 +1251,25 @@ void Scene::tickSoftwareTimers(uint32 deltaMs) {
 	}
 }
 
+bool Scene::isSoftwareTimerActive(uint16 index) const {
+	if (index >= TimerData::kNumTimers || !_puzzleData.contains(TimerData::getTag())) {
+		return false;
+	}
+
+	const TimerData::Timer &timer = ((const TimerData *)_puzzleData.getVal(TimerData::getTag()))->timers[index];
+	return timer.state == TimerData::Timer::kRunning ||
+		timer.state == TimerData::Timer::kOneShot ||
+		timer.state == TimerData::Timer::kRepeating;
+}
+
+uint32 Scene::getSoftwareTimerElapsed(uint16 index) const {
+	if (index >= TimerData::kNumTimers || !_puzzleData.contains(TimerData::getTag())) {
+		return 0;
+	}
+
+	return ((const TimerData *)_puzzleData.getVal(TimerData::getTag()))->timers[index].currentTimeMs;
+}
+
 void Scene::fireSoftwareTimer(TimerData::Timer &timer) {
 	timer.hasFired = true;
 
@@ -1372,10 +1427,13 @@ void Scene::handleInput() {
 			case kTaskButtonCellphone:
 				_cellPhonePopup.toggle();
 				break;
-			case kTaskButtonHelp:
-				requestStateChange(NancyState::kHelp);
+			case -1:
 				break;
 			default:
+				// HELP is always the last taskbar button. Its index shifts from
+				// 4 to 5 in Nancy12, where a non-clickable coin purse occupies slot
+				// 4 (and never reports a click), so match it as the fall-through.
+				requestStateChange(NancyState::kHelp);
 				break;
 			}
 		}

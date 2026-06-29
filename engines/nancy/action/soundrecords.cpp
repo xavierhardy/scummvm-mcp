@@ -99,6 +99,17 @@ void Update3DSound::execute() {
 	_isDone = true;
 }
 
+void Set3DSoundListenerPosition::readData(Common::SeekableReadStream &stream) {
+	_posX = stream.readSint32LE();
+	_posY = stream.readSint32LE();
+	_posZ = stream.readSint16LE();
+}
+
+void Set3DSoundListenerPosition::execute() {
+	// TODO: forward the listener position to the sound manager.
+	_isDone = true;
+}
+
 void PlaySound::readData(Common::SeekableReadStream &stream) {
 	_sound.readDIGI(stream);
 
@@ -126,6 +137,14 @@ void PlaySound::execute() {
 
 		if (g_nancy->getGameType() >= kGameTypeNancy8) {
 			NancySceneState.setEventFlag(_flag);
+		}
+
+		// A looping sound with no scene change and no event flag is started and then
+		// left to play; the record is marked done at once instead of waiting on a sound
+		// that never ends.
+		if (_sceneChange.sceneID == kNoScene && _flag.label == kEvNoEvent && _sound.numLoops == 0) {
+			_isDone = true;
+			break;
 		}
 
 		if (_changeSceneImmediately) {

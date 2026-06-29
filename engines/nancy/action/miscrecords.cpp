@@ -282,8 +282,9 @@ void ControlUIItems::execute() {
 		// player is in scene range [_startScene, _endScene]. _flagB != 0 sets
 		// the toggle (a _startScene of 9997 means "from scene 0", with the
 		// range capped at 9997); _flagB == 0 clears it once a bound is 9999
-		// (kNoScene). The _autoOpenOrBadgeSound value selects the button's
-		// click sound in the original (not yet implemented).
+		// (kNoScene). _flagB != 0 also sets the disabled button's rejection-sound
+		// mode from _autoOpenOrBadgeSound (which clickSoundName line plays when
+		// the button is clicked while its popup is unavailable).
 		UI::Taskbar *taskbar = NancySceneState.getTaskbar();
 		if (taskbar) {
 			if (_flagB != 0) {
@@ -294,6 +295,7 @@ void ControlUIItems::execute() {
 					end = 9997;
 				}
 				taskbar->setDisabledRange(_uiButton, start, end);
+				taskbar->setClickSoundMode(_uiButton, _autoOpenOrBadgeSound);
 			} else if (_startScene == (int16)kNoScene || _endScene == (int16)kNoScene) {
 				taskbar->clearButtonOverride(_uiButton);
 			}
@@ -747,6 +749,36 @@ void HintSystem::selectHint() {
 			break;
 		}
 	}
+}
+
+void ResourceUse::readData(Common::SeekableReadStream &stream) {
+	_resourceIndex = stream.readSint16LE();   // which UIRC resource to change
+	_amount = stream.readSint16LE();           // value / delta
+	_mode = stream.readByte();                 // 0 = set, non-zero = add
+	_flag.label = stream.readSint16LE();       // event flag set on success
+	_flag.flag = stream.readByte();
+	// The rest of the 113-byte block (success/fail sounds, an optional scene
+	// change at +0x5b, and a transient "UIResource_Overlay" sprite) isn't
+	// handled yet.
+	stream.skip(0x71 - 8);
+}
+
+void ResourceUse::execute() {
+	if (_mode == 0) {
+		// Set the resource outright.
+		NancySceneState.setUIResource(_resourceIndex, _amount);
+		NancySceneState.setEventFlag(_flag);
+	} else {
+		// Add the (signed) amount, but never let the resource go negative —
+		// the original skips the change (e.g. when Nancy can't afford it).
+		const int32 result = NancySceneState.getUIResource(_resourceIndex) + _amount;
+		if (result >= 0) {
+			NancySceneState.setUIResource(_resourceIndex, result);
+			NancySceneState.setEventFlag(_flag);
+		}
+	}
+
+	_isDone = true;
 }
 
 } // End of namespace Action
