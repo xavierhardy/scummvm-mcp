@@ -143,6 +143,10 @@ bool Script::hasProcedure(const Common::String &procedure) const {
 }
 
 String Script::procedureAt(uint32 pc) const {
+	// this can only happen if an error occurs before we load the script
+	if (_procedures.empty())
+		return "<none>";
+
 	// this method is very inefficient but it is only used for debugging
 	typedef Pair<String, uint32> Node;
 	Array<Node> sorted;
@@ -952,7 +956,16 @@ private:
 				_character = g_engine->game().unknownSayTextCharacter(characterName, dialogId);
 			if (_character == nullptr)
 				return TaskReturn::finish(1);
-			return TaskReturn::waitFor(_character->sayText(process(), dialogId));
+			return TaskReturn::waitFor(_character->sayText(process(), dialogId, nullptr));
+		};
+		case ScriptKernelTask::SayTextOnlySound: {
+			const char *dialogSound = getStringArg(1);
+			Character *_character = getObjectArg<Character>(0);
+			if (_character == nullptr)
+				_character = g_engine->game().unknownSayTextCharacter(getStringArg(0), -1);
+			if (_character == nullptr)
+				return TaskReturn::finish(1);
+			return TaskReturn::waitFor(_character->sayText(process(), -1, dialogSound));
 		};
 		case ScriptKernelTask::SetDialogLineReturn:
 			relatedCharacter().setLastDialogReturnValue(getNumberArg(0));

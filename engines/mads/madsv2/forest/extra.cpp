@@ -122,35 +122,32 @@ void unload_interface() {
 }
 
 void draw_interface() {
-	// Once Upon a Forest uses a custom interface
+	// Draw backpack icon
 	stamp_sprite_to_interface(BP_X, BP_Y, 1, int_sprite[fx_int_backpack]);
-	if (global[Forest::walker_converse_state]) {  // candle_is_on
+
+	// Draw candle cion
+	if (global[Forest::walker_converse_state]) {
 		stamp_sprite_to_interface(CANDLE_X, CANDLE_Y, 1, int_sprite[fx_int_candle_on]);
 	} else {
 		stamp_sprite_to_interface(CANDLE_X, CANDLE_Y, 1, int_sprite[fx_int_candle]);
 	}
+
+	// Draw door icon
 	stamp_sprite_to_interface(DOOR_X, DOOR_Y, 1, int_sprite[fx_int_exit]);
 
-	if (room_id != 199) {  // Taranjeet, if this is not journal room
+	// Draw journal icon, except when in journal room
+	if (room_id != 199) {
 		stamp_sprite_to_interface(JOURNAL_X, JOURNAL_Y, 1, int_sprite[fx_int_journal]);
 	}
-
 }
 
 void do_interface() {
-	if (mouse_y > 156 &&
-		mouse_stop_stroke &&
-		player.commands_allowed &&
-		/* global[4] == -1 && */
-		!kernel.trigger &&
-		/* player.command_ready && */
-		inter_input_mode == INTER_LIMITED_SENTENCES &&
-		!global[inventory_is_displayed]
-		/* pl conv_control.running < 0 */) {
+	if (mouse_y > 156 && mouse_stop_stroke && player.commands_allowed &&
+			!kernel.trigger && inter_input_mode == INTER_LIMITED_SENTENCES &&
+			!global[inventory_is_displayed]) {
+		// Interface click handling
 		if (room_id == 199) {
-			// Taranjeet's Journal
 			leave_journal();
-
 		} else if (mouse_x < 64) {
 			display_journal();
 		} else if (mouse_x < 139) {
@@ -195,9 +192,9 @@ void open_interface(InterfaceButton button) {
 
 		if (button == JOURNAL_FLY) {
 			if (count != 23) {
-				int x = count * 2 + 46;
-				int clip_x = 100 - count * 9;
-				sprite_draw_clipped(series_list[0], 1, clip_x, &scr_inter, x, 30);
+				int y = count * 2 + 46;
+				int scale = 100 - count * 9;
+				sprite_draw_scaled(series_list[0], 1, &scr_inter, 30, y, scale);
 			}
 		} else {
 			sprite_draw(series_list[0], 1, &scr_inter, JOURNAL_X, JOURNAL_Y);
@@ -205,9 +202,9 @@ void open_interface(InterfaceButton button) {
 
 		if (button == BP_FLY) {
 			if (count != 23) {
-				int x = count * 2 + 40;
-				int clip_x = 100 - count * 9;
-				sprite_draw_clipped(series_list[1], 1, clip_x, &scr_inter, x, 96);
+				int y = count * 2 + 40;
+				int scale = 100 - count * 9;
+				sprite_draw_scaled(series_list[1], 1, &scr_inter, 96, y, scale);
 			}
 		} else {
 			sprite_draw(series_list[1], 1, &scr_inter, BP_X, BP_Y);
@@ -232,6 +229,7 @@ void open_interface(InterfaceButton button) {
 		}
 
 		buffer_rect_copy_2(scr_inter, scr_main, 168, 0, 168, 156, 152, 44);
+		buffer_rect_copy_2(scr_main, scr_live, 0, 156, 0, 156, 320, 44);
 
 		while (timer_read() - current_time < 2) {
 		}
@@ -257,9 +255,9 @@ void close_interface(InterfaceButton button) {
 
 		if (button == JOURNAL_FLY) {
 			if (count != 0) {
-				int x = count * 2 + 43;
-				int clip_x = 100 - count * 9;
-				sprite_draw_clipped(series_list[0], 1, clip_x, &scr_inter, x, 30);
+				int y = count * 2 + 43;
+				int scale = 100 - count * 9;
+				sprite_draw_scaled(series_list[0], 1, &scr_inter, 30, y, scale);
 			} else {
 				sprite_draw(series_list[0], 1, &scr_inter, JOURNAL_X, JOURNAL_Y);
 			}
@@ -269,9 +267,9 @@ void close_interface(InterfaceButton button) {
 
 		if (button == BP_FLY) {
 			if (count != 0) {
-				int x = count * 2 + 37;
-				int clip_x = 100 - count * 9;
-				sprite_draw_clipped(series_list[1], 1, clip_x, &scr_inter, x, 96);
+				int y = count * 2 + 37;
+				int scale = 100 - count * 9;
+				sprite_draw_scaled(series_list[1], 1, &scr_inter, 96, y, scale);
 			} else {
 				sprite_draw(series_list[1], 1, &scr_inter, BP_X, BP_Y);
 			}
@@ -293,6 +291,7 @@ void close_interface(InterfaceButton button) {
 		sprite_draw(series_list[3], 1, &scr_inter, DOOR_X, DOOR_Y);
 
 		buffer_rect_copy_2(scr_inter, scr_main, 168, 0, 168, 156, 152, 44);
+		buffer_rect_copy_2(scr_main, scr_live, 0, 156, 0, 156, 320, 44);
 
 		while (timer_read() - current_time < 2) {
 		}

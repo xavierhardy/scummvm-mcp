@@ -2078,12 +2078,17 @@ void InsaneRebel2::iactRebel2Opcode9(byte *renderBitmap, Common::SeekableReadStr
 		if (ch == '^' && i + 1 < srcLen) {
 			byte next = (byte)textStr[i + 1];
 			if (next == 'f' && i + 3 < srcLen) {
+				// Reserve room for the escape bytes plus the terminating NUL.
+				if (dstIdx + 4 > (int)sizeof(convertedText) - 1)
+					break;
 				convertedText[dstIdx++] = textStr[i++];
 				convertedText[dstIdx++] = textStr[i++];
 				convertedText[dstIdx++] = textStr[i++];
 				convertedText[dstIdx++] = textStr[i];
 				continue;
 			} else if (next == 'c' && i + 4 < srcLen) {
+				if (dstIdx + 5 > (int)sizeof(convertedText) - 1)
+					break;
 				convertedText[dstIdx++] = textStr[i++];
 				convertedText[dstIdx++] = textStr[i++];
 				convertedText[dstIdx++] = textStr[i++];
@@ -2091,6 +2096,8 @@ void InsaneRebel2::iactRebel2Opcode9(byte *renderBitmap, Common::SeekableReadStr
 				convertedText[dstIdx++] = textStr[i];
 				continue;
 			} else if (next == 'l') {
+				if (dstIdx + 2 > (int)sizeof(convertedText) - 1)
+					break;
 				convertedText[dstIdx++] = textStr[i++];
 				convertedText[dstIdx++] = textStr[i];
 				continue;
@@ -2183,6 +2190,7 @@ void InsaneRebel2::initEnemyStruct(int id, int32 x, int32 y, int32 w, int32 h, b
 	e.active = active;
 	e.destroyed = destroyed;
 	e.explosionFrame = explosionFrame;
+	e.explosionComplete = false;
 	e.savedBackground = nullptr;
 	e.savedBgWidth = 0;
 	e.savedBgHeight = 0;
