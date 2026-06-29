@@ -1241,29 +1241,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 		}
 	}
 
-	// Sam & Max (V6) does not populate the classic text verb slots; expose a
-	// stable MCP verb set even when _verbs[] is empty.
-	if (_vm->_game.id == GID_SAMNMAX && !questionPending && activeVerbs.empty()) {
-		struct FallbackVerb { int id; const char *name; const char *label; };
-		static const FallbackVerb kSamnMaxFallback[] = {
-			{13, "walk_to", "walk to"},
-			{15, "look_at", "look at"},
-			{11, "use", "use"},
-			{6,  "talk_to", "talk to"},
-			{14, "pick_up", "pick up"},
-			{0, nullptr, nullptr}
-		};
-		for (int i = 0; kSamnMaxFallback[i].name; ++i) {
-			verbsArr.push_back(mcpJsonString(kSamnMaxFallback[i].label));
-			VerbInfo vi;
-			vi.verbId = kSamnMaxFallback[i].id;
-			vi.name = kSamnMaxFallback[i].name;
-			vi.label = kSamnMaxFallback[i].label;
-			activeVerbs.push_back(vi);
-		}
-	}
-
-	// Game-specific verb-list overrides (e.g. CMI's fixed single-cursor verb set).
+	// Game-specific verb-list overrides (CMI's fixed verb set, V7 single-cursor
+	// fallbacks, Sam & Max's icon verbs, …).
 	applyGameVerbs(verbsArr, activeVerbs, questionPending);
 
 	out.setVal("verbs", new Common::JSONValue(verbsArr));

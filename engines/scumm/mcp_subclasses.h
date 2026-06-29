@@ -161,6 +161,10 @@ public:
 class McpBridgeSamnMax : public McpBridgeV6 {
 public:
 	explicit McpBridgeSamnMax(ScummEngine *vm) : McpBridgeV6(vm) {}
+
+protected:
+	void applyGameVerbs(Common::JSONArray &verbsArr,
+	                    Common::Array<VerbInfo> &activeVerbs, bool questionPending) override;
 };
 
 // --- V7: blast-text dialog SCUMM (The Dig, Full Throttle) ------------------
