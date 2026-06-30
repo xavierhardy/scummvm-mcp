@@ -241,6 +241,82 @@ bool McpBridgeClassic::toolPlayNote(const Common::JSONValue &args, Common::Strin
 	return true;
 }
 
+void McpBridgeClassic::pumpStreamGame() {
+	// Only relevant inside a Loom section: full Loom always, or the Loom
+	// mini-game in Passport. Other classic games (Indy3/Monkey/Indy4) never play
+	// distaff notes and never queue play_note input, so skip entirely.
+	if (!isInLoomSection())
+		return;
+
+	// On the first pump of a new stream, snapshot the Loom note variable so the
+	// watcher below only emits transitions occurring during this action.
+	if (_frameCounter == _sseStartFrame) {
+		_ssePrevNoteValue = (vmNumVariables() > 259) ? vmVar(259) : 0;
+		_sseLastNoteFedFrame = 0;
+	}
+
+	// Loom note watcher: var(259) is set by the engine each time a distaff note
+	// is played — both when an object sings (e.g. the egg playing the Opening
+	// draft) and when the player presses a note key. Detect 0 -> note transitions
+	// and surface them as MCP notifications so the client can learn the songs
+	// objects play.
+	if (vmNumVariables() > 259) {
+		int32 cur = vmVar(259);
+		if (cur != _ssePrevNoteValue) {
+			if (cur >= 1 && cur <= 8) {
+				static const char *kNoteNames[] = {"c", "d", "e", "f", "g", "a", "b", "C"};
+				const char *noteName = kNoteNames[cur - 1];
+				MessageEntry m;
+				m.seq = _nextMessageSeq++;
+				m.frame = _frameCounter;
+				m.room = _vm->_currentRoom;
+				m.actorId = -1;
+				m.type = "note";
+				m.text = noteName;
+				_sseMessages.push_back(m);
+				_sseLastEventFrame = _frameCounter;
+
+				Common::JSONObject params;
+				params.setVal("type", mcpJsonString("note"));
+				params.setVal("text", mcpJsonString(noteName));
+				_server->emitNotification(params);
+			}
+			_ssePrevNoteValue = cur;
+		}
+	}
+
+	// Feed deferred synthetic inputs (used by Loom): second click for egg and
+	// note sequences for play_note(notes=[...]).
+	if (_ssePendingSecondClick) {
+		vmMouse().x = _sseClickMouseX;
+		vmMouse().y = _sseClickMouseY;
+		if (_vm->VAR_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_MOUSE_X) = _sseClickMouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = _sseClickMouseY;
+		vmLastInputScriptTime() = _vm->_system->getMillis();
+		vmLeftBtnPressed() |= 0x03; // msClicked | msDown
+		_ssePendingSecondClick = false;
+	}
+
+	// Feed the next pending note by invoking the engine's verb script directly
+	// (kKeyClickArea). Each runInputScript invocation runs Script 97 (Loom's
+	// input handler) which kills any prior instance — meaning two notes in rapid
+	// succession would have the second overwrite the first. Pace feeds fast
+	// enough that the script's draft-buffer timeout doesn't fire mid-sequence but
+	// slow enough that each note's script completes.
+	const uint32 kNoteSpacingFrames = 15;
+	if (!_ssePendingNotes.empty()
+	    && (_sseLastNoteFedFrame == 0
+	        || _frameCounter - _sseLastNoteFedFrame >= kNoteSpacingFrames)) {
+		Common::KeyCode kc = _ssePendingNotes[0];
+		_ssePendingNotes.remove_at(0);
+		_sseLastNoteFedFrame = _frameCounter;
+		// kKeyClickArea handler reads the ASCII value for the key. For the distaff
+		// note keys (lowercase letters c/d/e/f/g/a/b plus capital C), the keycode
+		// value equals the ASCII byte.
+		vmRunInputScript(kKeyClickArea, (int)kc, 1);
+	}
+}
+
 // ---------------------------------------------------------------------------
 // McpBridgeIndy4 — Fate of Atlantis "Lost Dialogue" book
 // ---------------------------------------------------------------------------

@@ -83,6 +83,11 @@ protected:
 	Common::JSONValue *dispatchPlayNote(const Common::String &name, const Common::JSONValue &args,
 	                                    Common::String &errorOut, bool &handled);
 	bool toolPlayNote(const Common::JSONValue &args, Common::String &errorOut);
+
+	// Loom note watcher + deferred note/click feed, active only inside a Loom
+	// section (full Loom, or the Loom mini-game in Passport). Surfaces var(259)
+	// note transitions as MCP notifications and paces play_note's queued keys.
+	void pumpStreamGame() override;
 };
 
 class McpBridgeLoom : public McpBridgeClassic {
@@ -171,6 +176,15 @@ protected:
 class McpBridgeV7 : public ScummMcpBridge {
 public:
 	explicit McpBridgeV7(ScummEngine *vm) : ScummMcpBridge(vm) {}
+
+protected:
+	// V7 dialog verb-script watcher: when the game switches to a dialog input
+	// script (VAR_VERB_SCRIPT changes) the action is still in progress, so reset
+	// the settle window to wait for the choices to appear.
+	void pumpStreamGame() override;
+	// V7 deferred clicks: the use-item scene click and the dialog-choice click.
+	// Both Dig and Full Throttle inherit this.
+	void pumpStreamGameLate() override;
 };
 
 class McpBridgeDig : public McpBridgeV7 {
@@ -181,6 +195,8 @@ protected:
 	void applyGameVerbs(Common::JSONArray &verbsArr,
 	                    Common::Array<VerbInfo> &activeVerbs, bool questionPending) override;
 	bool resolveGameVerb(const Common::String &normalized, int &verbId) const override;
+	// Dig pickup-deselect, then the shared V7 deferred clicks.
+	void pumpStreamGameLate() override;
 };
 
 class McpBridgeFullThrottle : public McpBridgeV7 {
@@ -213,6 +229,12 @@ private:
 class McpBridgeV8 : public ScummMcpBridge {
 public:
 	explicit McpBridgeV8(ScummEngine *vm) : ScummMcpBridge(vm) {}
+
+protected:
+	// V8 settle-window extender: use-on-X actions chain follow-up scripts after
+	// the sentence ends; bump the event frame whenever a new script appears so
+	// the stream keeps settling while the chain runs.
+	void pumpStreamGame() override;
 };
 
 class McpBridgeComi : public McpBridgeV8 {

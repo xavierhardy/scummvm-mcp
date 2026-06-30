@@ -278,7 +278,26 @@ void McpBridgeComi::classifyGameEntity(int numId, bool &isPathway) const {
 	}
 }
 
+void McpBridgeV8::pumpStreamGame() {
+	// Use-on-X actions chain follow-up scripts (animation cues + deferred
+	// inventory updates) that start in fresh slots after the sentence script
+	// ends. Whenever a NEW script appears (count rises since the previous frame),
+	// bump the event frame so the settling window keeps extending while the chain
+	// is in progress.
+	int curCount = vmActiveScriptCount();
+	// Only bump on a new script appearing this frame (count went up since the
+	// last frame). Stable counts (background music etc.) and counts above the
+	// pre-action baseline are not enough — those would keep the stream open
+	// indefinitely for plain walk_to actions.
+	if (curCount > _sseLastActiveScriptCount)
+		_sseLastEventFrame = _frameCounter;
+	_sseLastActiveScriptCount = curCount;
+}
+
 void McpBridgeComi::pumpStreamGame() {
+	// Shared V8 settle-window extender first, then the cannon-aim machine.
+	McpBridgeV8::pumpStreamGame();
+
 	// CMI cannon minigame aim. The room-4 control script (local 2008/2007) aims
 	// the cannon through two of its own globals: VAR(234) is the barrel's target
 	// column (the barrel actor walks toward it) and VAR(235) is the elevation

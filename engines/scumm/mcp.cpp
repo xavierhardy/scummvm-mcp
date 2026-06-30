@@ -346,6 +346,9 @@ int ScummMcpBridge::vmGetObjectIndex(int obj) const        { return _vm->getObje
 int ScummMcpBridge::vmGetVerbEntrypoint(int obj, int entry) const { return _vm->getVerbEntrypoint(obj, entry); }
 int ScummMcpBridge::vmActorToObj(int actor) const          { return _vm->actorToObj(actor); }
 int ScummMcpBridge::vmNumLocalObjects() const              { return _vm->_numLocalObjects; }
+uint16 *ScummMcpBridge::vmInventory() const                { return _vm->_inventory; }
+int ScummMcpBridge::vmNumInventory() const                 { return _vm->_numInventory; }
+int ScummMcpBridge::vmActiveScriptCount() const            { return _vm->activeScriptCount(); }
 void ScummMcpBridge::vmDoSentence(int verb, int objA, int objB) const { _vm->doSentence(verb, objA, objB); }
 void ScummMcpBridge::vmRunInputScript(int clickArea, int val, int mode) const { _vm->runInputScript(clickArea, val, mode); }
 void ScummMcpBridge::vmResetSentence() const               { _vm->resetSentence(); }
@@ -3052,77 +3055,11 @@ void ScummMcpBridge::pumpStream() {
 	if (pumpStreamGameEarly())
 		return;
 
-	// On the first pump of a new stream, snapshot the Loom note variable so
-	// the watcher below only emits transitions occurring during this action.
-	if (_frameCounter == _sseStartFrame) {
-		_ssePrevNoteValue = (_vm->_scummVars && _vm->_numVariables > 259)
-		                    ? _vm->_scummVars[259] : 0;
-		_sseLastNoteFedFrame = 0;
-	}
-
-	// Loom note watcher: var(259) is set by the engine each time a distaff
-	// note is played — both when an object sings (e.g. the egg playing the
-	// Opening draft) and when the player presses a note key. Detect 0 -> note
-	// transitions and surface them as MCP notifications so the client can
-	// learn the songs objects play.
-	if (_vm->_scummVars && _vm->_numVariables > 259) {
-		int32 cur = _vm->_scummVars[259];
-		if (cur != _ssePrevNoteValue) {
-			if (cur >= 1 && cur <= 8) {
-				static const char *kNoteNames[] = {"c", "d", "e", "f", "g", "a", "b", "C"};
-				const char *noteName = kNoteNames[cur - 1];
-				MessageEntry m;
-				m.seq = _nextMessageSeq++;
-				m.frame = _frameCounter;
-				m.room = _vm->_currentRoom;
-				m.actorId = -1;
-				m.type = "note";
-				m.text = noteName;
-				_sseMessages.push_back(m);
-				_sseLastEventFrame = _frameCounter;
-
-				Common::JSONObject params;
-				params.setVal("type", mcpJsonString("note"));
-				params.setVal("text", mcpJsonString(noteName));
-				_server->emitNotification(params);
-			}
-			_ssePrevNoteValue = cur;
-		}
-	}
-
-	// Feed deferred synthetic inputs (used by Loom): second click for egg and
-	// note sequences for play_note(notes=[...]).
-	if (_ssePendingSecondClick) {
-		_vm->_mouse.x = _sseClickMouseX;
-		_vm->_mouse.y = _sseClickMouseY;
-		if (_vm->VAR_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_MOUSE_X) = _sseClickMouseX;
-		if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = _sseClickMouseY;
-		_vm->_lastInputScriptTime = _vm->_system->getMillis();
-		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
-		_ssePendingSecondClick = false;
-	}
-
-	// Per-frame game-specific streaming step (e.g. CMI cannon aim machine).
+	// Per-frame game-specific streaming step: the CMI cannon-aim machine, the V7
+	// dialog verb-script watcher, the Loom note watcher / note-feed, etc. Runs
+	// before the close/timeout checks so its effects (e.g. resetting the settle
+	// window) are seen this frame. See the leaf classes' pumpStreamGame().
 	pumpStreamGame();
-
-	// Feed the next pending note by invoking the engine's verb script
-	// directly (kKeyClickArea). Each runInputScript invocation runs Script 97
-	// (Loom's input handler) which kills any prior instance — meaning two
-	// notes in rapid succession would have the second overwrite the first.
-	// Pace feeds fast enough that the script's draft-buffer timeout doesn't
-	// fire mid-sequence but slow enough that each note's script completes.
-	const uint32 kNoteSpacingFrames = 15;
-	if (!_ssePendingNotes.empty()
-	    && (_sseLastNoteFedFrame == 0
-	        || _frameCounter - _sseLastNoteFedFrame >= kNoteSpacingFrames)) {
-		Common::KeyCode kc = _ssePendingNotes[0];
-		_ssePendingNotes.remove_at(0);
-		_sseLastNoteFedFrame = _frameCounter;
-		// kKeyClickArea handler reads the ASCII value for the key. For the
-		// distaff note keys (lowercase letters c/d/e/f/g/a/b plus capital C),
-		// the keycode value equals the ASCII byte.
-		_vm->runInputScript(kKeyClickArea, (int)kc, 1);
-	}
 
 	// Track whether ego moved at any point during this stream.
 	{
@@ -3160,23 +3097,6 @@ void ScummMcpBridge::pumpStream() {
 			_sseLastInventorySnapshot = currentInv;
 			_sseLastEventFrame = _frameCounter;
 		}
-	}
-
-	// V8 (CMI): use-on-X actions chain follow-up scripts (animation cues +
-	// deferred inventory updates) that start in fresh slots after the
-	// sentence script ends. Whenever a NEW script appears (count rises since
-	// the previous frame), or the count is currently above the pre-action
-	// baseline (a chained script is still running), bump the event frame so
-	// the settling window keeps extending while the chain is in progress.
-	if (_vm->_game.version == 8) {
-		int curCount = _vm->activeScriptCount();
-		// Only bump on a new script appearing this frame (count went up
-		// since the last frame). Stable counts (background music etc.) and
-		// counts above the pre-action baseline are not enough — those would
-		// keep the stream open indefinitely for plain walk_to actions.
-		if (curCount > _sseLastActiveScriptCount)
-			_sseLastEventFrame = _frameCounter;
-		_sseLastActiveScriptCount = curCount;
 	}
 
 	// Early-close: if the room has already changed, there is nothing left to settle —
@@ -3242,21 +3162,6 @@ void ScummMcpBridge::pumpStream() {
 		}
 	}
 
-	// V7: if the game switched to a dialog input script (VAR_VERB_SCRIPT changed),
-	// the action is still in progress — reset the settle window so we wait for the
-	// dialog choices to appear rather than closing the stream prematurely.
-	if (_vm->_game.version == 7 && _sseVerbScript != 0 &&
-	    _vm->VAR_VERB_SCRIPT != 0xFF) {
-		int curVerbScript = (int)_vm->VAR(_vm->VAR_VERB_SCRIPT);
-		if (curVerbScript != _sseVerbScript) {
-			debug(1, "mcp: VAR_VERB_SCRIPT changed %d->%d at frame %d, resetting settle",
-			      _sseVerbScript, curVerbScript, _frameCounter);
-			_sseVerbScript = curVerbScript;
-			_sseVerbScriptChanged = true;
-			_sseDoneAtFrame = 0;
-		}
-	}
-
 	// Clear the simulated mouse-button msDown bit a couple frames after the click
 	// so that the dialog input script (V7 script 69) does not see a held button.
 	if (_sseButtonClearFrame != 0 && _frameCounter >= _sseButtonClearFrame) {
@@ -3265,123 +3170,10 @@ void ScummMcpBridge::pumpStream() {
 		_sseButtonClearFrame = 0;
 	}
 
-	// The Dig: picking up a scene object grabs it onto the mouse cursor, turning
-	// every subsequent click into "use <item> on X". Each MCP action is
-	// discrete, so once a pickup has added a new inventory item we deposit it by
-	// simulating the player's right-click — the game's input script puts the
-	// held item back into the inventory and restores the default cursor. Fire
-	// once per stream, after the item appears and the game accepts input.
-	if (_vm->_game.id == GID_DIG && !_sseDigDeselectDone && _vm->_userPut > 0 &&
-	    _frameCounter - _sseStartFrame >= 3) {
-		int egoForPick = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
-		bool pickedUp = false;
-		for (int i = 0; _vm->_inventory && i < _vm->_numInventory && !pickedUp; ++i) {
-			uint16 obj = _vm->_inventory[i];
-			if (!obj || _vm->getOwner(obj) != egoForPick) continue;
-			bool wasHeldBefore = false;
-			for (uint k = 0; k < _ssePreInventory.size(); ++k)
-				if (_ssePreInventory[k] == obj) { wasHeldBefore = true; break; }
-			if (!wasHeldBefore) pickedUp = true;
-		}
-		if (pickedUp) {
-			debug(1, "mcp: Dig — depositing picked-up item via right-click at frame %d", _frameCounter);
-			_vm->_rightBtnPressed |= 0x03; // msClicked | msDown
-			_sseButtonClearFrame = _frameCounter + 2;
-			_sseDigDeselectDone = true;
-			_sseDoneAtFrame = 0; // re-settle so the deselect completes before closing
-		}
-	}
-
-	// V7: fire the deferred use-item scene click once the engine has had a
-	// frame to commit the held-cursor state queued by the inventory click.
-	if (_ssePendingV7UseClick && _vm->_userPut > 0 &&
-	    _frameCounter - _sseStartFrame >= 2) {
-		_vm->_mouse.x        = _ssePendingV7UseMouseX;
-		_vm->_mouse.y        = _ssePendingV7UseMouseY;
-		_vm->_virtualMouse.x = _ssePendingV7UseObjX;
-		_vm->_virtualMouse.y = _ssePendingV7UseObjY;
-		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = _ssePendingV7UseObjX;
-		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = _ssePendingV7UseObjY;
-		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = _ssePendingV7UseMouseX;
-		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = _ssePendingV7UseMouseY;
-		_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
-		_sseButtonClearFrame = _frameCounter + 2;
-		_ssePendingV7UseClick = false;
-		_sseDoneAtFrame = 0;
-	}
-
-	// V7: feed a deferred dialog-choice click once the game is ready.
-	// toolAnswer() stores the choice here. The two V7 games render choices
-	// differently, so they are dispatched differently:
-	//   * The Dig — horizontal picture icons captured as blast OBJECTS, stored
-	//     in ROOM coordinates (objNumber != 0). The dialog input script hit-
-	//     tests VAR_VIRT_MOUSE (room space), so we point the virtual mouse at
-	//     the icon, the screen mouse at the matching on-screen spot, and press
-	//     the left button — exactly like a player clicking the icon.
-	//   * Full Throttle — text lines captured as blast TEXT, stored in SCREEN
-	//     coordinates (objNumber == 0). Its script reads VAR_MOUSE, so we keep
-	//     the original screen-mouse + scene-click dispatch untouched.
-	if (_ssePendingV7Choice != 0 && _vm->_userPut > 0 &&
-	    _frameCounter - _sseStartFrame >= 3) {
-		bool haveChoice = false;
-		V7Choice chosen;
-		if (!_v7DialogChoices.empty()) {
-			Common::Array<V7Choice> sorted = _v7DialogChoices;
-			for (uint i = 0; i + 1 < sorted.size(); ++i) {
-				for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
-					bool swap = (sorted[j].y > sorted[j + 1].y) ||
-					            (sorted[j].y == sorted[j + 1].y && sorted[j].x > sorted[j + 1].x);
-					if (swap) {
-						V7Choice tmp = sorted[j];
-						sorted[j] = sorted[j + 1];
-						sorted[j + 1] = tmp;
-					}
-				}
-			}
-			int idx = CLIP<int>(_ssePendingV7Choice - 1, 0, (int)sorted.size() - 1);
-			chosen = sorted[idx];
-			haveChoice = true;
-		}
-
-		if (haveChoice && chosen.objNumber != 0) {
-			// The Dig: room-space icon. Drive the virtual mouse + a real click.
-			int roomX = chosen.x;
-			int roomY = chosen.y;
-			VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
-			int screenX = CLIP<int>(roomX - vs->xstart, 0, _vm->_screenWidth - 1);
-			int screenY = CLIP<int>(roomY - _vm->_screenTop, 0, _vm->_screenHeight - 1);
-			debug(1, "mcp: feeding Dig dialog choice %d as left click at room (%d,%d) screen (%d,%d) frame %d",
-			      _ssePendingV7Choice, roomX, roomY, screenX, screenY, _frameCounter);
-			_vm->_mouse.x = screenX;
-			_vm->_mouse.y = screenY;
-			_vm->_virtualMouse.x = roomX;
-			_vm->_virtualMouse.y = roomY;
-			if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = screenX;
-			if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = screenY;
-			if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = roomX;
-			if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = roomY;
-			_vm->_leftBtnPressed |= 0x03; // msClicked | msDown — a real left click
-			_sseButtonClearFrame = _frameCounter + 2;
-			_vm->runInputScript(kSceneClickArea, 0, 1);
-		} else {
-			// Full Throttle (screen-space text lines) and the no-capture
-			// fallback: place the screen mouse on the choice and run the
-			// scene-click input script — the original, proven dispatch.
-			int screenX = haveChoice ? chosen.x : 160;
-			int screenY = haveChoice ? chosen.y : (163 + (_ssePendingV7Choice - 1) * 4);
-			debug(1, "mcp: feeding V7 dialog choice %d as scene click at (%d,%d) frame %d",
-			      _ssePendingV7Choice, screenX, screenY, _frameCounter);
-			_vm->_mouse.x = screenX;
-			_vm->_mouse.y = screenY;
-			if (_vm->VAR_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_MOUSE_X) = screenX;
-			if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = screenY;
-			_vm->runInputScript(kSceneClickArea, 0, 1);
-		}
-		_ssePendingV7Choice = 0;
-		_ssePendingV7UseClick = false;
-		// Reset settle window so we capture messages produced by this choice.
-		_sseDoneAtFrame = 0;
-	}
+	// Late per-frame game-specific streaming step: deferred synthetic clicks that
+	// must run after the button-clear pass above (the Dig pickup-deselect and the
+	// V7 use-item / dialog-choice clicks). See the leaf classes' pumpStreamGameLate().
+	pumpStreamGameLate();
 
 	// Sam & Max context-cursor click: cycle the verb cursor to _sseSnmCursorTarget
 	// over the target (right-clicks), then left-click. Drives talk_to (mouth, 877)

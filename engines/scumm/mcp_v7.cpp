@@ -6,9 +6,12 @@
  * (at your option) any later version.
  */
 
+#include "common/util.h"
+
 #include "scumm/mcp_subclasses.h"
 #include "scumm/object.h"
 #include "scumm/scumm.h"
+#include "scumm/verbs.h"
 #ifdef ENABLE_SCUMM_7_8
 #include "scumm/scumm_v7.h"
 #include "scumm/insane/insane.h"
@@ -21,6 +24,119 @@ using Networking::mcpObjectSchema;
 
 // Game/version-specific MCP bridge logic for the V7 SCUMM family (The Dig,
 // Full Throttle). Migrated out of mcp.cpp via the ScummMcpBridge virtual hooks.
+
+// ---------------------------------------------------------------------------
+// McpBridgeV7 — shared V7 streaming hooks (dialog verb-script + deferred clicks)
+// ---------------------------------------------------------------------------
+
+void McpBridgeV7::pumpStreamGame() {
+	// If the game switched to a dialog input script (VAR_VERB_SCRIPT changed),
+	// the action is still in progress — reset the settle window so we wait for
+	// the dialog choices to appear rather than closing the stream prematurely.
+	if (_sseVerbScript != 0 && _vm->VAR_VERB_SCRIPT != 0xFF) {
+		int curVerbScript = (int)_vm->VAR(_vm->VAR_VERB_SCRIPT);
+		if (curVerbScript != _sseVerbScript) {
+			debug(1, "mcp: VAR_VERB_SCRIPT changed %d->%d at frame %d, resetting settle",
+			      _sseVerbScript, curVerbScript, _frameCounter);
+			_sseVerbScript = curVerbScript;
+			_sseVerbScriptChanged = true;
+			_sseDoneAtFrame = 0;
+		}
+	}
+}
+
+void McpBridgeV7::pumpStreamGameLate() {
+	// Fire the deferred use-item scene click once the engine has had a frame to
+	// commit the held-cursor state queued by the inventory click.
+	if (_ssePendingV7UseClick && vmUserPut() > 0 &&
+	    _frameCounter - _sseStartFrame >= 2) {
+		vmMouse().x        = _ssePendingV7UseMouseX;
+		vmMouse().y        = _ssePendingV7UseMouseY;
+		vmVirtualMouse().x = _ssePendingV7UseObjX;
+		vmVirtualMouse().y = _ssePendingV7UseObjY;
+		if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = _ssePendingV7UseObjX;
+		if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = _ssePendingV7UseObjY;
+		if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = _ssePendingV7UseMouseX;
+		if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = _ssePendingV7UseMouseY;
+		vmLeftBtnPressed() |= 0x03; // msClicked | msDown
+		_sseButtonClearFrame = _frameCounter + 2;
+		_ssePendingV7UseClick = false;
+		_sseDoneAtFrame = 0;
+	}
+
+	// Feed a deferred dialog-choice click once the game is ready. toolAnswer()
+	// stores the choice here. The two V7 games render choices differently, so
+	// they are dispatched differently:
+	//   * The Dig — horizontal picture icons captured as blast OBJECTS, stored
+	//     in ROOM coordinates (objNumber != 0). The dialog input script hit-tests
+	//     VAR_VIRT_MOUSE (room space), so we point the virtual mouse at the icon,
+	//     the screen mouse at the matching on-screen spot, and press the left
+	//     button — exactly like a player clicking the icon.
+	//   * Full Throttle — text lines captured as blast TEXT, stored in SCREEN
+	//     coordinates (objNumber == 0). Its script reads VAR_MOUSE, so we keep
+	//     the original screen-mouse + scene-click dispatch untouched.
+	if (_ssePendingV7Choice != 0 && vmUserPut() > 0 &&
+	    _frameCounter - _sseStartFrame >= 3) {
+		bool haveChoice = false;
+		V7Choice chosen;
+		if (!_v7DialogChoices.empty()) {
+			Common::Array<V7Choice> sorted = _v7DialogChoices;
+			for (uint i = 0; i + 1 < sorted.size(); ++i) {
+				for (uint j = 0; j + 1 < sorted.size() - i; ++j) {
+					bool swap = (sorted[j].y > sorted[j + 1].y) ||
+					            (sorted[j].y == sorted[j + 1].y && sorted[j].x > sorted[j + 1].x);
+					if (swap) {
+						V7Choice tmp = sorted[j];
+						sorted[j] = sorted[j + 1];
+						sorted[j + 1] = tmp;
+					}
+				}
+			}
+			int idx = CLIP<int>(_ssePendingV7Choice - 1, 0, (int)sorted.size() - 1);
+			chosen = sorted[idx];
+			haveChoice = true;
+		}
+
+		if (haveChoice && chosen.objNumber != 0) {
+			// The Dig: room-space icon. Drive the virtual mouse + a real click.
+			int roomX = chosen.x;
+			int roomY = chosen.y;
+			VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
+			int screenX = CLIP<int>(roomX - vs->xstart, 0, _vm->_screenWidth - 1);
+			int screenY = CLIP<int>(roomY - _vm->_screenTop, 0, _vm->_screenHeight - 1);
+			debug(1, "mcp: feeding Dig dialog choice %d as left click at room (%d,%d) screen (%d,%d) frame %d",
+			      _ssePendingV7Choice, roomX, roomY, screenX, screenY, _frameCounter);
+			vmMouse().x = screenX;
+			vmMouse().y = screenY;
+			vmVirtualMouse().x = roomX;
+			vmVirtualMouse().y = roomY;
+			if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = screenX;
+			if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = screenY;
+			if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = roomX;
+			if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = roomY;
+			vmLeftBtnPressed() |= 0x03; // msClicked | msDown — a real left click
+			_sseButtonClearFrame = _frameCounter + 2;
+			vmRunInputScript(kSceneClickArea, 0, 1);
+		} else {
+			// Full Throttle (screen-space text lines) and the no-capture fallback:
+			// place the screen mouse on the choice and run the scene-click input
+			// script — the original, proven dispatch.
+			int screenX = haveChoice ? chosen.x : 160;
+			int screenY = haveChoice ? chosen.y : (163 + (_ssePendingV7Choice - 1) * 4);
+			debug(1, "mcp: feeding V7 dialog choice %d as scene click at (%d,%d) frame %d",
+			      _ssePendingV7Choice, screenX, screenY, _frameCounter);
+			vmMouse().x = screenX;
+			vmMouse().y = screenY;
+			if (_vm->VAR_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_MOUSE_X) = screenX;
+			if (_vm->VAR_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_MOUSE_Y) = screenY;
+			vmRunInputScript(kSceneClickArea, 0, 1);
+		}
+		_ssePendingV7Choice = 0;
+		_ssePendingV7UseClick = false;
+		// Reset settle window so we capture messages produced by this choice.
+		_sseDoneAtFrame = 0;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // McpBridgeDig — The Dig (single-cursor / pie-menu model)
@@ -59,6 +175,38 @@ bool McpBridgeDig::resolveGameVerb(const Common::String &normalized, int &verbId
 		return true;
 	}
 	return false;
+}
+
+void McpBridgeDig::pumpStreamGameLate() {
+	// Picking up a scene object grabs it onto the mouse cursor, turning every
+	// subsequent click into "use <item> on X". Each MCP action is discrete, so
+	// once a pickup has added a new inventory item we deposit it by simulating
+	// the player's right-click — the game's input script puts the held item back
+	// into the inventory and restores the default cursor. Fire once per stream,
+	// after the item appears and the game accepts input.
+	if (!_sseDigDeselectDone && vmUserPut() > 0 && _frameCounter - _sseStartFrame >= 3) {
+		int egoForPick = (_vm->VAR_EGO != 0xFF) ? _vm->VAR(_vm->VAR_EGO) : 0;
+		bool pickedUp = false;
+		uint16 *inv = vmInventory();
+		for (int i = 0; inv && i < vmNumInventory() && !pickedUp; ++i) {
+			uint16 obj = inv[i];
+			if (!obj || vmGetOwner(obj) != egoForPick) continue;
+			bool wasHeldBefore = false;
+			for (uint k = 0; k < _ssePreInventory.size(); ++k)
+				if (_ssePreInventory[k] == obj) { wasHeldBefore = true; break; }
+			if (!wasHeldBefore) pickedUp = true;
+		}
+		if (pickedUp) {
+			debug(1, "mcp: Dig — depositing picked-up item via right-click at frame %d", _frameCounter);
+			vmRightBtnPressed() |= 0x03; // msClicked | msDown
+			_sseButtonClearFrame = _frameCounter + 2;
+			_sseDigDeselectDone = true;
+			_sseDoneAtFrame = 0; // re-settle so the deselect completes before closing
+		}
+	}
+
+	// Then run the shared V7 deferred use-item / dialog-choice clicks.
+	McpBridgeV7::pumpStreamGameLate();
 }
 
 // ---------------------------------------------------------------------------

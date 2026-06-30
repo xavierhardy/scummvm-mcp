@@ -152,8 +152,18 @@ protected:
 		(void)normalized; (void)verbId; return false;
 	}
 	// Per-frame game-specific streaming step (state machines: cannon aim, bike
-	// fight, context-cursor clicks, …). Called from pumpStream().
+	// fight, context-cursor clicks, …). Called from pumpStream() near the top,
+	// right after the generic pre-step bookkeeping and before the close/timeout
+	// checks. Use this for steps whose effects should be visible to the generic
+	// settle/close logic on the same frame (e.g. resetting the settle window).
 	virtual void pumpStreamGame() {}
+	// Late per-frame game-specific streaming step, called from pumpStream() after
+	// the generic timeout/button-clear logic and just before the settle/close
+	// decision. Use this for deferred synthetic clicks (Dig pickup-deselect, the
+	// V7 use-item and dialog-choice clicks) that must run after the button-clear
+	// pass so they don't have their freshly-set button state cleared the same
+	// frame. Default does nothing.
+	virtual void pumpStreamGameLate() {}
 	// Early per-frame streaming hook, run at the very top of pumpStream (before
 	// the generic settle/close logic). Return true to end the frame immediately
 	// (e.g. Full Throttle's bike fight, which runs inside INSANE's own loop and
@@ -194,6 +204,11 @@ protected:
 	int vmGetVerbEntrypoint(int obj, int entry) const;
 	int vmActorToObj(int actor) const;
 	int vmNumLocalObjects() const;
+	// Null-safe inventory accessors (the array/count are engine-protected).
+	uint16 *vmInventory() const;
+	int vmNumInventory() const;
+	// Number of script slots currently in use (V8 settle-window heuristic).
+	int vmActiveScriptCount() const;
 	void vmDoSentence(int verb, int objA, int objB) const;
 	void vmRunInputScript(int clickArea, int val, int mode) const;
 	void vmResetSentence() const;
