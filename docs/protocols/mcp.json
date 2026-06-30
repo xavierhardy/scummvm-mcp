@@ -17,7 +17,7 @@
       "description": "Connect to ScummVM's built-in MCP server. Enable by setting mcp=true in scummvm.ini. Use mcp_port to override the default port (23456)."
     }
   },
-  "notes": "The MCP server uses Streamable HTTP (MCP spec 2025-03-26). Sync tools (state) return immediately; streaming tools (act, answer, walk) open an SSE channel and emit notifications as dialog plays out, then return a structured result when the action completes.",
+  "notes": "The MCP server uses Streamable HTTP (MCP spec 2025-03-26). Sync tools (state) return immediately; streaming tools (act, answer, walk, skip, and the game-specific tools) open an SSE channel and emit notifications as dialog plays out, then return a structured result when the action completes. The exact tool set is engine- and game-dependent: query tools/list at runtime. Beyond the core tools, some games expose extra tools (see gameTools: play_note for Loom, shoot_cannon for COMI, ride_bike for Full Throttle, switch_character and dial for Maniac Mansion), and a set of diagnostic debugTools is registered only when mcp_debug=true.",
   "networkExamples": {
     "scummvm_ini": "[monkey1]\nmcp=true\n",
     "scummvm_ini_custom_port": "[monkey1]\nmcp=true\nmcp_port=23456\n",
@@ -64,9 +64,9 @@
       }
     },
     "tools/call": {
-      "description": "Invoke a tool. Sync tools (state) return immediately. Streaming tools (act, answer, walk) promote the connection to SSE and stream notifications before sending a final result.",
+      "description": "Invoke a tool. Sync tools (state) return immediately. Streaming tools (act, answer, walk, skip, and the game-specific tools) promote the connection to SSE and stream notifications before sending a final result.",
       "params": {
-        "name": "string (state | act | answer | walk)",
+        "name": "string (core: state | act | answer | walk | skip; game-specific and debug tools listed under gameTools / debugTools — call tools/list for the live set)",
         "arguments": "object — see tool schemas below"
       },
       "result": "object — see tool schemas below"
@@ -313,8 +313,201 @@
           "note": "Clamped to (roomWidth-1, 0) before the walk is issued"
         }
       ]
+    },
+
+    {
+      "name": "skip",
+      "type": "streaming",
+      "description": "Skip/cancel the current action or cutscene by simulating an Escape key press. Useful for skipping long intros or animations. Returns state changes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": { "$ref": "#/definitions/stateChanges" }
     }
   ],
+
+  "gameTools": {
+    "description": "Tools registered only for specific games (in addition to the core tools). Always confirm availability via tools/list — they are absent for games that do not support them.",
+    "tools": [
+      {
+        "name": "play_note",
+        "type": "streaming",
+        "games": "Loom; the Loom segment of Passport to Adventure",
+        "description": "Play Loom distaff notes. Accepts either {note:'c'} for one note, or {notes:['e','c','e','d']} to play a full sequence in one call. Only valid in the Loom segment (and full Loom). Note events played by the engine or the player are streamed as 'note' notifications.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "note":  { "type": "string", "description": "Single note: one of c d e f g a b C (C is the high octave)." },
+            "notes": { "type": "array", "items": { "type": "string" }, "description": "Optional sequence of note strings to play in order, e.g. ['e','c','e','d']." }
+          },
+          "additionalProperties": false
+        },
+        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+      },
+      {
+        "name": "shoot_cannon",
+        "type": "streaming",
+        "games": "The Curse of Monkey Island (cannon minigame)",
+        "description": "Aim the cannon at screen position (x, y) and fire a cannonball. The skeleton war-canoes to sink are listed in state as boat_N objects with their (x, y); aim at one of those points. Blocks until the shot resolves (flight, explosion, any resulting speech), then returns state changes; a sunk boat disappears from state.objects.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "integer", "description": "Screen X to aim at (0–639); pass a boat's x from state.objects." },
+            "y": { "type": "integer", "description": "Screen Y to aim at (0–479); pass a boat's y from state.objects." }
+          },
+          "required": ["x", "y"],
+          "additionalProperties": false
+        },
+        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+      },
+      {
+        "name": "ride_bike",
+        "type": "streaming",
+        "games": "Full Throttle (highway motorcycle minigame)",
+        "description": "Play the Full Throttle motorcycle minigame. Available once Ben has the bike keys (from the bartender) and is at his bike at the bar front. Mounts the bike and rides onto the highway; the Rottwheeler fight runs as a real-time action sequence which this tool auto-plays. Takes no arguments. Blocks until the section ends, then returns state changes.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+      },
+      {
+        "name": "switch_character",
+        "type": "streaming",
+        "games": "Maniac Mansion",
+        "description": "Switch the player-controlled kid (the F1–F3 keys). state lists the available names in 'available_characters' and the current one in 'controlling'. Only allowed during normal gameplay. Blocks until the switch settles, then returns state changes (room_changed/position reflect the newly controlled kid).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "description": "Name of the kid to control, as listed in state.available_characters (e.g. 'dave')." }
+          },
+          "required": ["name"],
+          "additionalProperties": false
+        },
+        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+      },
+      {
+        "name": "dial",
+        "type": "streaming",
+        "games": "Maniac Mansion",
+        "description": "Dial a number on the phone dial pad. Only valid while the dial pad is on screen (use the phone first via act(verb='use', target1='phone')). Presses the keypad buttons one at a time, blocks until the sequence (and any resulting call) settles, then returns state changes.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "number": { "type": "string", "description": "Number to dial, as a string of keypad keys: digits 0-9 plus '*' and '#' (e.g. '1234')." }
+          },
+          "required": ["number"],
+          "additionalProperties": false
+        },
+        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+      }
+    ]
+  },
+
+  "debugTools": {
+    "description": "Diagnostic tools registered only when mcp_debug=true in the game's scummvm.ini section. Engine-version-agnostic unless noted. Intended for debugging and test-fixture authoring, not normal play; their results are free-form (no fixed outputSchema). keystroke/mouse_move/mouse_click run on the next engine frame.",
+    "tools": [
+      {
+        "name": "debug",
+        "type": "sync",
+        "description": "Return raw engine state for diagnostics: room id, ego position, _userPut, _mouse, _virtualMouse, _leftBtnPressed, _rightBtnPressed, _mouseAndKeyboardStat, _keyPressed, _currentRoom, plus a slice of SCUMM script vars (0..127 by default).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "from": { "type": "integer", "description": "First SCUMM var index to return (default 0)." },
+            "to":   { "type": "integer", "description": "Last SCUMM var index to return (inclusive, default 127)." }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "keystroke",
+        "type": "sync",
+        "description": "Inject a keyboard keystroke into the engine (sets _keyPressed for the next frame). Useful for skipping cutscenes, opening menus, or game-specific shortcuts (the numpad 1-9 keys drive the Indy3 boxing minigame).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "key":   { "type": "string",  "description": "A single ASCII character ('a','C','1') or a name ('Escape','Return','Space','Tab','Backspace','F1'..'F12','Up','Down','Left','Right')." },
+            "ctrl":  { "type": "boolean", "description": "Hold Ctrl modifier (default false)." },
+            "shift": { "type": "boolean", "description": "Hold Shift modifier (default false)." },
+            "alt":   { "type": "boolean", "description": "Hold Alt modifier (default false)." }
+          },
+          "required": ["key"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "mouse_move",
+        "type": "sync",
+        "description": "Move the virtual mouse cursor to (x, y) in room/screen coordinates. Updates _mouse, _virtualMouse, and VAR_VIRT_MOUSE_X/Y. Does not click.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "integer", "description": "X coordinate." },
+            "y": { "type": "integer", "description": "Y coordinate." }
+          },
+          "required": ["x", "y"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "mouse_click",
+        "type": "sync",
+        "description": "Simulate a mouse click at (x, y), processed like a real player click (walks ego, runs verb script, etc.). Button defaults to left; set 'double' for a double click.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "x":      { "type": "integer", "description": "X coordinate." },
+            "y":      { "type": "integer", "description": "Y coordinate." },
+            "button": { "type": "string",  "description": "Mouse button: 'left' (default), 'right', or 'middle'." },
+            "double": { "type": "boolean", "description": "True for a double click (two clicks within ~250ms). Default false." }
+          },
+          "required": ["x", "y"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "screenshot",
+        "type": "sync",
+        "description": "Save a PNG screenshot of the current frame to the configured screenshot path (auto-numbered, like the in-app screenshot key).",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "save_state",
+        "type": "sync",
+        "description": "Save the current game to a save slot, the same way the in-game save menu does. Writes <target>.s<NN> in the active save path, so it can capture reusable save states for tests. Returns the slot and whether the save was accepted.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "slot":        { "type": "integer", "description": "Save slot index to write (e.g. 2 -> <target>.s02)." },
+            "description": { "type": "string",  "description": "Optional label stored in the save header (default \"mcp save\")." }
+          },
+          "required": ["slot"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "set_talk_speed",
+        "type": "sync",
+        "description": "Force the game's text/talk speed at runtime on the 0..255 scale used by --talkspeed (0 = slowest, 255 = fastest, instant text). Needed for titles whose boot script overrides the configured talkspeed (e.g. the Fate of Atlantis demo). Updates ConfMan and the live VAR_CHARINC.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "speed": { "type": "integer", "description": "Talk speed on the 0..255 scale (0 = slowest, 255 = fastest)." }
+          },
+          "required": ["speed"],
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
 
   "definitions": {
     "stateChanges": {
