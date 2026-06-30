@@ -73,10 +73,16 @@ via the `xdist_group` mark.
 
 ## Code map
 
-- `utils.py` — `McpClient` (sync HTTP MCP client with SSE streaming:
-  `state`, `act`, `answer`, `walk`, `skip`, plus debug tools), `launch_scummvm`,
-  `wait_for_mcp`, `GAME_PATHS`, and pure state/dialog helpers (`object_by_id`,
-  `find_choice_id`, `choice_labels`, `make_verbs`, …).
+- `mcp_client.py` — `McpClient` (sync HTTP MCP client with SSE streaming:
+  `state`, `act`, `answer`, `walk`, `skip`, plus debug tools), `wait_for_mcp`,
+  and the per-worker `get_mcp_port` allocator.
+- `launcher.py` — `launch_scummvm`, `GAME_PATHS`, and the `require_game_path` /
+  `require_save_slot` / `save_slot_path` skip guards.
+- `state_helpers.py` — pure state/dialog helpers (`object_by_id`,
+  `find_choice_id`, `choice_labels`, `make_verbs`, …) and the
+  interactive-readiness polls (`wait_for_interactive`, `require_interactive`, …).
+- `utils.py` — back-compat facade re-exporting the three modules above, so
+  `from utils import …` keeps working.
 - `assertions.py` — `assert_inventory_contains`, `assert_room`,
   `assert_message_contains`, `assert_no_talkie_garbage`, …
 - `conftest.py` — the per-game pytest fixtures described above.

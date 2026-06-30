@@ -1,821 +1,94 @@
 #!/usr/bin/env python3
+"""MCP integration test utilities.
+
+Back-compat facade: the implementations now live in focused modules —
+:mod:`mcp_client` (client + connection), :mod:`launcher` (ScummVM launch +
+game-data/save resolution), and :mod:`state_helpers` (state/verb/dialog
+inspection + readiness guards). This module re-exports them so existing
+``from utils import ...`` imports keep working; new code may import the modules
+directly.
 """
-MCP integration test utilities: client, ScummVM launcher, shared helpers.
-"""
 
-import json
-import os
-import shutil
-import subprocess
-import tempfile
-import time
-from typing import Any, Protocol
-
-import httpx
-
-MCP_HOST = "127.0.0.1"
-MCP_PORT = 23456
-# Per-request HTTP timeout. Streaming tools (act/answer/walk) hold the SSE
-# connection open for the duration of a cutscene; under heavy parallelism
-# (--dist=loadgroup spins up many ScummVM instances at once) long cutscenes —
-# e.g. The Dig's ~1-minute leave-scene argument — stream their lines slowly, so
-# the gap between SSE events can exceed a short read timeout. Keep this generous
-# so contention only makes tests slower, never spuriously timed-out.
-MCP_TIMEOUT_SECS = 60.0
-MCP_CONNECT_TIMEOUT_SECS = 30.0
-MCP_TOOLS = ("state", "act", "answer", "walk", "skip")
-
-# Base for per-(worker, fixture) MCP ports (see get_mcp_port).
-MCP_PORT_BASE = 23400
-
-
-def get_mcp_port(fixture_index: int) -> int:
-    """Return a unique MCP port for this xdist worker and fixture.
-
-    Under ``--dist=loadgroup`` tests are distributed per-test across workers and
-    most game fixtures are function-scoped, so several ScummVM instances of the
-    same or different games can be alive at once. Each xdist worker (``gw0``,
-    ``gw1``, …) gets its own 100-port band, and each fixture a distinct slot
-    within that band, so ports never collide — even when a worker holds an idle
-    session fixture (FT/Atlantis) alongside an active function fixture.
-
-    ``fixture_index`` must be a stable integer in 0..99, unique per fixture.
-    Outside xdist (no ``PYTEST_XDIST_WORKER``) the worker index is 0.
-    """
-    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    digits = "".join(ch for ch in worker if ch.isdigit())
-    worker_index = int(digits) if digits else 0
-    return MCP_PORT_BASE + worker_index * 100 + fixture_index
-
-
-class McpClient:
-    """Synchronous MCP client over HTTP/1.1 with SSE streaming support."""
-
-    def __init__(
-        self,
-        host: str = MCP_HOST,
-        port: int = MCP_PORT,
-        timeout: float = MCP_TIMEOUT_SECS,
-    ):
-        self.host = host
-        self.port = port
-        self._url = f"http://{host}:{port}/mcp"
-        self._session_id: str | None = None
-        self._req_id = 0
-        self._client = httpx.Client(timeout=httpx.Timeout(timeout))
-
-    def _next_id(self) -> int:
-        self._req_id += 1
-        return self._req_id
-
-    def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
-        h: dict[str, str] = {"Content-Type": "application/json"}
-        if self._session_id:
-            h["Mcp-Session-Id"] = self._session_id
-        if extra:
-            h.update(extra)
-        return h
-
-    def _extract_result(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Pull the inner JSON from a tools/call response."""
-        result = data.get("result", {})
-        content = result.get("content", [])
-        if content and content[0].get("type") == "text":
-            return json.loads(content[0]["text"])
-        return result
-
-    def _decode_stream_response(self, resp: httpx.Response, tool: str):
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Act error: HTTP {resp.status_code}")
-        for line in resp.iter_lines():
-            if line.startswith("data: "):
-                raw = line[6:].strip()
-            else:
-                raw = line.strip()
-
-            if not raw or raw == ": keepalive":
-                continue
-
-            try:
-                msg = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(
-                    f"Failed to decode JSON (error: {exc}): '{raw}'"
-                ) from exc
-
-            if "result" in msg:
-                return self._extract_result(msg)
-            elif "error" in msg:
-                if "message" in msg["error"]:
-                    if "code" in msg["error"]:
-                        raise RuntimeError(
-                            f"{tool} error: {msg['error']['message']} "
-                            f"(code: {msg['error']['code']})"
-                        )
-                    else:
-                        raise RuntimeError(f"{tool} error: {msg['error']['message']}")
-                else:
-                    raise RuntimeError(f"{tool} error: {msg['error']}")
-        raise RuntimeError(f"{tool} stream ended without result")
-
-    def initialize(self) -> None:
-        """Initialize MCP session."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-03-26",
-                "clientInfo": {"name": "test_client", "version": "1.0"},
-            },
-        }
-        resp = self._client.post(self._url, json=payload, headers=self._headers())
-        sid = resp.headers.get("Mcp-Session-Id")
-        if sid:
-            self._session_id = sid
-        data = resp.json()
-        if "error" in data:
-            raise RuntimeError(f"Initialize error: {data['error']}")
-
-    def state(self) -> dict[str, Any]:
-        """Get current game state (sync call)."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "state", "arguments": {}},
-        }
-        resp = self._client.post(self._url, json=payload, headers=self._headers())
-        data = resp.json()
-
-        if "error" in data:
-            raise RuntimeError(f"State error: {data['error']}")
-        return self._extract_result(data)
-
-    def debug(self) -> dict[str, Any]:
-        """Get current game state (sync call)."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "debug", "arguments": {}},
-        }
-        resp = self._client.post(self._url, json=payload, headers=self._headers())
-        data = resp.json()
-
-        if "error" in data:
-            raise RuntimeError(f"Debug error: {data['error']}")
-        return self._extract_result(data)
-
-    def set_talk_speed(self, speed: int = 255) -> dict[str, Any]:
-        """Force the text/talk speed at runtime (sync call, gated by mcp_debug).
-
-        ``speed`` is on the 0..255 scale used by the --talkspeed option
-        (0 = slowest, 255 = fastest/instant text). Needed for titles whose boot
-        script overrides the configured talkspeed (e.g. the Fate of Atlantis
-        demo), where the startup setting never takes.
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {
-                "name": "set_talk_speed",
-                "arguments": {"speed": speed},
-            },
-        }
-        resp = self._client.post(self._url, json=payload, headers=self._headers())
-        data = resp.json()
-        if "error" in data:
-            raise RuntimeError(f"SetTalkSpeed error: {data['error']}")
-        return self._extract_result(data)
-
-    def skip(self) -> dict[str, Any]:
-        """Skip (equivalent to Escape)."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "skip", "arguments": {}},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            return self._decode_stream_response(resp=resp, tool="Skip")
-
-    def act(
-        self,
-        verb: str,
-        target1: str | int | None = None,
-        target2: str | int | None = None,
-    ) -> dict[str, Any]:
-        """Execute a verb on a target (streaming call)."""
-        arguments = {"verb": verb}
-        if target1 is not None:
-            arguments["target1"] = target1
-        if target2 is not None:
-            arguments["target2"] = target2
-
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "act", "arguments": arguments},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            return self._decode_stream_response(resp=resp, tool="Act")
-
-    def answer(self, choice_id: int) -> dict[str, Any]:
-        """Select a dialog choice (streaming call)."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "answer", "arguments": {"id": choice_id}},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            return self._decode_stream_response(resp=resp, tool="Answer")
-
-    def walk(self, x: int, y: int) -> dict[str, Any]:
-        """Select position to walk to (streaming call)."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "walk", "arguments": {"x": x, "y": y}},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            return self._decode_stream_response(resp=resp, tool="Walk")
-
-    def switch_character(self, name: str) -> dict[str, Any]:
-        """Switch the controlled kid in Maniac Mansion (streaming call).
-
-        Valid names are listed in state()['available_characters']; the active
-        one is state()['controlling'].
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "switch_character", "arguments": {"name": name}},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            return self._decode_stream_response(resp=resp, tool="SwitchCharacter")
-
-    def dial(self, number: str) -> dict[str, Any]:
-        """Dial a number on the Maniac Mansion phone dial pad (streaming call).
-
-        Only valid while the dial pad is on screen — use the phone first via
-        act('use', 'phone') and wait for the dial pad room. Keys are digits
-        0-9 plus '*' and '#'.
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "dial", "arguments": {"number": number}},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            return self._decode_stream_response(resp=resp, tool="Dial")
-
-    def ride_bike(self) -> dict[str, Any]:
-        """Play the Full Throttle motorcycle minigame (streaming call).
-
-        Only valid in Full Throttle once Ben has his bike keys and is at the bike
-        (bar front, room 6). Mounts the bike, rides onto the highway, and
-        auto-plays the Rottwheeler fight (steering + punching) until the section
-        resolves at the mechanic's shack. Takes no arguments. Blocks until done.
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "ride_bike", "arguments": {}},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            return self._decode_stream_response(resp=resp, tool="RideBike")
-
-    def play_note(self, note) -> dict[str, Any]:
-        """Play one or more notes on the Loom distaff (streaming call).
-
-        Pass a single note ('c'..'C') for a one-note play, or a list/tuple
-        like ['e', 'c', 'e', 'd'] to send a full sequence in one call. The
-        engine plays them one after another, throttled so each note finishes
-        before the next is pressed.
-        """
-        if isinstance(note, (list, tuple)):
-            arguments = {"notes": list(note)}
-        else:
-            arguments = {"note": note}
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": "play_note", "arguments": arguments},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            return self._decode_stream_response(resp=resp, tool="PlayNote")
-
-    def call_capturing(
-        self, name: str, arguments: dict
-    ) -> tuple[list[str], list[dict], dict | None]:
-        """Invoke any MCP tool, capturing every notification.
-
-        Returns (notes, messages, result):
-          - notes:    text of each notification with type=='note' (Loom note plays)
-          - messages: every other notification (dialog, system, etc.)
-          - result:   inner JSON of the final tool result, or None on error
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        }
-        headers = self._headers({"Accept": "text/event-stream"})
-        notes: list[str] = []
-        messages: list[dict] = []
-        result: dict | None = None
-        with self._client.stream(
-            "POST", self._url, json=payload, headers=headers
-        ) as resp:
-            for line in resp.iter_lines():
-                if not line.startswith("data: "):
-                    continue
-                raw = line[6:].strip()
-                if not raw:
-                    continue
-                try:
-                    msg = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                if "params" in msg:
-                    p = msg["params"]
-                    if p.get("type") == "note":
-                        text = p.get("text") or ""
-                        if text:
-                            notes.append(text)
-                    else:
-                        messages.append(p)
-                elif "result" in msg:
-                    result = self._extract_result(msg)
-                    break
-                elif "error" in msg:
-                    return notes, messages, None
-        return notes, messages, result
-
-    def close(self) -> None:
-        """Close the client."""
-        self._client.close()
-
-
-def wait_for_mcp(
-    host: str = MCP_HOST,
-    port: int = MCP_PORT,
-    connect_timeout: float = MCP_CONNECT_TIMEOUT_SECS,
-    timeout: float = MCP_TIMEOUT_SECS,
-) -> McpClient:
-    """Poll until MCP server is ready, then return initialized client."""
-    start = time.time()
-    last_error = None
-    while time.time() - start < connect_timeout:
-        try:
-            client = McpClient(host=host, port=port, timeout=timeout)
-            client.initialize()
-            return client
-        except Exception as e:
-            last_error = e
-            time.sleep(0.5)
-    raise TimeoutError(
-        f"MCP server at {host}:{port} did not respond "
-        f"within {connect_timeout}s: {last_error}"
-    )
-
-
-def _logs_dir() -> str:
-    """Return the (created) directory ScummVM's log files are written to."""
-    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    return logs_dir
-
-
-def _write_ini(game_id: str, game_path: str, port: int, scummvm_log: str) -> str:
-    """Render the per-game ini template into a fresh temp dir, return its path."""
-    with open(os.path.join("ini_files", f"scummvm_{game_id}.ini")) as ini_file:
-        content = ini_file.read() % {
-            "game_path": game_path,
-            "mcp_port": port,
-            "logfile": scummvm_log,
-        }
-    tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
-    ini_path = os.path.join(tmpdir, "scummvm.ini")
-    with open(ini_path, "w") as f:
-        f.write(content)
-    return ini_path
-
-
-def _resolve_save_path(game_id: str, ini_path: str, isolate_saves: bool) -> str:
-    """Return the ``--savepath`` for this instance.
-
-    When ``isolate_saves`` is true, copy the repo's ``save_slots/<game_id>`` into
-    a private folder (next to the ini) so concurrent same-game instances never
-    share (and clobber) save files; otherwise use the repo directory directly.
-    """
-    repo_save_path = os.path.join(os.path.dirname(__file__), f"save_slots/{game_id}")
-    if not isolate_saves:
-        return repo_save_path
-    save_path = os.path.join(os.path.dirname(ini_path), "saves")
-    if os.path.isdir(repo_save_path):
-        shutil.copytree(repo_save_path, save_path)
-    else:
-        os.makedirs(save_path, exist_ok=True)
-    return save_path
-
-
-def _launch_args(
-    game_id: str,
-    scummvm_binary: str,
-    ini_path: str,
-    save_slot: int,
-    save_path: str,
-) -> list[str]:
-    """Build the ScummVM command line for ``game_id``."""
-    if game_id in ("atlantis",):
-        # No save slot — these games start from scratch and handle their own intro.
-        return [scummvm_binary, "-c", ini_path, game_id]
-    return [
-        scummvm_binary,
-        "-c",
-        ini_path,
-        f"--save-slot={save_slot}",
-        f"--savepath={save_path}",
-        "--talkspeed=255",
-        game_id,
-    ]
-
-
-def _open_log_handles(game_id: str, port: int, args: list[str], ini_path: str):
-    """Write a header to the stdout log and return ``(stdout_fh, stderr_fh,
-    log_file, stderr_file)`` append handles for the launched process."""
-    logs_dir = _logs_dir()
-    log_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.log")
-    stderr_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.stderr")
-    with open(log_file, "w") as logf:
-        logf.write(f"Command: {' '.join(args)}\n")
-        logf.write("Environment: SDL_AUDIODRIVER=dummy\n")
-        logf.write(f"Config: {ini_path}\n")
-        logf.write("=" * 80 + "\n\n")
-    return open(log_file, "a"), open(stderr_file, "a"), log_file, stderr_file
-
-
-def launch_scummvm(
-    game_id: str,
-    game_path: str,
-    port: int = 23456,
-    scummvm_binary: str = "./scummvm",
-    save_slot: int = 1,
-    isolate_saves: bool = True,
-) -> subprocess.Popen:
-    """Launch ScummVM headlessly with MCP enabled for the given game.
-
-    When ``isolate_saves`` is true (the default, used by the test fixtures), the
-    game's ``save_slots/<game_id>`` directory is copied into a private temporary
-    folder used as the ``--savepath``. This keeps parallel instances of the same
-    game from racing on a shared save directory and stops autosaves from
-    polluting the committed save files. Pass ``isolate_saves=False`` (e.g. from
-    ``launch_manual.py``) when you want ``save_state`` to write back into the
-    repository's ``save_slots/<game_id>`` directory."""
-    scummvm_log = os.path.join(_logs_dir(), f"scummvm_{game_id}_{port}.scummvm.log")
-    ini_path = _write_ini(game_id, game_path, port, scummvm_log)
-    save_path = _resolve_save_path(game_id, ini_path, isolate_saves)
-    args = _launch_args(game_id, scummvm_binary, ini_path, save_slot, save_path)
-
-    # Launch with no video/audio
-    env = os.environ.copy()
-    env["SDL_AUDIODRIVER"] = "dummy"
-
-    stdout_file, stderr_fh, log_file, stderr_file = _open_log_handles(
-        game_id, port, args, ini_path
-    )
-    proc = subprocess.Popen(args, env=env, stdout=stdout_file, stderr=stderr_fh)
-
-    # Keep the log file handles alive for the process lifetime so they are not
-    # garbage-collected; the fixture teardown closes them (see conftest.py).
-    # setattr (not attribute assignment) because Popen has no typed slot for it.
-    setattr(proc, "_log_handles", (stdout_file, stderr_fh))  # noqa: B010
-
-    print(f"[MCP] {game_id} stdout: {log_file}", flush=True)
-    print(f"[MCP] {game_id} stderr: {stderr_file}", flush=True)
-
-    return proc
-
-
-GAME_PATHS = {
-    "monkey-ega-demo": os.environ.get("MONKEY_DEMO_PATH", "/home/pi/games/MonkeyDemo"),
-    "monkey-ega-demo-de": os.environ.get(
-        "MONKEY_DEMO_DE_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/monkey1-dos-ega-demo-de",
-    ),
-    "maniac-c64": os.environ.get("MANIAC_C64_PATH", "/home/pi/games/ManiacC64"),
-    "atlantis": os.environ.get("ATLANTIS_DEMO_PATH", "/home/pi/games/Indy4Demo"),
-    "samnmax": os.environ.get(
-        "SAMNMAX_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/samnmax-dos-demo-en",
-    ),
-    "dig-demo": os.environ.get(
-        "DIG_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/Dig",
-    ),
-    "ft-demo": os.environ.get(
-        "FT_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/ft-dos-demo",
-    ),
-    "pass": os.environ.get(
-        "PASS_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/pass",
-    ),
-    "comi-demo": os.environ.get(
-        "COMI_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/COMIDEMO",
-    ),
-}
-
-
-def require_game_path(game_id: str) -> None:
-    """Skip test if game files are not found."""
-    import pytest
-
-    path = GAME_PATHS.get(game_id)
-    if not path or not os.path.isdir(path):
-        pytest.skip(f"Game files not found at {path}")
-
-
-def save_slot_path(game_id: str, slot: int) -> str:
-    """Path to the committed save file for *game_id*'s *slot* (``<game>.sNN``)."""
-    return os.path.join(
-        os.path.dirname(__file__), "save_slots", game_id, f"{game_id}.s{slot:02d}"
-    )
-
-
-def require_save_slot(game_id: str, slot: int) -> None:
-    """Skip test if the checkpoint save file for this slot hasn't been captured.
-
-    Checkpoint slots are generated by ``make_save_states.py`` on a machine that
-    has the game data; until that capture is run, the slot file is absent and
-    the dependent tests skip rather than fail.
-    """
-    import pytest
-
-    path = save_slot_path(game_id, slot)
-    if not os.path.isfile(path):
-        pytest.skip(
-            f"checkpoint save {os.path.basename(path)} not found — run "
-            f"make_save_states.py to capture it"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Shared test helpers
-# ---------------------------------------------------------------------------
-
-
-class VerbActor(Protocol):
-    """Anything with an ``act(verb, target1, target2)`` method (e.g. McpClient).
-
-    Lets :func:`bind_verb` / :func:`make_verbs` be type-checked against test
-    doubles that record calls, not just the live :class:`McpClient`.
-    """
-
-    def act(
-        self,
-        verb: str,
-        target1: str | int | None = ...,
-        target2: str | int | None = ...,
-    ) -> dict[str, Any]: ...
-
-
-def bind_verb(client: VerbActor, verb: str):
-    """Return a callable invoking ``client.act(verb, *targets)``."""
-    return lambda *targets: client.act(verb, *targets)
-
-
-def make_verbs(client: VerbActor, *verb_names: str) -> tuple:
-    """Bind verb names to *client* so tests read ``use(a, b)`` for ``act("use", a, b)``.
-
-    ``make_verbs(client, "pick_up", "use")`` returns two callables where
-    ``use(*targets)`` is exactly ``client.act("use", *targets)``. It always
-    returns a tuple so call sites stay verb-first regardless of how many verbs
-    are bound (``give = bind_verb(client, "give")``).
-    """
-    return tuple(bind_verb(client, name) for name in verb_names)
-
-
-def find_id(state: dict, name: str) -> int | None:
-    """Return the id of the first object whose name exactly matches *name*."""
-    obj = _find_object(state, name)
-    return obj["id"] if obj else None
-
-
-def object_names(state: dict) -> set:
-    """Return the set of object names visible in *state*."""
-    return {obj["name"] for obj in state.get("objects", [])}
-
-
-def object_by_id(state: dict, obj_id: int) -> dict | None:
-    """Return the first object whose id matches *obj_id*, or None."""
-    for obj in state.get("objects", []):
-        if obj.get("id") == obj_id:
-            return obj
-    return None
-
-
-def pathways(state: dict) -> list:
-    """Return the objects flagged as pathways (scene exits) in *state*."""
-    return [obj for obj in state.get("objects", []) if obj.get("pathway")]
-
-
-def message_texts(result: dict) -> list:
-    """Return the text of every message in *result* (missing text becomes '')."""
-    return [message.get("text", "") for message in result.get("messages", [])]
-
-
-def joined_message_text(result: dict) -> str:
-    """Return every message text in *result* joined by single spaces."""
-    return " ".join(message_texts(result))
-
-
-def choice_labels(question: dict | None) -> list:
-    """Return the label of every choice in *question*."""
-    return [choice.get("label") for choice in (question or {}).get("choices", [])]
-
-
-def find_choice_id(question: dict, label: str) -> int | None:
-    """Return the id of the dialog choice whose label exactly matches *label*."""
-    for choice in (question or {}).get("choices", []):
-        if choice["label"] == label:
-            return choice["id"]
-    return None
-
-
-def find_choice_id_containing(question: dict, needle: str) -> int | None:
-    """Return the id of the first dialog choice whose label contains *needle*.
-
-    Matching is case-insensitive; returns None when no label matches.
-    """
-    lowered = needle.lower()
-    for choice in (question or {}).get("choices", []):
-        if lowered in choice["label"].lower():
-            return choice["id"]
-    return None
-
-
-def find_object_by_name(state: dict, substring: str) -> str | None:
-    """Return the first object name containing *substring* (case-insensitive)."""
-    for obj in state.get("objects", []):
-        if substring.lower() in obj["name"].lower():
-            return obj["name"]
-    return None
-
-
-def find_object_with_verb(state: dict, verb: str) -> str | None:
-    """Return the first non-pathway object that lists *verb* as compatible."""
-    for obj in state.get("objects", []):
-        if obj.get("pathway"):
-            continue
-        if verb in obj.get("compatible_verbs", []):
-            return obj["name"]
-    return None
-
-
-def skip_intros(client: McpClient, max_skips: int = 20, poll_secs: float = 1.0) -> None:
-    """Send repeated skip commands to advance past SMUSH/intro videos.
-
-    May block until a video finishes, so timeouts are silently ignored.
-    """
-    for _ in range(max_skips):
-        time.sleep(poll_secs)
-        try:
-            client.skip()
-        except Exception:
-            pass
-
-
-def wait_for_interactive(client: McpClient, timeout: float = 120.0) -> bool:
-    """Poll with skips until walk() succeeds (game accepts input)."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        time.sleep(1.0)
-        try:
-            client.skip()
-        except Exception:
-            pass
-        try:
-            state = client.state()
-            pos = state.get("position", {})
-            x, y = pos.get("x", 160), pos.get("y", 100)
-            client.walk(x, y)
-            return True
-        except RuntimeError as e:
-            if "not accepting input" in str(e):
-                continue
-            return True
-        except Exception:
-            continue
-    return False
-
-
-def require_interactive(
-    client: McpClient,
-    message: str = "game did not reach an interactive state",
-    timeout: float = 120.0,
-) -> None:
-    """Skip the current test unless the game reaches an interactive state."""
-    import pytest
-
-    if not wait_for_interactive(client, timeout=timeout):
-        pytest.skip(message)
-
-
-def skip_unless(condition: bool, message: str) -> None:
-    """Skip the current test unless *condition* holds."""
-    import pytest
-
-    if not condition:
-        pytest.skip(message)
-
-
-def wait_until_or_skip(predicate, message: str, timeout: float = 10.0) -> None:
-    """Skip the current test unless *predicate* becomes true within *timeout*."""
-    import pytest
-
-    if not _wait_until(predicate, timeout=timeout):
-        pytest.skip(message)
-
-
-def get_state_with_retry(client: McpClient, max_attempts: int = 5) -> dict:
-    """Call state() with retries for ReadTimeout (cutscene in progress)."""
-    import httpx
-
-    for attempt in range(max_attempts):
-        try:
-            return client.state()
-        except (httpx.ReadTimeout, httpx.ConnectTimeout):
-            if attempt == max_attempts - 1:
-                raise
-            time.sleep(2.0)
-    raise RuntimeError("state() failed after retries")
-
-
-def _wait_until(predicate, timeout: float = 10.0, poll: float = 0.5) -> bool:
-    """Wait until *predicate()* returns True or timeout expires."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            if predicate():
-                return True
-        except (httpx.ReadTimeout, httpx.ConnectTimeout):
-            pass
-        time.sleep(poll)
-    return False
-
-
-def _state_or_skip(client: McpClient, retries: int = 5) -> dict:
-    """Return state() or skip the test if it can't be read."""
-    import pytest
-
-    for _ in range(retries):
-        try:
-            return client.state()
-        except (httpx.ReadTimeout, httpx.ConnectTimeout):
-            time.sleep(1.0)
-    pytest.skip("could not read state")
-
-
-def _find_object(state: dict, name: str) -> dict | None:
-    """Return the first object whose name exactly matches *name*."""
-    for obj in state.get("objects", []):
-        if obj["name"] == name:
-            return obj
-    return None
+from launcher import (
+    GAME_PATHS,
+    launch_scummvm,
+    require_game_path,
+    require_save_slot,
+    save_slot_path,
+)
+from mcp_client import (
+    MCP_CONNECT_TIMEOUT_SECS,
+    MCP_HOST,
+    MCP_PORT,
+    MCP_PORT_BASE,
+    MCP_TIMEOUT_SECS,
+    MCP_TOOLS,
+    McpClient,
+    get_mcp_port,
+    wait_for_mcp,
+)
+from state_helpers import (
+    VerbActor,
+    _find_object,
+    _state_or_skip,
+    _wait_until,
+    bind_verb,
+    choice_labels,
+    find_choice_id,
+    find_choice_id_containing,
+    find_id,
+    find_object_by_name,
+    find_object_with_verb,
+    get_state_with_retry,
+    joined_message_text,
+    make_verbs,
+    message_texts,
+    object_by_id,
+    object_names,
+    pathways,
+    require_interactive,
+    skip_intros,
+    skip_unless,
+    wait_for_interactive,
+    wait_until_or_skip,
+)
+
+__all__ = [
+    "GAME_PATHS",
+    "MCP_CONNECT_TIMEOUT_SECS",
+    "MCP_HOST",
+    "MCP_PORT",
+    "MCP_PORT_BASE",
+    "MCP_TIMEOUT_SECS",
+    "MCP_TOOLS",
+    "McpClient",
+    "VerbActor",
+    "_find_object",
+    "_state_or_skip",
+    "_wait_until",
+    "bind_verb",
+    "choice_labels",
+    "find_choice_id",
+    "find_choice_id_containing",
+    "find_id",
+    "find_object_by_name",
+    "find_object_with_verb",
+    "get_mcp_port",
+    "get_state_with_retry",
+    "joined_message_text",
+    "launch_scummvm",
+    "make_verbs",
+    "message_texts",
+    "object_by_id",
+    "object_names",
+    "pathways",
+    "require_game_path",
+    "require_interactive",
+    "require_save_slot",
+    "save_slot_path",
+    "skip_intros",
+    "skip_unless",
+    "wait_for_interactive",
+    "wait_for_mcp",
+    "wait_until_or_skip",
+]
