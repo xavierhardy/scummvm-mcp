@@ -328,7 +328,7 @@ void drawBoxAroundSpot(void) {
 	ofs = *(uint16 *)(buffer + 2);
 
 	/*decode ofs back to x:y*/
-	if (g_vm->_videoMode == Common::kRenderEGA) {
+	if (isEgaLikeRenderer()) {
 		y = ofs / EGA_BYTES_PER_LINE;
 		x = ofs % EGA_BYTES_PER_LINE;
 		w *= 4; /* w was stored in CGA byte units */
@@ -451,7 +451,7 @@ void animPortrait(byte layer, byte index, byte delay) {
 		g_vm->_renderer->loadPortraitWithFrame(portrait - 1);
 		if (*ani == 0xFF) {
 			ani++;
-			if (g_vm->_videoMode == Common::kRenderEGA)
+			if (isEgaLikeRenderer())
 				ega_loadPortrait(&ani, ani + 3);
 			else
 				loadPortrait(&ani, ani + 3);
@@ -467,8 +467,7 @@ void animPortrait(byte layer, byte index, byte delay) {
 				else
 					blinkToWhite();
 			} else {
-				int16 i;
-				while (delay--) for (i = 0; i < cpu_speed_delay; i++) ; /*TODO: FIXME weak delay*/
+				g_system->delayMillis(delay * 1000 / 128);
 			}
 		}
 	}

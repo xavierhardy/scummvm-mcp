@@ -26,6 +26,7 @@
 #include "common/random.h"
 #include "common/serializer.h"
 #include "common/rendermode.h"
+#include "common/platform.h"
 #include "engines/engine.h"
 #include "chamber/renderer.h"
 
@@ -55,6 +56,7 @@ public:
 	~ChamberEngine();
 
 	Common::Language getLanguage() const;
+	Common::Platform getPlatform() const;
 
 	Common::Error run() override;
 	Common::Error init();
@@ -107,6 +109,12 @@ private:
 void init(void);
 
 extern ChamberEngine *g_vm;
+
+// Amiga shares the EGA planar 16-colour pipeline; graphics code branches on this
+inline bool isEgaLikeRenderer() {
+	return g_vm->_videoMode == Common::kRenderEGA ||
+	       g_vm->_videoMode == Common::kRenderAmiga;
+}
 
 } // End of namespace Chamber
 
