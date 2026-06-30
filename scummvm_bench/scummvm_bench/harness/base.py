@@ -17,9 +17,19 @@ class RunContext:
 
     spec: RunSpec
     bench_port: int
-    session_dir: str
+    agent_dir: str
     stop_event: threading.Event
     proxy: BenchProxy
+    # Backend-side facts the coding harnesses need to build the sandbox jail.
+    # ``backend_dir`` holds the rendered ini/logs (and so leaks ``scummvm_port``)
+    # and is denied to the agent; ``game_path``/``save_folder`` are the data dirs
+    # to hide. Per-harness config dirs isolate the agent's config from the user's.
+    backend_dir: str = ""
+    scummvm_port: int = 0
+    game_path: str | None = None
+    save_folder: str | None = None
+    pi_config_dir: str | None = None
+    claude_config_dir: str | None = None
 
 
 class HarnessRunner(Protocol):

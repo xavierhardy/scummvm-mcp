@@ -7,10 +7,12 @@ here. ``none`` is the attach-after-the-fact mode.
 from collections.abc import Callable
 
 from .base import HarnessRunner, NoneHarness, RunContext
+from .claude import ClaudeCodeHarness
 from .pi import PiHarness
 
 HARNESSES: dict[str, Callable[[], HarnessRunner]] = {
     "pi": PiHarness,
+    "claude": ClaudeCodeHarness,
     "none": NoneHarness,
 }
 
@@ -28,6 +30,7 @@ def make_harness(name: str) -> HarnessRunner:
 
 __all__ = [
     "HARNESSES",
+    "ClaudeCodeHarness",
     "HarnessRunner",
     "NoneHarness",
     "PiHarness",

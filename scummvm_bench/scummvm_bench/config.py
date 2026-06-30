@@ -29,12 +29,21 @@ class BenchConfig:
     local_models: list[LocalModelSpec] = field(default_factory=list)
     lms_bin: str = "lms"
     models_json: str | None = None
+    pi_config_dir: str | None = None
+    claude_config_dir: str | None = None
 
-    def session_config(self, save_folder: str | None = None) -> SessionConfig:
+    def session_config(
+        self,
+        save_folder: str | None = None,
+        pi_config_dir: str | None = None,
+        claude_config_dir: str | None = None,
+    ) -> SessionConfig:
         return SessionConfig(
             scummvm_binary=self.scummvm_binary,
             games=self.games,
             save_folder=save_folder or self.save_folder,
+            pi_config_dir=pi_config_dir or self.pi_config_dir,
+            claude_config_dir=claude_config_dir or self.claude_config_dir,
         )
 
     def local_model_map(self) -> dict[tuple[str | None, str | None], LocalModelSpec]:
@@ -90,4 +99,8 @@ def load_config(path: str | None = None) -> BenchConfig:
         local_models=local_models,
         lms_bin=str(raw.get("lms_bin", "lms")),
         models_json=str(raw["models_json"]) if raw.get("models_json") else None,
+        pi_config_dir=(str(raw["pi_config_dir"]) if raw.get("pi_config_dir") else None),
+        claude_config_dir=(
+            str(raw["claude_config_dir"]) if raw.get("claude_config_dir") else None
+        ),
     )

@@ -23,12 +23,16 @@ class SessionConfig:
     scummvm_binary: str
     games: dict[str, GameSpec]
     save_folder: str | None = None
+    # Optional overrides for the coding harnesses' config directories. When
+    # unset each harness defaults to an isolated subdir of the run's agent_dir.
+    pi_config_dir: str | None = None
+    claude_config_dir: str | None = None
 
 
 def build_real_backend(
     spec: RunSpec,
     scummvm_port: int,
-    session_dir: str,
+    backend_dir: str,
     config: SessionConfig,
 ) -> RealBackend:
     """Construct a :class:`RealBackend` for ``spec`` from the session config."""
@@ -44,7 +48,7 @@ def build_real_backend(
         game_path=game.game_path,
         scummvm_binary=config.scummvm_binary,
         scummvm_port=scummvm_port,
-        session_dir=session_dir,
+        session_dir=backend_dir,
         save_slot=save_slot,
         save_path=save_path,
         ini_template=game.ini_template,
@@ -64,7 +68,14 @@ class BenchSession:
         serve: bool = True,
     ) -> RunResult:
         bench_port, scummvm_port = reserve_pair()
-        session_dir = tempfile.mkdtemp(prefix=f"bench_{spec.game_id}_")
+        # The agent's working dir and the backend's are kept separate so the
+        # agent cannot read the rendered ini (which leaks the ScummVM port) or
+        # the engine logs from its own cwd.
+        root = tempfile.mkdtemp(prefix=f"bench_{spec.game_id}_")
+        agent_dir = os.path.join(root, "agent")
+        backend_dir = os.path.join(root, "backend")
+        os.makedirs(agent_dir, exist_ok=True)
+        os.makedirs(backend_dir, exist_ok=True)
         goal_set = get_goal_set(spec.game_id, spec.save_slot)
         recorder = Recorder(goal_set, LimitConfig(spec.max_calls, spec.time_limit_s))
         stop_event = threading.Event()
@@ -72,7 +83,7 @@ class BenchSession:
         if backend is None:
             if config is None:
                 raise ValueError("config is required when no backend is injected")
-            backend = build_real_backend(spec, scummvm_port, session_dir, config)
+            backend = build_real_backend(spec, scummvm_port, backend_dir, config)
 
         proxy = BenchProxy(
             backend, recorder, goal_set, on_stop=lambda _d: stop_event.set()
@@ -86,12 +97,19 @@ class BenchSession:
             if serve:
                 server = ProxyServer(proxy, HOST, bench_port)
                 server.start()
+            game = config.games.get(spec.game_id) if config else None
             ctx = RunContext(
                 spec=spec,
                 bench_port=bench_port,
-                session_dir=session_dir,
+                agent_dir=agent_dir,
                 stop_event=stop_event,
                 proxy=proxy,
+                backend_dir=backend_dir,
+                scummvm_port=scummvm_port,
+                game_path=game.game_path if game else None,
+                save_folder=config.save_folder if config else None,
+                pi_config_dir=config.pi_config_dir if config else None,
+                claude_config_dir=config.claude_config_dir if config else None,
             )
             error = runner.run(ctx)
         except Exception as exc:  # noqa: BLE001 - surface as a run error
@@ -105,9 +123,11 @@ class BenchSession:
                 pass
 
         result = recorder.result(spec, error=error)
-        transcript = os.path.join(session_dir, "pi.jsonl")
-        if os.path.exists(transcript):
-            result.transcript_path = transcript
+        for name in ("pi.jsonl", "claude.jsonl"):
+            transcript = os.path.join(agent_dir, name)
+            if os.path.exists(transcript):
+                result.transcript_path = transcript
+                break
         return result
 
 

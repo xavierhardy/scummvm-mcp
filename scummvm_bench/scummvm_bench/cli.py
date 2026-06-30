@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--harness",
         action="append",
-        choices=["pi", "none"],
+        choices=["pi", "claude", "none"],
         help="Harness to drive the run (repeatable; default: none).",
     )
     parser.add_argument(
@@ -35,6 +35,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="ScummVM target id and optional save slot (repeatable).",
     )
     parser.add_argument("--save-folder", help="Override the save-state folder.")
+    parser.add_argument(
+        "--pi-config-dir",
+        help="Override pi's config dir (default: an isolated per-run dir).",
+    )
+    parser.add_argument(
+        "--claude-config-dir",
+        help="Override claude's config dir (default: an isolated per-run dir).",
+    )
     parser.add_argument(
         "--time-limit", type=float, help="Wall-clock budget in seconds (optional)."
     )
@@ -101,9 +109,11 @@ def selection_from_args(
     ]
 
     harnesses = args.harness or ["none"]
-    if "pi" in harnesses and not model_pairs:
+    needs_model = {"pi", "claude"} & set(harnesses)
+    if needs_model and not model_pairs:
         raise ValueError(
-            "the 'pi' harness requires at least one --model provider/model"
+            f"the {sorted(needs_model)} harness(es) require at least one "
+            "--model provider/model"
         )
 
     return MatrixSelection(
@@ -128,7 +138,11 @@ def main(argv: list[str] | None = None) -> int:
 
     specs = build_matrix(selection)
     orchestrator = Orchestrator(
-        session_config=config.session_config(save_folder=args.save_folder),
+        session_config=config.session_config(
+            save_folder=args.save_folder,
+            pi_config_dir=args.pi_config_dir,
+            claude_config_dir=args.claude_config_dir,
+        ),
         pool_config=PoolConfig(workers=args.workers, work_type=args.work_type),
         local=args.local,
         local_models=config.local_model_map(),

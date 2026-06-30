@@ -66,11 +66,13 @@ def test_selection_defaults_to_none_harness() -> None:
     assert selection.models == []
 
 
-def test_build_matrix_nesting_model_outermost() -> None:
+def test_build_matrix_nesting_harness_outermost() -> None:
     args = build_parser().parse_args(
         [
             "--harness",
             "pi",
+            "--harness",
+            "none",
             "--model",
             "p1/m1",
             "--model",
@@ -85,12 +87,14 @@ def test_build_matrix_nesting_model_outermost() -> None:
     )
     selection = selection_from_args(args, _config())
     specs = build_matrix(selection)
-    assert len(specs) == 4  # 2 models x 1 harness x 2 games
+    assert len(specs) == 8  # 2 harnesses x 2 models x 2 games
     # provider/model round-trip into the spec
     assert (specs[0].provider, specs[0].model) == ("p1", "m1")
-    # model is the outermost loop
-    assert (specs[0].model, specs[1].model) == ("m1", "m1")
-    assert specs[2].model == "m2"
+    # harness is the outermost loop, then model, then game (innermost)
+    assert [s.harness for s in specs[:4]] == ["pi"] * 4
+    assert [s.harness for s in specs[4:]] == ["none"] * 4
+    assert [s.model for s in specs[:4]] == ["m1", "m1", "m2", "m2"]
+    assert [s.save_slot for s in specs[:2]] == [1, 2]
     assert all(s.max_calls == 40 for s in specs)
 
 

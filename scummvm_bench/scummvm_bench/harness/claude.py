@@ -1,9 +1,16 @@
-"""The `pi` harness runner.
+"""The Claude Code (`claude`) harness runner.
 
-Points the `pi` agent at the session's FastMCP proxy by writing a project-local
-``.mcp.json`` (read by the ``pi-mcp-adapter`` extension) into pi's working
-directory, launches ``pi --print --mode json`` with the game prompt, and streams
-its JSONL events live to ``pi.jsonl`` for later analysis.
+Mirrors :class:`PiHarness`: points ``claude`` at the session's FastMCP proxy via
+a project-local MCP config, launches it non-interactively, and streams its JSONL
+events to ``claude.jsonl``.
+
+The agent is locked to the MCP tools: ``--tools`` lists only the
+``mcp__scummvm__*`` tools, so no built-in tool (Bash/Read/Write/WebFetch/…)
+exists for the session, and ``--strict-mcp-config`` ignores the user's global MCP
+servers. Permissions are bypassed (``--dangerously-skip-permissions``) so the
+agent never stalls on a prompt in ``--print`` mode — safe because the tool list
+already excludes everything dangerous and the run is wrapped in a
+``sandbox-exec`` jail (on macOS) with a scrubbed environment.
 """
 
 import json
@@ -13,60 +20,60 @@ import threading
 import time
 
 from .base import RunContext
+from .pi import DEFAULT_DEADLINE_S, KILL_GRACE_S, _pump_stream
 from .prompts import build_prompt
 from .sandbox import build_agent_env, wrap_command
 
-# Tools surfaced directly in the agent's tool list (vs. the adapter proxy tool).
-DIRECT_TOOLS = ["state", "act", "walk", "answer", "skip"]
-# Extra wall-clock granted on top of the time limit before force-killing pi.
-KILL_GRACE_S = 30.0
-DEFAULT_DEADLINE_S = 1800.0
+# The proxy's tool surface (see ``proxy.py:_build_app``). Claude namespaces MCP
+# tools as ``mcp__<server>__<tool>``.
+_PROXY_TOOLS = (
+    "state",
+    "act",
+    "answer",
+    "walk",
+    "skip",
+    "play_note",
+    "switch_character",
+    "dial",
+    "shoot_cannon",
+    "keystroke",
+)
 
 
-class PiHarness:
-    """Launches the `pi` coding agent against the bench proxy.
-
-    The agent is locked to the MCP tools: ``--no-builtin-tools`` drops pi's
-    read/bash/edit/write/find/grep/ls while keeping the ``pi-mcp-adapter``
-    extension that surfaces the proxy's tools. It is launched in a scrubbed
-    environment and (on macOS) inside a ``sandbox-exec`` jail so it cannot read
-    the answer key / game data or reach the raw ScummVM port.
-    """
+class ClaudeCodeHarness:
+    """Launches the `claude` coding agent against the bench proxy."""
 
     def __init__(
         self,
-        pi_bin: str = "pi",
-        extra_args: list[str] | None = None,
+        claude_bin: str = "claude",
         server_name: str = "scummvm",
     ) -> None:
-        self.pi_bin = pi_bin
-        self.extra_args = extra_args or [
-            "--no-builtin-tools",
-            "--no-skills",
-            "--no-themes",
-            "--no-context-files",
-            "--no-session",
-        ]
+        self.claude_bin = claude_bin
         self.server_name = server_name
 
     def run(self, ctx: RunContext) -> str | None:
-        if not ctx.spec.provider or not ctx.spec.model:
-            return "pi harness requires both --provider and --model"
+        if not ctx.spec.model:
+            return "claude harness requires --model provider/model"
 
         self._write_mcp_json(ctx.bench_port, ctx.agent_dir)
-        config_dir = ctx.pi_config_dir or os.path.join(ctx.agent_dir, "pi-home")
+        config_dir = ctx.claude_config_dir or os.path.join(ctx.agent_dir, "claude-home")
         os.makedirs(config_dir, exist_ok=True)
         prompt = build_prompt(ctx.spec)
+        tools = ",".join(f"mcp__{self.server_name}__{name}" for name in _PROXY_TOOLS)
         args = [
-            self.pi_bin,
+            self.claude_bin,
             "--print",
-            "--mode",
-            "json",
-            "--provider",
-            ctx.spec.provider,
+            "--output-format",
+            "stream-json",
+            "--verbose",
             "--model",
             ctx.spec.model,
-            *self.extra_args,
+            "--mcp-config",
+            os.path.join(ctx.agent_dir, "claude.mcp.json"),
+            "--strict-mcp-config",
+            "--tools",
+            tools,
+            "--dangerously-skip-permissions",
             prompt,
         ]
         args = wrap_command(
@@ -75,12 +82,12 @@ class PiHarness:
             scummvm_port=ctx.scummvm_port,
             deny_paths=(ctx.game_path, ctx.save_folder),
         )
-        env = build_agent_env({"PI_CODING_AGENT_DIR": config_dir})
-        jsonl_path = os.path.join(ctx.agent_dir, "pi.jsonl")
+        env = build_agent_env({"CLAUDE_CONFIG_DIR": config_dir, "IS_SANDBOX": "1"})
+        jsonl_path = os.path.join(ctx.agent_dir, "claude.jsonl")
         try:
             return self._launch(ctx, args, jsonl_path, env)
         except FileNotFoundError:
-            return f"pi binary not found: {self.pi_bin!r}"
+            return f"claude binary not found: {self.claude_bin!r}"
         except Exception as exc:  # noqa: BLE001
             return f"{type(exc).__name__}: {exc}"
 
@@ -88,12 +95,12 @@ class PiHarness:
         config = {
             "mcpServers": {
                 self.server_name: {
+                    "type": "http",
                     "url": f"http://127.0.0.1:{bench_port}/mcp",
-                    "directTools": DIRECT_TOOLS,
                 }
             }
         }
-        path = os.path.join(agent_dir, ".mcp.json")
+        path = os.path.join(agent_dir, "claude.mcp.json")
         with open(path, "w") as handle:
             json.dump(config, handle, indent=2)
 
@@ -142,13 +149,5 @@ class PiHarness:
         if killed:
             return None
         if proc.returncode not in (0, None):
-            return f"pi exited with code {proc.returncode}"
+            return f"claude exited with code {proc.returncode}"
         return None
-
-
-def _pump_stream(stream, transcript) -> None:
-    if stream is None:
-        return
-    for line in stream:
-        transcript.write(line)
-        transcript.flush()

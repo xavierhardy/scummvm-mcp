@@ -7,9 +7,29 @@ adventure games.
 The proxy (built with [FastMCP](https://github.com/jlowin/fastmcp)) forwards
 every tool call to a real (or mocked) ScummVM backend, records every call and
 failure, and scores progress against a per-game/per-save set of latching
-**goals**. It can launch the harness itself (`pi`) or attach to one already
-running, run combinations sequentially or in parallel, optionally manage a local
-LM Studio model, and emit a TSV + a printed table.
+**goals**. It can launch the harness itself (`pi`, `claude`) or attach to one
+already running, run combinations sequentially or in parallel, optionally manage
+a local LM Studio model, and emit a TSV + a printed table.
+
+### Anti-cheat
+
+The benchmark only counts progress made through the proxy, and it actively stops
+a launched agent from reaching anything else:
+
+- **MCP tools only.** `pi` is launched with `--no-builtin-tools` (its
+  read/bash/edit/write/find/grep/ls are gone; only the `pi-mcp-adapter` tools
+  remain); `claude` is launched with `--tools mcp__scummvm__*` +
+  `--strict-mcp-config` so no built-in tool exists and the user's global MCP
+  servers are ignored.
+- **Process jail (macOS).** Each launched agent runs under `sandbox-exec`
+  (`harness/sandbox.py`): it cannot read the answer key (`goals/`,
+  `tests/walkthroughs/`), the game data/saves, or the backend dir (which holds
+  the rendered ini and engine logs), and cannot open a network connection to the
+  raw ScummVM MCP port — so it can't bypass the proxy. Off macOS the wrapper
+  no-ops with a warning and only the tool-restriction layer applies.
+- **Scrubbed environment + isolated config.** The agent gets a minimal env
+  (no `*_PATH` game-data variables) and a fresh, per-run config dir, so it can't
+  inherit the user's global config or read where the games live.
 
 ## Architecture
 
@@ -20,7 +40,9 @@ harness (pi / external) ──MCP──▶ FastMCP proxy (bench_port) ──▶ 
                                   Recorder ──▶ RunResult ──▶ TSV + table
 ```
 
-The nested run matrix is: **model → harness → game → save-state**.
+The nested run matrix is: **harness → model → game → save-state**. Each cell
+runs in its own session with its own pair of loopback ports (the FastMCP proxy
+and the ScummVM MCP server), so cells can run in parallel without colliding.
 
 ## Install / dev
 
@@ -61,9 +83,14 @@ uv run python -m scummvm_bench \
     --game monkey-ega-demo:1 --max-calls 80 \
     --workers 1 --work-type thread --out results.tsv
 
-# Sweep several models, harnesses and games (the matrix loops model->harness->game->save).
+# Real run: launch Claude Code against the same game.
 uv run python -m scummvm_bench \
-    --harness pi --harness none \
+    --harness claude --model anthropic/claude-opus-4-8 \
+    --game monkey-ega-demo:1 --max-calls 80 --workers 1
+
+# Sweep several harnesses, models and games (the matrix loops harness->model->game->save).
+uv run python -m scummvm_bench \
+    --harness pi --harness claude \
     --model openai/gpt-4o --model anthropic/claude-opus-4-8 \
     --game monkey-ega-demo:1 --workers 2 --work-type thread
 
@@ -84,10 +111,12 @@ into pi's working directory.
 
 | Flag | Meaning |
 |------|---------|
-| `--harness {pi,none}` | Harness to drive the run (repeatable). `none` = attach after the fact. |
-| `--model PROVIDER/MODEL` | Provider+model as one token, e.g. `openai/gpt-4o` (repeatable; split on the first `/`). Required for `pi`. |
+| `--harness {pi,claude,none}` | Harness to drive the run (repeatable). `none` = attach after the fact. |
+| `--model PROVIDER/MODEL` | Provider+model as one token, e.g. `openai/gpt-4o` (repeatable; split on the first `/`). Required for `pi`/`claude`. |
 | `--game GAME[:SLOT]` | ScummVM target id + optional save slot (repeatable). |
 | `--save-folder PATH` | Override the folder holding `<game>/<game>.sNN`. |
+| `--pi-config-dir PATH` | Override pi's config dir (default: an isolated per-run dir). |
+| `--claude-config-dir PATH` | Override claude's config dir (default: an isolated per-run dir). |
 | `--time-limit SEC` | Optional wall-clock budget (timer starts on the first MCP call). |
 | `--max-calls N` | Optional MCP tool-call budget. |
 | `--workers N` | 1 = sequential (no pool); >1 = parallel. |

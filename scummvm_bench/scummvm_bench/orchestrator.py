@@ -1,7 +1,9 @@
-"""Build the run matrix (model -> harness -> game -> save) and execute it.
+"""Build the run matrix (harness -> model -> game -> save) and execute it.
 
-The nesting puts the model outermost so the ``--local`` flow can bracket all of a
-model's runs inside a single LM Studio download/load/unload/delete lifecycle.
+The nesting puts the harness outermost, then the model, then the game. The
+``--local`` LM Studio bracketing is unaffected by iteration order: execution
+groups specs by ``(provider, model)`` (see :func:`_group_by_model`), so all of a
+model's runs still share one download/load/unload/delete lifecycle.
 """
 
 import functools
@@ -29,11 +31,11 @@ class MatrixSelection:
 
 
 def build_matrix(selection: MatrixSelection) -> list[RunSpec]:
-    """Expand a selection into ``RunSpec``s, model outermost, save-state innermost."""
+    """Expand a selection into ``RunSpec``s: harness -> model -> game -> save."""
     models = selection.models or [(None, None)]
     specs: list[RunSpec] = []
-    for provider, model in models:
-        for harness in selection.harnesses:
+    for harness in selection.harnesses:
+        for provider, model in models:
             for game_id, save_slot in selection.games:
                 specs.append(
                     RunSpec(
