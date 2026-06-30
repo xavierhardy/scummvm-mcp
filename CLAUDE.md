@@ -88,6 +88,13 @@ two projects. Typing rules: rely on `Any` as little as possible; never use
 `Optional`/`Union` (`X | None`, `X | Y`); prefer `list`/`dict`/`tuple` over the
 `typing` aliases. Preserve ruff's default formatting.
 
+**Scope `ruff` and `ty` strictly to `test/mcp/` and `scummvm_bench/`.** Each owns
+its own `pyproject.toml`; always run the tools from *inside* one of those two
+directories (e.g. `cd scummvm_bench && uv run ruff format . && uv run ruff check .
+&& uv run ty check`). Never run `ruff`/`ty` from the repo root or point them at
+the rest of the tree — the surrounding ScummVM source is not ours to lint or
+type-check, and doing so floods the output with upstream findings.
+
 ## Build & run tests
 
 ```bash
