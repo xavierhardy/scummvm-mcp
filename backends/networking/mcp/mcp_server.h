@@ -163,7 +163,7 @@ private:
 	void handleHttpRequest(const Common::String &method,
 	                       const Common::String &sessionHdr,
 	                       const Common::String &body);
-	void handleJsonRpc(const Common::String &body);
+	void handleJsonRpc(const Common::String &body, const Common::String &sessionHdr);
 	Common::JSONValue *handleRequest(const Common::JSONValue &req, bool &startedStream);
 	Common::JSONValue *handleInitialize();
 	Common::JSONValue *handleToolsList();

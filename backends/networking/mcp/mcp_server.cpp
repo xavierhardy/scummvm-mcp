@@ -120,6 +120,13 @@ static inline unsigned short htons(unsigned short x) {
 
 namespace Networking {
 
+// Cap on a single client's unparsed request buffer. Tool payloads are tiny
+// (state reads, short verb/coordinate calls), so anything past this is either a
+// malformed/oversized request or a slow-loris-style stall holding a connection
+// slot open. We close the connection rather than letting inBuffer grow without
+// bound. 4 MiB leaves ample headroom for any legitimate request.
+static const uint32 kMaxRequestBytes = 4 * 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // JSON helpers
 // ---------------------------------------------------------------------------
@@ -256,8 +263,20 @@ Common::JSONValue *wrapStructured(Common::JSONValue *result) {
 	return new Common::JSONValue(out);
 }
 
+// Portable search for the CRLFCRLF header/body separator in a raw byte buffer
+// (memmem is a GNU/BSD extension, so don't rely on it).
+const char *findHeaderEnd(const char *data, size_t len) {
+	if (len < 4) return nullptr;
+	for (size_t i = 0; i + 4 <= len; ++i) {
+		if (data[i] == '\r' && data[i + 1] == '\n' &&
+		    data[i + 2] == '\r' && data[i + 3] == '\n')
+			return data + i;
+	}
+	return nullptr;
+}
+
 void logMessage(const char *prefix, int clientId, uint32 msgId, const char *data, size_t len) {
-	const char *sep = (const char *)memmem(data, len, "\r\n\r\n", 4);
+	const char *sep = findHeaderEnd(data, len);
 	if (sep) {
 		size_t hdrLen  = (size_t)(sep - data) + 4;
 		size_t bodyLen = len - hdrLen;
@@ -687,6 +706,14 @@ void McpServer::pump() {
 
 		if (ce.fd < 0) continue;
 
+		// Guard against an oversized or never-completing request holding a slot.
+		if (ce.inBuffer.size() > kMaxRequestBytes) {
+			warning("mcp: client %d sent oversized request (%u bytes) — closing",
+				ce.clientId, (uint)ce.inBuffer.size());
+			close(ce.fd); ce.fd = -1;
+			continue;
+		}
+
 		while (true) {
 			Common::String method, sessionHdr, body;
 			if (!parseHttpRequest(ce.inBuffer, method, sessionHdr, body)) break;
@@ -749,21 +776,14 @@ void McpServer::handleHttpRequest(const Common::String &method,
 		return;
 	}
 
-	if (!_sessionId.empty()) {
-		bool isInit = (method == "POST" && body.contains("\"initialize\""));
-		if (!isInit && (sessionHdr.empty() || sessionHdr != _sessionId)) {
-			debug(1, "mcp: session validation failed: expected '%s', got '%s'",
-				_sessionId.c_str(), sessionHdr.empty() ? "(empty)" : sessionHdr.c_str());
-			writeHttpResponse(404, "", "");
-			return;
-		}
-	}
-
+	// Session validation is done in handleJsonRpc() against the parsed JSON-RPC
+	// method, so a tool argument that merely contains the text "initialize"
+	// cannot slip past the check.
 	if (!body.empty())
-		handleJsonRpc(body);
+		handleJsonRpc(body, sessionHdr);
 }
 
-void McpServer::handleJsonRpc(const Common::String &body) {
+void McpServer::handleJsonRpc(const Common::String &body, const Common::String &sessionHdr) {
 	Common::JSONValue *parsed = Common::JSON::parse(body);
 	if (!parsed || !parsed->isObject()) {
 		writeJsonRpcError(nullptr, -32700, "Parse error");
@@ -772,6 +792,22 @@ void McpServer::handleJsonRpc(const Common::String &body) {
 	}
 
 	const Common::JSONObject &root = parsed->asObject();
+
+	bool isInitialize = root.contains("method") && root["method"]->isString()
+	                    && root["method"]->asString() == "initialize";
+
+	// Session validation: once we have issued a session id, every request other
+	// than a fresh initialize must echo it back. Matched against the parsed
+	// method so a tool argument containing the literal "initialize" cannot
+	// bypass it. (The server tracks a single session — see handleInitialize.)
+	if (!_sessionId.empty() && !isInitialize &&
+	    (sessionHdr.empty() || sessionHdr != _sessionId)) {
+		debug(1, "mcp: session validation failed: expected '%s', got '%s'",
+			_sessionId.c_str(), sessionHdr.empty() ? "(empty)" : sessionHdr.c_str());
+		writeHttpResponse(404, "", "");
+		delete parsed;
+		return;
+	}
 
 	if (!root.contains("id") || root["id"]->isNull()) {
 		Common::String methodStr = (root.contains("method") && root["method"]->isString())
@@ -784,9 +820,6 @@ void McpServer::handleJsonRpc(const Common::String &body) {
 	}
 
 	const Common::JSONValue *id = root["id"];
-
-	bool isInitialize = root.contains("method") && root["method"]->isString()
-	                    && root["method"]->asString() == "initialize";
 
 	bool startedStream = false;
 	Common::JSONValue *result = handleRequest(*parsed, startedStream);
