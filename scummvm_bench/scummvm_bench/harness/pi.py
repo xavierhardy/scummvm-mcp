@@ -8,19 +8,13 @@ its JSONL events live to ``pi.jsonl`` for later analysis.
 
 import json
 import os
-import subprocess
-import threading
-import time
 
-from .base import RunContext
+from .base import RunContext, launch_agent
 from .prompts import build_prompt
 from .sandbox import build_agent_env, wrap_command
 
 # Tools surfaced directly in the agent's tool list (vs. the adapter proxy tool).
 DIRECT_TOOLS = ["state", "act", "walk", "answer", "skip"]
-# Extra wall-clock granted on top of the time limit before force-killing pi.
-KILL_GRACE_S = 30.0
-DEFAULT_DEADLINE_S = 1800.0
 
 
 class PiHarness:
@@ -78,7 +72,7 @@ class PiHarness:
         env = build_agent_env({"PI_CODING_AGENT_DIR": config_dir})
         jsonl_path = os.path.join(ctx.agent_dir, "pi.jsonl")
         try:
-            return self._launch(ctx, args, jsonl_path, env)
+            return launch_agent(ctx, args, jsonl_path, env, label="pi")
         except FileNotFoundError:
             return f"pi binary not found: {self.pi_bin!r}"
         except Exception as exc:  # noqa: BLE001
@@ -96,59 +90,3 @@ class PiHarness:
         path = os.path.join(agent_dir, ".mcp.json")
         with open(path, "w") as handle:
             json.dump(config, handle, indent=2)
-
-    def _launch(
-        self,
-        ctx: RunContext,
-        args: list[str],
-        jsonl_path: str,
-        env: dict[str, str],
-    ) -> str | None:
-        deadline = time.monotonic() + (ctx.spec.time_limit_s or DEFAULT_DEADLINE_S)
-        deadline += KILL_GRACE_S
-        with open(jsonl_path, "w") as transcript:
-            proc = subprocess.Popen(
-                args,
-                cwd=ctx.agent_dir,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
-            pump = threading.Thread(
-                target=_pump_stream,
-                args=(proc.stdout, transcript),
-                daemon=True,
-            )
-            pump.start()
-
-            killed = False
-            while proc.poll() is None:
-                if ctx.stop_event.wait(0.2):
-                    proc.kill()
-                    killed = True
-                    break
-                if time.monotonic() > deadline:
-                    proc.kill()
-                    killed = True
-                    break
-            try:
-                proc.wait(timeout=5)
-            except Exception:  # noqa: BLE001
-                pass
-            pump.join(timeout=2)
-
-        if killed:
-            return None
-        if proc.returncode not in (0, None):
-            return f"pi exited with code {proc.returncode}"
-        return None
-
-
-def _pump_stream(stream, transcript) -> None:
-    if stream is None:
-        return
-    for line in stream:
-        transcript.write(line)
-        transcript.flush()

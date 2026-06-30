@@ -15,12 +15,8 @@ already excludes everything dangerous and the run is wrapped in a
 
 import json
 import os
-import subprocess
-import threading
-import time
 
-from .base import RunContext
-from .pi import DEFAULT_DEADLINE_S, KILL_GRACE_S, _pump_stream
+from .base import RunContext, launch_agent
 from .prompts import build_prompt
 from .sandbox import build_agent_env, wrap_command
 
@@ -85,7 +81,7 @@ class ClaudeCodeHarness:
         env = build_agent_env({"CLAUDE_CONFIG_DIR": config_dir, "IS_SANDBOX": "1"})
         jsonl_path = os.path.join(ctx.agent_dir, "claude.jsonl")
         try:
-            return self._launch(ctx, args, jsonl_path, env)
+            return launch_agent(ctx, args, jsonl_path, env, label="claude")
         except FileNotFoundError:
             return f"claude binary not found: {self.claude_bin!r}"
         except Exception as exc:  # noqa: BLE001
@@ -103,51 +99,3 @@ class ClaudeCodeHarness:
         path = os.path.join(agent_dir, "claude.mcp.json")
         with open(path, "w") as handle:
             json.dump(config, handle, indent=2)
-
-    def _launch(
-        self,
-        ctx: RunContext,
-        args: list[str],
-        jsonl_path: str,
-        env: dict[str, str],
-    ) -> str | None:
-        deadline = time.monotonic() + (ctx.spec.time_limit_s or DEFAULT_DEADLINE_S)
-        deadline += KILL_GRACE_S
-        with open(jsonl_path, "w") as transcript:
-            proc = subprocess.Popen(
-                args,
-                cwd=ctx.agent_dir,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
-            pump = threading.Thread(
-                target=_pump_stream,
-                args=(proc.stdout, transcript),
-                daemon=True,
-            )
-            pump.start()
-
-            killed = False
-            while proc.poll() is None:
-                if ctx.stop_event.wait(0.2):
-                    proc.kill()
-                    killed = True
-                    break
-                if time.monotonic() > deadline:
-                    proc.kill()
-                    killed = True
-                    break
-            try:
-                proc.wait(timeout=5)
-            except Exception:  # noqa: BLE001
-                pass
-            pump.join(timeout=2)
-
-        if killed:
-            return None
-        if proc.returncode not in (0, None):
-            return f"claude exited with code {proc.returncode}"
-        return None

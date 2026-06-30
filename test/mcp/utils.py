@@ -414,6 +414,82 @@ def wait_for_mcp(
     )
 
 
+def _logs_dir() -> str:
+    """Return the (created) directory ScummVM's log files are written to."""
+    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    return logs_dir
+
+
+def _write_ini(game_id: str, game_path: str, port: int, scummvm_log: str) -> str:
+    """Render the per-game ini template into a fresh temp dir, return its path."""
+    with open(os.path.join("ini_files", f"scummvm_{game_id}.ini")) as ini_file:
+        content = ini_file.read() % {
+            "game_path": game_path,
+            "mcp_port": port,
+            "logfile": scummvm_log,
+        }
+    tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
+    ini_path = os.path.join(tmpdir, "scummvm.ini")
+    with open(ini_path, "w") as f:
+        f.write(content)
+    return ini_path
+
+
+def _resolve_save_path(game_id: str, ini_path: str, isolate_saves: bool) -> str:
+    """Return the ``--savepath`` for this instance.
+
+    When ``isolate_saves`` is true, copy the repo's ``save_slots/<game_id>`` into
+    a private folder (next to the ini) so concurrent same-game instances never
+    share (and clobber) save files; otherwise use the repo directory directly.
+    """
+    repo_save_path = os.path.join(os.path.dirname(__file__), f"save_slots/{game_id}")
+    if not isolate_saves:
+        return repo_save_path
+    save_path = os.path.join(os.path.dirname(ini_path), "saves")
+    if os.path.isdir(repo_save_path):
+        shutil.copytree(repo_save_path, save_path)
+    else:
+        os.makedirs(save_path, exist_ok=True)
+    return save_path
+
+
+def _launch_args(
+    game_id: str,
+    scummvm_binary: str,
+    ini_path: str,
+    save_slot: int,
+    save_path: str,
+) -> list[str]:
+    """Build the ScummVM command line for ``game_id``."""
+    if game_id in ("atlantis",):
+        # No save slot — these games start from scratch and handle their own intro.
+        return [scummvm_binary, "-c", ini_path, game_id]
+    return [
+        scummvm_binary,
+        "-c",
+        ini_path,
+        f"--save-slot={save_slot}",
+        f"--savepath={save_path}",
+        "--talkspeed=255",
+        game_id,
+    ]
+
+
+def _open_log_handles(game_id: str, port: int, args: list[str], ini_path: str):
+    """Write a header to the stdout log and return ``(stdout_fh, stderr_fh,
+    log_file, stderr_file)`` append handles for the launched process."""
+    logs_dir = _logs_dir()
+    log_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.log")
+    stderr_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.stderr")
+    with open(log_file, "w") as logf:
+        logf.write(f"Command: {' '.join(args)}\n")
+        logf.write("Environment: SDL_AUDIODRIVER=dummy\n")
+        logf.write(f"Config: {ini_path}\n")
+        logf.write("=" * 80 + "\n\n")
+    return open(log_file, "a"), open(stderr_file, "a"), log_file, stderr_file
+
+
 def launch_scummvm(
     game_id: str,
     game_path: str,
@@ -431,94 +507,25 @@ def launch_scummvm(
     polluting the committed save files. Pass ``isolate_saves=False`` (e.g. from
     ``launch_manual.py``) when you want ``save_state`` to write back into the
     repository's ``save_slots/<game_id>`` directory."""
-    # Create logs directory and per-game log file path for ScummVM's own logger
-    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    scummvm_log = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.scummvm.log")
-
-    # Create temporary scummvm.ini
-    with open(os.path.join("ini_files", f"scummvm_{game_id}.ini")) as ini_file:
-        content = ini_file.read() % {
-            "game_path": game_path,
-            "mcp_port": port,
-            "logfile": scummvm_log,
-        }
-
-    tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
-    ini_path = os.path.join(tmpdir, "scummvm.ini")
-    repo_save_path = os.path.join(os.path.dirname(__file__), f"save_slots/{game_id}")
-
-    if isolate_saves:
-        # Give this instance its own copy of the save slots so concurrent
-        # same-game instances never share (and clobber) save files.
-        save_path = os.path.join(tmpdir, "saves")
-        if os.path.isdir(repo_save_path):
-            shutil.copytree(repo_save_path, save_path)
-        else:
-            os.makedirs(save_path, exist_ok=True)
-    else:
-        save_path = repo_save_path
-
-    with open(ini_path, "w") as f:
-        f.write(content)
+    scummvm_log = os.path.join(_logs_dir(), f"scummvm_{game_id}_{port}.scummvm.log")
+    ini_path = _write_ini(game_id, game_path, port, scummvm_log)
+    save_path = _resolve_save_path(game_id, ini_path, isolate_saves)
+    args = _launch_args(game_id, scummvm_binary, ini_path, save_slot, save_path)
 
     # Launch with no video/audio
     env = os.environ.copy()
-    # env["SDL_VIDEODRIVER"] = "dummy"
     env["SDL_AUDIODRIVER"] = "dummy"
 
-    if game_id in ("atlantis",):
-        # No save slot — these games start from scratch and handle their own intro.
-        args = [
-            scummvm_binary,
-            "-c",
-            ini_path,
-            game_id,
-        ]
-    else:
-        args = [
-            scummvm_binary,
-            "-c",
-            ini_path,
-            f"--save-slot={save_slot}",
-            f"--savepath={save_path}",
-            "--talkspeed=255",
-            game_id,
-        ]
-
-    # Create logs directory for capturing output
-    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    log_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.log")
-    stderr_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.stderr")
-
-    # Open log files for writing
-    with open(log_file, "w") as logf:
-        # Write header with command line
-        logf.write(f"Command: {' '.join(args)}\n")
-        logf.write("Environment: SDL_AUDIODRIVER=dummy\n")
-        logf.write(f"Config: {ini_path}\n")
-        logf.write("=" * 80 + "\n\n")
-        logf.flush()
-
-    # Launch process with output going to separate log files
-    stdout_file = open(log_file, "a")
-    stderr_fh = open(stderr_file, "a")
-
-    proc = subprocess.Popen(
-        # [scummvm_binary, "-c", ini_path, "--no-gui", game_id],
-        args,
-        env=env,
-        stdout=stdout_file,
-        stderr=stderr_fh,
+    stdout_file, stderr_fh, log_file, stderr_file = _open_log_handles(
+        game_id, port, args, ini_path
     )
+    proc = subprocess.Popen(args, env=env, stdout=stdout_file, stderr=stderr_fh)
 
     # Keep the log file handles alive for the process lifetime so they are not
     # garbage-collected; the fixture teardown closes them (see conftest.py).
     # setattr (not attribute assignment) because Popen has no typed slot for it.
     setattr(proc, "_log_handles", (stdout_file, stderr_fh))  # noqa: B010
 
-    # Print log file locations for reference
     print(f"[MCP] {game_id} stdout: {log_file}", flush=True)
     print(f"[MCP] {game_id} stderr: {stderr_file}", flush=True)
 
