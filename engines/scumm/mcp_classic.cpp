@@ -242,11 +242,13 @@ bool McpBridgeClassic::toolPlayNote(const Common::JSONValue &args, Common::Strin
 }
 
 void McpBridgeClassic::pumpStreamGame() {
-	// Only relevant inside a Loom section: full Loom always, or the Loom
-	// mini-game in Passport. Other classic games (Indy3/Monkey/Indy4) never play
-	// distaff notes and never queue play_note input, so skip entirely.
-	if (!isInLoomSection())
-		return;
+	// The note watcher and the deferred note/second-click feed below are driven
+	// by Loom-only state: var(259) (the distaff note variable) and the
+	// _ssePending* flags, which only Loom's act/play_note paths ever set. They
+	// are inert for the other classic games (Indy3/Monkey/Indy4), so this runs
+	// unconditionally — matching the engine-wide behaviour it was migrated from —
+	// rather than gating on the loomSectionByVerbLabels() heuristic, which can be
+	// momentarily false mid-action and drop a queued Loom double-click.
 
 	// On the first pump of a new stream, snapshot the Loom note variable so the
 	// watcher below only emits transitions occurring during this action.
