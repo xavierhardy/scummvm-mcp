@@ -1,9 +1,16 @@
+# Single Python project for BOTH test suites: the scummvm_bench package/tests and
+# the MCP server integration tests under ../test/mcp. One venv, one config — the
+# [tool.pytest.ini_options] section adds ../test/mcp to testpaths so a single
+# `uv run pytest` (optionally `-n N`) runs both trees in one xdist pool.
+# Note: ruff/ty discover config by walking up from each file, so linting or
+# type-checking the sibling ../test/mcp tree needs `--config <path-to-this-file>`.
 [project]
 name = "scummvm-bench"
 version = "0.1.0"
 description = "MCP proxy bench-harness for benchmarking LLMs and agent harnesses against the ScummVM MCP server"
 readme = "README.md"
 requires-python = ">=3.11"
+# Runtime deps cover both suites: fastmcp+httpx (bench), httpx (test/mcp).
 dependencies = [
     "fastmcp>=2.3",
     "httpx>=0.27",
@@ -38,12 +45,20 @@ packages = ["scummvm_bench"]
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+# First-party source roots for import sorting (I): this package plus the sibling
+# test/mcp tree's flat modules, so they group correctly when ruff lints
+# ../test/mcp via `--config <this file>`. (tests/ is intentionally omitted so the
+# bench's own test-helper imports keep ruff's default third-party grouping.)
+src = [".", "../test/mcp"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ty.environment]
 python-version = "3.11"
+# Resolve imports of the sibling test/mcp tree's flat modules (utils, etc.) and
+# the bench tests' helpers when type-checking with this config.
+extra-paths = ["../test/mcp", "tests"]
 
 [tool.ty.src]
 # Type-check the library strictly; test code intentionally pokes at dynamic
@@ -51,5 +66,19 @@ python-version = "3.11"
 exclude = ["tests"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "--cov=scummvm_bench --cov-report=term-missing --cov-fail-under=70"
+minversion = "8.0"
+testpaths = ["tests", "../test/mcp"]
+# Both test trees on sys.path: bench tests import `mock_harness`/`walkthroughs`
+# from tests/, the MCP tests import `utils`/`mcp_client`/… from ../test/mcp.
+pythonpath = ["../test/mcp", "tests"]
+# importlib import-mode is required to collect two sibling trees that each have a
+# conftest.py (and a flat, non-packaged test layout) without basename clashes.
+# --dist=loadgroup honours the xdist_group markers (FT/Atlantis serialization).
+# Coverage is intentionally NOT in the defaults (it is meaningless over the mixed
+# suite); run the bench with `--cov=scummvm_bench --cov-fail-under=70` explicitly.
+addopts = "--dist=loadgroup --import-mode=importlib"
+markers = [
+    "xdist_group: pin all tests sharing the group name to one xdist worker (no-save games like FT/Atlantis)",
+    "slow: long-running test, skipped when SKIP_SLOW_TESTS is true/1",
+    "real: launches a real ScummVM (slow; opt-in via --run-real)",
+]

@@ -21,7 +21,10 @@ def _logs_dir() -> str:
 
 def _write_ini(game_id: str, game_path: str, port: int, scummvm_log: str) -> str:
     """Render the per-game ini template into a fresh temp dir, return its path."""
-    with open(os.path.join("ini_files", f"scummvm_{game_id}.ini")) as ini_file:
+    ini_template = os.path.join(
+        os.path.dirname(__file__), "ini_files", f"scummvm_{game_id}.ini"
+    )
+    with open(ini_template) as ini_file:
         content = ini_file.read() % {
             "game_path": game_path,
             "mcp_port": port,
@@ -117,7 +120,14 @@ def launch_scummvm(
     stdout_file, stderr_fh, log_file, stderr_file = _open_log_handles(
         game_id, port, args, ini_path
     )
-    proc = subprocess.Popen(args, env=env, stdout=stdout_file, stderr=stderr_fh)
+    # Run from test/mcp regardless of the caller's CWD: ScummVM resolves some
+    # runtime state relative to the working directory, and the suite historically
+    # ran from here. (Tests may now be driven from the consolidated project in
+    # ../scummvm_bench, so don't inherit that CWD.)
+    proc = subprocess.Popen(
+        args, env=env, stdout=stdout_file, stderr=stderr_fh,
+        cwd=os.path.dirname(__file__),
+    )
 
     # Keep the log file handles alive for the process lifetime so they are not
     # garbage-collected; the fixture teardown closes them (see conftest.py).

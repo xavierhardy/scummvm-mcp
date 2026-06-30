@@ -30,31 +30,43 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 Each test **skips** (not fails) when its game data is missing. Point the env var
 at the data folder if it is not at the built-in default.
 
+> **These tests share one Python project with `scummvm_bench`.** There is no
+> longer a `test/mcp/pyproject.toml` or venv — the single project lives at
+> `../scummvm_bench/pyproject.toml` (one venv, one config), and its
+> `[tool.pytest] testpaths` include this `../test/mcp` tree. Run everything from
+> `scummvm_bench/` and select this tree with `-o testpaths=../test/mcp`.
+
 ## Requirements
 
 - ScummVM built with MCP support (`./scummvm` in the repo root — run `make`)
-- Python 3.11+ and [`uv`](https://github.com/astral-sh/uv) (manages `pytest`/`httpx`)
+- Python 3.11+ and [`uv`](https://github.com/astral-sh/uv)
 - Game data only for the games you want to exercise (others skip)
 
 ## Install / dev
 
 ```bash
-cd test/mcp
+cd scummvm_bench                      # the consolidated Python project
+export UV_CONFIG_FILE="$PWD/uv.toml"
 uv sync
-uv run ruff format . && uv run ruff check . && uv run ty check
+# lint/type-check this (sibling) tree with the explicit config:
+uv run --no-sync ruff format ../test/mcp
+uv run --no-sync ruff check --config "$PWD/pyproject.toml" ../test/mcp
+uv run --no-sync ty check --project "$PWD" ../test/mcp
 ```
-
-`uv sync` creates `.venv/` and installs `pytest`, `pytest-xdist` and `httpx`.
-Lint/format is `ruff`; type-checking is `ty` (both via `uv run`).
 
 ## Running
 
+All from `scummvm_bench/` (with `UV_CONFIG_FILE` exported as above):
+
+# Narrow to specific files/tests with `-k` (a positional filename would resolve
+# against scummvm_bench/, the wrong dir — `-o testpaths` + `-k` keeps the config).
 ```bash
-uv run pytest                       # everything (game tests skip if data absent)
-uv run pytest test_unit.py          # the 41 pure unit tests (no game needed)
-uv run pytest test_comi.py -v       # one game
-uv run pytest -n auto               # parallel (see fixture model below)
-MANIAC_C64_PATH=/path/to/data uv run pytest test_maniac_c64.py
+uv run --no-sync pytest -o testpaths=../test/mcp                 # all MCP server tests
+uv run --no-sync pytest -o testpaths=../test/mcp -k test_unit    # the 41 pure unit tests
+uv run --no-sync pytest -o testpaths=../test/mcp -k comi -v      # one game
+uv run --no-sync pytest -o testpaths=../test/mcp -n auto         # parallel (see fixture model below)
+uv run --no-sync pytest                                          # BOTH trees (test/mcp + bench)
+MANIAC_C64_PATH=/path/to/data uv run --no-sync pytest -o testpaths=../test/mcp -k maniac
 ```
 
 The suite runs under `--dist=loadgroup` by default. `SKIP_SLOW_TESTS=1` skips
@@ -103,10 +115,11 @@ def test_pickup_bowl(monkey_client: McpClient) -> None:
 ./scummvm --debugflags=mcp --debuglevel=11 monkey
 
 # Drive the server by hand with mcp_cli.py (REPL or one-shot). It can also
-# launch ScummVM on a per-game save for you:
-uv run python mcp_cli.py --launch pass --port 23462          # launch + REPL
-uv run python mcp_cli.py --port 23462 state                  # one-shot
-uv run python mcp_cli.py --port 23462 act pick_up "bowl o' mints"
+# launch ScummVM on a per-game save for you. Run it through the consolidated env
+# (from scummvm_bench/, with UV_CONFIG_FILE exported):
+uv run --no-sync python ../test/mcp/mcp_cli.py --launch pass --port 23462   # launch + REPL
+uv run --no-sync python ../test/mcp/mcp_cli.py --port 23462 state           # one-shot
+uv run --no-sync python ../test/mcp/mcp_cli.py --port 23462 act pick_up "bowl o' mints"
 ```
 
 ## Notes

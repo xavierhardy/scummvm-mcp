@@ -46,19 +46,31 @@ and the ScummVM MCP server), so cells can run in parallel without colliding.
 
 ## Install / dev
 
+This is the single Python project for **both** test suites — its own `tests/`
+plus the MCP server integration tests under `../test/mcp` (added to
+`[tool.pytest] testpaths`). One venv, one config. Pick a tree with
+`-o testpaths=...`; the default runs both.
+
 ```bash
 cd scummvm_bench
+export UV_CONFIG_FILE="$PWD/uv.toml"
 uv sync
-uv run ruff format . && uv run ruff check . && uv run ty check
-uv run pytest            # unit tests + mock full-run for every game (no binary needed)
+uv run --no-sync ruff format . && uv run --no-sync ruff check . && uv run --no-sync ty check
+uv run --no-sync pytest -o testpaths=tests   # bench unit + mock full-runs (no binary)
+
+# Both trees in one xdist pool (the test/mcp game tests need ./scummvm built):
+uv run --no-sync pytest --run-real -n auto
 
 # Opt-in: the real end-to-end tests launch an actual ScummVM and drive each
-# game's captured walkthrough to 100% of its goals (each opens a window). A game
-# is skipped individually if its data/save is absent; point the per-game env var
-# at the data folder if it isn't auto-found.
-uv run pytest --run-real tests/test_games_real.py            # all games
-MONKEY_DEMO_PATH=/path/to/monkey uv run pytest --run-real \
-    tests/test_full_run_real_monkey.py                       # Monkey Island
+# game's captured walkthrough to 100% of its goals. A game is skipped if its
+# data/save is absent; point the per-game env var at the data folder otherwise.
+uv run --no-sync pytest -o testpaths=tests --run-real tests/test_games_real.py   # all games
+MONKEY_DEMO_PATH=/path/to/monkey uv run --no-sync pytest --run-real \
+    tests/test_full_run_real_monkey.py                                           # Monkey Island
+
+# Lint/type-check the sibling MCP test tree with the explicit config:
+uv run --no-sync ruff check --config "$PWD/pyproject.toml" ../test/mcp
+uv run --no-sync ty check --project "$PWD" ../test/mcp
 ```
 
 Every game that has a captured walkthrough (`tests/walkthroughs.py`) gets both a

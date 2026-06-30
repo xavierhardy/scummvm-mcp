@@ -83,17 +83,30 @@ required to reach 100% of the game's goals.
 ## Python tooling (both `test/mcp` and `scummvm_bench`)
 
 Use **`uv`** (install/run), **`ruff`** (lint + format, replaces black/isort), and
-**`ty`** (`astral/ty`, type-check, replaces mypy). Keep tooling uniform across the
-two projects. Typing rules: rely on `Any` as little as possible; never use
-`Optional`/`Union` (`X | None`, `X | Y`); prefer `list`/`dict`/`tuple` over the
-`typing` aliases. Preserve ruff's default formatting.
+**`ty`** (`astral/ty`, type-check, replaces mypy). Typing rules: rely on `Any` as
+little as possible; never use `Optional`/`Union` (`X | None`, `X | Y`); prefer
+`list`/`dict`/`tuple` over the `typing` aliases. Preserve ruff's default formatting.
 
-**Scope `ruff` and `ty` strictly to `test/mcp/` and `scummvm_bench/`.** Each owns
-its own `pyproject.toml`; always run the tools from *inside* one of those two
-directories (e.g. `cd scummvm_bench && uv run ruff format . && uv run ruff check .
-&& uv run ty check`). Never run `ruff`/`ty` from the repo root or point them at
-the rest of the tree — the surrounding ScummVM source is not ours to lint or
-type-check, and doing so floods the output with upstream findings.
+**Both test trees are ONE Python project** rooted at `scummvm_bench/pyproject.toml`
+(one venv, one config). Its `[tool.pytest] testpaths` include `../test/mcp`, so a
+single `uv run pytest` (optionally `-n N`) from `scummvm_bench/` runs both trees in
+one xdist pool. Select a subset with `-o testpaths=...`:
+
+```bash
+cd scummvm_bench
+export UV_CONFIG_FILE="$PWD/uv.toml" && uv sync
+uv run --no-sync pytest -o testpaths=tests          # bench only
+uv run --no-sync pytest -o testpaths=../test/mcp     # MCP server tests only
+uv run --no-sync pytest --run-real -n auto           # both trees, one pool
+```
+
+**`ruff`/`ty` scope:** they only ever apply to this one project. Run them from
+`scummvm_bench/` (`uv run ruff format . && uv run ruff check . && uv run ty check`).
+Because `ruff`/`ty` discover config by walking *up* from each file and `test/mcp`
+is a *sibling*, lint/type-check that tree with the explicit config:
+`uv run ruff check --config "$PWD/pyproject.toml" ../test/mcp` and
+`uv run ty check --project "$PWD" ../test/mcp`. Never run `ruff`/`ty` from the repo
+root or point them at the surrounding ScummVM source (not ours to lint).
 
 ## Build & run tests
 
@@ -106,17 +119,17 @@ make
 # python3 exists, create a venv to provide one:  uv venv .venv && PATH=.venv/bin:$PATH make test
 make test
 
-# Python — MCP server integration + unit tests
-cd test/mcp && uv sync
-uv run pytest                 # game tests skip when data is absent
-uv run pytest test_unit.py    # pure unit tests, no game needed
-uv run ruff format . && uv run ruff check . && uv run ty check
-
-# Python — MCP benchmark
-cd scummvm_bench && uv sync
-uv run pytest                 # unit + mock full-runs (no binary needed)
-uv run pytest --run-real tests/test_games_real.py   # drives a real ScummVM
-uv run ruff format . && uv run ruff check . && uv run ty check
+# Python — both suites share one project in scummvm_bench (testpaths cover
+# ../test/mcp). Game tests skip when data is absent.
+cd scummvm_bench && export UV_CONFIG_FILE="$PWD/uv.toml" && uv sync
+uv run --no-sync pytest                              # both trees (no real ScummVM bench runs)
+uv run --no-sync pytest --run-real -n auto           # both trees, one xdist pool, full runs
+uv run --no-sync pytest -o testpaths=../test/mcp     # MCP server tests only
+uv run --no-sync pytest -o testpaths=tests           # bench only
+# lint/type-check (test/mcp needs the explicit config — sibling dir):
+uv run --no-sync ruff format . && uv run --no-sync ruff check . && uv run --no-sync ty check
+uv run --no-sync ruff check --config "$PWD/pyproject.toml" ../test/mcp
+uv run --no-sync ty check --project "$PWD" ../test/mcp
 ```
 
 Game data is not in the repo. Tests look for it via per-game env vars and skip
@@ -135,12 +148,14 @@ when it is missing (see `test/mcp/README.md`).
 - **`test/mcp/mcp_cli.py`** — an interactive REPL / one-shot CLI to call any MCP
   tool against a running instance, and to auto-launch a game on a save:
 
+  Run it through the consolidated env (it lives in `test/mcp/`, so pass the path):
+
   ```bash
-  cd test/mcp
-  uv run python mcp_cli.py --launch pass --port 23462          # launch + REPL
-  uv run python mcp_cli.py --port 23462 state                  # one-shot
-  uv run python mcp_cli.py --port 23462 mouse_click 140 134 --double
-  uv run python mcp_cli.py --port 23462 debug --vars 250-263
+  cd scummvm_bench && export UV_CONFIG_FILE="$PWD/uv.toml"
+  uv run --no-sync python ../test/mcp/mcp_cli.py --launch pass --port 23462   # launch + REPL
+  uv run --no-sync python ../test/mcp/mcp_cli.py --port 23462 state           # one-shot
+  uv run --no-sync python ../test/mcp/mcp_cli.py --port 23462 mouse_click 140 134 --double
+  uv run --no-sync python ../test/mcp/mcp_cli.py --port 23462 debug --vars 250-263
   ```
 
 ## Decompiling a game (recovering exact mechanics)
@@ -170,7 +185,11 @@ When working on the MCP server, its tests, or the MCP bench:
   shared by every SCUMM game from V0 to V8 — gate game- or version-specific
   behaviour behind the appropriate version/game checks rather than changing
   common paths. When in doubt, prefer an additive, narrowly-scoped branch.
-- Keep `scummvm_bench` free of any dependency on the `test/mcp` tree.
+- The two Python test trees share one project/venv (`scummvm_bench/pyproject.toml`,
+  whose `testpaths` include `../test/mcp`). The vendored `scummvm_bench/scummvm_bench/
+  mcp_client.py` must still stay a self-contained copy — keep the **runtime package**
+  `scummvm_bench` free of imports from the `test/mcp` tree; only the shared *test
+  tooling* (one pyproject/venv) spans both.
 
 ## Conventions & attribution
 
