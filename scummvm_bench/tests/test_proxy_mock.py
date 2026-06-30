@@ -84,7 +84,7 @@ def test_in_memory_client_lists_all_tools() -> None:
             return sorted(t.name for t in await client.list_tools())
 
     names = asyncio.run(go())
-    assert {"state", "act", "answer", "walk", "skip"} <= set(names)
+    assert {"state", "act", "answer", "walk", "skip", "ride_bike"} <= set(names)
 
 
 def test_stop_callback_fires_on_stopping_goal() -> None:

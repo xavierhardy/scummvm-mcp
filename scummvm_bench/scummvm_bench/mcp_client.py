@@ -173,6 +173,34 @@ class McpClient:
     def state(self) -> dict[str, object]:
         return self.call_tool("state", {})
 
+    def list_tools(self) -> list[dict[str, object]]:
+        """Return the server's advertised tools (name / description / inputSchema).
+
+        Each entry is the raw ``tools/list`` tool object, so callers can mirror the
+        server's own schemas without hardcoding them.
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/list",
+            "params": {},
+        }
+        resp = self._client.post(self._url, json=payload, headers=self._headers())
+        if resp.status_code >= 400:
+            raise McpError(f"tools/list: HTTP {resp.status_code}")
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise McpDecodeError("tools/list: non-object response")
+        if "error" in data:
+            raise self._error_from(data["error"], "tools/list")
+        result = data.get("result")
+        tools = result.get("tools") if isinstance(result, dict) else None
+        if not isinstance(tools, list):
+            raise McpDecodeError("tools/list: missing tools array")
+        return [
+            t for t in tools if isinstance(t, dict) and isinstance(t.get("name"), str)
+        ]
+
     def close(self) -> None:
         self._client.close()
 

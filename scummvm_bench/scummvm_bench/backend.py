@@ -46,7 +46,107 @@ class Backend(Protocol):
 
     def call(self, tool: str, args: dict[str, object]) -> dict[str, object]: ...
 
+    def list_tools(self) -> list[dict[str, object]]: ...
+
     def stop(self) -> None: ...
+
+
+def _prop(type_name: str, desc: str) -> dict[str, object]:
+    return {"type": type_name, "description": desc}
+
+
+def _target(desc: str) -> dict[str, object]:
+    return {"oneOf": [{"type": "string"}, {"type": "integer"}], "description": desc}
+
+
+def _tool(
+    name: str, description: str, properties: dict[str, object], required: list[str]
+) -> dict[str, object]:
+    return {
+        "name": name,
+        "description": description,
+        "inputSchema": {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False,
+        },
+    }
+
+
+# Canonical gameplay tool surface. Used by ``MockBackend.list_tools()`` and as the
+# proxy's fallback when a live server's ``tools/list`` cannot be read. The real
+# backend derives its surface from the running server instead, so the proxy never
+# drifts from what the engine actually exposes (see ``proxy.BenchProxy``).
+DEFAULT_GAMEPLAY_TOOLS: list[dict[str, object]] = [
+    _tool("state", "Get the current game state.", {}, []),
+    _tool(
+        "act",
+        "Execute a verb on up to two targets (e.g. walk_to / pick_up / use).",
+        {
+            "verb": _prop("string", "The verb to perform."),
+            "target1": _target("First target (object/actor name or id)."),
+            "target2": _target("Second target (for two-object verbs)."),
+        },
+        ["verb"],
+    ),
+    _tool(
+        "answer",
+        "Select a dialog choice by its 1-based id.",
+        {"id": _prop("integer", "The 1-based dialog choice id.")},
+        ["id"],
+    ),
+    _tool(
+        "walk",
+        "Walk to a pixel coordinate in the current room.",
+        {"x": _prop("integer", "X pixel."), "y": _prop("integer", "Y pixel.")},
+        ["x", "y"],
+    ),
+    _tool("skip", "Skip the current cutscene / advance text.", {}, []),
+    _tool(
+        "play_note",
+        "Play one note or a sequence of notes (Loom distaff).",
+        {
+            "note": _prop("string", "A single note (c d e f g a b C)."),
+            "notes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "A sequence of notes to play in order.",
+            },
+        },
+        [],
+    ),
+    _tool(
+        "switch_character",
+        "Switch the controlled character (Maniac Mansion).",
+        {"name": _prop("string", "The character to switch to.")},
+        ["name"],
+    ),
+    _tool(
+        "dial",
+        "Dial a number on the phone dial pad (Maniac Mansion).",
+        {"number": _prop("string", "The number to dial.")},
+        ["number"],
+    ),
+    _tool(
+        "shoot_cannon",
+        "Aim and fire the cannon at a coordinate (Curse of Monkey Island).",
+        {"x": _prop("integer", "Aim X."), "y": _prop("integer", "Aim Y.")},
+        ["x", "y"],
+    ),
+    _tool(
+        "ride_bike",
+        "Play the Full Throttle motorcycle minigame (auto-plays the highway fight).",
+        {},
+        [],
+    ),
+    _tool(
+        "keystroke",
+        "Send a raw keypress (numpad 1-9 drives the Indy3 boxing fight).",
+        {"key": _prop("string", "The key to press.")},
+        ["key"],
+    ),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +215,16 @@ class RealBackend:
     def call(self, tool: str, args: dict[str, object]) -> dict[str, object]:
         clean = {k: v for k, v in args.items() if v is not None}
         return self._guard(lambda: self._require_client().call_tool(tool, clean))
+
+    def list_tools(self) -> list[dict[str, object]]:
+        try:
+            return self._require_client().list_tools()
+        except McpError as exc:
+            raise BackendError(str(exc)) from exc
+        except McpDecodeError as exc:
+            raise BackendInvalidResponse(str(exc)) from exc
+        except (httpx.HTTPError, OSError) as exc:
+            raise BackendError(str(exc)) from exc
 
     def stop(self) -> None:
         if self._client is not None:
@@ -202,6 +312,9 @@ class MockBackend:
             "objects": [],
             "messages": [],
         }
+
+    def list_tools(self) -> list[dict[str, object]]:
+        return [copy.deepcopy(t) for t in DEFAULT_GAMEPLAY_TOOLS]
 
     def call(self, tool: str, args: dict[str, object]) -> dict[str, object]:
         if tool == "state":

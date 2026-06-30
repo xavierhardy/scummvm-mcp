@@ -7,13 +7,16 @@ the room the player was in *before* a call without an extra round-trip per call.
 """
 
 import copy
+import keyword
 import threading
 from collections.abc import Callable
 
 from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware, MiddlewareContext
+from fastmcp.tools.function_tool import FunctionTool
 
 from .backend import (
+    DEFAULT_GAMEPLAY_TOOLS,
     Backend,
     BackendError,
     BackendInvalidRequest,
@@ -28,6 +31,15 @@ from .models import (
 from .recorder import Decision, Recorder
 
 StopCallback = Callable[[Decision], None]
+
+# Debug tools (gated by ``mcp_debug`` in the engine) that drive the cursor or
+# read engine internals directly. Exposing them would let the agent bypass the
+# semantic tool surface the benchmark scores, so they are filtered out of the
+# proxy even when a debug-enabled game advertises them. ``keystroke`` is *not*
+# here: it is the legitimate input for the Indy3 boxing minigame.
+DENIED_TOOLS = frozenset(
+    {"debug", "save_state", "set_talk_speed", "mouse_move", "mouse_click", "screenshot"}
+)
 
 
 class BenchProxy:
@@ -45,16 +57,38 @@ class BenchProxy:
         self.goal_set = goal_set
         self.on_stop = on_stop or (lambda _decision: None)
         self._state_cache: dict[str, object] = {}
-        self.app = self._build_app()
+        # Built from whatever tools the backend can advertise right now (the
+        # fallback set if it is not started yet); prime() rebuilds it once the
+        # backend is live so the surface matches the running engine exactly.
+        self.app = self._build_app(self._discover_tools())
 
     # -- lifecycle ---------------------------------------------------------
 
     def prime(self) -> None:
-        """Seed the cached state once, after the backend has started."""
+        """Seed the cached state and lock in the tool surface, post-backend-start."""
         try:
             self._state_cache = self.backend.state()
         except Exception:  # noqa: BLE001 - state read is best-effort
             self._state_cache = {}
+        self.app = self._build_app(self._discover_tools())
+
+    def _discover_tools(self) -> list[dict[str, object]]:
+        """Tools to expose: the backend's advertised set minus the denylist.
+
+        Falls back to the canonical gameplay set if the backend cannot be asked
+        (e.g. not started yet, or a transport hiccup) so the proxy always has a
+        usable surface."""
+        try:
+            advertised = self.backend.list_tools()
+        except Exception:  # noqa: BLE001 - fall back to the default surface
+            advertised = []
+        if not advertised:
+            advertised = DEFAULT_GAMEPLAY_TOOLS
+        return [
+            t
+            for t in advertised
+            if isinstance(t.get("name"), str) and t["name"] not in DENIED_TOOLS
+        ]
 
     # -- dispatch ----------------------------------------------------------
 
@@ -127,71 +161,64 @@ class BenchProxy:
 
     # -- FastMCP wiring ----------------------------------------------------
 
-    def _build_app(self) -> FastMCP:
+    def _build_app(self, tools: list[dict[str, object]]) -> FastMCP:
+        """Build a FastMCP app that mirrors ``tools``, forwarding each to dispatch.
+
+        Every tool is registered with the server's own input schema, so the
+        surface the agent sees can never drift from what the engine exposes."""
         app: FastMCP = FastMCP("scummvm-bench")
         app.add_middleware(_RecordingMiddleware(self))
-        dispatch = self.dispatch
-
-        @app.tool
-        def state() -> dict[str, object]:
-            """Get the current game state (room, position, inventory, objects)."""
-            return dispatch("state", {})
-
-        @app.tool
-        def act(
-            verb: str,
-            target1: str | int | None = None,
-            target2: str | int | None = None,
-        ) -> dict[str, object]:
-            """Execute a verb on up to two targets (e.g. walk_to / pick_up / use)."""
-            return dispatch(
-                "act", {"verb": verb, "target1": target1, "target2": target2}
+        for spec in tools:
+            name = str(spec["name"])
+            schema = _input_schema(spec)
+            description = spec.get("description")
+            forwarder = _make_forwarder(name, schema, self.dispatch)
+            tool = FunctionTool.from_function(
+                forwarder,
+                name=name,
+                description=str(description) if isinstance(description, str) else None,
             )
-
-        @app.tool
-        def answer(id: int) -> dict[str, object]:
-            """Select a dialog choice by its 1-based id."""
-            return dispatch("answer", {"id": id})
-
-        @app.tool
-        def walk(x: int, y: int) -> dict[str, object]:
-            """Walk to a pixel coordinate in the current room."""
-            return dispatch("walk", {"x": x, "y": y})
-
-        @app.tool
-        def skip() -> dict[str, object]:
-            """Skip the current cutscene / advance text."""
-            return dispatch("skip", {})
-
-        @app.tool
-        def play_note(
-            note: str | None = None,
-            notes: list[str] | None = None,
-        ) -> dict[str, object]:
-            """Play one note or a sequence of notes (Loom distaff)."""
-            return dispatch("play_note", {"note": note, "notes": notes})
-
-        @app.tool
-        def switch_character(name: str) -> dict[str, object]:
-            """Switch the controlled character (Maniac Mansion)."""
-            return dispatch("switch_character", {"name": name})
-
-        @app.tool
-        def dial(number: str) -> dict[str, object]:
-            """Dial a number on the phone dial pad (Maniac Mansion)."""
-            return dispatch("dial", {"number": number})
-
-        @app.tool
-        def shoot_cannon(x: int, y: int) -> dict[str, object]:
-            """Aim and fire the cannon at a coordinate (Curse of Monkey Island)."""
-            return dispatch("shoot_cannon", {"x": x, "y": y})
-
-        @app.tool
-        def keystroke(key: str) -> dict[str, object]:
-            """Send a raw keypress (numpad 1-9 drives the Indy3 boxing fight)."""
-            return dispatch("keystroke", {"key": key})
-
+            # Advertise the engine's exact schema rather than the one inferred
+            # from the generated forwarder's (untyped) signature.
+            tool.parameters = schema
+            app.add_tool(tool)
         return app
+
+
+def _input_schema(spec: dict[str, object]) -> dict[str, object]:
+    """The tool's input schema, defaulting to an empty object when absent."""
+    schema = spec.get("inputSchema")
+    if isinstance(schema, dict):
+        typed = {str(key): val for key, val in schema.items()}
+        if isinstance(typed.get("properties"), dict):
+            return typed
+    return {"type": "object", "properties": {}, "additionalProperties": False}
+
+
+def _make_forwarder(
+    name: str,
+    schema: dict[str, object],
+    dispatch: Callable[[str, dict[str, object]], dict[str, object]],
+) -> Callable[..., dict[str, object]]:
+    """Build a function whose signature matches ``schema`` and forwards to dispatch.
+
+    FastMCP infers a tool's callable signature (it rejects ``**kwargs``), so we
+    synthesise one parameter per schema property — required ones positional, the
+    rest defaulting to ``None`` — and pass them straight through to dispatch."""
+    props = schema.get("properties")
+    prop_names = [str(n) for n in props] if isinstance(props, dict) else []
+    names = [n for n in prop_names if n.isidentifier() and not keyword.iskeyword(n)]
+    required = schema.get("required")
+    required_set = {str(r) for r in required} if isinstance(required, list) else set()
+
+    params = ", ".join(n if n in required_set else f"{n}=None" for n in names)
+    payload = ", ".join(f"{n!r}: {n}" for n in names)
+    source = f"def _forward({params}):\n    return _dispatch({name!r}, {{{payload}}})\n"
+    namespace: dict[str, object] = {"_dispatch": dispatch}
+    exec(source, namespace)  # noqa: S102 - schema is server-controlled, names validated
+    forwarder = namespace["_forward"]
+    forwarder.__name__ = name  # type: ignore[attr-defined]
+    return forwarder  # type: ignore[return-value]
 
 
 class _RecordingMiddleware(Middleware):
