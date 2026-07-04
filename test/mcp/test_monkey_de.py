@@ -295,6 +295,44 @@ def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> No
 
 
 # ---------------------------------------------------------------------------
+# Door state names and the English 'open' verb
+# ---------------------------------------------------------------------------
+
+
+def test_11_de_door_state_name(monkey_de_client: McpClient) -> None:
+    """The troll-clearing door reports opened/closed state names and advertises
+    the open verb; opening it flips the state to 'opened'."""
+    client = monkey_de_client
+    assert_room(client.state(), 55)
+
+    door = object_by_id(client.state(), 422)
+    assert door is not None, "door (422) not in room 55"
+    assert door["state_name"] == "closed", f"door not 'closed': {door}"
+    assert "Öffne" in door["compatible_verbs"], f"door missing open verb: {door}"
+
+    client.act("öffne", "tür")
+    door = object_by_id(client.state(), 422)
+    assert door is not None, "door (422) vanished after opening"
+    assert door["state_name"] == "opened", f"door not 'opened' after open: {door}"
+
+    # The archway is not an openable, so it has no state_name.
+    arch = object_by_id(client.state(), 421)
+    assert arch is not None and "state_name" not in arch, (
+        f"archway got a state_name: {arch}"
+    )
+
+
+def test_12_de_english_open_verb(monkey_de_client: McpClient) -> None:
+    """The canonical English 'open' verb drives the German 'Öffne' door label."""
+    client = monkey_de_client
+    assert_room(client.state(), 55)
+    changed = client.act("open", "tür")["objects_changed"]
+    assert changed == [{"name": "tür", "old_state": 0, "new_state": 1}], (
+        f"'open' did not open the German door: {changed}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Kitchen plank (surfaced from an untouchable, unnamed hotspot)
 # ---------------------------------------------------------------------------
 

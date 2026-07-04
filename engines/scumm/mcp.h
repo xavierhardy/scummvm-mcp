@@ -178,11 +178,27 @@ protected:
 	// Classify an entity for buildEntityMap (e.g. mark exit hotspots as pathway).
 	// numId is the object/actor id; set isPathway to flag a navigable exit.
 	virtual void classifyGameEntity(int numId, bool &isPathway) const { (void)numId; (void)isPathway; }
+	// Verb id 1 is normally the engine's reserved default/sentence verb and is
+	// hidden from the exposed verb bar. Games where id 1 is a real bar verb
+	// (Monkey Island's "Open") override this to expose it. Default: hide it.
+	virtual bool includeBarVerbId1() const { return false; }
 	// Force an otherwise-unselectable/unnamed scene object into the entity map
 	// under a stable, action-friendly name (e.g. Monkey Island's kitchen plank,
 	// authored as an untouchable, unnamed hotspot). Return "" to leave the
 	// object handled by the default selectability/name logic.
 	virtual Common::String syntheticObjectName(int numId) const { (void)numId; return Common::String(); }
+	// Optional human-readable name for an object's raw SCUMM state (e.g. a door
+	// reported as "opened"/"closed"). Empty string means "no named state" and the
+	// `state_name` field is omitted. `rawState` is _vm->getState(numId); isPathway
+	// mirrors the object's computed pathway flag. The base implementation names
+	// the state of any openable object (one that scripts both an open and a close
+	// verb) as "opened"/"closed"; leaves may override to add game-specific states
+	// (and can chain to ScummMcpBridge::objectStateName for the door default).
+	virtual Common::String objectStateName(int numId, int rawState, bool isPathway) const;
+
+	// Locate the engine verb ids for the "open" and "close" bar verbs (0 if the
+	// game has none). Used for the generic door-state naming above.
+	void findOpenCloseVerbIds(int &openVerb, int &closeVerb) const;
 
 	// --- Protected accessors for ScummEngine internals ---------------------
 	// The base class is the sole `friend` of ScummEngine; friendship is not
@@ -203,6 +219,7 @@ protected:
 	int32 vmVar(int i) const;
 	void vmConvertMessageToString(const byte *msg, byte *dst, int dstSize) const;
 	int vmGetOwner(int obj) const;
+	int vmGetState(int obj) const;
 	int vmGetObjX(int obj) const;
 	int vmGetObjY(int obj) const;
 	int vmGetObjectIndex(int obj) const;

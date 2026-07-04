@@ -80,17 +80,20 @@ public:
 
 	// --- normalizeActionName: UTF-8 Latin-1 uppercase folds to lowercase ---
 	// The German "Öffne" (open) verb begins with U+00D6; Common::String's ASCII
-	// toLowercase would have left it uppercase and failed the "öffne" match.
+	// toLowercase would have left it uppercase and failed the umlaut-fold that
+	// the German verb synonyms rely on. After folding, "öffne" maps to the
+	// canonical English verb "open".
 	void test_normalize_utf8_lowercase() {
-		// "\xC3\x96ffne" == "Öffne" -> "\xC3\xB6ffne" == "öffne"
+		// "\xC3\x96ffne" == "Öffne" -> folds to "öffne" -> canonical "open".
 		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("\xC3\x96""ffne"),
-		                 "\xC3\xB6""ffne");
+		                 "open");
 	}
 
 	// --- normalizeActionName: German verb-bar labels -> canonical English ---
 	void test_normalize_german_verbs() {
 		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("geh zu"),   "walk_to");
 		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("Schau an"), "look_at");
+		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("Schlie\xC3\x9F""e"), "close");
 	}
 };
 

@@ -340,6 +340,7 @@ int ScummMcpBridge::vmNumVerbs() const                     { return _vm->_numVer
 int32 ScummMcpBridge::vmVar(int i) const                   { return _vm->_scummVars ? _vm->_scummVars[i] : 0; }
 void ScummMcpBridge::vmConvertMessageToString(const byte *msg, byte *dst, int dstSize) const { _vm->convertMessageToString(msg, dst, dstSize); }
 int ScummMcpBridge::vmGetOwner(int obj) const              { return _vm->getOwner(obj); }
+int ScummMcpBridge::vmGetState(int obj) const              { return _vm->getState(obj); }
 int ScummMcpBridge::vmGetObjX(int obj) const               { return _vm->getObjX(obj); }
 int ScummMcpBridge::vmGetObjY(int obj) const               { return _vm->getObjY(obj); }
 int ScummMcpBridge::vmGetObjectIndex(int obj) const        { return _vm->getObjectIndex(obj); }
@@ -811,6 +812,7 @@ void ScummMcpBridge::registerTools() {
 		objectItemProps.setVal("id",              mcpProp("integer", "Object ID"));
 		objectItemProps.setVal("name",            mcpProp("string",  "Object name"));
 		objectItemProps.setVal("state",           mcpProp("integer", "Object state"));
+		objectItemProps.setVal("state_name",      mcpProp("string",  "Human-readable state (e.g. a door's 'opened'/'closed'); omitted when the object has no named state"));
 		objectItemProps.setVal("x",               mcpProp("integer", "X coordinate"));
 		objectItemProps.setVal("y",               mcpProp("integer", "Y coordinate"));
 		objectItemProps.setVal("pathway",         mcpProp("boolean", "Is pathway/exit"));
@@ -859,6 +861,8 @@ void ScummMcpBridge::registerTools() {
 		    "(including NPCs with their compatible_verbs — always includes talk_to), "
 		    "active verbs, latest messages (cleared after reading), "
 		    "and pending dialog question if any. The player character is never listed. "
+		    "Objects with a meaningful state expose a human-readable 'state_name' "
+		    "(e.g. a door reads 'opened'/'closed'); doors advertise the 'open'/'close' verbs. "
 		    "Use act(verb='talk_to', target1=<npc_name>) to speak to an NPC.";
 		spec.inputSchema  = mcpObjectSchema(inputProps);
 		spec.outputSchema = mcpObjectSchema(outputProps);
@@ -1193,7 +1197,12 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	if (!questionPending) {
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
-			if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
+			// Verb id 1 is the engine's reserved default/sentence verb in most
+			// SCUMM games and is hidden from the exposed verb bar. A few games use
+			// id 1 for a real bar verb instead (Monkey Island's "Open"), so the
+			// skip is gated behind a per-game hook.
+			if (!vs.verbid || vs.saveid != 0 ||
+			    (_vm->_game.version > 0 && vs.verbid == 1 && !includeBarVerbId1())) continue;
 			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 			if (vs.curmode != 0 && vs.curmode != 1) continue;
 			const byte *ptr2 = _vm->getResourceAddress(rtVerb, slot);
@@ -1361,6 +1370,9 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			obj.setVal("x",                mcpJsonInt(_vm->getObjX(ne.numId)));
 			obj.setVal("y",                mcpJsonInt(_vm->getObjY(ne.numId)));
 			obj.setVal("pathway",          mcpJsonBool(isPathway));
+			Common::String stateName = objectStateName(ne.numId, _vm->getState(ne.numId), isPathway);
+			if (!stateName.empty())
+				obj.setVal("state_name", mcpJsonString(stateName));
 			obj.setVal("compatible_verbs", new Common::JSONValue(compatVerbs));
 			objects.push_back(new Common::JSONValue(obj));
 			break;
@@ -3983,6 +3995,39 @@ bool ScummMcpBridge::isActorSelectable(int actorId) const {
 	default:
 		return !_vm->getClass(actorId, kObjectClassUntouchable);
 	}
+}
+
+void ScummMcpBridge::findOpenCloseVerbIds(int &openVerb, int &closeVerb) const {
+	openVerb = 0;
+	closeVerb = 0;
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid || vs.saveid != 0) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256] = {};
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		Common::String norm = normalizeActionName(safeUtf8(Common::String((const char *)textBuf)));
+		if (!openVerb && norm == "open") openVerb = vs.verbid;
+		else if (!closeVerb && norm == "close") closeVerb = vs.verbid;
+	}
+}
+
+Common::String ScummMcpBridge::objectStateName(int numId, int rawState, bool isPathway) const {
+	(void)isPathway;
+	// Generic door/passage naming: an object that scripts both the open and the
+	// close verb is an openable, so surface its opened/closed state. Doors start
+	// closed (state 0); a non-zero image state is the opened image (verified on
+	// Monkey Island's Scumm Bar doors, and consistent with "already opened" doors
+	// such as Indy3's gym reading as opened). Games whose objects carry no scripted
+	// open/close verbs (V6+ single-cursor titles) simply report no door states.
+	int openVerb = 0, closeVerb = 0;
+	findOpenCloseVerbIds(openVerb, closeVerb);
+	if (openVerb && closeVerb &&
+	    _vm->getVerbEntrypoint(numId, openVerb) != 0 &&
+	    _vm->getVerbEntrypoint(numId, closeVerb) != 0)
+		return (rawState != 0) ? "opened" : "closed";
+	return Common::String();
 }
 
 void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const {

@@ -118,6 +118,7 @@
                 "id":               { "type": "integer" },
                 "name":             { "type": "string" },
                 "state":            { "type": "integer" },
+                "state_name":       { "type": "string", "description": "Human-readable state, present only for objects that have one (e.g. a door's \"opened\"/\"closed\"). Omitted otherwise. Localised to the game's language." },
                 "visible":          { "type": "boolean" },
                 "pathway":          { "type": "boolean" },
                 "compatible_verbs": { "type": "array", "items": { "type": "string" } }
@@ -175,7 +176,8 @@
                 "verbs": ["open","close","give","pick_up","look_at","talk_to","walk_to","push","pull","use"],
                 "inventory": ["sword","idol"],
                 "objects": [
-                  { "id": 42, "name": "mug", "state": 1, "visible": true, "pathway": false, "compatible_verbs": ["look_at","pick_up"] }
+                  { "id": 42, "name": "mug", "state": 1, "visible": true, "pathway": false, "compatible_verbs": ["look_at","pick_up"] },
+                  { "id": 43, "name": "door", "state": 0, "state_name": "closed", "visible": true, "pathway": false, "compatible_verbs": ["open","close","walk_to"] }
                 ],
                 "actors": ["guybrush","pirate"],
                 "messages": [],

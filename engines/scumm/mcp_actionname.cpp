@@ -96,8 +96,12 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 	if (s == "get")     return "pick_up";
 	if (s == "talk")     return "talk_to";
 	// German (DE_DEU) verb-bar labels, so an agent can drive a German build with
-	// the canonical English verb names and the per-object compatible_verbs
-	// fallbacks (walk_to / look_at) fire regardless of the build's language.
+	// the canonical English verb names, the per-object compatible_verbs fallbacks
+	// (walk_to / look_at) fire, and the generic door-state detection can identify
+	// openables regardless of the build's language.
+	if (s == "öffne")    return "open";
+	if (s == "schließe") return "close";
+	if (s == "schliesse") return "close";
 	if (s == "geh_zu")   return "walk_to";
 	if (s == "schau_an") return "look_at";
 	if (s == "nimm")     return "pick_up";

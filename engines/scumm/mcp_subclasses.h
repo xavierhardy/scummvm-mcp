@@ -138,6 +138,9 @@ public:
 	explicit McpBridgeMonkey(ScummEngine *vm) : McpBridgeClassic(vm) {}
 
 protected:
+	// Monkey Island's "Open" (Öffne) is verb id 1, a real verb-bar entry the base
+	// class would otherwise hide as the reserved default verb.
+	bool includeBarVerbId1() const override { return true; }
 	// Surface the Scumm Bar kitchen plank (an untouchable, unnamed hotspot) as
 	// "plank"/"Planke" so it can be walked onto by name.
 	Common::String syntheticObjectName(int numId) const override;
