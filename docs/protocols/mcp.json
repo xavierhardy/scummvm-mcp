@@ -118,7 +118,7 @@
                 "id":               { "type": "integer" },
                 "name":             { "type": "string" },
                 "state":            { "type": "integer" },
-                "state_name":       { "type": "string", "description": "Human-readable state, present only for objects that have one (e.g. a door's \"opened\"/\"closed\"). Omitted otherwise. Localised to the game's language." },
+                "state_name":       { "type": "string", "description": "Human-readable state, present only for objects that have one (e.g. a door's \"opened\"/\"closed\", or the Monkey Island seagull's \"eating\"/\"flying away\"). Omitted otherwise. Localised to the game's language." },
                 "visible":          { "type": "boolean" },
                 "pathway":          { "type": "boolean" },
                 "compatible_verbs": { "type": "array", "items": { "type": "string" } }

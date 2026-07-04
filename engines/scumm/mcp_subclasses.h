@@ -142,8 +142,11 @@ protected:
 	// class would otherwise hide as the reserved default verb.
 	bool includeBarVerbId1() const override { return true; }
 	// Surface the Scumm Bar kitchen plank (an untouchable, unnamed hotspot) as
-	// "plank"/"Planke" so it can be walked onto by name.
+	// "plank"/"Planke" so it can be walked onto by name, and the seagull's active
+	// feeding/flight animation frame as "bird"/"Vogel".
 	Common::String syntheticObjectName(int numId) const override;
+	// Name the seagull's feeding/flight phase; falls back to the base door naming.
+	Common::String objectStateName(int numId, int rawState, bool isPathway) const override;
 
 private:
 	// True for the German (DE_DEU) build, so labels can be localised.

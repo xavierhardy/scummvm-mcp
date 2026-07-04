@@ -422,18 +422,43 @@ bool McpBridgeMonkey::isGerman() const {
 	return _vm->_language == Common::DE_DEU;
 }
 
-// The Scumm Bar kitchen (room 51) hosts the red-herring dock puzzle. The
-// gangplank the player bounces is authored as an untouchable, unnamed object
-// (obj 307); surface it under a friendly name so an agent can walk onto it.
+// The Scumm Bar kitchen (room 51) hosts the red-herring dock puzzle. Two scene
+// hotspots there are authored as untouchable, unnamed objects: the gangplank
+// the player bounces (obj 307) and the seagull, whose feeding/flight phase is
+// tracked by three mutually-exclusive animation objects (301 is the resting
+// "eating" frame the bird starts and returns to; 300/302 are its flight frames).
+// Surface them under friendly names so an agent can target/read them.
 static const int kMonkeyKitchenRoom = 51;
 static const int kMonkeyPlankObj = 307;
+static const int kMonkeyBirdEating = 301;
+static const int kMonkeyBirdFlyAway = 300;
+static const int kMonkeyBirdFlyHigher = 302;
 
 Common::String McpBridgeMonkey::syntheticObjectName(int numId) const {
 	if (_vm->_currentRoom != kMonkeyKitchenRoom)
 		return Common::String();
 	if (numId == kMonkeyPlankObj)
 		return isGerman() ? "Planke" : "plank";
+	// The seagull is drawn by whichever of its three phase objects is currently
+	// active (state != 0). Surface only that one, as a single "bird".
+	if ((numId == kMonkeyBirdEating || numId == kMonkeyBirdFlyAway ||
+	     numId == kMonkeyBirdFlyHigher) && vmGetState(numId) != 0)
+		return isGerman() ? "Vogel" : "bird";
 	return Common::String();
+}
+
+Common::String McpBridgeMonkey::objectStateName(int numId, int rawState, bool isPathway) const {
+	if (_vm->_currentRoom == kMonkeyKitchenRoom) {
+		// Seagull feeding/flight phase (see kMonkeyBird* above).
+		if (numId == kMonkeyBirdEating)
+			return isGerman() ? "frisst" : "eating";
+		if (numId == kMonkeyBirdFlyAway)
+			return isGerman() ? "fliegt davon" : "flying away";
+		if (numId == kMonkeyBirdFlyHigher)
+			return isGerman() ? "fliegt höher davon" : "flying away higher";
+	}
+	// Fall back to the generic openable-door naming.
+	return ScummMcpBridge::objectStateName(numId, rawState, isPathway);
 }
 
 } // End of namespace Scumm

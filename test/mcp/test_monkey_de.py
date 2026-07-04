@@ -353,3 +353,26 @@ def test_13_de_kitchen_plank_walkable(monkey_de_client: McpClient) -> None:
     assert any(c["name"] == "obj-307" for c in changed), (
         f"walking the plank by name did nothing: {changed}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Seagull feeding/flight state name
+# ---------------------------------------------------------------------------
+
+
+def test_14_de_seagull_state_name(monkey_de_client: McpClient) -> None:
+    """The seagull surfaces as 'vogel' with a feeding/flight state name that
+    changes from 'frisst' (eating) to a flight phase once the plank is bounced."""
+    client = monkey_de_client
+    _navigate_to_dock(client)
+
+    bird = next((o for o in client.state()["objects"] if o["name"] == "vogel"), None)
+    assert bird is not None, "seagull not surfaced as 'vogel' in the kitchen"
+    assert bird["state_name"] == "frisst", f"seagull not eating at rest: {bird}"
+
+    client.act("geh zu", "planke")
+    bird = next((o for o in client.state()["objects"] if o["name"] == "vogel"), None)
+    assert bird is not None, "seagull vanished after the bounce"
+    assert bird["state_name"] in ("fliegt davon", "fliegt höher davon"), (
+        f"seagull not in a flight phase after the bounce: {bird}"
+    )
