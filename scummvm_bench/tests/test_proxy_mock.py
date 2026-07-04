@@ -105,3 +105,49 @@ def test_stop_callback_fires_on_stopping_goal() -> None:
     proxy.prime()
     proxy.dispatch("act", {"verb": "talk_to", "target1": "Troll"})
     assert len(stopped) == 1
+
+
+def test_comi_fire_stops_on_receipt_without_forwarding() -> None:
+    """The COMI escape: once the restraint rope has been cut, firing the cannon
+    ends the run the moment the call is received — the doomed 'use cannon' (which
+    would start an unstoppable closing video) is never forwarded to the backend.
+    """
+    stopped: list[object] = []
+    # The backend scripts only the cut act. It has no response for 'use cannon',
+    # so if the fire were ever forwarded the dispatch would classify it as an
+    # invalid request rather than stopping cleanly.
+    backend = MockBackend(
+        [
+            ScriptStep(
+                "act",
+                {
+                    "verb": "use",
+                    "target1": "cutlass",
+                    "target2": "cannon_restraint_rope",
+                },
+                {"messages": [{"text": "<weep>", "actor": "wally"}]},
+            )
+        ],
+        initial_room=3,
+    )
+    goal_set = get_goal_set("comi-demo", 1)
+    recorder = Recorder(goal_set, LimitConfig())
+    proxy = BenchProxy(backend, recorder, goal_set, on_stop=stopped.append)
+    proxy.prime()
+
+    # Firing before the rope is cut is not the escape: no scripted response, so
+    # it is forwarded and rejected (and the run does not stop).
+    assert proxy.dispatch("act", {"verb": "use", "target1": "cannon"}) == {
+        "error": "invalid_request"
+    }
+    assert not stopped
+
+    # Cut the rope (recorded as a prior act), then fire: the fire stops the run
+    # on receipt and returns an empty result without touching the backend.
+    proxy.dispatch(
+        "act",
+        {"verb": "use", "target1": "cutlass", "target2": "cannon_restraint_rope"},
+    )
+    assert proxy.dispatch("act", {"verb": "use", "target1": "cannon"}) == {}
+    assert len(stopped) == 1
+    assert "fire_unrestrained_cannon" in recorder._reached

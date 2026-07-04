@@ -13,7 +13,9 @@ whole demo is the escape, scored here as its minimum actions:
   out of the water (landing a ``cutlass`` and a ``skeleton_arm``). Cut the
   ``cannon_restraint_rope`` with the cutlass and fire the cannon once more: with
   nothing to hold it down it backfires Guybrush out in the closing cutscene,
-  which ends the demo (the stopping goal).
+  which ends the demo. Firing the *unrestrained* cannon — ``use cannon`` while
+  the ``cannon_restraint_rope`` is already in its cut state — is the stopping
+  goal.
 
 The cannon room and pirate (room 3, ``small_pirate``), the dialog lines, the
 ``ramrod`` pickup, the gaff combine (ramrod + plastic_hook) and the gaff-on-
@@ -26,18 +28,23 @@ dialog goals are observable end-states (messages / inventory) independent of the
 path.
 
 Note there is no separate "treasure room": the whole demo plays out across
-rooms 3 (cannon), 4 (the minigame) and 5 (the gunport). Cutting the restraint
-rope (``cut_restraint_rope``) is the *stopping* goal: it is the last controllable
-beat of the demo. Firing the unrestrained cannon afterwards only triggers the
-closing cutscene -- a non-interactive video that the engine never settles out of
-(it loops the demo's attract reel), so the run deliberately ends at the snip
-rather than chase a ``use cannon`` whose result never comes back.
+rooms 3 (cannon), 4 (the minigame) and 5 (the gunport). The *stopping* goal is
+``fire_unrestrained_cannon`` — the ``use cannon`` act issued once the
+``cannon_restraint_rope`` is already cut. The engine never exposes the rope's
+cut state as a readable object ``state`` (it reads the same taut or cut; only the
+"It's already cut" line reflects the snip), so the goal treats "rope is cut" as
+"the cut act has already happened" (``after_act``) and combines that with the
+use-cannon call. Firing only starts the closing cutscene — a non-interactive
+video the engine never settles out of — so the proxy latches this goal and stops
+the run *on receipt* of the cannon call, before the doomed fire is ever
+forwarded, rather than hanging on a result that never comes back.
 """
 
 from .engine import (
     Goal,
     GoalSet,
     Predicate,
+    after_act,
     all_of,
     in_room,
     on_boats_remaining_at_most,
@@ -59,8 +66,17 @@ def _goal(
     kind: str = "result",
     stopping: bool = False,
     times: int = 1,
+    stop_on_receipt: bool = False,
 ) -> Goal:
-    return Goal(goal_id, label, predicate, stopping=stopping, kind=kind, times=times)
+    return Goal(
+        goal_id,
+        label,
+        predicate,
+        stopping=stopping,
+        kind=kind,
+        times=times,
+        stop_on_receipt=stop_on_receipt,
+    )
 
 
 GOALS = {
@@ -141,17 +157,34 @@ GOALS = {
             "Fish the debris out of the water to land a cutlass",
             on_inventory_added("cutlass"),
         ),
-        # Cutting the rope is the last controllable beat, so it is the stopping
-        # goal: firing the cannon next would only start the closing video, which
-        # never settles (it loops the attract reel), so the run ends at the snip.
         _goal(
             "cut_restraint_rope",
-            "Cut the cannon restraint rope with the cutlass (ends the demo run)",
+            "Cut the cannon restraint rope with the cutlass",
             on_call(
                 "act", verb="use", target1="cutlass", target2="cannon_restraint_rope"
             ),
             kind="call",
+        ),
+        # The demo ends by firing the now-unrestrained cannon: with the rope
+        # already cut it backfires Guybrush out in the closing cutscene. This is
+        # the stopping goal, and it is what makes the whole escape count — the
+        # same "use cannon" earlier (rope intact) only drops into the minigame.
+        # Combine the use-cannon act with the rope already being cut: the engine
+        # never exposes the rope's cut state as a readable object state, so we
+        # gate on the cut *act* having already happened (after_act), which the
+        # first firing (rope still intact) has not. Because this is decidable
+        # from the call alone, the run stops the moment the cannon act is
+        # received — before the unstoppable closing video is ever forwarded.
+        _goal(
+            "fire_unrestrained_cannon",
+            "Fire the cannon with the restraint rope cut (escape — ends the demo run)",
+            all_of(
+                on_call("act", verb="use", target1="cannon"),
+                after_act("use", target1="cutlass", target2="cannon_restraint_rope"),
+            ),
+            kind="call",
             stopping=True,
+            stop_on_receipt=True,
         ),
     )
 }

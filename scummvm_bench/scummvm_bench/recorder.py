@@ -63,6 +63,23 @@ class Recorder:
     def call_count(self) -> int:
         return self._seq
 
+    def stopping_goal_pending_on(self, event: GoalEvent) -> bool:
+        """Would recording ``event`` latch the (not-yet-reached) stopping goal?
+
+        A non-mutating peek: the proxy uses it to end the run *on receipt* of a
+        call whose stopping goal is already satisfied by the call's tool/args and
+        the pre-call state, without forwarding an action whose result it does not
+        need (e.g. the COMI cannon whose fire triggers an unstoppable video)."""
+        sid = self.goal_set.stopping_goal_id
+        if sid in self._reached:
+            return False
+        goal = self.goal_set.goals[sid]
+        if not goal.stop_on_receipt:
+            return False
+        if not self._safe_predicate(goal.predicate, event):
+            return False
+        return self._match_counts.get(sid, 0) + 1 >= goal.times
+
     def record(self, event: GoalEvent, failure: str | None) -> Decision:
         """Record one call, latch any newly satisfied goals, decide on stopping."""
         self.begin()

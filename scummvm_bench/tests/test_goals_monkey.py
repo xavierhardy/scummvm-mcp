@@ -7,6 +7,7 @@ from scummvm_bench.goals.engine import (
     Goal,
     GoalEvent,
     GoalSet,
+    after_act,
     all_of,
     any_of,
     in_room,
@@ -79,6 +80,18 @@ def test_on_call_matches_tool_and_args() -> None:
 def test_in_room_reads_state_before() -> None:
     assert in_room(52)(ev(room=52)) is True
     assert in_room(52)(ev(room=51)) is False
+
+
+def test_after_act_reads_prior_acts_from_state_before() -> None:
+    cut = {"verb": "use", "target1": "cutlass", "target2": "cannon_restraint_rope"}
+    state = {"acts": [cut]}
+    fire = GoalEvent("act", {"verb": "use", "target1": "cannon"}, None, state, True)
+    assert after_act("use", "cutlass", "cannon_restraint_rope")(fire) is True
+    # A more specific target that was never acted on does not match.
+    assert after_act("use", "sword", "cannon_restraint_rope")(fire) is False
+    # No prior acts recorded yet -> the guard is false.
+    empty = GoalEvent("act", {"verb": "use", "target1": "cannon"}, None, {}, True)
+    assert after_act("use", "cutlass", "cannon_restraint_rope")(empty) is False
 
 
 def test_all_of_and_any_of() -> None:

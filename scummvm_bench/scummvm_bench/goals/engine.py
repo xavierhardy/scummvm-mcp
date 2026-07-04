@@ -39,6 +39,11 @@ class Goal:
     stopping: bool = False
     kind: str = "result"  # "call" | "result", documentation only
     times: int = 1
+    # When set on the (call-based) stopping goal, the proxy ends the run the
+    # moment the matching call is received, *before* forwarding it to the engine.
+    # Use for a final action whose result the run does not need and must not wait
+    # for — e.g. the COMI cannon whose fire starts an unstoppable closing video.
+    stop_on_receipt: bool = False
 
 
 @dataclass
@@ -226,6 +231,34 @@ def in_room(room_id: int) -> Predicate:
 
     def predicate(event: GoalEvent) -> bool:
         return _current_room(event.state_before) == room_id
+
+    return predicate
+
+
+def after_act(
+    verb: str, target1: str | None = None, target2: str | None = None
+) -> Predicate:
+    """State guard: a matching ``act`` was already performed *earlier* in the run.
+
+    Some world state is not exposed as a readable object ``state`` — e.g. the
+    COMI ``cannon_restraint_rope`` reports the same object ``state`` whether taut
+    or cut; only the "It's already cut" line (and firing behaviour) reflect the
+    snip. The proxy records each successful ``act`` in the state snapshot, so this
+    lets a goal treat "the rope is in its cut state" as "the cut act has already
+    happened", and combine that with a later act on a *different* object (firing
+    the now-unrestrained cannon)."""
+    wanted = {"verb": _norm(verb)}
+    if target1 is not None:
+        wanted["target1"] = _norm(target1)
+    if target2 is not None:
+        wanted["target2"] = _norm(target2)
+
+    def predicate(event: GoalEvent) -> bool:
+        for act in _as_list(event.state_before.get("acts")):
+            record = _as_dict(act)
+            if all(_norm(record.get(k)) == v for k, v in wanted.items()):
+                return True
+        return False
 
     return predicate
 

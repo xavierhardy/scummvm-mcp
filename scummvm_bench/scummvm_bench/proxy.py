@@ -95,6 +95,23 @@ class BenchProxy:
     def dispatch(self, tool: str, args: dict[str, object]) -> dict[str, object]:
         """Forward one tool call, record it, evaluate goals, maybe stop."""
         state_before = copy.deepcopy(self._state_cache)
+
+        # A call-based stopping goal that is already satisfied by this call's
+        # tool/args plus the pre-call state ends the run *on receipt* — before
+        # forwarding. This is essential for the COMI escape: firing the
+        # unrestrained cannon starts a closing video the engine never settles out
+        # of, so forwarding it would hang; instead we stop the moment the cannon
+        # act arrives. Result-based stopping goals never match here (no result
+        # yet), so they still forward and settle as usual.
+        pre_event = GoalEvent(
+            tool=tool, args=args, result=None, state_before=state_before, ok=True
+        )
+        if self.recorder.stopping_goal_pending_on(pre_event):
+            decision = self.recorder.record(pre_event, None)
+            if decision.stop:
+                self.on_stop(decision)
+            return {}
+
         result: dict[str, object] | None = None
         failure: str | None = None
         try:
@@ -107,7 +124,7 @@ class BenchProxy:
             failure = FAILURE_BACKEND_ERROR
 
         if failure is None and result is not None:
-            self._update_cache(tool, result)
+            self._update_cache(tool, args, result)
 
         event = GoalEvent(
             tool=tool,
@@ -135,9 +152,16 @@ class BenchProxy:
         )
         self.recorder.record(event, FAILURE_INVALID_REQUEST)
 
-    def _update_cache(self, tool: str, result: dict[str, object]) -> None:
+    def _update_cache(
+        self, tool: str, args: dict[str, object], result: dict[str, object]
+    ) -> None:
         if tool == "state":
+            # A state read replaces the cache but must not drop the act history
+            # accumulated from earlier world actions.
+            acts = self._state_cache.get("acts")
             self._state_cache = result
+            if isinstance(acts, list):
+                self._state_cache["acts"] = acts
             return
         updated = dict(self._state_cache)
         room_changed = result.get("room_changed")
@@ -157,6 +181,27 @@ class BenchProxy:
                 if isinstance(item, str) and item not in inv:
                     inv.append(item)
             updated["inventory"] = inv
+        # Record each successful act in the snapshot so state-guard predicates
+        # (after_act) can gate a later action on an earlier one — e.g. firing the
+        # COMI cannon only counts once the restraint rope's cut act has already
+        # happened, a "cut state" the engine does not otherwise surface. Only
+        # world-changing tools are logged (state reads are not acts).
+        if tool != "state":
+            prior_acts = updated.get("acts")
+            acts = (
+                [a for a in prior_acts if isinstance(a, dict)]
+                if isinstance(prior_acts, list)
+                else []
+            )
+            acts.append(
+                {
+                    "verb": args.get("verb"),
+                    "target1": args.get("target1"),
+                    "target2": args.get("target2"),
+                    "tool": tool,
+                }
+            )
+            updated["acts"] = acts
         self._state_cache = updated
 
     # -- FastMCP wiring ----------------------------------------------------

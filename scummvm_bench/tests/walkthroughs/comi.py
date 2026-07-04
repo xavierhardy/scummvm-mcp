@@ -205,10 +205,11 @@ class ComiRealHarness:
             await call("act", {"verb": "use", "target1": "gaff", "target2": "debris"})
 
             # Back to the cannon room and cut the restraint rope with the
-            # cutlass -- the stopping goal and the last controllable beat. We do
-            # NOT fire the cannon afterwards: that only starts the closing video,
-            # which the engine never settles out of (it loops the attract reel),
-            # so the use-cannon call would hang. The run ends at the snip.
+            # cutlass, then fire the now-unrestrained cannon to escape (the
+            # stopping goal). Firing only starts the closing video, which the
+            # engine never settles out of, so the proxy latches the goal and
+            # stops the run the moment this cannon call is received -- it is
+            # never forwarded to the engine. One attempt, no retry, no hang.
             await go_through("obj_321", 3)
             await call(
                 "act",
@@ -218,13 +219,16 @@ class ComiRealHarness:
                     "target2": "cannon_restraint_rope",
                 },
             )
+            if stop.is_set():
+                return
+            await call("act", {"verb": "use", "target1": "cannon"}, tries=1)
 
 
 COMI = Walkthrough(
     game_id="comi-demo",
     save_slot=1,
     initial_room=3,
-    expected_goals=15,
+    expected_goals=16,
     game_path_env="COMI_DEMO_PATH",
     game_path_default=str(GAMES_DIR / "COMIDEMO"),
     initial_inventory=["helium_balloons"],
@@ -251,12 +255,15 @@ COMI = Walkthrough(
             "act",
             {"verb": "use", "target1": "gaff", "target2": "debris"},
         ),  # fish cutlass
-        # cut_restraint_rope (STOP) — last controllable beat; firing the cannon
-        # afterwards only starts the unstoppable closing video, so we end here.
+        # cut_restraint_rope — snip the rope (now in its cut state).
         (
             "act",
             {"verb": "use", "target1": "cutlass", "target2": "cannon_restraint_rope"},
         ),
+        # fire_unrestrained_cannon (STOP) — firing with the rope already cut is
+        # the escape; the proxy stops the run on receipt of this call (it is
+        # never forwarded, so it starts no closing video and needs no response).
+        ("act", {"verb": "use", "target1": "cannon"}),
     ],
     steps=[
         ScriptStep(
@@ -348,18 +355,16 @@ COMI = Walkthrough(
                 "objects_changed": [{"name": "debris", "old_state": 0, "new_state": 1}],
             },
         ),
-        # Cutting the rope is the stopping beat (the run ends here). Firing the
-        # cannon afterwards would only start the unstoppable closing video, so
-        # the walkthrough does not issue a second "use cannon".
+        # Cutting the rope: the engine reports no object-state change (Wally just
+        # weeps), so the "rope is cut" fact is carried by the cut *act* itself.
         ScriptStep(
             "act",
             {"verb": "use", "target1": "cutlass", "target2": "cannon_restraint_rope"},
-            {
-                "objects_changed": [
-                    {"name": "cannon_restraint_rope", "old_state": 0, "new_state": 1}
-                ],
-                **_msgs(("guybrush", "Snip.")),
-            },
+            {**_msgs(("wally", "<weep>"))},
         ),
+        # The second "use cannon" (rope now cut) is the stopping beat. The proxy
+        # ends the run on receipt of that call — it is never forwarded to the
+        # backend (firing would start the unstoppable closing video), so it needs
+        # no scripted response here.
     ],
 )
