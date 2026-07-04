@@ -205,7 +205,9 @@ def _reach_bike(client: McpClient, tries: int = 15) -> bool:
         if _room(client) == BAR_FRONT_ROOM:
             return True
         if _room(client) == STREET_ROOM:
-            _act_retry(client, "walk to", 36, attempts=3)
+            # The street runs ambient cutscenes that briefly lock input, so give
+            # the walk-to a roomy retry budget rather than giving up after 3s.
+            _act_retry(client, "walk to", 36, attempts=15)
         sleep(1.2)
     return _room(client) == BAR_FRONT_ROOM
 
