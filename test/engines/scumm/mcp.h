@@ -86,6 +86,12 @@ public:
 		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("\xC3\x96""ffne"),
 		                 "\xC3\xB6""ffne");
 	}
+
+	// --- normalizeActionName: German verb-bar labels -> canonical English ---
+	void test_normalize_german_verbs() {
+		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("geh zu"),   "walk_to");
+		TS_ASSERT_EQUALS(Scumm::ScummMcpBridge::normalizeActionName("Schau an"), "look_at");
+	}
 };
 
 // Pure, engine-independent MCP string helpers in the Networking namespace

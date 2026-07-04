@@ -292,3 +292,26 @@ def test_10_de_plank_bounce_frees_red_herring(monkey_de_client: McpClient) -> No
     nimm("roter_hering")
     inventory = client.state()["inventory"]
     assert "roter_hering" in inventory, "herring not in inventory after bounces"
+
+
+# ---------------------------------------------------------------------------
+# Kitchen plank (surfaced from an untouchable, unnamed hotspot)
+# ---------------------------------------------------------------------------
+
+
+def test_13_de_kitchen_plank_walkable(monkey_de_client: McpClient) -> None:
+    """The loose plank surfaces as the named object 'planke' with a walk_to
+    (geh zu) verb, and can be bounced by name."""
+    client = monkey_de_client
+    _navigate_to_dock(client)
+
+    plank = object_by_id(client.state(), 307)
+    assert plank is not None, "plank (307) not surfaced in the kitchen"
+    assert plank["name"] == "planke", f"plank not named 'planke': {plank}"
+    assert "geh zu" in plank["compatible_verbs"], f"plank not walkable: {plank}"
+
+    # Walking onto it by name catapults the seagull (a real state change).
+    changed = client.act("geh zu", "planke")["objects_changed"]
+    assert any(c["name"] == "obj-307" for c in changed), (
+        f"walking the plank by name did nothing: {changed}"
+    )

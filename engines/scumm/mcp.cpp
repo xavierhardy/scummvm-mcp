@@ -4013,8 +4013,12 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 	for (int i = 1; _vm->_objs && i < _vm->_numLocalObjects; ++i) {
 		const ObjectData &od = _vm->_objs[i];
 		if (!od.obj_nr) continue;
-		// Exclude objects the player cannot interact with (mirrors findObject()).
-		if (!isObjectSelectable(od)) continue;
+		// A game leaf may surface an otherwise-untouchable object under a friendly
+		// name (e.g. Monkey Island's kitchen plank) so the agent can target it.
+		Common::String forcedName = syntheticObjectName(od.obj_nr);
+		// Exclude objects the player cannot interact with (mirrors findObject()),
+		// unless a leaf has force-named this object.
+		if (forcedName.empty() && !isObjectSelectable(od)) continue;
 		Common::String name = getObjName(this, od.obj_nr);
 		// In the Passport-to-Adventure Loom segment, scene pathways/exits have
 		// no OBNA name (they're invisible hotspots authored without a label).
@@ -4029,7 +4033,9 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		RawEntry e;
 		e.kind = NamedEntity::kObject;
 		e.numId = od.obj_nr;
-		if (isLoomPassPathway) {
+		if (!forcedName.empty()) {
+			e.baseName = normalizeActionName(forcedName);
+		} else if (isLoomPassPathway) {
 			e.baseName = Common::String::format("pathway_%d", od.obj_nr);
 		} else {
 			e.baseName = name.empty() ? Common::String::format("obj_%d", od.obj_nr)

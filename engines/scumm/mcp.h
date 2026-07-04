@@ -178,6 +178,11 @@ protected:
 	// Classify an entity for buildEntityMap (e.g. mark exit hotspots as pathway).
 	// numId is the object/actor id; set isPathway to flag a navigable exit.
 	virtual void classifyGameEntity(int numId, bool &isPathway) const { (void)numId; (void)isPathway; }
+	// Force an otherwise-unselectable/unnamed scene object into the entity map
+	// under a stable, action-friendly name (e.g. Monkey Island's kitchen plank,
+	// authored as an untouchable, unnamed hotspot). Return "" to leave the
+	// object handled by the default selectability/name logic.
+	virtual Common::String syntheticObjectName(int numId) const { (void)numId; return Common::String(); }
 
 	// --- Protected accessors for ScummEngine internals ---------------------
 	// The base class is the sole `friend` of ScummEngine; friendship is not

@@ -136,6 +136,15 @@ private:
 class McpBridgeMonkey : public McpBridgeClassic {
 public:
 	explicit McpBridgeMonkey(ScummEngine *vm) : McpBridgeClassic(vm) {}
+
+protected:
+	// Surface the Scumm Bar kitchen plank (an untouchable, unnamed hotspot) as
+	// "plank"/"Planke" so it can be walked onto by name.
+	Common::String syntheticObjectName(int numId) const override;
+
+private:
+	// True for the German (DE_DEU) build, so labels can be localised.
+	bool isGerman() const;
 };
 
 class McpBridgePassport : public McpBridgeClassic {

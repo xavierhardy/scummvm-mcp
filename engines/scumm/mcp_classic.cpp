@@ -414,4 +414,26 @@ bool McpBridgeIndy4::turnAtlantisBookPage(int page, Common::String &errorOut) {
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// McpBridgeMonkey — Monkey Island (V4)
+// ---------------------------------------------------------------------------
+
+bool McpBridgeMonkey::isGerman() const {
+	return _vm->_language == Common::DE_DEU;
+}
+
+// The Scumm Bar kitchen (room 51) hosts the red-herring dock puzzle. The
+// gangplank the player bounces is authored as an untouchable, unnamed object
+// (obj 307); surface it under a friendly name so an agent can walk onto it.
+static const int kMonkeyKitchenRoom = 51;
+static const int kMonkeyPlankObj = 307;
+
+Common::String McpBridgeMonkey::syntheticObjectName(int numId) const {
+	if (_vm->_currentRoom != kMonkeyKitchenRoom)
+		return Common::String();
+	if (numId == kMonkeyPlankObj)
+		return isGerman() ? "Planke" : "plank";
+	return Common::String();
+}
+
 } // End of namespace Scumm

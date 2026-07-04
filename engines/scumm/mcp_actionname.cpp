@@ -95,6 +95,17 @@ Common::String ScummMcpBridge::normalizeActionName(const Common::String &action)
 	if (s == "take")    return "pick_up";
 	if (s == "get")     return "pick_up";
 	if (s == "talk")     return "talk_to";
+	// German (DE_DEU) verb-bar labels, so an agent can drive a German build with
+	// the canonical English verb names and the per-object compatible_verbs
+	// fallbacks (walk_to / look_at) fire regardless of the build's language.
+	if (s == "geh_zu")   return "walk_to";
+	if (s == "schau_an") return "look_at";
+	if (s == "nimm")     return "pick_up";
+	if (s == "rede_mit") return "talk_to";
+	if (s == "gib")      return "give";
+	if (s == "benutze")  return "use";
+	if (s == "drücke")   return "push";
+	if (s == "ziehe")    return "pull";
 	// The Dig: single-cursor verbs map to the generic 'use' action (verb ID 7).
 	if (s == "interact") return "use";
 	if (s == "use_item") return "use";
