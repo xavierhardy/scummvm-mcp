@@ -43,22 +43,22 @@ namespace Forest {
 namespace Rooms {
 
 struct Scratch {
-	int16 sprite[10];                  // 0x00
-	int16 sequence[10];                // 0x14
-	int16 animation[10];               // 0x28
-	AnimationInfo animation_info[10];  // 0x3C (80 bytes, ends at 0x8B)
-	int16 _8c;                         // 0x8C
-	int16 _8e;                         // 0x8E
-	int16 _90;                         // 0x90
-	int16 _92;                         // 0x92 — hotspot ID for incoming transition
-	int16 _94;                         // 0x94
-	int16 _96;                         // 0x96
-	int16 _98;                         // 0x98 — room state / variant index
-	int16 _9a;                         // 0x9A — background anim handle (e-series)
-	int16 _9c;                         // 0x9C — background anim handle (r-series)
-	int16 _9e;                         // 0x9E
-	int16 _a0;                         // 0xA0
-	int16 _a2;                         // 0xA2
+	int16 sprite[10];
+	int16 sequence[10];
+	int16 animation[10];
+	AnimationInfo animation_info[10];
+	int16 _8c;
+	int16 _8e;
+	int16 _90;
+	int16 _92;
+	int16 _94;
+	int16 _96;
+	int16 _98;
+	int16 _9a;
+	int16 _9c;
+	int16 _9e;
+	int16 _a0;
+	int16 _a2;
 };
 
 static Scratch scratch;
@@ -106,7 +106,7 @@ static void room_401_anim_state(int16 state) {
 		kernel_synch(KERNEL_PLAYER, 0, KERNEL_NOW, 0);
 		player.commands_allowed = true;
 		player.walker_visible = true;
-		if (config_file.forest1) {
+		if (config_file.misc2) {
 			digi_stop(1);
 			kernel_timing_trigger(1, 106);
 		}
@@ -207,7 +207,7 @@ static void room_401_anim2() {
 					result = 22;
 				} else if (frame < 25) {
 					if (frame == 15) {
-						if (!global[g066])
+						if (!global[phineas_status])
 							digi_play_build(401, 'r', 1, 1);
 						else
 							digi_play_build(401, 'r', 2, 1);
@@ -229,7 +229,7 @@ static void room_401_anim2() {
 					} else if (frame == 32) {
 						result = 29;
 					} else if (frame == 35) {
-						if (config_file.forest1)
+						if (config_file.misc2)
 							kernel_timing_trigger(1, 106);
 					}
 				}
@@ -369,9 +369,9 @@ static void room_401_init1() {
 	global[g141] = 0;
 
 	scratch._9c = kernel_run_animation_disp('r', 3, 0);
-	kernel_position_anim(scratch._9c, 228, 132, 82, 4);
+	extra_change_animation(scratch._9c, 228, 132, 82, 4);
 	scratch._9a = kernel_run_animation_disp('e', 2, 0);
-	kernel_position_anim(scratch._9a, 252, 115, 76, 7);
+	extra_change_animation(scratch._9a, 252, 115, 76, 7);
 
 	if (previous_room != KERNEL_RESTORING_GAME && previous_room != 199) {
 		player_demand_facing(7);
@@ -436,11 +436,11 @@ static void room_401_init() {
 	scratch._a2 = -1;
 	midi_stop();
 
-	if (!flags[31] || !global[g066])
+	if (!flags[31] || !global[phineas_status])
 		kernel_flip_hotspot(words_room_404, false);
 
 	kernel_timing_trigger(1, 106);
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 	scratch._98 = 0;
 
 	if (previous_room != KERNEL_RESTORING_GAME) {
@@ -471,7 +471,7 @@ static void room_401_daemon() {
 		global[walker_converse_state] = 0;
 		close_interface(CANDLE_FLY);
 		player.commands_allowed = true;
-		if (config_file.forest1)
+		if (config_file.misc2)
 			kernel_timing_trigger(1, 106);
 		break;
 

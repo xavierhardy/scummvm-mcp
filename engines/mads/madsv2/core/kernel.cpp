@@ -43,9 +43,7 @@
 #include "mads/madsv2/core/keys.h"
 #include "mads/madsv2/core/pack.h"
 #include "mads/madsv2/core/room.h"
-#include "mads/madsv2/core/demo.h"
 #include "mads/madsv2/core/xms.h"
-#include "mads/madsv2/core/lock.h"
 #include "mads/madsv2/core/tile.h"
 #include "mads/madsv2/core/popup.h"
 #include "mads/madsv2/core/pal.h"
@@ -294,9 +292,7 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 	int pages;
 	int reserve[EMS_PAGING_CLASSES];
 	byte *interrupt_stack;
-#ifdef demo
-	char temp_buf[20];
-#endif
+
 #ifndef disable_error_check
 	int error_code = 0;
 #endif
@@ -306,25 +302,6 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 
 	speech_init();
 
-	// ScummVM doesn't need EMS/XMS
-#if 0
-	int ems_error = true;
-
-	if (ems_exists) {
-		work_screen_ems_handle = ems_get_page_handle(4);
-		if (work_screen_ems_handle >= 0) {
-			ems_error = false;
-		}
-	}
-
-	if (ems_error) {
-		if (ems_exists) {
-			error_report(ERROR_NO_MORE_EMS, SEVERE, MODULE_KERNEL, ems_pages, work_screen_ems_handle);
-		} else {
-			error_report(ERROR_KERNEL_NO_EMS, SEVERE, MODULE_KERNEL, ems_exists, work_screen_ems_handle);
-		}
-	}
-#endif
 	if (ems_exists) {
 		if (load_flag & KERNEL_STARTUP_POPUP) {
 			object_ems_handle = ems_get_page_handle(4);
@@ -366,10 +343,6 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 		}
 	}
 
-	// Some preliminary copy protection stuff
-	// lock_preliminary_check();
-	// Initialize sound driver jump table
-	// pl sound_driver_null();
 	timer_set_sound_flag(0);
 
 	// Video initialization
@@ -433,26 +406,6 @@ int kernel_game_startup(int game_video_mode, int load_flag,
 		timer_activate_low_priority(cycle_colors);
 		keys_install();
 	}
-
-	// Log in demo copy
-#ifdef demo
-	if (game_video_mode != text_mode) demo_log_in(release_version, release_date);
-#endif
-
-	// Mention EMS paging situation
-#ifdef demo
-	if (ems_paging_active) {
-		ltoa(((long)ems_pages * EMS_PAGE_SIZE) >> 10, temp_buf, 10);
-		echo(temp_buf, false);
-		echo("K of EMS memory available.", true);
-	} else {
-		echo("EMS memory not available.", true);
-	}
-
-	if (xms_exists) {
-		echo("XMS memory system detected.", true);
-	}
-#endif
 
 	// Load the objects list
 	if (load_flag & KERNEL_STARTUP_OBJECTS) {
@@ -881,9 +834,6 @@ int kernel_seq_forward(int series_id, int mirror, word ticks, word interval_tick
 int kernel_seq_forward_scroll(int series_id, int mirror,
 		word ticks, word interval_ticks, word start_ticks, int expire) {
 	int depth = 0;
-	SpritePtr sprite;
-
-	sprite = &series_list[series_id]->index[0];
 
 	return kernel_seq_add(series_id, mirror, 1, 0, 0, AA_LINEAR, 1,
 		depth, 100, true, 0, 0, ticks, interval_ticks,
@@ -911,9 +861,6 @@ int kernel_seq_pingpong(int series_id, int mirror,
 int kernel_seq_pingpong_scroll(int series_id, int mirror,
 		word ticks, word interval_ticks, word start_ticks, int expire) {
 	int depth = 0;
-	SpritePtr sprite;
-
-	sprite = &series_list[series_id]->index[0];
 
 	return kernel_seq_add(series_id, mirror, 1, 0, 0, AA_PINGPONG, 1,
 		depth, 100, true, 0, 0, ticks, interval_ticks,
@@ -2200,6 +2147,7 @@ static void kernel_message_update(KernelMessagePtr my_message) {
 	yy = 0;
 
 	if (my_message->flags & KERNEL_MESSAGE_ANIM) {
+		assert(imgList);
 		xx = imgList[image].x - picture_view_x;
 		yy = imgList[image].y - picture_view_y;
 	}
@@ -2447,10 +2395,13 @@ int  kernel_dynamic_consecutive(int id) {
 		}
 	}
 
-	if (id >= 0) scan = -1;
+	if (id >= 0) {
+		warning("kernel_dynamic_consecutive(%d) - could not find id", id);
+		scan = 0;
+	}
 
 done:
-	return (scan);
+	return scan;
 }
 
 void kernel_refresh_dynamic() {
@@ -2666,6 +2617,7 @@ void kernel_random_messages_init(int max_messages_at_once,
 		my_quote = va_arg(marker, int);
 	}
 
+	va_end(marker);
 	kernel_random_purge();
 }
 
@@ -2918,6 +2870,42 @@ done:
 	return error_flag;
 }
 
+void kernel_random_frame(int handle, int16 *frame, int mode) {
+	int16 newFrame = -1;
+
+	if (kernel_anim[handle].frame == *frame)
+		return;
+
+	int16 currentFrame = (int16)kernel_anim[handle].frame;
+	*frame = currentFrame;
+
+	if (currentFrame >= 1 && currentFrame <= 8) {
+		if (mode == 0)
+			newFrame = 0;
+		else if (mode == 1)
+			newFrame = 7;
+		else
+			newFrame = (int16)imath_random(1, 6);
+	}
+
+	if (newFrame >= 0) {
+		kernel_reset_animation(handle, newFrame);
+		*frame = newFrame;
+	}
+}
+
+void kernel_translate_anim(int handle, int delta_x, int delta_y, int delta_scale) {
+	Animation &k_anim = kernel_anim[handle];
+	Anim *anim = k_anim.anim;
+
+	for (int count = 0; count < anim->num_frames; ++count) {
+		Image &image = anim->image[count];
+		image.x += delta_x;
+		image.y += delta_y;
+		image.scale += delta_scale;
+	}
+}
+
 void init_kernel() {
 	memset(room_state, 0, sizeof(room_state));
 	video_mode = 0;
@@ -2976,55 +2964,6 @@ void init_kernel() {
 	random_message_color = 0;
 	random_message_duration = 0;
 	memset(kernel_interface_loaded, 0, sizeof(kernel_interface_loaded));
-}
-
-void kernel_random_frame(int handle, int16 *frame, int mode) {
-	int16 newFrame = -1;
-
-	if (kernel_anim[handle].frame == *frame)
-		return;
-
-	int16 currentFrame = (int16)kernel_anim[handle].frame;
-	*frame = currentFrame;
-
-	if (currentFrame >= 1 && currentFrame <= 8) {
-		if (mode == 0)
-			newFrame = 0;
-		else if (mode == 1)
-			newFrame = 7;
-		else
-			newFrame = (int16)imath_random(1, 6);
-	}
-
-	if (newFrame >= 0) {
-		kernel_reset_animation(handle, newFrame);
-		*frame = newFrame;
-	}
-}
-
-void kernel_translate_anim(int handle, int delta_x, int delta_y, int delta_scale) {
-	Animation &k_anim = kernel_anim[handle];
-	Anim *anim = k_anim.anim;
-
-	for (int count = 0; count < anim->num_frames; ++count) {
-		Image &image = anim->image[count];
-		image.x += delta_x;
-		image.y += delta_y;
-		image.scale += delta_scale;
-	}
-}
-
-void kernel_position_anim(int handle, int x, int y, int scale, int depth) {
-	Animation &k_anim = kernel_anim[handle];
-	Anim *anim = k_anim.anim;
-
-	for (int count = 0; count < anim->num_frames; ++count) {
-		Image &image = anim->image[count];
-		image.x = x;
-		image.y = y;
-		image.scale = scale;
-		image.depth = depth;
-	}
 }
 
 } // namespace MADSV2

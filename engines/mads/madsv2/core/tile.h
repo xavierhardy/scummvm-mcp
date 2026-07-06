@@ -28,7 +28,6 @@
 namespace MADS {
 namespace MADSV2 {
 
-
 #define DEFAULT_TILE_X          20
 #define DEFAULT_TILE_Y          12
 
@@ -53,13 +52,13 @@ struct TileResource {
 
 	byte *tile_data;      /* Flat tile store allocated by tile_load (not serialised) */
 
-	static constexpr int SIZE = 2 + 2 + 2 + 2 + 2 + 2 + 2 + 4 + 2;
+	static constexpr size_t SIZE = 2 + 2 + 2 + 2 + 2 + 2 + 2 + 4 + 2;
 	void load(Common::SeekableReadStream *src);
 };
 
-typedef struct {
+struct Tile {
 	int32 file_offset;
-} Tile;
+};
 
 struct TileMapHeader {
 	int16 tile_type;              /* Type of tile                     */
@@ -91,7 +90,7 @@ struct TileMapHeader {
 
 	int16 *map;                   /* Picture tile map pointer (not in size) */
 
-	static constexpr int SIZE = (14 * 2) + (8 * 2) + 4 + 4;
+	static constexpr size_t SIZE = (14 * 2) + (8 * 2) + 4 + 4;
 	void load(Common::SeekableReadStream *src);
 };
 

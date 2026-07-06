@@ -19,21 +19,22 @@
  *
  */
 
-#ifndef MADS_CORE_DEMO_H
-#define MADS_CORE_DEMO_H
+#ifndef MACS2_CONSTANTS_H
+#define MACS2_CONSTANTS_H
 
-#include "mads/madsv2/core/general.h"
+namespace Macs2 {
 
-namespace MADS {
-namespace MADSV2 {
+// Original game viewport dimensions (all scene maps and buffers use these).
+static constexpr int kScreenWidth     = 320;
+static constexpr int kScreenWidthLast = kScreenWidth - 1;
+static constexpr int kGameHeight      = 200;
+static constexpr int kGameHeightLast  = kGameHeight - 1;
 
-int demo_checksum(byte **source, int *pack_size, int *unpack_size);
-int demo_check(void);
+// SCUMM-style verb/inventory strip (kEnhUIUX enhancement only).
+static constexpr int kUIHeight       = 64;
+static constexpr int kScreenHeight   = kGameHeight + kUIHeight;
+static constexpr int kScreenHeightLast = kScreenHeight - 1;
 
-void demo_log_in(char *release_version, char *release_date);
-void demo_verify(void);
+} // namespace Macs2
 
-} // namespace MADSV2
-} // namespace MADS
-
-#endif
+#endif // MACS2_CONSTANTS_H

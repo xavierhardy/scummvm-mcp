@@ -191,6 +191,7 @@ InsaneRebel2::InsaneRebel2(ScummEngine_v7 *scumm) {
 	_enemies.clear();
 	_rebelHandler = 0;
 	_rebelLevelType = 0;
+	_level15SecondHalf = false;
 	_rebelStatusBarSprite = 0;
 	_introCursorPushed = false;
 
@@ -244,19 +245,19 @@ InsaneRebel2::InsaneRebel2(ScummEngine_v7 *scumm) {
 
 	for (int i = 0; i < 10; ++i) {
 		_rebelValueCounters[i] = 0;
-		_rebelMaskCounters[i] = 0;
+		_rebelGaugeBlink[i] = 0;
+	}
+	for (int i = 0; i < 15; ++i) {
+		_turretShakeRingX[i] = 0;
+		_turretShakeRingY[i] = 0;
 	}
 	_rebelLastCounter = 0;
 
-	for (int i = 0; i < 512; ++i)
-		_rebelGaugeSlot[i] = -1;
 	_rebelShieldGateActive = false;
 	_rebelShieldDestroyed = false;
 	_rebelReactorMode = false;
 	_rebelGaugeArmed = false;
 	_rebelLastArmedSlot = -1;
-	for (int i = 0; i < 10; ++i)
-		_rebelGaugeCleared[i] = false;
 
 	_difficulty = 1;
 	_targetLockTimer = 0;
@@ -559,6 +560,7 @@ InsaneRebel2::InsaneRebel2(ScummEngine_v7 *scumm) {
 
 	_currentPhase = 1;
 	_deathFrame = 0;
+	_rebelDeathCause = 0;
 	_skipSectionRequested = false;
 
 	_vm->_system->getEventManager()->getEventDispatcher()->registerObserver(this, 1, false);
@@ -1281,29 +1283,26 @@ const InsaneRebel2::LevelDifficultyParams InsaneRebel2::kDifficultyTable[6][17] 
 	},
 };
 
-InsaneRebel2::LevelDifficultyParams InsaneRebel2::getDifficultyParams() const {
-	int diff = CLIP(_difficulty, 0, 5);
-	int lvIdx = 0;
-
+int InsaneRebel2::getDifficultyRow() const {
 	// Index mapping reconstructed from level handlers:
 	//   Lv1->0, Lv2->1, Lv3->2, Lv4->3, Lv5->4,
 	//   Lv6A->5, Lv6B->6, Lv7->7 ... Lv14->14, Lv15A->15, Lv15B->16.
 	// Our Level 6 phase flow sets _currentPhase to 1/2 accordingly.
-	// Level 15 phase switch to 16 is currently approximated by _currentPhase >= 2.
-	if (_selectedLevel <= 0) {
-		lvIdx = CLIP((int)_rebelLevelType, 0, 16);
-	} else if (_selectedLevel <= 5) {
-		lvIdx = _selectedLevel - 1;
-	} else if (_selectedLevel == 6) {
-		lvIdx = (_currentPhase >= 2) ? 6 : 5;
-	} else if (_selectedLevel <= 14) {
-		lvIdx = _selectedLevel;
-	} else { // _selectedLevel == 15
-		lvIdx = (_currentPhase >= 2) ? 16 : 15;
-	}
+	// Level 15 hardens at frame 0x21e (updateLevel15TypeSwitch). Do not key on
+	// _rebelLevelType here: the turret opcode-6 overwrites it with the ship type.
+	if (_selectedLevel <= 0)
+		return CLIP((int)_rebelLevelType, 0, 16);
+	if (_selectedLevel <= 5)
+		return _selectedLevel - 1;
+	if (_selectedLevel == 6)
+		return (_currentPhase >= 2) ? 6 : 5;
+	if (_selectedLevel <= 14)
+		return _selectedLevel;
+	return _level15SecondHalf ? 16 : 15;   // _selectedLevel == 15
+}
 
-	lvIdx = CLIP(lvIdx, 0, 16);
-	return kDifficultyTable[diff][lvIdx];
+InsaneRebel2::LevelDifficultyParams InsaneRebel2::getDifficultyParams() const {
+	return kDifficultyTable[CLIP(_difficulty, 0, 5)][getDifficultyRow()];
 }
 
 bool InsaneRebel2::applyPlayerDamage(int damage) {
@@ -1330,6 +1329,7 @@ void InsaneRebel2::addScore(int points) {
 		int newMilestone = (_playerScore + points) / threshold;
 		if (oldMilestone < newMilestone) {
 			_playerLives++;
+			playSfx(5, 127, 0);
 			debugC(DEBUG_INSANE, "BONUS LIFE! Score crossed %d threshold. Lives=%d", threshold, _playerLives);
 		}
 	}
@@ -1597,7 +1597,7 @@ int32 InsaneRebel2::processMouse() {
 				if (_rebelHandler != 8 && _rebelHandler != 25) {
 					spawnExplosion((it->rect.left + it->rect.right) / 2,
 								   (it->rect.top + it->rect.bottom) / 2,
-								   explosionHalfWidth);
+								   explosionHalfWidth, it->velX, it->velY);
 				} else if (_rebelHandler == 8 && it->type == 0) {
 					spawnExplosion((it->rect.left + it->rect.right) / 2,
 								   (it->rect.top + it->rect.bottom) / 2,
@@ -1610,25 +1610,18 @@ int32 InsaneRebel2::processMouse() {
 
 				setBit(it->id);
 
-				// Shield hit-point gauge: if this target feeds a gauge counter, destroying it
-				// decrements that counter; the shield is destroyed when it reaches 0.
-				if (_rebelShieldGateActive && it->id >= 0 && it->id < 512 && _rebelGaugeSlot[it->id] >= 0) {
-					int slot = _rebelGaugeSlot[it->id];
-					short *counter = (slot < 10) ? &_rebelValueCounters[slot]
-					                             : &_rebelMaskCounters[slot - 10];
-					if (*counter > 0) {
-						(*counter)--;
-						_rebelLastCounter = *counter;
-						if (*counter == 0) {
-							if (slot < 10)
-								_rebelGaugeCleared[slot] = true;
-							if (!_rebelReactorMode) {
-								_rebelShieldDestroyed = true;
-								debugC(DEBUG_INSANE, "Shield destroyed (gauge slot %d depleted by target %d)", slot, it->id);
-							}
+				// Shield hit-point gauge (handler 0x26): the target's type field addresses
+				// the gauge group(s) it feeds — 100-109 directly, > 0x3ff as a bitmask —
+				// and destroying it decrements each of them.
+				if (_rebelHandler == 0x26) {
+					if (it->type >= 100 && it->type < 110) {
+						decrementGaugeGroup(it->type - 100, it->id);
+					} else if (it->type > 0x3ff) {
+						for (int slot = 1; slot <= 9; ++slot) {
+							if ((it->type & (1 << (slot - 1))) != 0)
+								decrementGaugeGroup(slot, it->id);
 						}
 					}
-					_rebelGaugeSlot[it->id] = -1;
 				}
 
 				if (it->type > 0 && it->type < 32) {

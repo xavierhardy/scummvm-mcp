@@ -367,7 +367,6 @@ SeriesPtr sprite_series_load(const char *filename, int load_flags) {
 	SpritePageInfoPtr  page_info;
 	SpritePageTablePtr page_table;
 	ColorListPtr color_list = NULL;
-	/* ColorList color_list; */
 	Load load_handle;
 
 	mem_last_alloc_loader = MODULE_SPRITE_LOADER;
@@ -639,7 +638,7 @@ done:
 	if (sprite != NULL) mem_free(sprite);
 	if ((target != NULL) && (target != (SeriesPtr)sprite_force_memory) && (result == NULL)) mem_free(target);
 
-	return (result);
+	return result;
 }
 
 void sprite_get_scaled_matte(SeriesPtr series, int id, int target_x, int target_y,
@@ -1161,11 +1160,10 @@ ok:
 
 done:
 	if (decompress_buffer != NULL) mem_free(decompress_buffer);
-	return (error_flag);
+	return error_flag;
 }
 
-
-void dont_frag_the_palette(void) {
+void dont_frag_the_palette() {
 	/* this will tell sprite_free to not execute pal_deallocate. This will */
 	/* make it so the colors are not freed and you won't get the */
 	/* palette fragging. */
@@ -1173,7 +1171,7 @@ void dont_frag_the_palette(void) {
 	kidney = true;
 }
 
-void go_ahead_and_frag_the_palette(void) {
+void go_ahead_and_frag_the_palette() {
 	kidney = false;
 }
 

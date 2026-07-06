@@ -44,11 +44,6 @@ namespace MADSV2 {
 
 int tile_load_error;
 ShadowList tile_shadow;
-static bool tile_ems_available = false;
-#if 0
-static int tile_picture_handle;
-static int tile_attribute_handle;
-#endif
 
 void TileMapHeader::load(Common::SeekableReadStream *src) {
 	src->readMultipleLE(tile_type, one_to_one, num_x_tiles, num_y_tiles,
@@ -73,21 +68,7 @@ int tile_setup() {
 
 	picture_map.map = NULL;
 	depth_map.map = NULL;
-#if 0
-	tile_picture_handle = ems_get_page_handle(TILE_MAX_PAGES);
-	if (tile_picture_handle < 0) goto done;
 
-	tile_attribute_handle = ems_get_page_handle(TILE_MAX_PAGES >> 1);
-	if (tile_attribute_handle < 0) goto done;
-
-	tile_ems_available = true;
-	error_flag = false;
-
-done:
-	if (error_flag) {
-		if (tile_picture_handle >= 0) ems_free_page_handle(tile_picture_handle);
-	}
-#endif
 	return error_flag;
 }
 
@@ -531,7 +512,6 @@ done:
 	return error_flag;
 }
 
-
 int tile_buffer(Buffer *target, TileResource *tile_resource,
 		TileMapHeader *map, int tile_x, int tile_y) {
 	int default_value;
@@ -586,7 +566,6 @@ int tile_buffer(Buffer *target, TileResource *tile_resource,
 	return false;
 }
 
-
 void tile_map_free(TileMapHeader *map) {
 	if (map != NULL) {
 		if (map->resource != NULL) {
@@ -600,10 +579,7 @@ void tile_map_free(TileMapHeader *map) {
 	}
 }
 
-
-void tile_pan(TileMapHeader *tile_map,
-	int           x,
-	int           y) {
+void tile_pan(TileMapHeader *tile_map, int x, int y) {
 	int tile_x, offset_x;
 	int tile_y, offset_y;
 
@@ -640,12 +616,7 @@ done:
 	;
 }
 
-
-int tile_fake_map(int tile_type,
-	TileMapHeader *tile_map,
-	Buffer *buffer,
-	int           x,
-	int           y) {
+int tile_fake_map(int tile_type, TileMapHeader *tile_map, Buffer *buffer, int x, int y) {
 	int error_flag = true;
 
 	tile_map->tile_type = tile_type;

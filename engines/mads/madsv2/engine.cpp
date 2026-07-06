@@ -89,6 +89,13 @@ MADSV2Engine::~MADSV2Engine() {
 	delete _soundManager;
 }
 
+void MADSV2Engine::initializePath(const Common::FSNode &gamePath) {
+	MADSEngine::initializePath(gamePath);
+	Common::FSNode folder = gamePath.getChild("resource");
+	if (folder.exists())
+		SearchMan.addDirectory(folder);
+}
+
 void MADSV2Engine::initGlobals() {
 	init_anim();
 	init_attr();
@@ -341,7 +348,7 @@ int MADSV2Engine::getKey() {
 
 	if (!_keyEvents.empty()) {
 		Common::KeyState ks = _keyEvents.pop();
-		return ks.ascii ? ks.ascii : (ks.flags << 16) | ks.keycode;
+		return ks.ascii && (ks.flags == 0) ? ks.ascii : (ks.flags << 16) | ks.keycode;
 	}
 
 	return 0;

@@ -128,6 +128,15 @@ void Window::invertChannel(Channel *channel, const Common::Rect &destRect) {
 				if (!mask || (msk && (*msk++)))
 					*src = _wm->inverter(*src);
 		}
+	} else if (_wm->_pixelformat.bytesPerPixel == 2) {
+		for (int i = 0; i < srcRect.height(); i++) {
+			uint16 *src = (uint16 *)composeSurface->getBasePtr(srcRect.left, srcRect.top + i);
+			const byte *msk = mask ? (const byte *)mask->getBasePtr(xoff, yoff + i) : nullptr;
+
+			for (int j = 0; j < srcRect.width(); j++, src++)
+				if (!mask || (msk && (*msk++)))
+					*src = _wm->inverter(*src);
+		}
 	} else {
 
 		for (int i = 0; i < srcRect.height(); i++) {
@@ -560,6 +569,7 @@ void Window::loadNewSharedCast(Cast *previousSharedCast) {
 		// Clear those previous widget pointers
 		previousSharedCast->releaseCastMemberWidget();
 		_currentMovie->_sharedCast = previousSharedCast;
+		previousSharedCast->setMovie(_currentMovie);
 
 		debugC(1, kDebugLoading, "Skipping loading already loaded shared cast, path: %s", previousSharedCastPath.toString(Common::Path::kNativeSeparator).c_str());
 		return;
@@ -600,6 +610,9 @@ bool Window::loadNextMovie() {
 	if (_currentMovie) {
 		previousSharedCast = _currentMovie->getSharedCast();
 		_currentMovie->_sharedCast = nullptr;
+		if (previousSharedCast) {
+			previousSharedCast->setMovie(nullptr);
+		}
 	}
 
 	if (_currentMovie) {

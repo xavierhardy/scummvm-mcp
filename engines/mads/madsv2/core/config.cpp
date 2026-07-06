@@ -24,21 +24,25 @@
 #include "mads/madsv2/core/env.h"
 #include "mads/madsv2/core/inter.h"
 #include "mads/madsv2/core/kernel.h"
+#include "mads/madsv2/engine.h"
 
 namespace MADS {
 namespace MADSV2 {
 
-ConfigFile config_file = { 0, 0x220,
-			   0, 0x220, 7, 1,
-			   true, true, 1,
-			   0, 0,
-			   0, 0,
-			   0, true,
-			   0, 0,
-			   false, 'D',
-			   false,
-			   false,
-			   7, 0, 0, 0, 0 };
+ConfigFile config_file = {
+	0, 0x220,
+	0, 0x220, 7, 1,
+	true, true, 1,
+	0, 0,
+	0, 0,
+	0, true,
+	0, 0,
+	false, 'D',
+	false,
+	false,
+	7, 0, 0, 0, 0,
+	false
+};
 
 void read_config_file() {
 	ConfMan.registerDefault("music_mute", false);
@@ -66,7 +70,8 @@ void read_config_file() {
 	config_file.show_speech_boxes = ConfMan.getBool("show_speech_boxes");
 	config_file.original_save_load = ConfMan.getBool("original_menus");
 
-	game.difficulty = ConfMan.getInt("difficulty");
+	if (ConfMan.hasKey("difficulty") && !g_engine->isDemo())
+		game.difficulty = ConfMan.getInt("difficulty");
 }
 
 void write_config_file() {
@@ -100,7 +105,7 @@ void global_load_config_parameters() {
 	}
 }
 
-void global_unload_config_parameters(void) {
+void global_unload_config_parameters() {
 	config_file.interface_hotspots = inter_report_hotspots ? INTERFACE_BRAINDEAD : INTERFACE_MACINTOSH;
 
 	config_file.panning_speed = kernel_panning_speed;

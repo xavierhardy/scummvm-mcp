@@ -34,9 +34,6 @@
 namespace MADS {
 namespace MADSV2 {
 
-
-#define anim_file_version   "3.02"      /* Animate definition file version */
-
 /* Flags to be passed to anim_load().  Note that all PAL_MAP... flags */
 /* can be passed through as well.                                     */
 
@@ -210,7 +207,7 @@ struct SegmentBuf {
 	word   sprite_change_target[AA_MAX_CHANGES];
 };
 
-typedef struct SegmentBuf Segment;
+typedef SegmentBuf Segment;
 typedef Segment *SegmentPtr;
 
 
@@ -229,7 +226,7 @@ struct ImageEditBuf {
 	byte scale;
 };
 
-typedef struct ImageEditBuf ImageEdit;
+typedef ImageEditBuf ImageEdit;
 typedef ImageEdit *ImageEditPtr;
 
 struct ImageInter {
@@ -242,7 +239,7 @@ struct ImageInter {
 	byte y;
 	// byte padding
 
-	static constexpr int SIZE = 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1;
+	static constexpr size_t SIZE = 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1;
 	void load(Common::SeekableReadStream *src);
 };
 typedef ImageInter *ImageInterPtr;
@@ -259,7 +256,7 @@ struct MessageBuf {
 	char *text;
 };
 
-typedef struct MessageBuf Message;
+typedef MessageBuf Message;
 typedef Message *MessagePtr;
 
 
@@ -274,7 +271,7 @@ struct FrameEditBuf {
 	int8 yank_y;
 };
 
-typedef struct FrameEditBuf FrameEdit;
+typedef FrameEditBuf FrameEdit;
 typedef FrameEdit *FrameEditPtr;
 
 
@@ -287,7 +284,7 @@ struct Frame {
 	int8 yank_x;        /* for backgrounds which wrap around, like starfields */
 	int8 yank_y;
 
-	static constexpr int SIZE = 1 + 1 + 2 + 2 + 2 + 1 + 1;
+	static constexpr size_t SIZE = 1 + 1 + 2 + 2 + 2 + 1 + 1;
 	void load(Common::SeekableReadStream *src);
 };
 typedef Frame *FramePtr;
@@ -304,7 +301,7 @@ struct SegmentInter {
 	byte sound;
 	int16 sound_frame;
 
-	static constexpr int SIZE = 5 * 2 + AA_MAX_SPAWNED + AA_MAX_SPAWNED * 2 + 1 + 2;
+	static constexpr size_t SIZE = 5 * 2 + AA_MAX_SPAWNED + AA_MAX_SPAWNED * 2 + 1 + 2;
 	void load(Common::SeekableReadStream *src);
 };
 typedef SegmentInter *SegmentInterPtr;
@@ -327,7 +324,7 @@ struct Speech {
 	int16 last_frame;             /* Last frame of segment    */
 	int16 first_image;            /* First image number       */
 
-	static constexpr int SIZE = 2 + 60 + 3 + 1 + 4 + 2 + 2 + 2 + 2 * RGBcolor::SIZE + 7 * 2;
+	static constexpr size_t SIZE = 2 + 60 + 3 + 1 + 4 + 2 + 2 + 2 + 2 * RGBcolor::SIZE + 7 * 2;
 	void load(Common::SeekableReadStream *src);
 };
 
@@ -369,7 +366,7 @@ struct AnimDefBuf {
 };
 
 
-typedef struct AnimDefBuf AnimDef;
+typedef AnimDefBuf AnimDef;
 typedef AnimDef *AnimDefPtr;
 
 /* aa file header */
@@ -391,7 +388,7 @@ struct AnimFile {
 	char speech_file[13];
 	char font_file[13];
 
-	static constexpr int SIZE = (8 * 2) + (10 * 2) + 13 +
+	static constexpr size_t SIZE = (8 * 2) + (10 * 2) + 13 +
 		(AA_MAX_SERIES * 13) + 13 + 13 + 13 + 13 +
 		1; // structure padding
 	void load(Common::SeekableReadStream *src);

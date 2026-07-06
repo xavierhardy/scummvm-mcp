@@ -281,13 +281,13 @@ void ScriptExecutor::scriptChangeAnimation() {
 uint16 ScriptExecutor::getAreaAtPoint(uint16 x, uint16 y) {
 	// getAreaAtPoint (1008:101d). Reads the pathfinding map pixel and applies
 	// the area override table at sceneData + value*5 + 0x4EA8.
-	if (x >= 320 || y >= 200 || _engine->_pathfindingMap.w == 0) {
+	if (x >= kScreenWidth || y >= kGameHeight || _engine->_pathfindingMap.w == 0) {
 		return 0;
 	}
 	uint16 result = _engine->_pathfindingMap.getPixel(x, y);
-	if (result > 199 && result < 0xFA) {
+	if (result >= AREA_OVERRIDE_MIN && result < 250) {
 		uint16 overrideValue = _engine->getPathfindingOverride2(result);
-		if (overrideValue > 199) {
+		if (overrideValue >= AREA_OVERRIDE_MIN) {
 			result = overrideValue;
 		}
 	}
@@ -518,6 +518,39 @@ Common::Point ScriptExecutor::getCharPosition() {
 	if (!actor)
 		actor = GameObjects::getProtagonistObject();
 	return actor ? actor->_position : Common::Point();
+}
+
+void ScriptExecutor::debugLogActorWalkState(const char *context) {
+	if (!debugChannelSet(-1, kDebugScript))
+		return;
+
+	const uint16 actorIndex = Scenes::instance()._currentActorIndex;
+	const GameObject *actor = GameObjects::getObjectByIndex(actorIndex);
+	if (actor == nullptr) {
+		debugC(kDebugScript, "%s: no actor object", context);
+		return;
+	}
+
+	const int16 x = actor->_position.x;
+	const int16 y = actor->_position.y;
+	const uint16 area = getAreaAtPoint((uint16)x, (uint16)y);
+	const uint16 walk = _engine->getWalkabilityAt(y, x);
+	View1 *view = (View1 *)_engine->findView("View1");
+	Character *character = view ? view->getCharacterByIndex(actorIndex) : nullptr;
+
+	debugC(kDebugScript,
+		   "%s: actor=(%d,%d) area=%u walk=%u/0x%04x int16=%d walkable=%s var[122]=%u "
+		   "cursor=0x%02x executorState=%u walkWaitObj=%u frameWait=%u soundWait=%d musicWait=%d "
+		   "pendingVMotion=%s vOff=%u motionTgt=%u motionProg=%u/%u repeatRun=%d",
+		   context, x, y, area, walk, walk, (int16)walk, Macs2Engine::isWalkabilityWalkable(walk) ? "yes" : "NO",
+		   getVariableValue(122), (uint)_cursorMode, (uint)_state, _walkTargetObjectIndex,
+		   _frameWaitTicksRemaining, _waitForPcmSound ? 1 : 0, _waitForMusicControl ? 1 : 0,
+		   (character && character->hasPendingVerticalMotion()) ? "yes" : "no",
+		   actor->_verticalOffsetScale,
+		   character ? character->_motionTargetVerticalOffset : 0u,
+		   character ? character->_motionProgress : 0u,
+		   character ? character->_motionDistanceUnits : 0u,
+		   _repeatRunFlag ? 1 : 0);
 }
 
 bool ScriptExecutor::isRelevantObject(const GameObject *obj) const {
@@ -1042,6 +1075,21 @@ void Script::ScriptExecutor::scriptMoveObject() {
 		_stream->seek(0, SEEK_END);
 	}
 
+	// Binary (1008:aa83): when runtime data exists, sync target/finalDest to the new
+	// object position so a subsequent waitForWalk completes immediately.
+	if (object->_dataOffset != 0) {
+		GameObject::StoredWalkRuntime &s = object->_storedWalkRuntime;
+		s.valid = true;
+		s.targetPosition = object->_position;
+		s.pathFinalDestination = object->_position;
+		s.currentPathIndex = 0;
+		s.path.clear();
+		s.stepDeltaX = 0;
+		s.stepDeltaY = 0;
+		s.stepError = 0;
+		s.stepDirectionSet = false;
+	}
+
 	currentView->rebuildCharacterLookupTable();
 }
 
@@ -1276,7 +1324,7 @@ void Script::ScriptExecutor::scriptWalkToPosition() {
 	c->_pathFinalDestination = target;
 
 	bool directPath = _engine->isPathWalkable(y, x, current.y, current.x);
-	if (!directPath && _engine->getWalkabilityAt(y, x) < 200) {
+	if (!directPath && Macs2Engine::isWalkabilityWalkable(_engine->getWalkabilityAt(y, x))) {
 		c->calculatePath(target);
 	}
 	if (c->_path.empty()) {
@@ -1314,22 +1362,22 @@ ExecutionResult Script::ScriptExecutor::scriptWaitForWalk() {
 		endBuffering(_lastOpcodeTriggeredSkip);
 		return ExecutionResult::ScriptFinished;
 	}
+	// Binary (1008:db56 opcode 0x11): object+0x0A runtime must exist; no on-screen Character required.
+	if (walkObject->_dataOffset == 0) {
+		setScriptError(2);
+		endBuffering(_lastOpcodeTriggeredSkip);
+		return ExecutionResult::ScriptFinished;
+	}
 	// Original checks runtime+0x231 (frozen/attached flag) -> error 0x1F
 	if (walkObject->_hasBoundsAttachment) {
 		setScriptError(0x1F);
 		endBuffering(_lastOpcodeTriggeredSkip);
 		return ExecutionResult::ScriptFinished;
 	}
-	View1 *currentView = (View1 *)_engine->findView("View1");
-	Character *c = currentView->getCharacterByIndex(objectID);
-	if (c == nullptr) {
-		setScriptError(2);
-		endBuffering(_lastOpcodeTriggeredSkip);
-		return ExecutionResult::ScriptFinished;
-	}
 	_walkTargetObjectIndex = objectID;
 	endTimer();
 	endBuffering(_lastOpcodeTriggeredSkip);
+	debugLogActorWalkState("waitForWalk start");
 	enterBlockingWaitCursor();
 	// Binary: opcode 0x11 exits executeOpcodes with g_wScriptIsExecuting still true.
 	// runScriptExecutor returns immediately (no object iteration, no cursor restore).
@@ -1442,6 +1490,7 @@ ExecutionResult Script::ScriptExecutor::scriptShowDialogueChoice() {
 ExecutionResult Script::ScriptExecutor::scriptDismissPanel() {
 	// Set the stream to the end and let the calling code figure out that we are done
 	// for this run.
+	debugLogActorWalkState("dismissPanel (opcode 0x18)");
 	_stream->seek(_stream->size(), SEEK_SET);
 	endBuffering(_lastOpcodeTriggeredSkip);
 	return ExecutionResult::ScriptFinished;
@@ -1870,6 +1919,7 @@ void Script::ScriptExecutor::scriptSetMotion() {
 
 	Character *character = getOrCreateCharacter((uint16)objectID);
 	seedMotionState(object, character, targetVerticalOffset, verticalOffsetDelta, motionDistance);
+	debugLogActorWalkState("after setMotion");
 }
 
 bool Script::ScriptExecutor::scriptSetOrientation() {
@@ -1924,7 +1974,7 @@ void Script::ScriptExecutor::scriptMoveToPosition() {
 
 	const Common::Point target(x, y);
 	if (!_engine->isPathWalkable(object->_position.y, object->_position.x, y, x) &&
-		_engine->getWalkabilityAt(target) < 0xC8) {
+		Macs2Engine::isWalkabilityWalkable(_engine->getWalkabilityAt(target))) {
 		setScriptError(0x15);
 		return;
 	}
@@ -2388,6 +2438,7 @@ void Script::ScriptExecutor::scriptDismissAllPanels() {
 	currentView->_uiPanelState = View1::kUiPanelNone;
 	currentView->_pendingPanelRequest = View1::kPanelRequestNone;
 	currentView->_isDialogueChoiceInputActive = false;
+	currentView->_activeInventoryItem = nullptr;
 	currentView->clearClickedButtonIndex();
 }
 
@@ -2399,6 +2450,7 @@ void Script::ScriptExecutor::scriptResetToSceneScript() {
 	_executingObjectIndex = Scenes::instance()._currentSceneIndex;
 	_scriptExecutionState = ScriptExecutionState::ExecutingSceneScript;
 	setCurrentSceneScriptAt(0);
+	_expectedEndLocation = 0;
 }
 
 void Script::ScriptExecutor::scriptLoadOverlayFont() {
@@ -2492,6 +2544,7 @@ void Script::ScriptExecutor::scriptFrameWait() {
 	// once per game tick, rather than using a wall-clock timer.
 	uint16 duration = scriptReadValue16();
 	debugC(kDebugScript, "SCRIPT::frameWait(duration=%u)", duration);
+	debugLogActorWalkState("frameWait start");
 	startFrameWait(duration);
 	enterBlockingWaitCursor();
 	endBuffering(_lastOpcodeTriggeredSkip);
@@ -2504,7 +2557,9 @@ void Script::ScriptExecutor::scriptSetPathfinding() {
 	uint16 areaID = scriptReadValue16();
 	uint16 active = scriptReadValue16();
 	uint16 overrideValue = scriptReadValue16();
-	debugC(kDebugScript, "SCRIPT::setPathfinding(areaID=%u, active=%u, overrideValue=%u)", areaID, active, overrideValue);
+	debugC(kDebugScript, "SCRIPT::setPathfinding(areaID=%u, active=%u, overrideValue=%u/0x%04x int16=%d walkable=%s)",
+		   areaID, active, overrideValue, overrideValue, (int16)overrideValue,
+		   (!active || Macs2Engine::isWalkabilityWalkable(overrideValue)) ? "yes" : "NO");
 	if (areaID < 200 || areaID > 0xEF) {
 		setScriptError(0x0D);
 		return;
@@ -2514,6 +2569,7 @@ void Script::ScriptExecutor::scriptSetPathfinding() {
 	} else {
 		g_engine->removePathfindingOverride(areaID);
 	}
+	debugLogActorWalkState("after setPathfinding");
 }
 
 void Script::ScriptExecutor::scriptTestSceneAnimFrame() {
@@ -2593,9 +2649,14 @@ bool Script::ScriptExecutor::scriptWaitForSound() {
 		_waitForPcmSound = true;
 		endTimer();
 		endBuffering(_lastOpcodeTriggeredSkip);
+		debugC(kDebugScript, "SCRIPT::waitForSound start (soundPlaying=%d hasSound=%d)",
+			   g_engine->isCurrentSoundPlaying() ? 1 : 0, g_engine->hasCurrentSound() ? 1 : 0);
+		debugLogActorWalkState("waitForSound start");
 		enterBlockingWaitCursor();
 		return true;
 	}
+	debugC(kDebugScript, "SCRIPT::waitForSound skipped (soundEnabled=%d soundSystemActive=%d)",
+		   _soundEnabled ? 1 : 0, _soundSystemActive ? 1 : 0);
 	return false;
 }
 

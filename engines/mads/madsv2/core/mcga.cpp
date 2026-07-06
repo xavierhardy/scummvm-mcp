@@ -31,7 +31,6 @@ namespace MADSV2 {
 
 #define mcga_retrace_magic      14      /* Dave McKibbin's magic heuristic # */
 
-word mcga_shakes = false;
 int  mcga_retrace_computed = false;
 word mcga_retrace_ticks = 0;
 int  mcga_retrace_max_colors = 256;
@@ -137,7 +136,7 @@ void mcga_retrace() {
 	g_engine->getScreen()->update();
 }
 
-void mcga_compute_retrace_parameters(void) {
+void mcga_compute_retrace_parameters() {
 	mcga_setpal(&master_palette);
 
 	// On original hardware this function also measured how many palette
@@ -147,10 +146,6 @@ void mcga_compute_retrace_parameters(void) {
 	mcga_retrace_max_colors = Graphics::PALETTE_COUNT;
 	mcga_retrace_max_bytes = Graphics::PALETTE_SIZE;
 	mcga_retrace_computed = true;
-}
-
-void mcga_shake() {
-	warning("TODO: mcga_shake");
 }
 
 void mcga_reset() {

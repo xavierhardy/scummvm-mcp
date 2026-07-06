@@ -126,7 +126,6 @@ bool PackList::load(Common::SeekableReadStream *src) {
 	return true;
 }
 
-
 word pack_read_memory(char *buffer, word *mysize) {
 	word cx = *mysize;
 	uint32 remaining = pack_read_size;
@@ -231,8 +230,7 @@ done:
 	return write_this_time;
 }
 
-
-word pack_raw_copy(void) {
+word pack_raw_copy() {
 	word result = CMP_NO_ERROR;
 	word read_this_time;
 	word read_back;
@@ -247,9 +245,8 @@ word pack_raw_copy(void) {
 		}
 	}
 
-	return (result);
+	return result;
 }
-
 
 word pack_a_packet(int packing_flag, int explode_mode) {
 	word result;
@@ -258,9 +255,7 @@ word pack_a_packet(int packing_flag, int explode_mode) {
 	switch (packing_flag) {
 	case PACK_IMPLODE:
 		pack_window_size = PACK_WINDOW_SIZE;
-		// while ((pack_read_size < (long)pack_window_size) && ((long)pack_window_size > PACK_MIN_WINDOW_SIZE)) {
-		// pack_window_size = pack_window_size >> 1;
-		// }
+
 		if (pack_strategy == PACK_PFAB) {
 			result = (*pack_pFABcomp_routine)(pack_read_routine, pack_write_routine, (char *)pack_buffer,
 				&pack_mode, &pack_window_size);
@@ -297,10 +292,10 @@ word pack_a_packet(int packing_flag, int explode_mode) {
 		break;
 	}
 
-	return (result);
+	return result;
 }
 
-static void pack_activate(void) {
+static void pack_activate() {
 	if (pack_special_function)
 		pack_special_function();
 }
@@ -452,8 +447,7 @@ done:
 	return *return_value;
 }
 
-
-int pack_check(void) {
+int pack_check() {
 	dialog_declare_ok(dialog);
 	ItemPtr none_item, zip_item = nullptr, pfab_item = nullptr, default_item;
 	int result;
@@ -506,17 +500,17 @@ int pack_check(void) {
 
 done:
 	if (dialog != NULL) dialog_destroy(dialog);
-	return (result);
+	return result;
 }
 
-void pack_enable_zip(void) {
+void pack_enable_zip() {
 	pack_strategy = PACK_ZIP;
 	pack_zip_enabled = true;
 	pack_implode_routine = implode;
 	pack_explode_routine = explode;
 }
 
-void pack_enable_pfab(void) {
+void pack_enable_pfab() {
 	pack_strategy = PACK_PFAB;
 	pack_pfab_enabled = true;
 	pack_pFABcomp_routine = pFABcomp;
@@ -525,7 +519,7 @@ void pack_enable_pfab(void) {
 	pack_pFABexp2_routine = pFABexp2;
 }
 
-void pack_enable_pfab_explode(void) {
+void pack_enable_pfab_explode() {
 	pack_strategy = PACK_PFAB;
 	pack_pfab_enabled = true;
 	pack_pFABcomp_routine = NULL;
@@ -534,7 +528,7 @@ void pack_enable_pfab_explode(void) {
 	pack_pFABexp2_routine = pFABexp2;
 }
 
-void pack_enable_zip_explode(void) {
+void pack_enable_zip_explode() {
 	pack_strategy = PACK_ZIP;
 	pack_zip_enabled = true;
 	pack_implode_routine = NULL;
@@ -589,7 +583,6 @@ packed:
 
 	return (long)dx;
 }
-
 
 word pack_write_ems(char *buffer, word *mysize) {
 	word write_this_time;

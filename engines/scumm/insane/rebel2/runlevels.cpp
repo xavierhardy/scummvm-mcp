@@ -268,10 +268,11 @@ void InsaneRebel2::resetLevelPhaseState(bool clearEnemies) {
 	if (clearEnemies)
 		_enemies.clear();
 
-	if (_selectedChapter == 1 || _selectedChapter == 10) {
-		_rebelAutopilot = 1;
-		_rebelDamageLevel = 5;
-	}
+	// Every phase starts with the player fully in cover. This only has an
+	// effect in the on-foot cover sections (handler 25, levels 2 and 11);
+	// the other levels ignore these values.
+	_rebelAutopilot = 1;
+	_rebelDamageLevel = 5;
 }
 
 void InsaneRebel2::clearEmbeddedHudFrames() {
@@ -292,19 +293,52 @@ void InsaneRebel2::resetLevelWaveState() {
 	_rebelWaveState = 0;
 }
 
-void InsaneRebel2::resetShieldGauge() {
+void InsaneRebel2::resetGaugeCounters() {
 	for (int i = 0; i < 10; ++i) {
 		_rebelValueCounters[i] = 0;
-		_rebelMaskCounters[i] = 0;
+		_rebelGaugeBlink[i] = 0;
 	}
-	for (int i = 0; i < 512; ++i)
-		_rebelGaugeSlot[i] = -1;
 	_rebelLastCounter = -1;        // non-zero sentinel: gauge not yet depleted
+}
+
+void InsaneRebel2::resetShieldGauge() {
+	resetGaugeCounters();
+	for (int i = 0; i < 15; ++i) {
+		_turretShakeRingX[i] = 0;
+		_turretShakeRingY[i] = 0;
+	}
 	_rebelShieldDestroyed = false;
 	_rebelGaugeArmed = false;
 	_rebelLastArmedSlot = -1;
-	for (int i = 0; i < 10; ++i)
-		_rebelGaugeCleared[i] = false;
+}
+
+void InsaneRebel2::decrementGaugeGroup(int slot, int targetId) {
+	_rebelValueCounters[slot]--;
+	if (_rebelValueCounters[slot] == 0) {
+		_rebelGaugeBlink[slot] = 6;
+		if (_rebelShieldGateActive && !_rebelReactorMode) {
+			_rebelShieldDestroyed = true;
+			debugC(DEBUG_INSANE, "Shield destroyed (gauge slot %d depleted by target %d)", slot, targetId);
+		}
+	}
+	_rebelLastCounter = _rebelValueCounters[slot];
+}
+
+int16 InsaneRebel2::getWaveBudgetBase(int phase) const {
+	// Per-phase wave budgets share the tail columns (rollRate..driftRate) of the
+	// previous level-type row with the flight movement rates.
+	const LevelDifficultyParams &p =
+		kDifficultyTable[CLIP(_difficulty, 0, 5)][CLIP(_rebelLevelType - 1, 0, 16)];
+	switch (phase) {
+	case 1:
+		return p.rollRate;
+	case 2:
+		return p.liftRate;
+	case 3:
+		return p.slideRate;
+	default:
+		return p.driftRate;
+	}
 }
 
 void InsaneRebel2::resetExplosions() {
@@ -316,6 +350,8 @@ void InsaneRebel2::resetExplosions() {
 		_explosions[i].width = 0;
 		_explosions[i].height = 0;
 		_explosions[i].scale = 0;
+		_explosions[i].dx = 0;
+		_explosions[i].dy = 0;
 	}
 }
 
@@ -361,8 +397,6 @@ void InsaneRebel2::resetHandler7FlightState() {
 }
 
 int InsaneRebel2::runLevel2() {
-	const int16 kLevel2BudgetBase[3] = { 3, 3, 3 };
-
 	int bonusCount = 0;
 	int totalKills = 0;
 	int totalMisses = 0;
@@ -386,7 +420,7 @@ int InsaneRebel2::runLevel2() {
 
 		resetLevelPhaseState(false);
 
-		int16 budget = kLevel2BudgetBase[0] + _vm->_rnd.getRandomNumber(2);
+		int16 budget = getWaveBudgetBase(1) + _vm->_rnd.getRandomNumber(2);
 
 		debugC(DEBUG_INSANE, "Level 2 Phase 1 - playing 02P01_A.SAN (background) budget=%d", budget);
 		if (!playLevelSegment("LEV02/P1/02P01_A.SAN", 0x28))
@@ -435,7 +469,7 @@ int InsaneRebel2::runLevel2() {
 		_currentPhase = 2;
 		resetLevelPhaseState(true);
 
-		budget = kLevel2BudgetBase[1] + _vm->_rnd.getRandomNumber(2);
+		budget = getWaveBudgetBase(2) + _vm->_rnd.getRandomNumber(2);
 
 		_rebelHandler = 8;
 
@@ -501,7 +535,7 @@ int InsaneRebel2::runLevel2() {
 		resetLevelPhaseState(true);
 		prevWaveState = 0;
 
-		budget = kLevel2BudgetBase[2] + _vm->_rnd.getRandomNumber(2);
+		budget = getWaveBudgetBase(3) + _vm->_rnd.getRandomNumber(2);
 
 		_rebelHandler = 8;
 
@@ -715,15 +749,17 @@ int InsaneRebel2::runLevel4() {
 		}
 
 		debugC(DEBUG_INSANE, "Level 4 death");
-		playLevelDeathVariant(4, 1, _deathFrame);
-		if (_vm->shouldQuit())
-			return kLevelQuit;
-
+		// The death video only plays on the retry path; the last life goes
+		// straight to the game-over cinematic.
 		_playerLives--;
 		if (_playerLives <= 0) {
 			playLevelGameOver(4);
 			return kLevelGameOver;
 		}
+
+		playLevelDeathVariant(4, 1, _deathFrame);
+		if (_vm->shouldQuit())
+			return kLevelQuit;
 
 		playLevelRetry(4);
 		if (_vm->shouldQuit())
@@ -921,7 +957,7 @@ int InsaneRebel2::runLevel7() {
 		// Right fork: continue into the alternate corridor segment (0x40 =
 		// continuation, so the ship position carries over instead of recentering).
 		if (_level7TookRightFork && _playerShield > 0) {
-			if (!playLevelSegment("LEV07/07PLAYB.SAN", 0x68))
+			if (!playLevelSegment("LEV07/07PLAYB.SAN", 0x468))
 				return kLevelQuit;
 		}
 
@@ -935,7 +971,7 @@ int InsaneRebel2::runLevel7() {
 		// Death cinematic depends on which corridor side the player died on
 		// (the original keys 07DIE_B/07DIE_A on DAT_0047ab8c), independent of
 		// the fork frame; taking the right fork implies the right side.
-		const bool diedOnRight = _level7TookRightFork || (_flyShipScreenX > 0xd4);
+		const bool diedOnRight = _level7TookRightFork || (_flyShipScreenX + _smoothedVelocity > 0xd4);
 		debugC(DEBUG_INSANE, "Level 7 death at frame %d, right=%d", _deathFrame, diedOnRight);
 		if (diedOnRight) {
 			playCinematic("LEV07/07DIE_B.SAN");
@@ -1022,6 +1058,7 @@ int InsaneRebel2::runLevel9() {
 		clearBit(0);
 		_rebelKillCounter = 0;
 		_rebelHitCounter = 0;
+		resetShieldGauge();
 
 		_rebelPhaseState = 0xfffffffe;
 
@@ -1110,8 +1147,6 @@ int InsaneRebel2::runLevel11() {
 	int totalMisses = 0;
 	int prevPhaseState = 0;
 
-	const int16 kLevel11BudgetBase[4] = { 3, 3, 3, 3 };
-
 	playCinematic("LEV11/11CUT.SAN");
 	if (_vm->shouldQuit())
 		return kLevelQuit;
@@ -1130,7 +1165,7 @@ int InsaneRebel2::runLevel11() {
 
 		resetLevelPhaseState(false);
 
-		int16 budget = kLevel11BudgetBase[0] + _vm->_rnd.getRandomNumber(2);
+		int16 budget = getWaveBudgetBase(1) + _vm->_rnd.getRandomNumber(2);
 
 		debugC(DEBUG_INSANE, "Level 11 Phase 1 - playing 11P01_A.SAN budget=%d", budget);
 		if (!playLevelSegment("LEV11/P1/11P01_A.SAN", 0x28))
@@ -1146,6 +1181,7 @@ int InsaneRebel2::runLevel11() {
 				uint16 waveSelect = waveEnd.creditedBits;
 
 				if ((_rebelPhaseState & 0x10) != 0 && (prevPhaseState & 0x10) == 0) {
+					playAuxSfx(3, 127, 0);
 				}
 				prevPhaseState = _rebelPhaseState;
 
@@ -1186,7 +1222,7 @@ int InsaneRebel2::runLevel11() {
 		_currentPhase = 2;
 		resetLevelPhaseState(true);
 
-		budget = kLevel11BudgetBase[1] + _vm->_rnd.getRandomNumber(2);
+		budget = getWaveBudgetBase(2) + _vm->_rnd.getRandomNumber(2);
 		_rebelHandler = 8;
 
 		debugC(DEBUG_INSANE, "Level 11 Phase 2 - playing 11P02_A.SAN budget=%d", budget);
@@ -1238,7 +1274,7 @@ int InsaneRebel2::runLevel11() {
 		resetLevelPhaseState(true);
 		prevPhaseState = 0;
 
-		budget = kLevel11BudgetBase[2] + _vm->_rnd.getRandomNumber(2);
+		budget = getWaveBudgetBase(3) + _vm->_rnd.getRandomNumber(2);
 		_rebelHandler = 8;
 
 		debugC(DEBUG_INSANE, "Level 11 Phase 3 first half - playing 11P03_A.SAN budget=%d", budget);
@@ -1254,6 +1290,7 @@ int InsaneRebel2::runLevel11() {
 					return kLevelQuit;
 
 				if ((_rebelPhaseState & 0x0e) == 0x0e && (prevPhaseState & 0x0e) != 0x0e) {
+					playAuxSfx(3, 127, 0);
 				}
 				prevPhaseState = _rebelPhaseState;
 
@@ -1313,7 +1350,7 @@ int InsaneRebel2::runLevel11() {
 
 		_rebelHandler = 8;
 
-		budget = kLevel11BudgetBase[3] + _vm->_rnd.getRandomNumber(2);
+		// The phase-3 budget carries into the second half; no new roll.
 
 		debugC(DEBUG_INSANE, "Level 11 Phase 3 second half - playing 11P03_G.SAN budget=%d", budget);
 		if (!playLevelSegment("LEV11/P3/11P03_G.SAN", 0x28))
@@ -1382,8 +1419,6 @@ int InsaneRebel2::runLevel11() {
 }
 
 int InsaneRebel2::runLevel12() {
-	const int16 kLevel12BudgetBase[4] = { 3, 4, 4, 4 };
-
 	playCinematic("LEV12/12CUT.SAN");
 	if (_vm->shouldQuit())
 		return kLevelQuit;
@@ -1399,7 +1434,7 @@ int InsaneRebel2::runLevel12() {
 
 		resetLevelPhaseState(false);
 
-		int16 budget = kLevel12BudgetBase[0] + _vm->_rnd.getRandomNumber(2);
+		int16 budget = getWaveBudgetBase(1) + _vm->_rnd.getRandomNumber(2);
 
 		debugC(DEBUG_INSANE, "Level 12 Phase 1 - init 12P05.SAN budget=%d", budget);
 		if (!playLevelSegment("LEV12/12P05.SAN", 0x28, false))
@@ -1446,7 +1481,7 @@ int InsaneRebel2::runLevel12() {
 		_currentPhase = 2;
 		resetLevelWaveState();
 
-		budget = kLevel12BudgetBase[1] + _vm->_rnd.getRandomNumber(3);
+		budget = getWaveBudgetBase(2) + _vm->_rnd.getRandomNumber(3);
 
 		debugC(DEBUG_INSANE, "Level 12 Phase 2 - init 12P06.SAN budget=%d", budget);
 		if (!playLevelSegment("LEV12/12P06.SAN", 0x428, false))
@@ -1503,7 +1538,7 @@ int InsaneRebel2::runLevel12() {
 		_currentPhase = 3;
 		resetLevelWaveState();
 
-		budget = kLevel12BudgetBase[2] + _vm->_rnd.getRandomNumber(3);
+		budget = getWaveBudgetBase(3) + _vm->_rnd.getRandomNumber(3);
 
 		debugC(DEBUG_INSANE, "Level 12 Phase 3 - init 12P07.SAN budget=%d", budget);
 		if (!playLevelSegment("LEV12/12P07.SAN", 0x428, false))
@@ -1557,7 +1592,7 @@ int InsaneRebel2::runLevel12() {
 		_currentPhase = 4;
 		resetLevelWaveState();
 
-		budget = kLevel12BudgetBase[3] + _vm->_rnd.getRandomNumber(3);
+		budget = getWaveBudgetBase(4) + _vm->_rnd.getRandomNumber(3);
 
 		debugC(DEBUG_INSANE, "Level 12 Phase 4 - init 12P08.SAN budget=%d", budget);
 		if (!playLevelSegment("LEV12/12P08.SAN", 0x428, false))
@@ -1764,6 +1799,7 @@ int InsaneRebel2::runLevel15() {
 		_rebelHitCounter = 0;
 
 		_rebelLevelType = 0xf;
+		_level15SecondHalf = false;
 
 		if (!playLevelSegment("LEV15/15PLAY.SAN", 0x28))
 			return kLevelQuit;

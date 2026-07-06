@@ -45,6 +45,7 @@ class DirectorEngine;
 class Lingo;
 struct LingoArchive;
 struct Resource;
+class ScriptContext;
 class Stxt;
 class RTE0;
 class RTE1;
@@ -92,6 +93,8 @@ public:
 	void loadArchive();
 	void setArchive(Common::SharedPtr<Archive> archive);
 	Common::SharedPtr<Archive> getArchive() const { return _castArchive; };
+	Movie *getMovie() const { return _movie; }
+	void setMovie(Movie *movie) { _movie = movie; }
 	Common::String getMacName() const { return _macName; }
 	Common::String getCastName() const { return _castName; }
 	void setCastName(const Common::String &name) { _castName = name; }
@@ -143,6 +146,10 @@ public:
 
 	Common::CodePage getFileEncoding();
 	Common::U32String decodeString(const Common::String &str);
+
+	// Script contexts keep a back-pointer to their owning cast.
+	void registerScriptContext(ScriptContext *ctx) { _liveScriptContexts.setVal(ctx, true); }
+	void unregisterScriptContext(ScriptContext *ctx) { _liveScriptContexts.erase(ctx); }
 
 	Common::String formatCastSummary(int castId);
 	PaletteV4 loadPalette(Common::SeekableReadStreamEndian &stream, int id);
@@ -266,6 +273,8 @@ private:
 	Common::HashMap<uint16, CastMemberInfo *> _castsInfo;
 	Common::HashMap<Common::String, int, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> _castsNames;
 	Common::HashMap<uint16, int> _castsScriptIds;
+
+	Common::HashMap<ScriptContext *, bool> _liveScriptContexts;
 
 };
 

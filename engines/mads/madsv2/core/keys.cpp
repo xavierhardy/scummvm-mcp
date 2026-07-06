@@ -38,15 +38,16 @@ void keys_remove() {
 }
 
 int keys_check_install() {
-	error("TODO: keys_check_install");
+	// No implementation in ScummVM
+	return true;
 }
 
 void keys_enable() {
-	error("TODO: keys_enable");
+	// No implementation in ScummVM
 }
 
 void keys_disable() {
-	error("TODO: keys_disable");
+	// No implementation in ScummVM
 }
 
 int keys_any() {
@@ -57,7 +58,7 @@ int keys_get() {
 	return g_engine->getKey();
 }
 
-void keys_flush(void) {
+void keys_flush() {
 	g_engine->flushKeys();
 }
 
@@ -77,7 +78,7 @@ int keys_read_buffer(KeyPtr key_buf) {
 	if (key_buf->len > 0) {
 		myval = key_buf->buf[0];
 		key_buf->len--;
-		memcpy(key_buf->buf, key_buf->buf + 1, (key_buf->len * sizeof(int)));
+		memmove(key_buf->buf, key_buf->buf + 1, (key_buf->len * sizeof(int)));
 
 		return myval;
 	} else {
@@ -96,7 +97,7 @@ int keys_append_buffer(KeyPtr key_buf, int newchar) {
 
 int keys_insert_buffer(KeyPtr key_buf, int newchar, int before) {
 	if ((key_buf->len < KEYS_MAX_BUF_CHARS) && (before < key_buf->len) && (before > 0)) {
-		memcpy(key_buf->buf + before + 1, key_buf->buf + before, (key_buf->len - before) * sizeof(int));
+		memmove(key_buf->buf + before + 1, key_buf->buf + before, (key_buf->len - before) * sizeof(int));
 		key_buf->buf[before] = newchar;
 		return (before + 1);
 	} else {

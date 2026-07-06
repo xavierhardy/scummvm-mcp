@@ -68,15 +68,16 @@ int imageFrame;
 CycleList anim_cycle_list;
 bool has_cycles;
 int currentViewX, currentViewY;
+int concat_mode;
+bool stop_music_at_end;
+bool wait_for_music_at_end;
 
 static const byte FX_TIMES[16] = {
 	0, 110, 110, 64, 64, 64, 64, 64, 64, 64, 64, 0, 0, 0
 };
 
-static int concat_mode;
 static bool has_sound_file;
 static char sound_file_name[80];
-static TileMapHeader picture_map, depth_map;
 static TileResource picture_res, depth_res;
 static Buffer scr_work_orig;
 static Room *room;
@@ -96,7 +97,6 @@ static bool hasAnimInited;
 static int runVal1, runVal2, runVal3;
 static int runVal12;
 static int error_code;
-static bool wait_for_music_at_end;
 
 /**
  * Initializes animview global variables
@@ -386,9 +386,9 @@ static void animate() {
 	AnimFile anim_in;
 	int count, series_ctr, ctr;
 	int soundLoadFlag = 0;
-	bool foundSound;
 	int imageIndex;
 	static int packIndex = 0;
+	bool found_sound = false;
 
 	himem_startup();
 	(void)tile_setup();
@@ -447,17 +447,16 @@ static void animate() {
 	for (count = 0; count < anim_count && !error_code; ++count) {
 		MADS_FORMAT(buf, anim_list[count].name);
 
-		foundSound = false;
-
 		if (!has_sound_file) {
 			if (anim_get_sound_info(buf, sound_file_name, &soundLoadFlag))
 				goto done;
 
 			Common::String name(sound_file_name);
 			has_sound_file = !name.empty() && Common::isDigit(name.lastChar());
+			found_sound = true;
 		}
 
-		if (has_sound_file) {
+		if ((!stop_music_at_end || found_sound) && !g_engine->_soundManager->isLoaded()) {
 			// Initialize the sound driver
 			int section = sound_file_name[strlen(sound_file_name) - 1] - '0';
 			g_engine->_soundManager->init(section);
@@ -572,9 +571,13 @@ static void animate() {
 
 		minFrame = maxFrame = -1;
 
-		// Free the allocated sound driver
-		g_engine->_soundManager->closeDriver();
-		has_sound_file = false;
+		if (has_sound_file && stop_music_at_end) {
+			// Free the allocated sound driver
+			g_engine->_soundManager->closeDriver();
+		}
+
+		if (stop_music_at_end && found_sound)
+			has_sound_file = false;
 
 		// Free surface
 		buffer_free(&scr_work);
@@ -596,6 +599,9 @@ done:
 	if (room)
 		mem_free(room);
 	timer_set_sound_flag(false);
+
+	if (g_engine->_soundManager->isLoaded())
+		g_engine->_soundManager->removeDriver();
 
 	timer_remove();
 	himem_shutdown();

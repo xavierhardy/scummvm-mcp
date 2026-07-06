@@ -3,6 +3,7 @@ MODULE := engines/nancy
 MODULE_OBJS = \
   action/actionmanager.o \
   action/actionrecord.o \
+  action/actionzone.o \
   action/arfactory.o \
   action/autotext.o \
   action/datarecords.o \
@@ -20,6 +21,7 @@ MODULE_OBJS = \
   action/puzzle/assemblypuzzle.o \
   action/puzzle/bballpuzzle.o \
   action/puzzle/beadpuzzle.o \
+  action/puzzle/boardgamepuzzle.o \
   action/puzzle/bulpuzzle.o \
   action/puzzle/bombpuzzle.o \
   action/puzzle/cardgamepuzzle.o \
@@ -35,6 +37,8 @@ MODULE_OBJS = \
   action/puzzle/matchpuzzle.o \
   action/puzzle/memorypuzzle.o \
   action/puzzle/mindpuzzle.o \
+  action/puzzle/minigolfpuzzle.o \
+  action/puzzle/mirrorlightpuzzle.o \
   action/puzzle/mouselightpuzzle.o \
   action/puzzle/multibuildpuzzle.o \
   action/puzzle/onebuildpuzzle.o \
@@ -98,6 +102,7 @@ MODULE_OBJS = \
   font.o \
   graphics.o \
   iff.o \
+  movieplayer.o \
   input.o \
   metaengine.o \
   nancy.o \

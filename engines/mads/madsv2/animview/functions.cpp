@@ -79,12 +79,30 @@ void add_anim(const char *name) {
  * Parses a flag from an animation line in the resource file
  */
 void flag_parse(const char *param) {
-	switch (tolower(*param++)) {
+	char c = tolower(*param++);
+	switch (c) {
+	case 'd':
+		stop_music_at_end = true;
+		break;
+
+	case 'j':
+		wait_for_music_at_end = true;
+		break;
+
+	case 'k':
+		// Toggle whether keypress jumps to end. Not implemented in ScummVM
+		break;
+
 	case 'o':
 		// Specify opening special effect
 		assert(anim_count < MAX_ANIM);
 		if (*param == ':')
 			anim_list[anim_count].fx = atoi(param + 1);
+		break;
+
+	case 'p':
+		// Switch MADS path mode to CONCAT
+		concat_mode = 1;
 		break;
 
 	case 'r':
@@ -124,7 +142,7 @@ void flag_parse(const char *param) {
 		break;
 
 	default:
-		error("Unsupported animview flag - %c", *param);
+		error("Unsupported animview flag - %c", c);
 		break;
 	}
 }

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ScummVM 2.8.0git\n"
 "Report-Msgid-Bugs-To: scummvm-devel@lists.scummvm.org\n"
-"POT-Creation-Date: 2026-06-30 09:21+0000\n"
+"POT-Creation-Date: 2026-07-05 20:12+0000\n"
 "PO-Revision-Date: 2026-06-05 10:22+0000\n"
 "Last-Translator: NorwayFun <temuri.doghonadze@gmail.com>\n"
 "Language-Team: Georgian <https://translations.scummvm.org/projects/scummvm/"
@@ -4073,32 +4073,32 @@ msgid "Resolution: %dx%d"
 msgstr "გაფართოება: %dx%d"
 
 #: backends/graphics/openglsdl/openglsdl-graphics.cpp:1010
-#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2869
+#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2868
 msgid "Active graphics filter:"
 msgstr "აქტიური გრაფიკის ფილტრი:"
 
 #: backends/graphics/openglsdl/openglsdl-graphics.cpp:1031
-#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2903
+#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2902
 msgid "Enabled aspect ratio correction"
 msgstr "ასპექტის ფარდობის შესწორება ჩართულია"
 
 #: backends/graphics/openglsdl/openglsdl-graphics.cpp:1033
-#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2909
+#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2908
 msgid "Disabled aspect ratio correction"
 msgstr "ასპექტის ფარდობის შესწორება გამორთულია"
 
 #: backends/graphics/openglsdl/openglsdl-graphics.cpp:1046
-#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2925
+#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2924
 msgid "Filtering enabled"
 msgstr "გაფილტვრა ჩართულია"
 
 #: backends/graphics/openglsdl/openglsdl-graphics.cpp:1048
-#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2927
+#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2926
 msgid "Filtering disabled"
 msgstr "გაფილტვრა გამორთულია"
 
 #: backends/graphics/openglsdl/openglsdl-graphics.cpp:1074
-#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2954
+#: backends/graphics/surfacesdl/surfacesdl-graphics.cpp:2953
 msgid "Stretch mode"
 msgstr "გაწელვის რეჟიმი"
 
@@ -10207,6 +10207,10 @@ msgstr "უფრო ნელი თამაშის სიჩქარე"
 #: engines/touche/metaengine.cpp:147
 msgid "Open options menu"
 msgstr "მორგების მენიუს გახსნა"
+
+#: engines/macs2/metaengine.cpp:85
+msgid "Help / map"
+msgstr ""
 
 #: engines/made/detection_tables.h:446 engines/made/detection_tables.h:463
 msgid "The game is using unsupported engine"

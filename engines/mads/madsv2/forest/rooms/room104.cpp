@@ -44,9 +44,9 @@ namespace Forest {
 namespace Rooms {
 
 struct Scratch {
-	int16 sprite[10];       /* Sprite series handles */
-	int16 sequence[10];     /* Sequence handles      */
-	int16 animation[10];    /* Animation handles     */
+	int16 sprite[10];
+	int16 sequence[10];
+	int16 animation[10];
 	AnimationInfo animation_info[10];
 
 	int16 _8c;
@@ -86,7 +86,7 @@ static void room_104_anim8();
 
 static void room_104_init() {
 	scratch._a0 = -1;
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 
 	for (int count = 0; count < 10; count++) {
 		aainfo[count]._active = 0;
@@ -95,51 +95,51 @@ static void room_104_init() {
 		aainfo[count]._val4 = 0;
 	}
 
-	if (previous_room != -2 && previous_room != 199) {
+	if (previous_room != KERNEL_RESTORING_GAME && previous_room != 199) {
 		player.walker_visible = false;
 		player.commands_allowed = false;
-		if (flags[4] != 3)
-			flags[4]++;
+		if (flags[2] != 3)
+			flags[2]++;
 	}
 
-	switch (flags[4]) {
+	switch (flags[2]) {
 	case -3:
-		if (previous_room == 107) { flags[4] = 5; room_104_init2(); return; }
+		if (previous_room == 107) { flags[2] = 5; room_104_init2(); return; }
 		room_104_init1();
 		return;
 	case -2:
-		if (previous_room == 107) { flags[4] = 5; room_104_init2(); return; }
-		flags[4] = -3;
+		if (previous_room == 107) { flags[2] = 5; room_104_init2(); return; }
+		flags[2] = -3;
 		room_104_init1();
 		return;
 	case -1:
-		if (previous_room == 107) { flags[4] = 5; room_104_init2(); return; }
-		flags[4] = -3;
+		if (previous_room == 107) { flags[2] = 5; room_104_init2(); return; }
+		flags[2] = -3;
 		room_104_init1();
 		return;
 	case 1:
-		if (previous_room == 107) { flags[4] = 5; room_104_init2(); return; }
+		if (previous_room == 107) { flags[2] = 5; room_104_init2(); return; }
 		room_104_init3();
 		return;
 	case 2:
-		if (previous_room == 107) { flags[4] = 5; room_104_init2(); return; }
+		if (previous_room == 107) { flags[2] = 5; room_104_init2(); return; }
 		room_104_init3();
 		return;
 	case 3:
 		if (previous_room != 107) { room_104_init3(); return; }
-		flags[4] = 5;
+		flags[2] = 5;
 		room_104_init2();
 		return;
 	case 5:
-		if (previous_room == 107) flags[4] = 5;
+		if (previous_room == 107) flags[2] = 5;
 		room_104_init2();
 		return;
 	case 6:
-		if (previous_room == 107) { flags[4] = 5; room_104_init2(); return; }
+		if (previous_room == 107) { flags[2] = 5; room_104_init2(); return; }
 		room_104_init3();
 		return;
 	case 7:
-		if (previous_room == 107) { flags[4] = 5; room_104_init2(); return; }
+		if (previous_room == 107) { flags[2] = 5; room_104_init2(); return; }
 		room_104_init3();
 		return;
 	default:
@@ -149,7 +149,7 @@ static void room_104_init() {
 }
 
 static void room_104_init1() {
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 	global[g009] = -1;
 	global_midi_play(8);
 	viewing_at_y = 22;
@@ -162,12 +162,12 @@ static void room_104_init1() {
 		aainfo[count]._frame = -1;
 	}
 
-	aa[6] = kernel_run_animation(kernel_name('s', 1), 0);
+	aa[6] = kernel_run_animation(kernel_name('I', 1), 0);
 	aainfo[6]._active = -1;
 }
 
 static void room_104_init2() {
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 	global[g009] = 0;
 	midi_stop();
 	viewing_at_y = 22;
@@ -191,9 +191,9 @@ static void room_104_init3() {
 	global[g141] = 0;
 
 	scratch._9c = kernel_run_animation_disp('r', 4, 0);
-	kernel_position_anim(scratch._9c, 265, 111, 87, 14);
+	extra_change_animation(scratch._9c, 265, 111, 87, 14);
 	scratch._9a = kernel_run_animation_disp('e', 4, 0);
-	kernel_position_anim(scratch._9a, 248, 137, 94, 3);
+	extra_change_animation(scratch._9a, 248, 137, 94, 3);
 
 	aa[4] = kernel_run_animation(kernel_name('C', 1), 0);
 	aainfo[4]._active = -1;
@@ -883,7 +883,7 @@ static void room_104_daemon() {
 		break;
 	}
 
-	if (flags[4] != -3 && flags[4] != 5) {
+	if (flags[2] != -3 && flags[2] != 5) {
 		global_anim1(4, scratch._9a, global[g131], &global[g132]);
 		global_anim2(4, scratch._9c, global[g141], &global[g142]);
 	}

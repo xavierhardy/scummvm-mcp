@@ -44,22 +44,22 @@ namespace Forest {
 namespace Rooms {
 
 struct Scratch {
-	int16 sprite[10];                  /* 0x00 — sprite series handles  */
-	int16 sequence[10];                /* 0x14 — sequence handles       */
-	int16 animation[12];               /* 0x28 — animation handles; [10]=N2 anim, [11]=Z1 anim */
-	AnimationInfo animation_info[12];  /* 0x40 — 12 entries, one per animation slot */
-	int16 _pad_a0;                     /* 0xA0 unused */
-	int16 _a2;                         /* 0xA2 visit-count / playback-stage select */
-	int16 _pad_a4;                     /* 0xA4 unused */
-	int16 _pad_a6;                     /* 0xA6 unused */
-	int16 _pad_a8;                     /* 0xA8 unused */
-	int16 _aa;                         /* 0xAA converse-anim handle (kernel_reset_animation / kernel_synch) */
-	int16 _pad_ac;                     /* 0xAC unused */
-	int16 _ae;                         /* 0xAE converse-anim handle (kernel_abort_animation / global_anim3) */
-	int16 _b0;                         /* 0xB0 ambient audio num arg / uninitialised flag */
-	int16 _b2;                         /* 0xB2 ambient audio playing flag */
-	int16 _b4;                         /* 0xB4 ambient loop active flag */
-	int16 _b6;                         /* 0xB6 playback variant (1 / 2 / -1) */
+	int16 sprite[10];
+	int16 sequence[10];
+	int16 animation[12];
+	AnimationInfo animation_info[12];
+	int16 _pad_a0;
+	int16 _a2;
+	int16 _pad_a4;
+	int16 _pad_a6;
+	int16 _pad_a8;
+	int16 _aa;
+	int16 _pad_ac;
+	int16 _ae;
+	int16 _b0;
+	int16 _b2;
+	int16 _b4;
+	int16 _b6;
 };
 
 static Scratch scratch;
@@ -136,7 +136,7 @@ static void room_503_init() {
 }
 
 static void room_503_init1() {
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 	player.walker_visible = false;
 	player.commands_allowed = false;
 
@@ -189,7 +189,7 @@ static void room_503_init1() {
 
 static void room_503_init2() {
 	viewing_at_y = 22;
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 	player.walker_visible = false;
 	player.commands_allowed = false;
 	mouse_hide();
@@ -199,7 +199,7 @@ static void room_503_init2() {
 }
 
 static void room_503_init3() {
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 	player.walker_visible = false;
 	player.commands_allowed = false;
 

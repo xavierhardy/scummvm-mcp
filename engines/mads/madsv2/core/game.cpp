@@ -50,9 +50,7 @@
 #include "mads/madsv2/core/error.h"
 #include "mads/madsv2/core/popup.h"
 #include "mads/madsv2/core/object.h"
-#include "mads/madsv2/core/demo.h"
 #include "mads/madsv2/core/himem.h"
-#include "mads/madsv2/core/lock.h"
 #include "mads/madsv2/core/magic.h"
 #include "mads/madsv2/core/btype.h"
 #include "mads/madsv2/core/pack.h"
@@ -104,10 +102,10 @@ void (*game_emergency_save)() = NULL;
 
 int debugger = false;
 int debugger_state = DEBUGGER_MAIN;
-int debugger_matte_before = false;
+bool debugger_matte_before = false;
 int debugger_memory_skip = 0;        /* For paging up/down      */
-int debugger_memory_all = false;    /* Not showing ALL memory  */
-int debugger_memory_keywait = false;    /* Not waiting for memory  */
+bool debugger_memory_all = false;    /* Not showing ALL memory  */
+bool debugger_memory_keywait = false;    /* Not waiting for memory  */
 void (*debugger_reset)() = NULL;     /* Debugger reset routine  */
 void (*debugger_update)() = NULL;     /* Debugger update routine */
 int selected_intro = false;
@@ -199,7 +197,7 @@ void game_cold_data_init() {
 	kernel.cursor_y[0] = display_y >> 1;
 	kernel.cursor_y[1] = inter_base_y + 5;
 
-	game.difficulty = -1;
+	game.difficulty = g_engine->isDemo() ? 0 : -1;
 
 	kernel.paused = false;
 	kernel.cause_pause = false;
@@ -219,7 +217,6 @@ void game_cold_data_init() {
 	magic_high_fade_bound = 251;
 }
 
-
 static int scan_past(const char **myscan, char scan) {
 	int found = false;
 
@@ -237,7 +234,7 @@ static int scan_past(const char **myscan, char scan) {
 
 void flag_parse(const char **myscan) {
 	long mem_max;
-	// long mem_avail;
+
 	if (kernel.cheating == (byte)kernel_cheating_forbidden) {
 		if (scumm_stricmp(*myscan, kernel_cheating_password) == 0) {
 			kernel.cheating = (byte)kernel_cheating_allowed;
@@ -255,19 +252,11 @@ void flag_parse(const char **myscan) {
 		}
 		break;
 
-		// case 'A':
-		// if (scan_past(myscan, ':')) {
-		// abort_value = atoi(*myscan);
-		// scan_past(myscan, 0);
-		// }
-		// break;
 	case 'C':
 		if (scan_past(myscan, ':')) {
 			kernel.sound_card = **myscan;
 			if (scan_past(myscan, ',')) {
-				// pl sound_board_address = xtoi(*myscan);
 				if (scan_past(myscan, ',')) {
-					// pl sound_board_type  = xtoi(*myscan);
 					scan_past(myscan, 0);
 				}
 			}
@@ -316,31 +305,13 @@ void flag_parse(const char **myscan) {
 
 	case 'K':
 		inter_report_hotspots = true;
-		// config_file.interface_hotspots = INTERFACE_BRAINDEAD;
-		// inter_report_hotspots = !inter_report_hotspots;
-		break;
-
-	case 'L':
-#ifdef debug_enable_logfiles
-		logfile_enabled = true;
-#endif
 		break;
 
 	case 'M':
 		if (scan_past(myscan, ':')) {
 			mem_max = atol(*myscan);
-			mem_get_name(mem_max, "$HIDE$");
-			// mem_avail = mem_get_avail() - mem_program_block();
-			// if (mem_avail > mem_max) {
-			// mem_get_name(mem_avail - mem_max, "$HIDE$");
-			// }
 			scan_past(myscan, 0);
 		}
-		break;
-
-	case 'O':
-		// config_file.inventory_mode = INVENTORY_SQUAT;
-		// inter_spinning_objects = false;
 		break;
 
 	case 'P':
@@ -383,10 +354,6 @@ void flag_parse(const char **myscan) {
 
 	case 'V':
 		report_version = true;
-		break;
-
-	case 'Y':
-		// lock_hash_value = 0;
 		break;
 
 	case 'Z':
@@ -444,15 +411,11 @@ void show_version() {
 	echo(global_release_copyright, false);
 	echo(" by Sanctuary Woods Multimedia Corp.", true);
 	echo(" ", true);
-	// echo ("  FOR INTERNAL USE ONLY", true);
-	// echo (" ", true);
 }
-
 
 void show_logo() {
 	show_version();
 }
-
 
 void problem() {
 	debug("\nA slight problem . . .\n\n");
@@ -468,15 +431,11 @@ static void game_fix_save_name() {
 	Common::strcat_s(save_game_buf, ".SAV");
 }
 
-
 void game_save_name(int id) {
 	Common::strcpy_s(save_game_buf, save_game_key);
 	env_catint(save_game_buf, id, 3);
 	game_fix_save_name();
 }
-
-
-
 
 static void game_player_status() {
 	char work_buf[80];
@@ -490,8 +449,6 @@ static void game_player_status() {
 
 	popup_alert(20, "PLAYER GRAPHICS STATUS", "  ", temp_buf_3, NULL);
 }
-
-
 
 int game_parse_keystroke(int mykey) {
 	int count;
@@ -507,7 +464,6 @@ int game_parse_keystroke(int mykey) {
 	char temp_buf[80], temp_buf_2[80];
 
 	if (kernel.cheating == (byte)kernel_cheating_allowed) {
-
 		mykey = main_cheating_key(mykey);
 
 		switch (mykey) {
@@ -520,14 +476,10 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case ctrl_d_key:
-			// temp = game.difficulty;
-			// if (!popup_get_number (&temp, "CHANGE DIFFICULTY FACTOR", "New Factor:", 3)) {
-			  // game.difficulty = (byte)temp;
-			// }
-			break;
-
-		case ctrl_e_key:
-			mcga_shakes = 350;
+			temp = game.difficulty;
+			if (!popup_get_number (&temp, "CHANGE DIFFICULTY FACTOR", "New Factor:", 3)) {
+				game.difficulty = (byte)temp;
+			}
 			break;
 
 		case ctrl_f_key:
@@ -579,7 +531,6 @@ int game_parse_keystroke(int mykey) {
 					move_target = object[move_object].location;
 					popup_get_number(&move_target, "MOVE OBJ TO", "Loc:", 3);
 					inter_move_object(move_object, move_target);
-					// kernel.force_restart = true;
 				}
 			}
 			break;
@@ -591,26 +542,25 @@ int game_parse_keystroke(int mykey) {
 		case ctrl_r_key:
 			kernel_panning_speed = (kernel_panning_speed + 1) % 3;
 			game_set_camera_speed();
+
 			switch (kernel_panning_speed) {
 			case PANNING_INSTANT:
-				// popup_alert (22, "Pan INS", NULL);
+				popup_alert(22, "Panning = INSTANT.", NULL);
 				break;
 
 			case PANNING_MEDIUM:
-				// popup_alert (22, "Pan MEDIUM.", NULL);
+				popup_alert(22, "Panning = MEDIUM.", NULL);
 				break;
 
 			case PANNING_SMOOTH:
 			default:
-				// popup_alert (22, "Panning = SMOOTH.", NULL);
+				popup_alert(22, "Panning = SMOOTH.", NULL);
 				break;
 			}
 			break;
 
-			// case ctrl_r_key:
-			// box_param.font_spacing = 1 - box_param.font_spacing;
-			// break;
 		case ctrl_t_key:
+		case alt_t_key:
 			popup_get_number(&new_room, "TELEPORT", "New Room:", 3);
 			kernel.teleported_in = (byte)(mykey == ctrl_t_key);
 			break;
@@ -630,10 +580,11 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case ctrl_w_key:
-			// popup_get_string (player.series_name, "WALKER SERIES", "Series:", 8);
-			// player.force_series = (byte)strlen(player.series_name);
-			// if (!scumm_stricmp(player.series_name, "NULL")) player.series_name[0] = 0;
-			// kernel.force_restart = true;
+			popup_get_string (player.series_name, "WALKER SERIES", "Series:", 8);
+			player.force_series = (byte)strlen(player.series_name);
+			if (!scumm_stricmp(player.series_name, "NULL"))
+				player.series_name[0] = 0;
+			kernel.force_restart = true;
 			break;
 
 		case ctrl_z_key:
@@ -641,9 +592,8 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case alt_b_key:
-			// if (!popup_get_string (box_param.name, "POPUP BOX SERIES", "Series:", 16)) {
-			  // kernel.force_restart = true;
-			// }
+			if (!popup_get_string (box_param.name, "POPUP BOX SERIES", "Series:", 16))
+				kernel.force_restart = true;
 			break;
 
 		case ctrl_y_key:
@@ -677,13 +627,6 @@ int game_parse_keystroke(int mykey) {
 		case alt_p_key:
 			debugger = true;
 			debugger_state = DEBUGGER_PALETTE;
-			mem_manager_update = NULL;
-			pal_manager_update = debugger_update;
-			break;
-
-		case alt_t_key:
-			debugger = true;
-			debugger_state = DEBUGGER_STATE;
 			mem_manager_update = NULL;
 			pal_manager_update = debugger_update;
 			break;
@@ -733,23 +676,24 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case alt_a_key:
-			//       if (debugger_watch < DEBUGGER_MAX_WATCH) {
-			// temp = -1;
-			// if (debugger_watch > 0) temp = debugger_watch_index[debugger_watch - 1];
-			// if (!popup_get_number (&temp, "ADD GLOBAL WATCH", "Variable #:", 3)) {
-			// if ((temp >= 0) && (temp < 500)) {
-			// for (count = 0; count < debugger_watch; count++) {
-			// if (debugger_watch_index[count] == temp) {
-			// temp = -1;
-			// }
-			// }
-			//
-			// if (temp > 0) {
-			// debugger_watch_index[debugger_watch++] = temp;
-			// }
-			// }
-			// }
-			// }
+			if (debugger_watch < DEBUGGER_MAX_WATCH) {
+				temp = -1;
+				if (debugger_watch > 0)
+					temp = debugger_watch_index[debugger_watch - 1];
+				if (!popup_get_number(&temp, "ADD GLOBAL WATCH", "Variable #:", 3)) {
+					if ((temp >= 0) && (temp < 500)) {
+						for (count = 0; count < debugger_watch; count++) {
+							if (debugger_watch_index[count] == temp) {
+								temp = -1;
+							}
+						}
+
+						if (temp > 0) {
+							debugger_watch_index[debugger_watch++] = temp;
+						}
+					}
+				}
+			}
 			break;
 
 		case alt_e_key:
@@ -804,13 +748,14 @@ int game_parse_keystroke(int mykey) {
 			break;
 
 		case alt_w_key:
-			// player.walk_freedom  = !player.walk_freedom;
-			// player.walk_anywhere = player.walk_freedom;
-			// if (player.walk_freedom) {
-			  // popup_alert (26, "Player walks anywhere.", NULL);
-			// } else {
-			  // popup_alert (26, "Player walk restricted.", NULL);
-			// }
+			player.walk_freedom  = !player.walk_freedom;
+			player.walk_anywhere = player.walk_freedom;
+
+			if (player.walk_freedom) {
+				popup_alert(26, "Player walks anywhere.", NULL);
+			} else {
+				popup_alert(26, "Player walk restricted.", NULL);
+			}
 			break;
 
 		case alt_v_key:
@@ -843,8 +788,11 @@ int game_parse_keystroke(int mykey) {
 		case ctrl_c_key:
 			kernel.mouse_cursor_point = (byte)(!kernel.mouse_cursor_point);
 			break;
-#if 0
+
 		case ctrl_s_key:
+			if (g_engine->getGameID() != GType_Forest)
+				break;
+
 			Common::strcpy_s(temp_buf, "d322u001");
 
 			if (!popup_get_string(temp_buf, "Speech Play", "File:", 14)) {
@@ -854,8 +802,7 @@ int game_parse_keystroke(int mykey) {
 
 				// if exist RAC file
 				if (env_exist(temp_buf_2)) {
-					digi_play(temp_buf, 1);
-					digi_trigger_dialog = false;
+					Forest::digi_play(temp_buf, 1);
 
 				} else {
 					Common::strcpy_s(temp_buf_2, "*");
@@ -864,8 +811,7 @@ int game_parse_keystroke(int mykey) {
 
 					// if exist RAW
 					if (env_exist(temp_buf_2)) {
-						digi_play(temp_buf, 1);
-						digi_trigger_dialog = false;
+						Forest::digi_play(temp_buf, 1);
 
 					} else {
 						popup_alert(22, temp_buf, "does not exist!", NULL);
@@ -873,7 +819,7 @@ int game_parse_keystroke(int mykey) {
 				}
 			}
 			break;
-#endif
+
 		case alt_f1_key:
 			if (room->front_y > room->back_y) room->front_y--;
 			kernel_room_bound_dif = room->front_y - room->back_y;
@@ -889,7 +835,8 @@ int game_parse_keystroke(int mykey) {
 			kernel_room_scale_dif = room->front_scale - room->back_scale;
 			break;
 
-		case alt_f4_key:
+		// Was Alt+F4 in original, but obviously can't use that in Windows builds
+		case ctrl_f4_key:
 			room->front_scale++;
 			kernel_room_scale_dif = room->front_scale - room->back_scale;
 			break;
@@ -978,7 +925,11 @@ int game_parse_keystroke(int mykey) {
 	}
 
 	if (kernel.cheating < (byte)kernel_cheating_allowed) {
-		if (mykey == (kernel_cheating_password[kernel.cheating] - '@')) {
+		// Check for entering cheat sequence. The original did it using Control+key sequence,
+		// but in ScummVM I'm allowing it to be done with or without ctrl key being pressed.
+		// Since Ctrl+M, for example, is intercepted for mouse lock, so the Once Upon a Forest
+		// 'LLAMA' cheat sequence couldn't otherwise be entered
+		if (toupper(mykey & 0xffff) == kernel_cheating_password[kernel.cheating]) {
 			kernel.cheating++;
 			mykey = 0;
 			if (kernel.cheating >= (byte)kernel_cheating_allowed) {
@@ -993,7 +944,7 @@ int game_parse_keystroke(int mykey) {
 
 	switch (mykey) {
 	case space_key:
-		global[3] = true;  // player_hyperwalked
+		global[player_hyperwalked] = true;
 		if (!kernel.paused) {
 			if (player.walking && (new_room == room_id) && (player.walk_off_edge == 0)) {
 				if (!kernel.disable_fastwalk || (kernel.cheating == (byte)kernel_cheating_allowed)) {
@@ -1099,18 +1050,6 @@ int game_parse_keystroke(int mykey) {
 			NULL);
 		break;
 
-		// case I_key:
-		// case B_key:
-		// case i_key:
-		// case b_key:
-		  // if (room_id != 199 && section_id != 9 &&
-			  // player.commands_allowed &&
-			  // !kernel.trigger &&
-			  // inter_input_mode == INTER_LIMITED_SENTENCES &&
-	//          !global[2]) {*/  /* inventory_is_displayed
-			// display_inventory();
-		  // }
-		  // break;
 	case 0:
 		break;
 
@@ -1127,8 +1066,6 @@ int game_parse_keystroke(int mykey) {
 
 	return (unpause >= 2);
 }
-
-
 
 void game_pause_mode() {
 	int mykey = -1;
@@ -1157,8 +1094,6 @@ void game_pause_mode() {
 
 	kernel.paused = false;
 }
-
-
 
 void game_error_service() {
 	if (inter_spinning_objects || inter_animation_running) {
@@ -1226,9 +1161,7 @@ void game_control() {
 			game.going = false;
 			force_chain = true;
 			game_restore_flag = false;
-			// new_room    = 804;
-			// global_init_code();
-			// global[copy_protect_failed] = true;
+
 			error_report(ERROR_COPY_PROTECTION, SEVERE, MODULE_LOCK, 0, 0);
 		} else if (result == COPY_ESCAPE) {
 			game.going = false;
@@ -1290,7 +1223,6 @@ void game_control() {
 		Forest::int_sprite[Forest::fx_int_journal] = -1;
 
 	while (game.going) {
-
 		// Start up next section
 		kernel_mode = KERNEL_SECTION_PRELOAD;
 
@@ -1327,10 +1259,6 @@ void game_control() {
 			quote_emergency = false;
 			// vocab_emergency = false;
 			game_wait_cursor();
-
-#ifdef demo
-			demo_verify();
-#endif
 
 			kernel.quotes = NULL;
 
@@ -1410,9 +1338,7 @@ void game_control() {
 			for (count = 0; count < master_shadow->num_shadow_colors; count++) {
 				color = PAL_FORCE_SHADOW + count;
 				color_status[color] = 0;
-				// error_watch_point ("color_status", count, 0);
 			}
-
 
 			game.going = (byte)!kernel_room_startup(new_room, kernel_initial_variant, kernel.interface, false);
 
@@ -1446,13 +1372,10 @@ void game_control() {
 
 			// Use a graphics fade in for room transition
 			if (kernel_screen_fade == SCREEN_FADE_SMOOTH) {
-				// kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW;
 				kernel.fx = MATTE_FX_FADE_THRU_BLACK;
 			} else if (kernel_screen_fade == SCREEN_FADE_FAST) {
-				// kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW;
 				kernel.fx = MATTE_FX_FAST_THRU_BLACK;
 			} else {
-				// kernel.fx = MATTE_FX_CIRCLE_OUT_SLOW;
 				kernel.fx = MATTE_FX_FAST_AND_FANCY;
 			}
 
@@ -1520,7 +1443,7 @@ void game_control() {
 
 			ems_paging_mode(EMS_PAGING_SYSTEM);
 
-			if ((quote_emergency /* || vocab_emergency */) && !game_any_emergency) {
+			if (quote_emergency && !game_any_emergency) {
 				room_id = previous_room;
 				game_any_emergency = true;
 			} else {
@@ -1598,7 +1521,6 @@ void game_control() {
 
 		game_wait_cursor();
 
-		// pl kernel_unload_sound_driver();
 		// Shut down current section
 		kernel_section_shutdown();
 
@@ -1639,7 +1561,6 @@ static void game_system_maintenance() {
 
 	if (section_id != 9 && room_id != 199) {
 		if (((mouse_status & 3) == 3) && player.commands_allowed) {
-			// kernel.force_restart = true;
 			kernel.activate_menu = GAME_MAIN_MENU;
 			inter_init_sentence();
 			inter_sentence_ready = false;
@@ -1681,19 +1602,10 @@ static void game_daemon_code() {
  * player.need_to_walk to false.
  */
 static void game_handle_preparse() {
-	// if (global[4] >= 0 || global[5]) player.command_ready = true;
-	// if (global[4] >= 0 || global[5]) player.command_error = false;
-	// if (global[4] >= 0 ) player.command_ready = true;
-	// if (global[4] >= 0 ) player.command_error = false;
 	if ((inter_input_mode == INTER_BUILDING_SENTENCES) ||
-		(inter_input_mode == INTER_LIMITED_SENTENCES)) {
+			(inter_input_mode == INTER_LIMITED_SENTENCES)) {
 		kernel.trigger_setup_mode = KERNEL_TRIGGER_PREPARSE;
 
-		// if (global[4] >= 0) {
-		  // player_verb = -1;
-		  // player_main_noun = -1;
-		  // player_second_noun = -1;
-		// }
 		global_pre_parser_code();
 		game_exec_function(section_pre_parser_code_pointer);
 		game_exec_function(room_pre_parser_code_pointer);
@@ -1703,8 +1615,6 @@ static void game_handle_preparse() {
 		}
 	}
 }
-
-
 
 /**
  * Handles incoming player commands -- they are filtered down through
@@ -1790,73 +1700,13 @@ done:
 	}
 }
 
-void do_looping_sounds() {
-	switch (room_id) {
-	case 304:
-		// do water trickle
-		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 107);  // PLAY_MORE_TRICKLE
-		break;
-
-	case 305:
-		// do bird crowd
-		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 109);  // DO_CROWD
-		break;
-
-	case 306:
-		// if global[phineas_status] <= PHIN_IS_IN_CONTROL_AGAIN) {
-		if (global[66] <= 2) {
-			// bird crowd talking
-			kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-			kernel_timing_trigger(1, 117);  // DO_CROWD
-		} else {
-			// water flowing
-			kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-			kernel_timing_trigger(1, 118);  // DO_WATER
-		}
-		break;
-
-	case 401:
-		// do dragon noise
-		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 106);  // DRAGON_NOISE
-		break;
-
-	case 403:
-		// do water noise
-		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 105);  // WATER
-		break;
-
-	case 404:
-		// do dragon noise
-		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 110);  // DRAGON_NOISE
-		break;
-
-	case 405:
-		// do dragon noise
-		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 106);  // DRAGON_NOISE
-		break;
-
-	case 210:
-		// rush MORE_RUSH_RUSH
-		kernel.trigger_setup_mode = KERNEL_TRIGGER_DAEMON;
-		kernel_timing_trigger(1, 109);  // MORE_RUSH_RUSH
-		break;
-
-	}
-}
-
 /**
  * This is the main inner graphics control loop for the game,
  * and is executed once for each framing round.
  */
 static void game_main_loop() {
+	bool preparse_flag = false;
 	int id;
-	int preparse_flag = false;
 	int temp_message = 0;
 	int temp_message_2 = 0;
 	int temp_message_3 = 0;
@@ -1864,166 +1714,8 @@ static void game_main_loop() {
 	long one_clock, two_clock;
 	static char temp_buf[20];
 
-#if 0
-	static char temp_buf_2[20];
-	static char temp_buf_3[20];
-	static char temp_buf_4[20];
-	int yy;
-	long dif;
-
-	if (global[10]) {  // please play the damn targets
-
-		// this is for the background sound efx
-		dif = kernel.clock - noise_clock;
-		if ((dif >= 0) && (dif <= 4)) {
-			noise_timer += dif;
-		} else {
-			noise_timer += 1;
-		}
-		noise_clock = kernel.clock;
-
-		if (noise_length == -1) {
-			if (room_id == 220 || room_id == 221 || room_id == 307 || room_id == 322 || room_id == 420 ||
-				room_id == 308 || room_id == 204 || room_id == 211) {
-				// night time
-				noise_length = imath_random(50, 80);
-
-			} else {
-				// day time
-				noise_length = imath_random(150, 220);
-			}
-		}
-
-		if (noise_timer >= (noise_length + global[13])) {
-			if (room_id == 220 || room_id == 221 || room_id == 307 || room_id == 322 || room_id == 420 ||
-				room_id == 308 || room_id == 204 || room_id == 211) {
-				// night time
-				// digi_initial_volume (75);
-				digi_trigger_effect = false;
-				digi_play_build(220, '_', 5, 2);  // EFFECT
-				// digi_trigger_ambiance = false;
-			} else {
-				// day time
-				yy = imath_random(1, 6);
-				while (last_bird_sound == (byte)yy) yy = imath_random(1, 6);
-
-				last_bird_sound = (byte)yy;
-
-				// digi_initial_volume (imath_random (25, 100));
-				digi_trigger_effect = false;
-
-				switch (yy) {
-				case 1: digi_play_build(321, '_', 500, 2); break;  // EFFECT
-				case 2: digi_play_build(321, '_', 501, 2); break;  // EFFECT
-				case 3: digi_play_build(321, '_', 502, 2); break;  // EFFECT
-				case 4: digi_play_build(321, '_', 503, 2); break;  // EFFECT
-				case 5: digi_play_build(321, '_', 504, 2); break;  // EFFECT
-				case 6: digi_play_build(321, '_', 505, 2); break;  // EFFECT
-
-				}
-			}
-			// digi_trigger_ambiance = false;
-			noise_length = -1;
-			noise_timer = 0;
-		}
-	}
-
-	if (player.walker_visible && player.commands_allowed && section_id != 9 && lets_get_a_move_on_anim &&
-		!player.walking && !player.need_to_walk && move_your_butt_anim_handle == -1) {
-		move_your_butt_enabled = 1;
-	} else {
-		move_your_butt_enabled = 0;
-		move_your_butt_timer = 0;
-	}
-
-	if (move_your_butt_enabled) {
-
-		// this is for the background sound efx
-		dif = kernel.clock - move_your_butt_clock;
-		if ((dif >= 0) && (dif <= 4)) {
-			move_your_butt_timer += dif;
-		} else {
-			move_your_butt_timer += 1;
-		}
-		move_your_butt_clock = kernel.clock;
-
-		if (move_your_butt_timer >= MOVE_YOUR_BUTT_TIMEOUT) {
-			player.commands_allowed = false;
-			player.walker_visible = false;
-			player.clock = kernel.clock;
-			move_your_butt_anim_handle = kernel_run_animation("*b_2t", 0);
-			extra_change_animation(move_your_butt_anim_handle, player.x, player.y, player.scale, player.depth);
-			kernel_synch(KERNEL_ANIM, move_your_butt_anim_handle, KERNEL_NOW, 0);
-
-			switch (player.facing) {
-			case 8:
-				kernel_reset_animation(move_your_butt_anim_handle, 21);
-				break;
-
-			case 9:
-				kernel_reset_animation(move_your_butt_anim_handle, 22);
-				break;
-
-			case 6:
-				kernel_reset_animation(move_your_butt_anim_handle, 23);
-				break;
-
-			case 7:
-				kernel_reset_animation(move_your_butt_anim_handle, 26);
-				break;
-
-			case 4:
-				kernel_reset_animation(move_your_butt_anim_handle, 27);
-				break;
-
-			default:
-				kernel_reset_animation(move_your_butt_anim_handle, 24);
-				break;
-			}
-
-			do_looping_sounds();
-		}
-	}
-
-	if (move_your_butt_anim_handle != -1) {
-		if (kernel_anim[move_your_butt_anim_handle].frame != move_your_butt_anim_frame) {
-			move_your_butt_anim_frame = kernel_anim[move_your_butt_anim_handle].frame;
-
-			switch (move_your_butt_anim_frame) {
-
-			case 24:  // ab in a 2
-			case 28:  // ab in a 2
-				// AB we need to keep moving, michelle needs those herbs
-				digi_trigger_dialog = false;
-				digi_play_build_ii('b', 4, 1);
-				// digi_send_dialog_trigger = false;
-				kernel_reset_animation(move_your_butt_anim_handle, 0);
-				move_your_butt_anim_frame = 0;
-				break;
-
-			case 20:  // end of talking
-				// end AB we need to keep moving, michelle needs those herbs
-				dont_frag_the_palette();
-				kernel_abort_animation(move_your_butt_anim_handle);
-				move_your_butt_anim_handle = -1;
-
-				move_your_butt_timer = 0;
-				player.walker_visible = true;
-				player.commands_allowed = true;
-				kernel_synch(KERNEL_PLAYER, 0, KERNEL_NOW, 0);
-				player_demand_facing(FACING_SOUTH);
-
-				if (config_file.misc2) {
-					do_looping_sounds();
-				}
-				break;
-			}
-		}
-	}
-
-
-	// Clear any remaining player command message from screen
-#endif
+	// Dispatch to the engine to allow it to do game specific per-loop actions
+	g_engine->global_game_main_loop();
 
 	if (inter_sentence_ready || !player.commands_allowed) {
 		inter_init_sentence();
@@ -2168,26 +1860,6 @@ static void game_main_loop() {
 		temp_message = kernel_message_add(temp_buf, 5, 5, 515, 1, 0, 0);
 	}
 
-	// if (kernel.memory_tracking) {
-	  // Common::strcpy_s (temp_buf_2, "(Mem: ");
-	  // ltoa (mem_get_avail(), &temp_buf_2[6], 10);
-	  // Common::strcat_s (temp_buf_2, ") ");
-	  // temp_message_2 = kernel_message_add (temp_buf_2, 315, 5, 515, 1, 0, KERNEL_MESSAGE_RIGHT);
-	// }
-	// if (kernel.player_tracking) {
-	  // Common::strcpy_s (temp_buf_3, "(Plyr: ");
-	  // mads_itoa (player.x, &temp_buf_3[strlen(temp_buf_3)], 10);
-	  // Common::strcat_s (temp_buf_3, ",");
-	  // mads_itoa (player.y, &temp_buf_3[strlen(temp_buf_3)], 10);
-	  // Common::strcat_s (temp_buf_3, ")");
-	  // yy = 5;
-	  // if (kernel.mouse_cursor_point) yy += 15;
-	  // temp_message_3 = kernel_message_add (temp_buf_3, 5, yy, 515, 1, 0, 0);
-	  // Common::strcpy_s (temp_buf_4, "Scale %");
-	  // mads_itoa (player.scale, &temp_buf_4[strlen(temp_buf_4)], 10);
-	  // yy += 15;
-	  // temp_message_4 = kernel_message_add (temp_buf_4, 5, yy, 515, 1, 0, 0);
-	// }
 	// Update any messages
 	if (!kernel.trigger) {
 		if (kernel.force_restart || (new_room != room_id)) kernel_message_purge();
@@ -2230,11 +1902,10 @@ static void game_main_loop() {
 		kernel_message_delete(temp_message_4);
 	}
 
-	if (kernel.cause_pause || kernel.frame_by_frame) game_pause_mode();
+	if (kernel.cause_pause || kernel.frame_by_frame)
+		game_pause_mode();
 
 skip_frame:
-
-	// if (mcga_shakes) mcga_shake();
 	if (kernel.fx) {
 		cycling_active = true;
 	}
@@ -2613,7 +2284,7 @@ static void game_global_update() {
 
 	debugger_name("4", 23);
 
-	for (count = 0; count < 220; count += 10) {
+	for (count = 0; count < GLOBAL_LIST_SIZE; count += 10) {
 		screen_printf(0, (count / 10) + 2, "%4d => %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x",
 			count,
 			global[count],
@@ -2781,7 +2452,6 @@ static void game_matte() {
 					Common::sprintf_s(sprite_buf, "%d", image_list[count].sprite_id);
 				}
 			} else {
-				series_id = -1;
 				Common::strcpy_s(name_buf, "sys");
 				Common::strcpy_s(sprite_buf, " ");
 			}

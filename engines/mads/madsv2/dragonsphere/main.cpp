@@ -122,6 +122,7 @@ static void main_cold_data_init() {
 	game_menu_init = global_menu_system_init;
 	game_menu_exit = global_menu_system_shutdown;
 	game_emergency_save = global_emergency_save;
+	game.difficulty = g_engine->isDemo() ? 0 : -1;
 
 	Common::strcpy_s(config_file_name, "config.dra");
 	Common::strcpy_s(save_game_key, "drag");
@@ -133,7 +134,7 @@ static void main_cold_data_init() {
 	player.walker_visible = true;
 	player.scaling_velocity = true;
 
-	Common::strcpy_s(kernel_cheating_password, "WIDECHEW");
+	Common::strcpy_s(kernel_cheating_password, "FAREWELLAGA");
 	kernel_cheating_allowed = strlen(kernel_cheating_password);
 
 	kernel.cheating = gDebugLevel == 9 ? kernel_cheating_allowed : 0;
@@ -149,7 +150,7 @@ static void game_main(int argc, const char **argv) {
 	mads_mode = env_verify();
 
 	new_section = 1;
-	new_room = 101;
+	new_room = g_engine->isDemo() ? 110 : 101;
 	player.x = 160;
 	player.y = 78;
 
@@ -220,6 +221,8 @@ void dragonsphere_main() {
 
 	if (ConfMan.getBool("start_game") || ConfMan.hasKey("save_slot"))
 		selected_item = 0;
+	else if (g_engine->isDemo())
+		selected_item = 5;
 	else if (ConfMan.getBool("start_intro"))
 		selected_item = 3;
 	else
@@ -257,7 +260,7 @@ void dragonsphere_main() {
 
 		case 3:
 			AnimView::animview_main("@dragon");
-			selected_item = -1;
+			selected_item = g_engine->isDemo() ? 0 : -1;
 			break;
 
 		case 4:
@@ -266,8 +269,13 @@ void dragonsphere_main() {
 
 		default:
 			// Credits
-			TextView::textview_main("credits");
-			selected_item = -1;
+			if (g_engine->isDemo()) {
+				AnimView::animview_main("@demodisk");
+				selected_item = 0;
+			} else {
+				TextView::textview_main("credits");
+				selected_item = -1;
+			}
 			break;
 		}
 	}

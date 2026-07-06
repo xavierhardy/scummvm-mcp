@@ -35,12 +35,12 @@ namespace Forest {
 namespace Rooms {
 
 struct Scratch {
-	int16 sprite[10];            /* 0x00 — sprite series handles  */
-	int16 sequence[10];          /* 0x14 — sequence handles       */
-	int16 animation[10];         /* 0x28 — animation handles      */
-	AnimationInfo animation_info[10]; /* 0x3C */
-	int16 _8c;                        /* 0x8C */
-	int16 _8e;                        /* 0x8C */
+	int16 sprite[10];
+	int16 sequence[10];
+	int16 animation[10];
+	AnimationInfo animation_info[10];
+	int16 _8c;
+	int16 _8e;
 };
 
 static Scratch scratch;
@@ -75,7 +75,7 @@ static void room_107_init() {
 	kernel_seq_scale(seq[2], 100);
 
 	viewing_at_y = 22;
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 	global[g009] = 0;
 	player.walker_visible = false;
 	player.commands_allowed = false;

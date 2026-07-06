@@ -125,6 +125,7 @@ Scene::Scene() :
 		_menuButton(nullptr),
 		_helpButton(nullptr),
 		_taskbar(nullptr),
+		_pendingTaskbarButton(-1),
 		_viewportOrnaments(nullptr),
 		_textboxOrnaments(nullptr),
 		_inventoryBoxOrnaments(nullptr),
@@ -889,6 +890,14 @@ void Scene::synchronize(Common::Serializer &ser) {
 				pd->synchronize(ser);
 			}
 		}
+
+		// Restore the taskbar disable overrides now that the persisted
+		// TaskbarData is available. A disable can be set from an earlier
+		// scene's AR that won't re-run here, so it has to come from the save.
+		if (_taskbar && g_nancy->getGameType() >= kGameTypeNancy10) {
+			_taskbar->syncFromPuzzleData();
+			_taskbar->updateNotificationStates(_sceneState.currentScene.sceneID);
+		}
 	}
 
 	_isRunningAd = false;
@@ -1131,6 +1140,7 @@ void Scene::load(bool fromSaveFile) {
 	_inventorySoundOverrides.clear();
 
 	_timers.sceneTime = 0;
+	g_nancy->_sound->clearListenerPositionOverride();
 	g_nancy->_sound->recalculateSoundEffects();
 
 	// Increment the number of times we've visited this scene, unless we're
@@ -1410,31 +1420,55 @@ void Scene::handleInput() {
 	// skipped while the textbox is in open mode (it visually covers the
 	// buttons, so they should not receive hover/clicks).
 	if (!_activeMovie) {
-		if (_taskbar && !_textbox.isFullMode()) {
-			_taskbar->handleInput(input);
+		// While a Nancy 10+ popup (inventory / notebook / cellphone /
+		// conversation) is open, the original disables the entire taskbar —
+		// every button, including MENU and HELP. Skip the taskbar input so it
+		// neither hovers nor reacts to clicks until the popup is closed.
+		const bool popupOpen = g_nancy->getGameType() >= kGameTypeNancy10 &&
+								!activePopupConfinement().isEmpty();
+		if (_taskbar) {
+			// Grey out the whole taskbar while a popup is open (matches the
+			// original); restored automatically once the popup closes.
+			_taskbar->setPopupLockout(popupOpen);
+		}
+		if (_taskbar && !_textbox.isFullMode() && !popupOpen) {
+			// MENU and HELP leave gameplay entirely, which would cut off the
+			// taskbar click sound. The original defers the transition until that
+			// sound finishes, so we hold the click here and only switch state
+			// once the button's click sound has stopped playing.
+			if (_pendingTaskbarButton != -1) {
+				auto *taskData = GetEngineData(TASK);
+				if (!taskData || !g_nancy->_sound->isSoundPlaying(taskData->buttons[_pendingTaskbarButton].button.clickSound)) {
+					NancyState::NancyState target = _pendingTaskbarButton == kTaskButtonMenu ? NancyState::kMainMenu : NancyState::kHelp;
+					_pendingTaskbarButton = -1;
+					requestStateChange(target);
+				}
+			} else {
+				_taskbar->handleInput(input);
 
-			int clicked = _taskbar->getClickedButton();
-			switch (clicked) {
-			case kTaskButtonMenu:
-				requestStateChange(NancyState::kMainMenu);
-				break;
-			case kTaskButtonInventory:
-				_inventoryPopup.toggle();
-				break;
-			case kTaskButtonNotebook:
-				_notebookPopup.toggle();
-				break;
-			case kTaskButtonCellphone:
-				_cellPhonePopup.toggle();
-				break;
-			case -1:
-				break;
-			default:
-				// HELP is always the last taskbar button. Its index shifts from
-				// 4 to 5 in Nancy12, where a non-clickable coin purse occupies slot
-				// 4 (and never reports a click), so match it as the fall-through.
-				requestStateChange(NancyState::kHelp);
-				break;
+				int clicked = _taskbar->getClickedButton();
+				switch (clicked) {
+				case kTaskButtonMenu:
+					_pendingTaskbarButton = kTaskButtonMenu;
+					break;
+				case kTaskButtonInventory:
+					_inventoryPopup.toggle();
+					break;
+				case kTaskButtonNotebook:
+					_notebookPopup.toggle();
+					break;
+				case kTaskButtonCellphone:
+					_cellPhonePopup.toggle();
+					break;
+				case -1:
+					break;
+				default:
+					// HELP is always the last taskbar button. Its index shifts from
+					// 4 to 5 in Nancy12, where a non-clickable coin purse occupies slot
+					// 4 (and never reports a click), so match it as the fall-through.
+					_pendingTaskbarButton = clicked;
+					break;
+				}
 			}
 		}
 

@@ -55,13 +55,13 @@ void clear_selected_item() {
 	buffer_rect_copy_2(scr_inter_orig, scr_live, 138, 0, 138, 156, 55, 42);
 }
 
-void solve_me_selected(void) {
+void solve_me_selected() {
 	global[walker_converse_state] = -1;
 	open_interface(CANDLE_FLY);
 	game_exec_function(room_parser_code_pointer);
 }
 
-void door_selected(void) {
+void door_selected() {
 	open_interface(DOOR_FLY);
 	kernel.activate_menu = GAME_MAIN_MENU;
 }
@@ -90,14 +90,6 @@ void delete_sprite_in_interface(int series) {
 			--image_inter_marker;
 		}
 	}
-}
-
-void extra_change_animation(int handle, int x, int y, byte scale, byte depth) {
-	error("TODO: extra_change_animation");
-}
-
-void extra_shift_animation(int handle, int x, int y, byte scale) {
-	error("TODO: extra_shift_animation");
 }
 
 void load_interface() {
@@ -175,7 +167,6 @@ void inter_update_series(int series_id) {
 			ii.flags = IMAGE_UPDATE;
 	}
 }
-
 
 void open_interface(InterfaceButton button) {
 	mouse_hide();
@@ -300,6 +291,19 @@ void close_interface(InterfaceButton button) {
 	} while (count >= 0);
 
 	mouse_show();
+}
+
+void extra_change_animation(int handle, int x, int y, int scale, int depth) {
+	Animation &k_anim = kernel_anim[handle];
+	Anim *anim = k_anim.anim;
+
+	for (int count = 0; count < anim->num_frames; ++count) {
+		Image &image = anim->image[count];
+		image.x = x;
+		image.y = y;
+		image.scale = scale;
+		image.depth = depth;
+	}
 }
 
 } // namespace Forest

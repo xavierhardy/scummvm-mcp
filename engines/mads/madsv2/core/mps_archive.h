@@ -19,37 +19,30 @@
  *
  */
 
-#ifndef MADS_CORE_LOCK_H
-#define MADS_CORE_LOCK_H
+#ifndef MADS_CORE_MPS_ARCHIVE_H
+#define MADS_CORE_MPS_ARCHIVE_H
 
+#include "common/archive.h"
 #include "mads/madsv2/core/general.h"
 
 namespace MADS {
 namespace MADSV2 {
 
-extern char *lock_program_name;
-extern char *lock_search_mark;
-extern int  lock_search_length;
-extern word *lock_hash_value;
 
-word lock_get_disk_hash(void);
+class MpsArchive : public Common::Archive {
+private:
+	Common::Array<Common::Archive *> _zips;
 
-long lock_search_hash_offset(void);
+public:
+	static MpsArchive *open(const char *baseName = "mpslabs");
+	MpsArchive() {}
+	~MpsArchive() override;
 
-void lock_write_new_hash(void);
-
-int lock_get_copy_code(void);
-
-void lock_short_protection_check(void);
-
-int  lock_verification(void);
-void lock_sabotage(void);
-
-void lock_long_protection_check(void);
-
-void lock_secret_protection_check(void);
-
-void lock_preliminary_check(void);
+	bool hasFile(const Common::Path &path) const override;
+	int listMembers(Common::ArchiveMemberList &list) const override;
+	const Common::ArchiveMemberPtr getMember(const Common::Path &path) const override;
+	Common::SeekableReadStream *createReadStreamForMember(const Common::Path &path) const override;
+};
 
 } // namespace MADSV2
 } // namespace MADS

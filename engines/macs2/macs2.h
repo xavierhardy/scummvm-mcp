@@ -39,6 +39,7 @@
 #include "common/util.h"
 #include "engines/engine.h"
 #include "macs2/events.h"
+#include "macs2/macs2_constants.h"
 #include "macs2/scriptexecutor.h"
 
 namespace Macs2 {
@@ -227,8 +228,8 @@ struct PathfindingAreaOverride {
 
 // Area override table at scene+0x4EA8 (indexed by pathfinding value 0xC8..0xEF)
 // Set by opcode 0x4D, read by getAreaAtPoint (1008:101d)
-#define AREA_OVERRIDE_MIN 0xC8
-#define AREA_OVERRIDE_MAX 0xEF
+#define AREA_OVERRIDE_MIN 200
+#define AREA_OVERRIDE_MAX 239
 #define AREA_OVERRIDE_COUNT (AREA_OVERRIDE_MAX - AREA_OVERRIDE_MIN + 1)
 
 class Macs2Engine : public Engine, public Events {
@@ -309,6 +310,15 @@ public:
 	bool getPathfindingOverride(uint16 index, uint16 &result);
 	void setPathfindingOverride(uint16 index, uint16 overrideValue);
 
+	// Walkability threshold 0xC8 uses signed 16-bit comparison in the binary (JL/JGE).
+	// Values with (int16)value < 0xC8 are walkable heights; e.g. -2 (0xFFFE) is walkable.
+	static inline bool isWalkabilityBlocking(uint16 value) {
+		return (int16)value >= 0xC8;
+	}
+	static inline bool isWalkabilityWalkable(uint16 value) {
+		return (int16)value < 0xC8;
+	}
+
 	// This one implements the lookup relative to es:[di+4EA8h] vs. the other one at es:[di+4EA5h] and es:[di+4EA6h]
 	uint16 getPathfindingOverride2(uint16 index);
 	void removePathfindingOverride(uint16 index);
@@ -359,6 +369,7 @@ public:
 	Common::MemoryReadStream *_fileStream;
 
 	void setCursorMode(Script::MouseMode newMode);
+	void nextCursorMode();
 
 	Common::Array<uint16> _hotspotColorTable;
 

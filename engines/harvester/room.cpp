@@ -21,6 +21,7 @@
 
 #include "harvester/room.h"
 
+#include "common/algorithm.h"
 #include "common/endian.h"
 #include "common/events.h"
 #include "common/ptr.h"
@@ -934,7 +935,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			if (!effectEntity)
 				return false;
 
-			hitEffectStates.push_back(effectState);
+			hitEffectStates.push_back(Common::move(effectState));
 			return true;
 		};
 		auto spawnCombatDamagePopup = [&](Entity &targetEntity,
@@ -947,7 +948,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			popupState.startTick = Player::getRuntimeClockTicks();
 			popupState.damageAmount = damageAmount;
 			resolveCombatDamagePopupAnchor(targetEntity, popupState.anchorPoint);
-			damagePopupStates.push_back(popupState);
+			damagePopupStates.push_back(Common::move(popupState));
 		};
 		auto syncCombatHitEffects = [&]() {
 			if (!entityManager)
@@ -1122,13 +1123,13 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			byte previousPalette[256 * 3];
 			memcpy(previousPalette, scene.palette, sizeof(previousPalette));
 			const float previousPaletteBrightness = scene.targetPaletteBrightness;
-			const Common::Array<AudioCommand> entryAudioCommands = scene.state.audioCommands;
+			Common::Array<AudioCommand> entryAudioCommands = scene.state.audioCommands;
 			RoomSetupState updatedState;
 			if (!script->materializeRoomState(
 					scene.state.entranceName, scene.state.roomName, updatedState, *resources)) {
 				return false;
 			}
-			updatedState.audioCommands = entryAudioCommands;
+			updatedState.audioCommands = Common::move(entryAudioCommands);
 
 			RoomSceneResources updatedScene;
 			if (!loadRoomSceneResources(updatedState, *resources, updatedScene))
@@ -1376,14 +1377,14 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 				(void)Player::setIdleAnimation(playerState, playerState.facing);
 		};
 		auto refreshCurrentScene = [&](bool preservePlayerPlacement) {
-			const Common::Array<AudioCommand> entryAudioCommands = scene.state.audioCommands;
+			Common::Array<AudioCommand> entryAudioCommands = scene.state.audioCommands;
 			RoomSetupState refreshedState;
 			if (!_engine.getScript()->materializeRoomState(
 					scene.state.entranceName, scene.state.roomName, refreshedState, *_engine.getResources())) {
 				return false;
 			}
 
-			refreshedState.audioCommands = entryAudioCommands;
+			refreshedState.audioCommands = Common::move(entryAudioCommands);
 			if (!loadRoomSceneResources(refreshedState, *_engine.getResources(), scene))
 				return false;
 			hitEffectStates.clear();
@@ -1658,7 +1659,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 					return Common::kNoError;
 				}
 
-				exitInteraction = continuationInteraction;
+				exitInteraction = Common::move(continuationInteraction);
 			}
 
 			warning("Harvester: room exit command chain for '%s' exceeded continuation safety limit",
@@ -2267,7 +2268,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			return "none";
 		}
 	};
-	auto handleCombatInteraction = [&](InteractionResult interaction) -> Common::Error {
+	auto handleCombatInteraction = [&](const InteractionResult &interaction) -> Common::Error {
 		bool didTransition = false;
 		Common::Error interactionError =
 			interactionProcessor.handleInteractionResult(interaction, didTransition, Common::String());
@@ -2355,7 +2356,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 		if (script && !npc.onDeathActionTag.empty()) {
 			InteractionResult deathInteraction;
 			if (script->executeActionTag(npc.onDeathActionTag, deathInteraction, true, npc.roomName)) {
-				interaction = deathInteraction;
+				interaction = Common::move(deathInteraction);
 				interaction.mutatedRuntimeState = true;
 				interaction.visualRuntimeStateChanged = true;
 			}
@@ -2370,19 +2371,19 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 		auto isKillableMonster = [&](const MonsterRecord *monster) {
 			return monster && monster->active && monster->visible && monster->currentHitPoints > 0;
 		};
-		auto selectMonsterEntity = [&](MonsterRecord *monster) -> Entity * {
-			Entity *entity = monster ? findSceneRuntimeEntity(monster->monsterName) : nullptr;
+		auto selectMonsterEntity = [&](const MonsterRecord &monster) -> Entity * {
+			Entity *entity = findSceneRuntimeEntity(monster.monsterName);
 			return (entity && entity->isVisible()) ? entity : nullptr;
 		};
 		auto resolveKillTarget = [&]() -> MonsterRecord * {
 			if (playerState.attackTargetClassId == kRuntimeEntityClassMonster) {
 				MonsterRecord *monster = findRoomMonsterRecordByName(playerState.attackTargetName);
-				if (isKillableMonster(monster) && selectMonsterEntity(monster))
+				if (isKillableMonster(monster) && selectMonsterEntity(*monster))
 					return monster;
 			}
 
 			if (MonsterRecord *monster = findMonsterTargetAtPoint(_mousePos)) {
-				if (isKillableMonster(monster) && selectMonsterEntity(monster))
+				if (isKillableMonster(monster) && selectMonsterEntity(*monster))
 					return monster;
 			}
 
@@ -2390,7 +2391,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 				for (uint i = 0; i < scene.state.roomMonsters.size() && i < monsterCombatStates.size(); ++i) {
 					MonsterRecord &monster = scene.state.roomMonsters[i];
 					const RoomMonsterCombatState &combatState = monsterCombatStates[i];
-					if (!combatState.attackActive || !isKillableMonster(&monster) || !selectMonsterEntity(&monster))
+					if (!combatState.attackActive || !isKillableMonster(&monster) || !selectMonsterEntity(monster))
 						continue;
 					if (!combatState.attackTargetName.empty() &&
 							playerState.entity->getName().equalsIgnoreCase(combatState.attackTargetName)) {
@@ -2410,7 +2411,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 				if (!isKillableMonster(&monster))
 					continue;
 
-				Entity *entity = selectMonsterEntity(&monster);
+				Entity *entity = selectMonsterEntity(monster);
 				if (!entity)
 					continue;
 
@@ -2428,7 +2429,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 		};
 
 		MonsterRecord *monster = resolveKillTarget();
-		Entity *monsterEntity = selectMonsterEntity(monster);
+		Entity *monsterEntity = monster ? selectMonsterEntity(*monster) : nullptr;
 		if (!monster || !monsterEntity) {
 			debugC(1, kDebugCombat,
 				"Harvester: debug combat kill skipped reason='no active monster' cursor=(%d,%d)",
@@ -2496,7 +2497,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			InteractionResult deathInteraction;
 			if (script->executeActionTag(
 					monster->onDeathActionTag, deathInteraction, true, monster->roomName)) {
-				interaction = deathInteraction;
+				interaction = Common::move(deathInteraction);
 				interaction.mutatedRuntimeState = true;
 				interaction.visualRuntimeStateChanged = true;
 			}
@@ -2772,7 +2773,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 		if (playerState.attackTargetClassId == kRuntimeEntityClassMonster)
 			monster = findRoomMonsterRecordByName(playerState.attackTargetName);
 		Entity *monsterEntity = monster ? findSceneRuntimeEntity(monster->monsterName) : nullptr;
-		if (!monster || !monsterEntity || !playerAttackCanReachTarget(monsterEntity, monster ? monster->engageDistance : 0)) {
+		if (!monster || !monsterEntity || !playerAttackCanReachTarget(monsterEntity, monster->engageDistance)) {
 			if (!Player::isProjectileCombatLoadout(playerState.combatLoadout)) {
 				monster = findOverlappingMonsterTarget();
 			} else if (playerState.attackTargetClassId < 0) {
@@ -2856,7 +2857,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			InteractionResult deathInteraction;
 			if (script->executeActionTag(
 					monster->onDeathActionTag, deathInteraction, true, monster->roomName)) {
-				interaction = deathInteraction;
+				interaction = Common::move(deathInteraction);
 				interaction.mutatedRuntimeState = true;
 				interaction.visualRuntimeStateChanged = true;
 			}
@@ -2951,7 +2952,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 						InteractionResult deathInteraction;
 						if (script->executeActionTag(
 								monster.onDeathActionTag, deathInteraction, true, monster.roomName)) {
-							interaction = deathInteraction;
+							interaction = Common::move(deathInteraction);
 							interaction.mutatedRuntimeState = true;
 							interaction.visualRuntimeStateChanged = true;
 						}

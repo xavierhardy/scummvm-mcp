@@ -120,16 +120,6 @@ DirectorEngine::DirectorEngine(OSystem *syst, const DirectorGameDescription *gam
 		SearchMan.addSubDirectoryMatching(_gameDataDir, directoryGlob, 0, 5);
 	}
 
-	if (ConfMan.getBool("true_color") || (getGameFlags() & GF_32BPP) || debugChannelSet(-1, kDebug32bpp)) {
-#ifdef USE_RGB_COLOR
-		_colorDepth = 32;
-#else
-		warning("32-bpp color dept is not supported, forcing 8-bit");
-		_colorDepth = 8;
-#endif
-	} else {
-		_colorDepth = 8;	// 256-color
-	}
 	// Enable Macintosh gamma correction. This resolves the issue of Mac games appearing too dark.
 	// Enabled by default for Macintosh and Pippin games in the detection code.
 	// Right now only used in 8-bit mode to adjust the palette.
@@ -228,6 +218,18 @@ void DirectorEngine::forgetWindow(Window *window) {
 	_windowsToForget.push_back(window);
 }
 
+bool DirectorEngine::isWindowRegistered(Window *window) const {
+	if (window == _stage) {
+		return true;
+	}
+	for (auto &it : _windowList) {
+		if (it == window) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void DirectorEngine::setCurrentWindow(Window *window) {
 	if (_currentWindow == window)
 		return;
@@ -272,12 +274,14 @@ Common::Error DirectorEngine::run() {
 	if (!debugChannelSet(-1, kDebugDesktop))
 		_wmMode |= Graphics::kWMModeFullscreen | Graphics::kWMModeNoDesktop;
 
-#ifdef USE_RGB_COLOR
-	if (ConfMan.getBool("true_color") || (getGameFlags() & GF_32BPP) || debugChannelSet(-1, kDebug32bpp))
-		_pixelformat = Graphics::PixelFormat(4, 8, 8, 8, 8, 24, 16, 8, 0);
-	else
-#endif
+	if (ConfMan.getBool("true_color") || (getGameFlags() & GF_TRUECOLOR) || debugChannelSet(-1, kDebug32bpp)) {
+		// Both 16bpp and 32bpp formats are supported, but 32bpp is always reported to the scripts.
+		_pixelformat = g_system->getSupportedFormats().front();
+		_colorDepth = _pixelformat.isCLUT8() ? 8 : 32;
+	} else {
 		_pixelformat = Graphics::PixelFormat::createFormatCLUT8();
+		_colorDepth = 8;
+	}
 
 	debugC(1, kDebugImages, "Director pixelformat is: %s", _pixelformat.toString().c_str());
 
@@ -300,6 +304,8 @@ Common::Error DirectorEngine::run() {
 	_wm->setDesktopMode(_wmMode);
 
 	_wm->printWMMode();
+
+	debugC(1, kDebugImages, "Director pixelformat is: %s", _pixelformat.toString().c_str());
 
 	_stage = new Window(_wm->getNextId(), false, false, false, _wm, this, true);
 	_stage->incRefCount();

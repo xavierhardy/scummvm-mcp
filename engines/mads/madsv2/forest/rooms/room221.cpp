@@ -72,7 +72,7 @@ static void room_221_init1();
 static void room_221_init() {
 	scratch._a0 = 0;
 	midi_stop();
-	global[player_score] = -1;
+	global[play_background_sounds] = -1;
 
 	if (previous_room != KERNEL_RESTORING_GAME) {
 		if (previous_room != 199) {
@@ -102,9 +102,9 @@ static void room_221_init1() {
 	global[g141] = 0;
 
 	scratch._9c = kernel_run_animation_disp('r', 6, 0);
-	kernel_position_anim(scratch._9c, 122, 137, 100, 3);
+	extra_change_animation(scratch._9c, 122, 137, 100, 3);
 	scratch._9a = kernel_run_animation_disp('e', 4, 0);
-	kernel_position_anim(scratch._9a, 183, 135, 100, 3);
+	extra_change_animation(scratch._9a, 183, 135, 100, 3);
 
 	if (previous_room != KERNEL_RESTORING_GAME) {
 		player.x = 150;
@@ -129,7 +129,7 @@ static void room_221_init1() {
 		global[g133] = 0;
 		global[g143] = 0;
 		restore_player();
-		player.commands_allowed = -1;
+		player.commands_allowed = true;
 		return;
 	case 211:
 		aa[1] = kernel_run_animation(kernel_name('b', 1), 101);
@@ -149,7 +149,7 @@ static void room_221_init1() {
 		kernel_reset_animation(scratch._9c, 2);
 		global[g133] = 0;
 		global[g143] = 0;
-		player.commands_allowed = -1;
+		player.commands_allowed = true;
 		return;
 	}
 }
@@ -500,7 +500,7 @@ static void room_221_daemon() {
 			kernel_synch(KERNEL_ANIM, scratch._9c, KERNEL_NOW, 0);
 			global[g133] = 0;
 			global[g143] = 0;
-			player.commands_allowed = -1;
+			player.commands_allowed = true;
 		}
 		break;
 
@@ -597,7 +597,7 @@ static void room_221_daemon() {
 		kernel_synch(KERNEL_ANIM, scratch._9c, KERNEL_NOW, 0);
 		global[g133] = 0;
 		global[g143] = 0;
-		player.commands_allowed = -1;
+		player.commands_allowed = true;
 		break;
 
 	default:

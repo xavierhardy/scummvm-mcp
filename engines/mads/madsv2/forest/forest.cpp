@@ -30,6 +30,7 @@
 #include "mads/madsv2/core/inter.h"
 #include "mads/madsv2/core/kernel.h"
 #include "mads/madsv2/core/matte.h"
+#include "mads/madsv2/core/mps_archive.h"
 #include "mads/madsv2/core/object.h"
 #include "mads/madsv2/core/pal.h"
 #include "mads/madsv2/core/rail.h"
@@ -63,6 +64,7 @@ ForestEngine::ForestEngine(OSystem *syst, const MADSGameDescription *gameDesc) :
 	g_engine = this;
 	init_extra();
 	init_inventory();
+	init_global();
 }
 
 ForestEngine::~ForestEngine() {
@@ -79,15 +81,29 @@ Common::Error ForestEngine::run() {
 
 	// Set up to read mpslabs installer archive if needed
 	if (_gameDescription->desc.flags & GF_INSTALLER) {
-		Common::Archive *arch = MpsInstaller::open("MPSLABS");
+		MpsArchive *arch = MpsArchive::open();
 		if (arch)
 			SearchMan.add("mpslabs", arch);
 	}
+
+	_midiPlayer.open();
 
 	// Run the game
 	Forest::forest_main();
 
 	return Common::kNoError;
+}
+
+void ForestEngine::syncSoundSettings() {
+	Engine::syncSoundSettings();
+
+	_midiPlayer.syncSoundSettings();
+}
+
+void ForestEngine::pauseEngineIntern(bool pause) {
+	Engine::pauseEngineIntern(pause);
+
+	_midiPlayer.pause(pause);
 }
 
 void ForestEngine::global_init_code() {
@@ -99,7 +115,7 @@ void ForestEngine::global_init_code() {
 	flags[34] = flags[35] = flags[36] = 4;
 
 	global[g009] = -1;
-	global[player_score] = -1;
+	global[play_background_sounds] = -1;
 	global[g022] = 0;
 
 	// Randomly select the destinations for the passageways in the underground quick transport area
@@ -123,7 +139,7 @@ void ForestEngine::global_init_code() {
 	global[g017] = -1;
 	global[intro] = 0;
 	global[outro] = 0;
-	global[g066] = 0;
+	global[phineas_status] = 0;
 	global[walker_converse_now] = 0;
 
 	player.facing = FACING_NORTH;
@@ -179,6 +195,10 @@ void ForestEngine::global_room_init() {
 void ForestEngine::global_sound_driver() {
 	Common::strcpy_s(kernel.sound_driver, "/");
 	env_catint(kernel.sound_driver, new_section, 1);
+}
+
+void ForestEngine::global_game_main_loop() {
+	Forest::global_game_main_loop();
 }
 
 } // namespace Forest

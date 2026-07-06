@@ -97,9 +97,10 @@ enum {
 };
 
 enum {
-	GF_DESKTOP = 1 << 0,
-	GF_640x480 = 1 << 1,
-	GF_32BPP   = 1 << 2,
+	GF_DESKTOP   = 1 << 0,
+	GF_640x480   = 1 << 1,
+	GF_TRUECOLOR = 1 << 2,
+	GF_GAMMA     = 1 << 3,
 };
 
 struct MovieReference {
@@ -180,6 +181,7 @@ public:
 	Window *getCurrentWindow() const { return _currentWindow; }
 	Window *getOrCreateWindow(Common::String &name);
 	void forgetWindow(Window *window);
+	bool isWindowRegistered(Window *window) const;
 	void setCurrentWindow(Window *window);
 	Window *getCursorWindow() const { return _cursorWindow; }
 	void setCursorWindow(Window *window) { _cursorWindow = window; }

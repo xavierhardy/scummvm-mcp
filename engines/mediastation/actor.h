@@ -48,7 +48,7 @@ enum ActorType {
 	kActorTypeHotspot = 0x000b, // HSP
 	kActorTypeSprite = 0x000e, // SPR
 	kActorTypeLKZazu = 0x000f,
-	kActorTypeLKConstellations = 0x0010,
+	kActorTypeDotGame = 0x0010,
 	kActorTypeDocument = 0x0011,
 	kActorTypeDiskImage = 0x001d,
 	kActorTypeCursor = 0x000c, // CSR
@@ -59,7 +59,6 @@ enum ActorType {
 	kActorTypeText = 0x001a, // TXT
 	kActorTypeFont = 0x001b, // FON
 	kActorTypeCamera = 0x001c, // CAM
-	kActorTypeDiskImageActor = 0x001d,
 	kActorTypeCanvas = 0x001e, // CVS
 	kActorTypeXsnd = 0x001f,
 	kActorTypeXsndMidi = 0x0020,
@@ -145,7 +144,16 @@ enum ActorHeaderSectionType {
 
 	// SPRITE FIELDS.
 	kActorHeaderSpriteClip = 0x03e9,
-	kActorHeaderDefaultSpriteClip = 0x03ea
+	kActorHeaderDefaultSpriteClip = 0x03ea,
+
+	// DOT GAME FIELDS.
+	kActorHeaderDotGameMaxDots = 0x001d,
+	kActorHeaderDotGameHelperSprite1 = 0x0514,
+	kActorHeaderDotGameHelperSprite2 = 0x0515,
+	kActorHeaderDotGameState = 0x0516,
+	kActorHeaderDotGameSpeed = 0x0517,
+	kActorHeaderDotGameLineThickness = 0x0518,
+	kActorHeaderDotGameColor = 0x0519,
 };
 
 enum CylindricalWrapMode : int;
@@ -192,7 +200,7 @@ private:
 
 // For a range of valid argument counts (min to max).
 #define ARGCOUNTRANGE(min, max) \
-	if ((int64)(min) > args.size() || args.size() > (int64)(max)) { \
+	if ((int64)(min) > (int64)args.size() || (int64)args.size() > (int64)(max)) { \
 		warning("%s: Expected %d to %d arguments, got %d", builtInMethodToStr(methodId), (min), (max), args.size()); \
 	}
 
@@ -226,6 +234,11 @@ public:
 	void setId(uint id);
 	void setContextId(uint id) { _contextId = id; }
 	virtual bool isSpatialActor() const { return false; }
+
+	// Helper functions for the debugger.
+	virtual bool isActive() const { return true; }
+	virtual Common::String debugString() const { return "<no additional info>"; }
+	const Common::HashMap<uint, Common::Array<ScriptResponse *> > &scriptResponses() const { return _scriptResponses; }
 
 	const char *debugName() const;
 

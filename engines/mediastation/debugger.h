@@ -19,23 +19,35 @@
  *
  */
 
-#ifndef MADS_CORE_LBM_H
-#define MADS_CORE_LBM_H
+#ifndef MEDIASTATION_DEBUGGER_H
+#define MEDIASTATION_DEBUGGER_H
 
-#include "mads/madsv2/core/general.h"
-#include "mads/madsv2/core/color.h"
+#include "gui/debugger.h"
 
-namespace MADS {
-namespace MADSV2 {
+namespace MediaStation {
 
-void lbm_read_page(const char *filename, byte *image, Palette *pal);
+class MediaStationEngine;
 
-Buffer lbm_read_buffer(const char *filename, Palette *pal, CycleListPtr cycle);
+class Debugger : public GUI::Debugger {
+public:
+	Debugger(MediaStationEngine *vm);
+	~Debugger() override {}
 
-int lbm_read_buffer_main(const char *name, Buffer *target, int reserved_flag,
-	CycleListPtr cycle_list);
+protected:
+	bool Cmd_ListActors(int argc, const char **argv);
+	bool Cmd_PrintActor(int argc, const char **argv);
+	bool Cmd_ListFunctions(int argc, const char **argv);
+	bool Cmd_GetDocumentInfo(int argc, const char **argv);
+	bool Cmd_BranchToScreen(int argc, const char **argv);
+	bool Cmd_DecompileFunction(int argc, const char **argv);
+	bool Cmd_ListVariables(int argc, const char **argv);
 
-} // namespace MADSV2
-} // namespace MADS
+private:
+	MediaStationEngine *_vm;
+
+	void showScreenInfo();
+};
+
+} // End of namespace MediaStation
 
 #endif

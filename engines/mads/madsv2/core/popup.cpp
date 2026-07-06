@@ -187,9 +187,7 @@ void popup_add_icon(SeriesPtr series, int id, int center) {
 	}
 }
 
-
-
-void popup_next_line(void) {
+void popup_next_line() {
 	int y_sum;
 
 	box->text_y++;
@@ -202,19 +200,17 @@ void popup_next_line(void) {
 	}
 
 	box->text_x = 0;
-	// box->dont_add_space = false;
+
 	if (box->text_y >= POPUP_MAX_LINES) {
 		error_report(ERROR_POPUP_TOO_MANY_LINES, ERROR, MODULE_POPUP, box->text_y, POPUP_MAX_LINES);
 	}
 }
 
-
-void popup_set_ask(void) {
+void popup_set_ask() {
 	box->ask_x = box->text_x + 1;
 	box->ask_y = box->text_y;
 	popup_next_line();
 }
-
 
 void popup_add_string(const char *string) {
 	int len, width;
@@ -227,8 +223,6 @@ void popup_add_string(const char *string) {
 
 	Common::strcat_s(box->text[box->text_y], 65536, string);
 }
-
-
 
 void popup_write_string(const char *string) {
 	char wordStr[80];
@@ -319,7 +313,7 @@ void popup_write_string(const char *string) {
 		box->dont_add_space = stop_on_hyphen;
 
 		len = strlen(word2Str);
-		width = font_string_width(box_param.font, word2Str, POPUP_SPACING);	 // - POPUP_SPACING
+		width = font_string_width(box_param.font, word2Str, POPUP_SPACING);
 
 		if (((box->text_x + len) > box->text_width) || ((box->cursor_x + width) > box->text_xs)) {
 			popup_next_line();
@@ -331,8 +325,7 @@ void popup_write_string(const char *string) {
 	}
 }
 
-
-void popup_bar(void) {
+void popup_bar() {
 	if ((box->cursor_x > 0) || (box->text_x > 0)) {
 		popup_next_line();
 	}
@@ -340,21 +333,17 @@ void popup_bar(void) {
 	popup_next_line();
 }
 
-
-void popup_underline(void) {
+void popup_underline() {
 	box->tab[box->text_y] |= POPUP_UNDERLINE;
 }
 
-
-void popup_downpixel(void) {
+void popup_downpixel() {
 	box->tab[box->text_y] |= POPUP_DOWNPIXEL;
 }
-
 
 void popup_tab(int tab_level) {
 	box->tab[box->text_y] |= tab_level;
 }
-
 
 void popup_center_string(const char *string, int underline) {
 	int width;
@@ -377,7 +366,6 @@ void popup_center_string(const char *string, int underline) {
 	popup_next_line();
 }
 
-
 static void pop_draw(int sprite, int x, int y, int depth_code) {
 	matte_map_work_screen();
 
@@ -396,7 +384,6 @@ static void pop_draw(int sprite, int x, int y, int depth_code) {
 			picture_map.pan_offset_y);
 	}
 }
-
 
 int popup_draw(int save_screen, int depth_code) {
 	int error_flag = true;
@@ -763,8 +750,7 @@ done:
 	return error_flag;
 }
 
-
-void popup_destroy(void) {
+void popup_destroy() {
 	int x, y;
 	int xs, ys;
 
@@ -862,7 +848,6 @@ void popup_destroy(void) {
 	box->active = false;
 }
 
-
 int popup_and_wait(int save_screen) {
 	bool error_flag = true;
 	bool waiting;
@@ -903,7 +888,6 @@ done:
 	return error_flag;
 }
 
-
 int popup_and_dont_wait(int save_screen) {
 	int error_flag = true;
 
@@ -921,8 +905,6 @@ int popup_and_dont_wait(int save_screen) {
 done:
 	return error_flag;
 }
-
-
 
 void popup_update_ask(char *string, int maxlen) {
 	int x1, y1, x2, x3, xs, ys, xs2;
@@ -961,7 +943,6 @@ void popup_update_ask(char *string, int maxlen) {
 	video_update(&scr_main, x1, y1 - 3, x1, y1 - 3, xs, ys + 4);
 	mouse_show();
 }
-
 
 int popup_ask_string(char *target, int maxlen, int save_screen) {
 	int error_flag = true;
@@ -1075,8 +1056,6 @@ done:
 	return error_flag;
 }
 
-
-
 int popup_ask_number(long *value, int maxlen, int save_screen) {
 	int error_flag = true;
 	char temp_buf[80];
@@ -1100,8 +1079,6 @@ done:
 	return error_flag;
 }
 
-
-
 int popup_estimate_pieces(int maxlen) {
 	int font_len;
 	int pieces;
@@ -1112,7 +1089,6 @@ int popup_estimate_pieces(int maxlen) {
 	estimate = (pieces - box_param.pieces_per_center) >> 1;
 	return (estimate);
 }
-
 
 int popup_get_string(char *target, const char *top, const char *left, int maxlen) {
 	int result = -1;
@@ -1126,9 +1102,8 @@ int popup_get_string(char *target, const char *top, const char *left, int maxlen
 		result = popup_ask_string(target, maxlen, true);
 	}
 
-	return (result);
+	return result;
 }
-
 
 int popup_get_long(long *value, const char *top, const char *left, int maxlen) {
 	int error_flag = true;
@@ -1145,7 +1120,6 @@ int popup_get_long(long *value, const char *top, const char *left, int maxlen) {
 	return error_flag;
 }
 
-
 int popup_get_number(int16 *value, const char *top, const char *left, int maxlen) {
 	int result;
 	long temp;
@@ -1156,9 +1130,8 @@ int popup_get_number(int16 *value, const char *top, const char *left, int maxlen
 	if (!result) {
 		*value = (int)temp;
 	}
-	return (result);
+	return result;
 }
-
 
 int popup_alert(int width, const char *message_line, ...) {
 	int mykey = -1;
@@ -1187,7 +1160,7 @@ done:
 	return mykey;
 }
 
-int popup_box_load(void) {
+int popup_box_load() {
 	int error_flag = true;
 	int count;
 	int top_base, bottom_base, left_base, right_base;
@@ -1315,7 +1288,6 @@ done:
 	return error_flag;
 }
 
-
 /**
  * Causes the specified popup structure to become active (the active
  * popup structure is considered the target of all popup requests
@@ -1364,7 +1336,6 @@ static void popup_item_init(PopupItem *item) {
 		item->vector[count] = NULL;
 	}
 }
-
 
 Popup *popup_dialog_create(void *memory, long heap_size, int max_items) {
 	int   count;
@@ -1439,11 +1410,10 @@ done:
 	if ((block != NULL) && (result != (Popup *)block)) {
 		mem_free(block);
 	}
-	return (result);
+	return result;
 }
 
-
-Popup *popup_dialog_destroy(void) {
+Popup *popup_dialog_destroy() {
 	popup->status &= ~(POPUP_STATUS_VALID);
 
 	if (popup->status & POPUP_STATUS_DYNAMIC) {
@@ -1452,7 +1422,6 @@ Popup *popup_dialog_destroy(void) {
 
 	return (NULL);
 }
-
 
 static int extract_keystroke(char *string) {
 	int keystroke = 0;
@@ -1467,11 +1436,9 @@ static int extract_keystroke(char *string) {
 	return keystroke;
 }
 
-
 static void *popup_heap(long mem_to_get) {
 	return (heap_get(&popup->heap, mem_to_get));
 }
-
 
 static char *string_to_heap(char *string) {
 	char *mem_we_got;
@@ -1483,7 +1450,6 @@ static char *string_to_heap(char *string) {
 	return (mem_we_got);
 }
 
-
 static void set_prompt(PopupItem *item, const char *string) {
 	char temp_buf[80];
 
@@ -1492,7 +1458,6 @@ static void set_prompt(PopupItem *item, const char *string) {
 	item->keystroke = extract_keystroke(temp_buf);
 	item->prompt = string_to_heap(temp_buf);
 }
-
 
 static PopupItem *item_allocate(int can_be_default) {
 	PopupItem *item;
@@ -1510,15 +1475,12 @@ static PopupItem *item_allocate(int can_be_default) {
 	return (item);
 }
 
-
-
-static PopupList *list_allocate(void) {
+static PopupList *list_allocate() {
 	PopupList *list;
 
 	list = (PopupList *)popup_heap(sizeof(PopupList));
 	return (list);
 }
-
 
 static PopupBuffer *buffer_allocate(int size) {
 	PopupBuffer *buffer;
@@ -1532,12 +1494,9 @@ static PopupBuffer *buffer_allocate(int size) {
 	return (buffer);
 }
 
-
-
 static int popup_font_size(const char *string) {
 	return (font_string_width(box_param.font, string, box_param.font_spacing));
 }
-
 
 static void popup_y_placement(PopupItem *item, int y) {
 	int16 bottom;
@@ -1551,8 +1510,6 @@ static void popup_y_placement(PopupItem *item, int y) {
 		popup->y_position = MAX(popup->y_position, bottom);
 	}
 }
-
-
 
 static void popup_x_width_check(PopupItem *item) {
 	int16 new_width;
@@ -1569,11 +1526,9 @@ static void popup_x_width_check(PopupItem *item) {
 	popup->width = MAX(popup->width, new_width);
 }
 
-
 void popup_width_force(int width) {
 	popup->width = MAX<int16>(popup->width, width);
 }
-
 
 static void popup_coord_adjust(PopupItem *item) {
 	if (item->x & POPUP_CENTER) {
@@ -1596,8 +1551,7 @@ static void popup_coord_adjust(PopupItem *item) {
 	item->font_y = item->y + item->font_y;
 }
 
-
-static int popup_mouse_refresh(void) {
+static int popup_mouse_refresh() {
 	mouse_freeze();
 	mouse_set_work_buffer(scr_main.data, video_x);
 	mouse_set_view_port_loc(0, 0, video_x - 1, video_y - 1);
@@ -1605,14 +1559,12 @@ static int popup_mouse_refresh(void) {
 	return (mouse_refresh_view_port());
 }
 
-
 static void popup_mouse_refresh_2(int refresh) {
 	if (refresh) mouse_refresh_done();
 	mouse_thaw();
 }
 
-
-static void popup_to_screen(void) {
+static void popup_to_screen() {
 	int refresh;
 
 	refresh = popup_mouse_refresh();
@@ -1621,7 +1573,6 @@ static void popup_to_screen(void) {
 		box->xs, box->ys);
 	popup_mouse_refresh_2(refresh);
 }
-
 
 static void popup_item_to_screen(PopupItem *item) {
 	int refresh;
@@ -1633,14 +1584,12 @@ static void popup_item_to_screen(PopupItem *item) {
 	popup_mouse_refresh_2(refresh);
 }
 
-
-static void popup_screen_clear(void) {
+static void popup_screen_clear() {
 	buffer_rect_fill_pattern(scr_main,
 		box->window_x, box->window_y, box->window_xs, box->window_ys,
 		box->window_x, box->window_y, box->window_xs,
 		POPUP_FILL_COLOR, POPUP_FILL_COLOR_2, 0, 0);
 }
-
 
 static void popup_item_clear(PopupItem *item) {
 	if (mouse_y > 150 && item->y > 150) {
@@ -1658,13 +1607,11 @@ static void popup_item_clear(PopupItem *item) {
 
 }
 
-
 static void popup_redraw_item(PopupItem *item) {
 	popup_item_clear(item);
 	popup_exec_function(item, VECTOR_DRAW);
 	popup_item_to_screen(item);
 }
-
 
 static void popup_update_item(PopupItem *item) {
 	if (item) {
@@ -1676,8 +1623,7 @@ static void popup_update_item(PopupItem *item) {
 	}
 }
 
-
-static void popup_full_draw(void) {
+static void popup_full_draw() {
 	int count;
 	int bar_y;
 	int bar_x;
@@ -1707,7 +1653,6 @@ static void popup_full_draw(void) {
 	popup_to_screen();
 }
 
-
 static void popup_activate_item(PopupItem *item) {
 	PopupItem *old_active;
 
@@ -1718,8 +1663,6 @@ static void popup_activate_item(PopupItem *item) {
 	popup_update_item(popup->active_item);
 	popup_update_item(popup->enter_item);
 }
-
-
 
 static PopupItem *popup_next_item(PopupItem *item, int activate, int any_non_button) {
 	int count;
@@ -1761,9 +1704,8 @@ static PopupItem *popup_next_item(PopupItem *item, int activate, int any_non_but
 	}
 
 done:
-	return (result);
+	return result;
 }
-
 
 static PopupItem *popup_last_item(PopupItem *item, int activate, int any_non_button) {
 	int found = -1;
@@ -1804,10 +1746,8 @@ static PopupItem *popup_last_item(PopupItem *item, int activate, int any_non_but
 	}
 
 done:
-	return (result);
+	return result;
 }
-
-
 
 static int popup_in_item(PopupItem *item) {
 	int in_item;
@@ -1825,8 +1765,7 @@ static int popup_in_item(PopupItem *item) {
 	return (in_item);
 }
 
-
-static void popup_find_item(void) {
+static void popup_find_item() {
 	int count;
 
 	popup->mouse_item = NULL;
@@ -1842,9 +1781,7 @@ static void popup_find_item(void) {
 	}
 }
 
-
-static void popup_double_box(int x, int y, int xs, int ys,
-	byte color, byte color2) {
+static void popup_double_box(int x, int y, int xs, int ys, byte color, byte color2) {
 	if (popup->status & POPUP_STATUS_BUTTON) {
 		buffer_rect_fill(scr_main, x, y, xs, 1, color);
 		buffer_rect_fill(scr_main, x, y, 1, ys, color);
@@ -1868,9 +1805,7 @@ static void popup_double_box(int x, int y, int xs, int ys,
 	}
 }
 
-
-static void popup_double_box_2(int x, int y, int xs, int ys,
-	byte color, byte color2) {
+static void popup_double_box_2(int x, int y, int xs, int ys, byte color, byte color2) {
 	int count;
 
 	for (count = 0; count < 2; count++) {
@@ -1886,10 +1821,6 @@ static void popup_double_box_2(int x, int y, int xs, int ys,
 		color = color2;
 	}
 }
-
-
-
-
 
 /*******************************************************/
 /*             Item service routines                   */
@@ -1908,11 +1839,9 @@ static int popup_button_x_size(PopupItem *item) {
 	return (size);
 }
 
-
 static int popup_button_y_size(PopupItem *item) {
 	return (box_param.font->max_y_size + 4 + 2);
 }
-
 
 static int popup_button_draw(PopupItem *item) {
 	byte color;
@@ -1925,7 +1854,7 @@ static int popup_button_draw(PopupItem *item) {
 
 	selected = (popup->active_item == item) && (item->status & ITEM_STATUS_ACTIVE) != 0;
 
-	if (selected /* && (POPUP_DIALOG_BUTTON_COLOR_1 == POPUP_DIALOG_BUTTON_COLOR_2) */) {
+	if (selected) {
 		buffer_rect_fill(scr_main, item->x, item->y, item->xs, 1, POPUP_DIALOG_TEXT_COLOR);
 		buffer_rect_fill(scr_main, item->x, item->y, 1, item->ys, POPUP_DIALOG_TEXT_COLOR);
 		buffer_rect_fill(scr_main, item->x, item->y + item->ys, item->xs + 1, 1, POPUP_DIALOG_TEXT_COLOR);
@@ -1938,7 +1867,6 @@ static int popup_button_draw(PopupItem *item) {
 		popup_mouse_refresh_2(refresh);
 	}
 
-	// color = selected ? POPUP_ASK_COLOR : POPUP_TEXT_COLOR;
 	if (popup->active_item->type == ITEM_BUTTON) {
 		big_button = (item == popup->active_item);
 	} else {
@@ -1984,10 +1912,6 @@ static int popup_button_draw(PopupItem *item) {
 
 	return 0;
 }
-
-
-
-
 
 static int popup_button_mouse(PopupItem *item) {
 	int in_item;
@@ -2051,7 +1975,6 @@ done:
 	return 0;
 }
 
-
 static int popup_button_key(PopupItem *item) {
 	int count;
 
@@ -2068,7 +1991,6 @@ static int popup_button_key(PopupItem *item) {
 	return 0;
 }
 
-
 static void popup_button_create(PopupItem *item) {
 	item->vector[VECTOR_X_SIZE] = popup_button_x_size;
 	item->vector[VECTOR_Y_SIZE] = popup_button_y_size;
@@ -2076,10 +1998,6 @@ static void popup_button_create(PopupItem *item) {
 	item->vector[VECTOR_MOUSE] = popup_button_mouse;
 	item->vector[VECTOR_KEY] = popup_button_key;
 }
-
-
-
-
 
 /****************/
 /* Menu Buttons */
@@ -2106,11 +2024,9 @@ static int popup_menu_x_size(PopupItem *item) {
 	return (size);
 }
 
-
 static int popup_menu_y_size(PopupItem *item) {
 	return(box_param.menu->index[0].ys);
 }
-
 
 static int popup_menu_draw(PopupItem *item) {
 	int count;
@@ -2187,10 +2103,6 @@ static int popup_menu_draw(PopupItem *item) {
 	return 0;
 }
 
-
-
-
-
 static int popup_menu_mouse(PopupItem *item) {
 	int force_redraw = false;
 	int in_item;
@@ -2239,11 +2151,9 @@ done:
 	return 0;
 }
 
-
 static int popup_menu_key(PopupItem *item) {
 	return 0;
 }
-
 
 static void popup_menu_create(PopupItem *item) {
 	item->vector[VECTOR_X_SIZE] = popup_menu_x_size;
@@ -2253,22 +2163,17 @@ static void popup_menu_create(PopupItem *item) {
 	item->vector[VECTOR_KEY] = popup_menu_key;
 }
 
-
-
 /*****************/
 /* Text Messages */
 /*****************/
-
 
 static int popup_message_x_size(PopupItem *item) {
 	return popup_font_size(item->prompt);
 }
 
-
 static int popup_message_y_size(PopupItem *) {
 	return box_param.font->max_y_size;
 }
-
 
 static int popup_message_draw(PopupItem *item) {
 	font_set_colors(-1, POPUP_DIALOG_TEXT_COLOR,
@@ -2279,13 +2184,11 @@ static int popup_message_draw(PopupItem *item) {
 	return 0;
 }
 
-
 static void popup_message_create(PopupItem *item) {
 	item->vector[VECTOR_X_SIZE] = popup_message_x_size;
 	item->vector[VECTOR_Y_SIZE] = popup_message_y_size;
 	item->vector[VECTOR_DRAW] = popup_message_draw;
 }
-
 
 /******************/
 /* static Sprites */
@@ -2295,11 +2198,9 @@ static int popup_sprite_x_size(PopupItem *item) {
 	return (item->series->index[item->sprite - 1].xs);
 }
 
-
 static int popup_sprite_y_size(PopupItem *item) {
 	return (item->series->index[item->sprite - 1].ys);
 }
-
 
 static int popup_sprite_draw(PopupItem *item) {
 	sprite_draw(item->series, item->sprite, &scr_main,
@@ -2312,7 +2213,6 @@ static void popup_sprite_create(PopupItem *item) {
 	item->vector[VECTOR_Y_SIZE] = popup_sprite_y_size;
 	item->vector[VECTOR_DRAW] = popup_sprite_draw;
 }
-
 
 /**********************/
 /* Complex Save Lists */
@@ -2345,7 +2245,6 @@ static int popup_savelist_x_size(PopupItem *item) {
 	return (size);
 }
 
-
 static int popup_savelist_y_size(PopupItem *item) {
 	int size;
 	int row_size;
@@ -2365,7 +2264,6 @@ static int popup_savelist_y_size(PopupItem *item) {
 
 	return (size);
 }
-
 
 static int popup_savelist_adjust(PopupItem *item) {
 	PopupList *list;
@@ -2390,7 +2288,6 @@ static int popup_savelist_adjust(PopupItem *item) {
 	return 0;
 }
 
-
 static char *popup_savelist_string(PopupItem *item, int element) {
 	char *text_locator;
 	PopupList *list;
@@ -2402,8 +2299,6 @@ static char *popup_savelist_string(PopupItem *item, int element) {
 	return (text_locator);
 }
 
-
-
 static int popup_savelist_vertical(PopupItem *item, int relative) {
 	int y;
 	PopupList *list;
@@ -2414,7 +2309,6 @@ static int popup_savelist_vertical(PopupItem *item, int relative) {
 
 	return (y);
 }
-
 
 static void popup_savelist_number_draw(PopupItem *item, int relative, int number) {
 	char temp_buf[10];
@@ -2434,7 +2328,6 @@ static void popup_savelist_number_draw(PopupItem *item, int relative, int number
 	font_write(box_param.font, &scr_main,
 		temp_buf, x, y, box_param.font_spacing);
 }
-
 
 static void popup_savelist_element_draw(PopupItem *item, int element) {
 	int relative;
@@ -2489,7 +2382,6 @@ done:
 	;
 }
 
-
 static void popup_savelist_full_draw(PopupItem *item) {
 	int count;
 	int element;
@@ -2501,7 +2393,6 @@ static void popup_savelist_full_draw(PopupItem *item) {
 		}
 	}
 }
-
 
 static void popup_savelist_scroll_draw(PopupItem *item) {
 	int count;
@@ -2568,7 +2459,6 @@ static void popup_savelist_scroll_draw(PopupItem *item) {
 	}
 }
 
-
 static void popup_savelist_scroll_clear(PopupItem *item) {
 	PopupList *list;
 
@@ -2580,7 +2470,6 @@ static void popup_savelist_scroll_clear(PopupItem *item) {
 		box->window_x, box->window_y, box->window_xs,
 		POPUP_FILL_COLOR, POPUP_FILL_COLOR_2, 0, 0);
 }
-
 
 static void popup_savelist_item_clear(PopupItem *item, int relative) {
 	int x, y;
@@ -2605,9 +2494,6 @@ static void popup_savelist_item_clear(PopupItem *item, int relative) {
 
 }
 
-
-
-
 static void popup_savelist_scroll_to_screen(PopupItem *item) {
 	int refresh;
 	PopupList *list;
@@ -2620,8 +2506,6 @@ static void popup_savelist_scroll_to_screen(PopupItem *item) {
 		list->scroll.xs, list->scroll.ys);
 	popup_mouse_refresh_2(refresh);
 }
-
-
 
 static void popup_savelist_item_to_screen(PopupItem *item, int relative) {
 	int x, y;
@@ -2638,13 +2522,11 @@ static void popup_savelist_item_to_screen(PopupItem *item, int relative) {
 	popup_mouse_refresh_2(refresh);
 }
 
-
 static void popup_savelist_scroll_refresh(PopupItem *item) {
 	popup_savelist_scroll_clear(item);
 	popup_savelist_scroll_draw(item);
 	popup_savelist_scroll_to_screen(item);
 }
-
 
 static void popup_savelist_item_refresh(PopupItem *item, int element) {
 	int relative;
@@ -2658,7 +2540,6 @@ static void popup_savelist_item_refresh(PopupItem *item, int element) {
 	popup_savelist_item_to_screen(item, relative);
 }
 
-
 static int popup_savelist_draw(PopupItem *item) {
 	byte color;
 	byte color2;
@@ -2671,18 +2552,7 @@ static int popup_savelist_draw(PopupItem *item) {
 
 	// Basic box
 	popup_double_box_2(item->x, item->y, item->xs, item->ys, color, color2);
-	// buffer_rect_fill (scr_main, item->x, item->y,
-	// item->xs, 1,
-	// color);
-	// buffer_rect_fill (scr_main, item->x, item->y,
-	// 1, item->ys,
-	// color);
-	// buffer_rect_fill (scr_main, item->x + item->xs - 1, item->y,
-	// 1, item->ys,
-	// color);
-	// buffer_rect_fill (scr_main, item->x, item->y + item->ys - 1,
-	// item->xs, 1,
-	// color);
+
 	// Number list
 	buffer_rect_fill(scr_main, list->extra_x + list->extra_xs - 2, list->extra_y,
 		1, list->extra_ys, color);
@@ -2696,7 +2566,6 @@ static int popup_savelist_draw(PopupItem *item) {
 	return 0;
 }
 
-
 static void popup_adjust_elements(PopupList *list) {
 	list->base_element = MAX(0, list->base_element);
 	list->base_element = MIN(list->base_element, list->elements - 1);
@@ -2704,9 +2573,6 @@ static void popup_adjust_elements(PopupList *list) {
 	list->picked_element = MIN(list->picked_element, list->base_element + list->rows - 1);
 	list->picked_element = MIN(list->picked_element, list->elements - 1);
 }
-
-
-
 
 static int popup_savelist_mouse(PopupItem *item) {
 	bool in_scroll_bar;
@@ -2857,7 +2723,6 @@ static int popup_savelist_mouse(PopupItem *item) {
 	return 0;
 }
 
-
 static void popup_savelist_select(PopupItem *item, int element) {
 	PopupList *list;
 
@@ -2871,8 +2736,6 @@ static void popup_savelist_select(PopupItem *item, int element) {
 
 	popup_adjust_elements(list);
 }
-
-
 
 static void popup_savelist_select_free(PopupItem *item) {
 	int count;
@@ -2891,8 +2754,6 @@ static void popup_savelist_select_free(PopupItem *item) {
 		popup_savelist_select(item, found);
 	}
 }
-
-
 
 static int popup_savelist_key(PopupItem *item) {
 	int base_element;
@@ -3002,13 +2863,9 @@ done:
 	return 0;
 }
 
-
 static int popup_savelist_update(PopupItem *item) {
 	return 0;
 }
-
-
-
 
 static void popup_savelist_create(PopupItem *item) {
 	item->vector[VECTOR_X_SIZE] = popup_savelist_x_size;
@@ -3019,9 +2876,6 @@ static void popup_savelist_create(PopupItem *item) {
 	item->vector[VECTOR_ADJUST] = popup_savelist_adjust;
 	item->vector[VECTOR_UPDATE] = popup_savelist_update;
 }
-
-
-
 
 static void item_constructor(PopupItem *item, int type) {
 	item->type = (byte)type;
@@ -3044,8 +2898,6 @@ static void item_constructor(PopupItem *item, int type) {
 		break;
 	}
 }
-
-
 
 PopupItem *popup_button(const char *prompt, int x) {
 	int first_button;
@@ -3087,7 +2939,6 @@ PopupItem *popup_button(const char *prompt, int x) {
 	return (item);
 }
 
-
 PopupItem *popup_cancel_button(const char *prompt) {
 	PopupItem *item;
 
@@ -3102,7 +2953,6 @@ PopupItem *popup_cancel_button(const char *prompt) {
 	return item;
 }
 
-
 void popup_menu_option(PopupItem *item, char *option) {
 	PopupList *list;
 	char *text_locator;
@@ -3115,7 +2965,6 @@ void popup_menu_option(PopupItem *item, char *option) {
 		list->base_element++;
 	}
 }
-
 
 PopupItem *popup_menu(const char *prompt,
 	int x, int y, int pixel_width,
@@ -3169,8 +3018,6 @@ PopupItem *popup_menu(const char *prompt,
 	return (item);
 }
 
-
-
 PopupItem *popup_message(const char *prompt, int x, int y) {
 	PopupItem *item;
 
@@ -3193,18 +3040,13 @@ PopupItem *popup_message(const char *prompt, int x, int y) {
 	return item;
 }
 
-
-
 void popup_blank(int num_lines) {
 	popup->y_position += num_lines;
 }
 
-
-void popup_blank_line(void) {
+void popup_blank_line() {
 	popup_blank(box_param.font->max_y_size + popup->y_spacing);
 }
-
-
 
 PopupItem *popup_sprite(SeriesPtr series, int sprite, int x, int y) {
 	PopupItem *item;
@@ -3228,10 +3070,6 @@ PopupItem *popup_sprite(SeriesPtr series, int sprite, int x, int y) {
 
 	return (item);
 }
-
-
-
-
 
 PopupItem *popup_savelist(char *data, char *empty_string,
 		int elements, int element_offset, int element_max_length,
@@ -3307,11 +3145,7 @@ PopupItem *popup_savelist(char *data, char *empty_string,
 	return (item);
 }
 
-
-
-
-
-PopupItem *popup_execute(void) {
+PopupItem *popup_execute() {
 	int base_x_size;
 	int horiz_pieces;
 	int request_pieces;

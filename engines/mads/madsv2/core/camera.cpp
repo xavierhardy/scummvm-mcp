@@ -38,7 +38,7 @@ int camera_old_x_target = 0;/* For saving/restoring game */
 int camera_old_y_target = 0;
 
 
-void camera_init_default(void) {
+void camera_init_default() {
 	camera_x.panning = false;
 	camera_y.panning = false;
 
@@ -122,6 +122,7 @@ static int camera_pan(Camera *camera, int *picture_view, int *player_loc,
 				}
 			}
 		} else {
+			assert(player_loc);
 
 			if (!camera->panning) {
 				low_edge = *picture_view + camera->pan_on_tolerance;

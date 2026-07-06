@@ -28,7 +28,6 @@
 #include "mads/madsv2/core/room.h"
 #include "mads/madsv2/core/color.h"
 #include "mads/madsv2/core/fileio.h"
-#include "mads/madsv2/core/lbm.h"
 #include "mads/madsv2/core/buffer.h"
 #include "mads/madsv2/core/matte.h"
 #include "mads/madsv2/core/inter.h"
@@ -433,7 +432,6 @@ AnimPtr anim_load(const char *file_name, Buffer *orig, Buffer *depth,
 			// we'll get back a pointer to the actual sprite series for      
 			// each id number
 
-			// printf("temp_buf=%s",temp_buf); keys_get();
 			anim->series_id[count] = matte_load_series(temp_buf, load_flags, 0);
 			if (anim->series_id[count] < 0) {
 				anim_error = 9;

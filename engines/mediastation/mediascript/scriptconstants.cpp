@@ -163,37 +163,37 @@ const char *builtInFunctionToStr(uint function) {
 	case kDrawingFunction:
 		return "Drawing";
 	case kLegacy_RandomFunction:
-		return "Legacy Random";
+		return "Random_Legacy";
 	case kLegacy_TimeOfDayFunction:
-		return "Legacy TimeOfDay";
+		return "TimeOfDay_Legacy";
 	case kLegacy_EffectTransitionFunction:
-		return "Legacy EffectTransition";
+		return "EffectTransition_Legacy";
 	case kLegacy_EffectTransitionOnSyncFunction:
-		return "Legacy EffectTransitionOnSync";
+		return "EffectTransitionOnSync_Legacy";
 	case kLegacy_PlatformFunction:
-		return "Legacy Platform";
+		return "Platform_Legacy";
 	case kLegacy_SquareRootFunction:
-		return "Legacy SquareRoot";
+		return "SquareRoot_Legacy";
 	case kLegacy_GetUniqueRandomFunction:
-		return "Legacy GetUniqueRandom";
+		return "GetUniqueRandom_Legacy";
 	case kLegacy_GetCurrentRunTimeFunction:
-		return "Legacy GetCurrentRunTime";
+		return "GetCurrentRunTime_Legacy";
 	case kLegacy_SetGammaCorrectionFunction:
-		return "Legacy SetGammaCorrection";
+		return "SetGammaCorrection_Legacy";
 	case kLegacy_GetDefaultGammaCorrectionFunction:
-		return "Legacy GetDefaultGammaCorrection";
+		return "GetDefaultGammaCorrection_Legacy";
 	case kLegacy_GetCurrentGammaCorrectionFunction:
-		return "Legacy GetCurrentGammaCorrection";
+		return "GetCurrentGammaCorrection_Legacy";
 	case kLegacy_DebugPrintFunction:
-		return "DebugPrint";
+		return "DebugPrint_Legacy";
 	case kLegacy_SetAudioVolumeFunction:
-		return "Legacy SetAudioVolume";
+		return "SetAudioVolume_Legacy";
 	case kLegacy_GetAudioVolumeFunction:
-		return "Legacy GetAudioVolume";
+		return "GetAudioVolume_Legacy";
 	case kLegacy_SystemLanguagePreferenceFunction:
-		return "Legacy SystemLanguagePreference";
+		return "SystemLanguagePreference_Legacy";
 	default:
-		return "UNKNOWN";
+		return "func";
 	}
 }
 
@@ -450,6 +450,14 @@ const char *builtInMethodToStr(BuiltInMethod method) {
 		return "StopLoad";
 	case kIsRectInMemoryMethod:
 		return "IsRectInMemory";
+	case kDotGameResetMethod:
+		return "DotGameReset";
+	case kDotGameShowMethod:
+		return "DotGameShow";
+	case kDotGameHideMethod:
+		return "DotGameHide";
+	case kDotGameHitMethod:
+		return "DotGameHit";
 	default:
 		return "UNKNOWN";
 	}
@@ -466,7 +474,7 @@ const char *eventTypeToStr(EventType type) {
 	case kTimerServiceAlarmEvent:
 		return "TimerServiceAlarm";
 	case kTimerScriptEvent:
-		return "ScriptTimer";
+		return "ScriptTime";
 	case kMouseDownEvent:
 		return "MouseDown";
 	case kMouseUpEvent:
@@ -503,6 +511,8 @@ const char *eventTypeToStr(EventType type) {
 		return "MovieFailure";
 	case kSpriteMovieEndEvent:
 		return "SpriteMovieEnd";
+	case kDotGameCompleteEvent:
+		return "DotGameComplete";
 	case kScreenExitEvent:
 		return "ScreenExit";
 	case kPathStepEvent:

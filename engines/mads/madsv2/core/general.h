@@ -43,7 +43,7 @@ typedef uint16  word;            /* generic 16 bit data */
 struct RGBcolor {
 	byte r, g, b;
 
-	static constexpr int SIZE = 3;
+	static constexpr size_t SIZE = 3;
 	inline void load(Common::SeekableReadStream *src) {
 		r = src->readByte();
 		g = src->readByte();
@@ -55,11 +55,11 @@ typedef byte PaletteMap[256][3];        /* An entire Mcga palette #2 */
 
 #define pal_color(p,i,c)  (*(((byte *)&p[i])+c))
 
-typedef struct {                        /* Video buffer structure         */
+struct Buffer {                        /* Video buffer structure         */
 	int y;                                /* Wrap value for buffer (y size) */
 	int x;                                /* X size of buffer               */
 	byte *data;                       /* Pointer to actual data         */
-} Buffer;
+};
 
 #define far_string(v,s)   char _based(_segname("FARSTRING")) v[] = s;
 

@@ -353,10 +353,6 @@ done:
 	return error_flag;
 }
 
-int room_compile_hotspots(int id, int compression) {
-	error("TODO: room_compile_hotspots");
-}
-
 HotPtr room_load_hotspots(int id, int *num_spots) {
 	HotPtr spots;
 	HotPtr result = NULL;
@@ -502,11 +498,9 @@ void room_himem_preload(int roomNum, int level) {
 	himem_preload_series(kernel_full_name(roomNum, 0, -1, NULL, KERNEL_DAT), level);
 	himem_preload_series(kernel_full_name(roomNum, 0, -1, NULL, KERNEL_HH), level);
 
-	// himem_preload_series (kernel_full_name (room, 0, -1, NULL, KERNEL_TT),  level);
 	himem_preload_series(kernel_full_name(roomNum, 0, -1, NULL, KERNEL_MM), level);
 	himem_preload_series(kernel_full_name(roomNum, 0, -1, NULL, KERNEL_WW), level);
 
-	// himem_preload_series (kernel_full_name (room, 0, 0, NULL, KERNEL_TT),  level);
 	himem_preload_series(kernel_full_name(roomNum, 0, 0, NULL, KERNEL_MM), level);
 	himem_preload_series(kernel_full_name(roomNum, 0, 0, NULL, KERNEL_WW), level);
 }
@@ -544,7 +538,6 @@ int room_picture_load(int roomId, Buffer *picture, int load_flags) {
 		goto done;
 	}
 
-	// memcpy (&room->cycle_list, &art.cycle_list, sizeof(CycleList));
 	if (!(load_flags & ROOM_LOAD_TRANSLATE)) {
 		color_handle = pal_allocate(&art.color_list, NULL, (load_flags & PAL_MAP_MASK));
 		if (color_handle < 0) {
@@ -560,10 +553,6 @@ int room_picture_load(int roomId, Buffer *picture, int load_flags) {
 
 	if (!(load_flags & ROOM_LOAD_TRANSLATE)) {
 		color_buffer_list_to_main(&art.color_list, picture);
-	} else {
-#ifdef sixteen_color
-		color_buffer_list_to_x16(&art.color_list, picture);
-#endif
 	}
 
 	error_flag = false;
@@ -647,7 +636,7 @@ static void room_buffer_invert(Buffer *buffer, byte *work, int granularity) {
 	}
 }
 
-int room_invert(void) {
+int room_invert() {
 	int error_flag = true;
 	int count;
 	int x1, x2;

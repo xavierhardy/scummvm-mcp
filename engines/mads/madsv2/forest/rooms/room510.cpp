@@ -39,17 +39,17 @@ namespace Forest {
 namespace Rooms {
 
 struct Scratch {
-	int16 sprite[10];           /* 0x00 — sprite series handles */
-	int16 sequence[10];         /* 0x14 — sequence handles      */
-	int16 animation[10];        /* 0x28 — animation handles     */
-	AnimationInfo animation_info[10]; /* 0x3C                   */
-	int16 _8c;                  /* 0x8C                         */
-	int16 _8e;                  /* 0x8E — digi-play phase check */
-	int16 _90;                  /* 0x90 — volume/replay flag    */
-	int16 _92;                  /* 0x92 — timing accumulator    */
-	int16 _94;                  /* 0x94 — sequence table index  */
-	int16 _96;                  /* 0x96 — active flag           */
-	int16 _98;                  /* 0x98 — room mode (669/670)   */
+	int16 sprite[10];
+	int16 sequence[10];
+	int16 animation[10];
+	AnimationInfo animation_info[10];
+	int16 _8c;
+	int16 _8e;
+	int16 _90;
+	int16 _92;
+	int16 _94;
+	int16 _96;
+	int16 _98;
 };
 
 static Scratch scratch;
@@ -175,7 +175,7 @@ static void room_510_anim2() {
 			digi_play_build(510, 'e', 1, 1);
 			scratch._8e = 63;
 		} else if (aa_frame == 131) {
-			if (config_file.forest1)
+			if (config_file.misc2)
 				digi_stop(1);
 			scratch._90 = 133;
 			digi_play_build(510, '_', 3, 2);
@@ -238,7 +238,7 @@ static void room_510_anim3() {
 }
 
 static void room_510_init() {
-	global[player_score] = 0;
+	global[play_background_sounds] = 0;
 	global[g009] = 0;
 	scratch._96 = 0;
 	scratch._98 = 670;

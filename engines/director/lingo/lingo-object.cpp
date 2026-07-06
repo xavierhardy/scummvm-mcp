@@ -24,6 +24,7 @@
 #include "graphics/macgui/mactext.h"
 
 #include "director/director.h"
+#include "director/cast.h"
 #include "director/movie.h"
 #include "director/window.h"
 #include "director/lingo/lingo-ast.h"
@@ -164,6 +165,7 @@
 #include "director/lingo/xtras/f/filextra.h"
 #include "director/lingo/xtras/f/filextra4.h"
 #include "director/lingo/xtras/g/getdir.h"
+#include "director/lingo/xtras/g/glu32.h"
 #include "director/lingo/xtras/k/keypoll.h"
 #include "director/lingo/xtras/m/masterapp.h"
 #include "director/lingo/xtras/m/mui.h"
@@ -309,6 +311,7 @@ static const struct XLibProto {
 	XLIBDEF(FlushMouseXFCN,			kXObj,					300),	// D3
 	XLIBDEF(FlushXObj,			kXObj,			300),	// D3
 	XLIBDEF(FPlayXObj,			kXObj,			200),	// D2
+	XLIBDEF(GLU32Xtra,			kXtraObj,					500),	// D5
 	XLIBDEF(GenUtilsXObj,		kXObj,			400),	// D4
 	XLIBDEF(GetDirXtra,			kXtraObj,					500),	// D5
 	XLIBDEF(GetScreenRectsXFCN,	kXObj,			300),	// D3
@@ -586,9 +589,26 @@ ScriptContext::ScriptContext(const ScriptContext &sc) : Object<ScriptContext>(sc
 
 	_id = sc._id;
 	_castLibHint = sc._castLibHint;
+	setCast(sc._cast);
 }
 
 ScriptContext::~ScriptContext() {
+	if (_cast) {
+		_cast->unregisterScriptContext(this);
+	}
+}
+
+void ScriptContext::setCast(Cast *cast) {
+	if (_cast == cast) {
+		return;
+	}
+	if (_cast) {
+		_cast->unregisterScriptContext(this);
+	}
+	_cast = cast;
+	if (_cast) {
+		_cast->registerScriptContext(this);
+	}
 }
 
 Common::String ScriptContext::asString() {
