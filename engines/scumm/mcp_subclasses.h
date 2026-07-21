@@ -123,14 +123,25 @@ public:
 protected:
 	bool isInAtlantisBook() const override;
 	void augmentStateObjects(Common::JSONArray &objects) override;
-	bool interceptGameAct(const Common::JSONObject &args, Common::String &errorOut) override;
+	bool interceptGameAct(const Common::JSONObject &args, Common::String &errorOut,
+	                      bool &handled) override;
 
 private:
 	static const int kAtlantisBookPages = 5;
 	// 1..kAtlantisBookPages for a "page_N" target name, 0 otherwise.
 	static int atlantisBookPageFromName(const Common::String &name);
+	// True for the synthetic name that stands for the open book itself.
+	static bool isAtlantisBookName(const Common::String &name);
+	// The page the book is currently open at (0 if that cannot be determined).
+	int atlantisBookCurrentPage() const;
+	// The enabled tab ("paper clip") object of page N, 0 if none is enabled.
+	int atlantisBookTabObject(int page) const;
+	// Click *obj* the way a player would and stream what the click triggers.
+	bool clickAtlantisBookObject(int obj, Common::String &errorOut);
 	// Turn the open book to page (1..kAtlantisBookPages) and stream its lines.
 	bool turnAtlantisBookPage(int page, Common::String &errorOut);
+	// Shut the book, returning to the room it was opened from.
+	bool closeAtlantisBook(Common::String &errorOut);
 };
 
 class McpBridgeMonkey : public McpBridgeClassic {

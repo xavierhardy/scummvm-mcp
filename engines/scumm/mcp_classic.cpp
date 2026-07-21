@@ -9,6 +9,7 @@
 #include "common/util.h"
 
 #include "scumm/mcp_subclasses.h"
+#include "scumm/object.h"
 #include "scumm/resource.h"
 #include "scumm/scumm.h"
 #include "scumm/verbs.h"
@@ -323,12 +324,24 @@ void McpBridgeClassic::pumpStreamGame() {
 // McpBridgeIndy4 — Fate of Atlantis "Lost Dialogue" book
 // ---------------------------------------------------------------------------
 
+// The "Lost Dialogue" close-up (room 83) is driven entirely by clicks: its entry
+// script points VAR_VERB_SCRIPT at local script 200, which looks up whatever
+// object sits under the mouse and acts on it. Clicking either page half closes
+// the book; clicking a page's tab (the paper clips down the edge) runs that
+// page's script (200 + page), which redraws the spread and prints its text.
+//
+// Object ids are regular: the page halves are 1103/1104, and page N (1-based)
+// owns three tab objects — 1103 + 2N and 1104 + 2N (its clip drawn on the top
+// edge / on the fore edge) plus 1114 + N (its clip as the page being shown).
+// Exactly one of the three is ever enabled, and 1114 + N is the enabled one
+// precisely when the book stands open at page N.
+static const int kBookPageLeft  = 1103;
+static const int kBookPageRight = 1104;
+
 bool McpBridgeIndy4::isInAtlantisBook() const {
-	// The "Lost Dialogue" close-up is a dedicated full-screen room whose two page
-	// halves are room objects 1103 (left) and 1104 (right). They are only loaded
-	// while the book is open, so their presence pins the close-up without hard-
-	// coding the room id.
-	return vmGetObjectIndex(1103) != -1 && vmGetObjectIndex(1104) != -1;
+	// The page halves are only loaded while the close-up is open, so their
+	// presence pins it without hard-coding the room id.
+	return vmGetObjectIndex(kBookPageLeft) != -1 && vmGetObjectIndex(kBookPageRight) != -1;
 }
 
 int McpBridgeIndy4::atlantisBookPageFromName(const Common::String &name) {
@@ -347,52 +360,117 @@ int McpBridgeIndy4::atlantisBookPageFromName(const Common::String &name) {
 	return (page >= 1 && page <= kAtlantisBookPages) ? page : 0;
 }
 
+bool McpBridgeIndy4::isAtlantisBookName(const Common::String &name) {
+	Common::String n = normalizeActionName(name);
+	return n == "book" || n == "lost_dialogue_of_plato" || n == "lost_dialogue";
+}
+
+int McpBridgeIndy4::atlantisBookCurrentPage() const {
+	for (int p = 1; p <= kAtlantisBookPages; ++p) {
+		if (vmGetObjectIndex(1114 + p) != -1 && vmGetState(1114 + p) != 0)
+			return p;
+	}
+	return 0;
+}
+
+int McpBridgeIndy4::atlantisBookTabObject(int page) const {
+	// Exactly one of a page's three tab objects is enabled at a time; script 200
+	// ignores a click on a disabled one, so pick the live one.
+	const int tabs[3] = { 1103 + 2 * page, 1104 + 2 * page, 1114 + page };
+	for (int i = 0; i < 3; ++i) {
+		if (vmGetObjectIndex(tabs[i]) != -1 && vmGetState(tabs[i]) != 0)
+			return tabs[i];
+	}
+	return 0;
+}
+
 void McpBridgeIndy4::augmentStateObjects(Common::JSONArray &objects) {
 	// Surface each book page as a synthetic "page_N" object so an MCP client can
-	// turn to it with `act look_at page_N`; the page's lines then stream back as
-	// messages. This is how the randomised Thera -> Atlantis heading on page 3 is
-	// read without the mouse/screenshot debug tools.
+	// turn to it with `act look_at page_N`, and the book itself so it can be shut
+	// again with `act close book`. The page's lines stream back as messages, which
+	// is how the randomised Thera -> Atlantis heading on page 3 is read without
+	// the mouse/screenshot debug tools.
 	if (!isInAtlantisBook())
 		return;
+	const int current = atlantisBookCurrentPage();
 	for (int p = 1; p <= kAtlantisBookPages; ++p) {
 		Common::JSONObject page;
 		page.setVal("id",               mcpJsonInt(0));
 		page.setVal("name",             mcpJsonString(Common::String::format("page_%d", p)));
-		page.setVal("state",            mcpJsonInt(0));
+		page.setVal("state",            mcpJsonInt(p == current ? 1 : 0));
 		page.setVal("x",                mcpJsonInt(0));
 		page.setVal("y",                mcpJsonInt(0));
 		page.setVal("pathway",          mcpJsonBool(false));
+		if (current != 0)
+			page.setVal("state_name", mcpJsonString(p == current ? "open" : "not open"));
 		Common::JSONArray pv;
 		pv.push_back(mcpJsonString("look at"));
 		page.setVal("compatible_verbs", new Common::JSONValue(pv));
 		objects.push_back(new Common::JSONValue(page));
 	}
+
+	Common::JSONObject book;
+	book.setVal("id",               mcpJsonInt(0));
+	book.setVal("name",             mcpJsonString("book"));
+	book.setVal("state",            mcpJsonInt(1));
+	book.setVal("x",                mcpJsonInt(0));
+	book.setVal("y",                mcpJsonInt(0));
+	book.setVal("pathway",          mcpJsonBool(false));
+	book.setVal("state_name",       mcpJsonString("open"));
+	Common::JSONArray bv;
+	bv.push_back(mcpJsonString("close"));
+	book.setVal("compatible_verbs", new Common::JSONValue(bv));
+	objects.push_back(new Common::JSONValue(book));
 }
 
-bool McpBridgeIndy4::interceptGameAct(const Common::JSONObject &args, Common::String &errorOut) {
-	// While the book close-up is open, a "page_N" target turns to that page. This
-	// is a synthetic target rather than a real verb script, so handle it up front,
-	// before verb/target resolution. Any verb is accepted (the page just opens).
+bool McpBridgeIndy4::interceptGameAct(const Common::JSONObject &args, Common::String &errorOut,
+                                      bool &handled) {
+	// While the book close-up is open, "page_N" turns to that page and the book
+	// itself closes. Both are synthetic targets rather than real verb scripts, so
+	// handle them up front, before verb/target resolution (the close-up has no
+	// verb bar at all, so nothing would resolve).
+	handled = false;
 	if (!isInAtlantisBook())
 		return false;
 	if (!args.contains("target1") || !args["target1"]->isString())
 		return false;
-	int page = atlantisBookPageFromName(args["target1"]->asString());
-	if (page <= 0)
-		return false;
-	turnAtlantisBookPage(page, errorOut);
-	return true;
+	Common::String target = args["target1"]->asString();
+
+	int page = atlantisBookPageFromName(target);
+	if (page > 0) {
+		// Any verb turns the page: in the close-up a click carries no verb.
+		handled = true;
+		return turnAtlantisBookPage(page, errorOut);
+	}
+	if (isAtlantisBookName(target)) {
+		// Only "close" shuts the book; other verbs on it fall through so they
+		// still report an unknown verb rather than silently leaving the close-up.
+		Common::String verb;
+		if (args.contains("verb") && args["verb"]->isString())
+			verb = normalizeActionName(args["verb"]->asString());
+		if (verb == "close" || verb == "put_away" || verb == "exit") {
+			handled = true;
+			return closeAtlantisBook(errorOut);
+		}
+	}
+	return false;
 }
 
-bool McpBridgeIndy4::turnAtlantisBookPage(int page, Common::String &errorOut) {
-	if (page < 1 || page > kAtlantisBookPages) {
-		errorOut = "act: invalid book page";
+bool McpBridgeIndy4::clickAtlantisBookObject(int obj, Common::String &errorOut) {
+	int idx = vmGetObjectIndex(obj);
+	if (idx == -1) {
+		errorOut = "act: the book is not open";
 		return false;
 	}
-	// Each page is rendered by local script (200 + page) — the very script the
-	// in-game page tab starts. Running it redraws the page and prints its lines,
-	// which the bridge captures as messages. Stream like any other action so the
-	// printed text settles before the result is returned.
+	// Click the middle of the object exactly as a player would. Driving the page
+	// scripts through the engine's own input path (rather than running them
+	// directly) is what keeps the close-up rendering right: the click is picked up
+	// by local script 200, the room's verb script, which redraws the spread before
+	// its text is printed.
+	const ObjectData &od = _vm->_objs[idx];
+	int x = od.x_pos + od.width / 2;
+	int y = od.y_pos + od.height / 2;
+
 	snapshotPreAction();
 	_streaming = true;
 	_sseAnswerStream = false;
@@ -409,9 +487,46 @@ bool McpBridgeIndy4::turnAtlantisBookPage(int page, Common::String &errorOut) {
 	_sseVerbScript = (_vm->VAR_VERB_SCRIPT != 0xFF) ? (int)_vm->VAR(_vm->VAR_VERB_SCRIPT) : 0;
 	_sseInitialVerbScript = _sseVerbScript;
 	_sseVerbScriptChanged = false;
-	_vm->runScript(200 + page, false, false, nullptr);
+
+	vmMouse().x        = x;
+	vmMouse().y        = y;
+	vmVirtualMouse().x = x;
+	vmVirtualMouse().y = y;
+	if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = x;
+	if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = y;
+	if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = x;
+	if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = y;
+	vmLeftBtnPressed() |= 0x03;         // msClicked | msDown
+	_debugButtonReleaseFrame = _frameCounter + 2;
+
 	_server->startStreaming();
 	return true;
+}
+
+bool McpBridgeIndy4::turnAtlantisBookPage(int page, Common::String &errorOut) {
+	if (page < 1 || page > kAtlantisBookPages) {
+		errorOut = "act: invalid book page";
+		return false;
+	}
+	if (page == atlantisBookCurrentPage()) {
+		// The tab of the page on show sits under its own disabled variants, so the
+		// game ignores a click on it — the book never re-prints the open page.
+		errorOut = Common::String::format(
+		    "act: page_%d is already open (turn to another page and back to re-read it)", page);
+		return false;
+	}
+	int tab = atlantisBookTabObject(page);
+	if (tab == 0) {
+		errorOut = "act: that page cannot be reached";
+		return false;
+	}
+	return clickAtlantisBookObject(tab, errorOut);
+}
+
+bool McpBridgeIndy4::closeAtlantisBook(Common::String &errorOut) {
+	// Clicking either page half shuts the book and returns to the room it was
+	// opened from.
+	return clickAtlantisBookObject(kBookPageLeft, errorOut);
 }
 
 // ---------------------------------------------------------------------------

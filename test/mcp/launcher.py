@@ -125,7 +125,10 @@ def launch_scummvm(
     # ran from here. (Tests may now be driven from the consolidated project in
     # ../scummvm_bench, so don't inherit that CWD.)
     proc = subprocess.Popen(
-        args, env=env, stdout=stdout_file, stderr=stderr_fh,
+        args,
+        env=env,
+        stdout=stdout_file,
+        stderr=stderr_fh,
         cwd=os.path.dirname(__file__),
     )
 
@@ -147,7 +150,10 @@ GAME_PATHS = {
         "/Users/xhardy/Personal/llm/scummvm/games/monkey1-dos-ega-demo-de",
     ),
     "maniac-c64": os.environ.get("MANIAC_C64_PATH", "/home/pi/games/ManiacC64"),
-    "atlantis": os.environ.get("ATLANTIS_DEMO_PATH", "/home/pi/games/Indy4Demo"),
+    "atlantis": os.environ.get(
+        "ATLANTIS_DEMO_PATH",
+        "/Users/xhardy/Personal/llm/scummvm/games/atlantis-dos-demo1-en",
+    ),
     "samnmax": os.environ.get(
         "SAMNMAX_DEMO_PATH",
         "/Users/xhardy/Personal/llm/scummvm/games/samnmax-dos-demo-en",

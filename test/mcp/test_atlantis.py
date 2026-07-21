@@ -8,7 +8,8 @@ interleave with itself.
 
 Walkthrough: skip intro -> answer opening dialog -> walk to the canyon (room 63)
 -> find the jeep behind the mountain and take the tire repair kit -> read Plato's
-Lost Dialogue (turn to the page giving Thera's bearing relative to Atlantis) ->
+Lost Dialogue page by page (including the one giving Thera's bearing relative to
+Atlantis) and close it again ->
 work out the course (distance / ten, reversed direction) -> tell the captain, who
 ferries you to the dive site -> patch the punctured diving suit with the tire kit,
 attach the air hose and put it on -> as Sophia, run the compressor and hoist Indy
@@ -36,11 +37,13 @@ import pytest
 from assertions import assert_text_contains
 from atlantis_helpers import (
     BEAD,
+    BOOK_PAGES,
     DIR_FROM_CITY,
     LADDER,
     ROD,
     ROOM_ATLANTIS,
     ROOM_BOAT,
+    ROOM_BOOK,
     ROOM_CANYON,
     ROOM_GATEWAY,
     RUBBLE,
@@ -48,19 +51,21 @@ from atlantis_helpers import (
     STONE_BOX,
     _act,
     _added,
+    _close_book,
     _debug,
     _find_jeep_behind_mountain,
     _in_inventory,
     _objects,
+    _open_page,
     _open_storage_locker,
     _pick,
     _read_heading_page,
+    _read_page,
     _removed,
     _room,
     _says,
     _search_caves_for_atlantis,
     _set_talk_speed,
-    _skip,
     _skip_intro,
     _step_through_bronze_door,
     _wait_object,
@@ -145,11 +150,32 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     assert _wait_room(client, 49), "[dock] expected to return to the dock (room 49)"
 
     # --- Read the Lost Dialogue's heading (goal: read_dialogue) -------------
+    # The whole book is readable over MCP: opening it puts the close-up's five
+    # pages in state as page_1..page_5, each turned to with `act look_at`, and
+    # `act close book` shuts it again.
     _act(client, "look_at", "lost_dialogue_of_plato")
     sleep(1.5)
+    assert _room(client) == ROOM_BOOK, (
+        "[book] look at the book should open the close-up"
+    )
+    # The book opens on page 1, whose own tab the game ignores (it sits under its
+    # disabled variants), so turning to it is rejected while it is on show.
+    assert _open_page(client) == 1, "[book] the book should open on page 1"
+    with pytest.raises(RuntimeError, match="already open"):
+        _act(client, "look_at", "page_1")
+
+    # Page 2 onwards, then back round to page 1: the whole dialogue, page by page.
+    for page, needle in BOOK_PAGES[1:] + BOOK_PAGES[:1]:
+        text = _read_page(client, page, needle)
+        assert needle.lower() in text.lower(), (
+            f"[book] page {page} should read {needle!r}, got {text!r}"
+        )
+        assert _open_page(client) == page, f"[book] state should show page {page} open"
+
     page_text = _read_heading_page(client)
-    _skip(client)
+    _close_book(client)
     sleep(2.0)
+    assert _wait_room(client, 49), "[book] closing the book should return to the dock"
     assert "of the City" in page_text, f"[book] no bearing on page 3: {page_text!r}"
     miles = re.search(r"Lesser\s+(\d+)\s+miles", page_text)
     direction = re.search(r"(northeast|northwest|north)\s+of the City", page_text)

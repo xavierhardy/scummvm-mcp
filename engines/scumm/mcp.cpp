@@ -1603,8 +1603,10 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 
 	// Game-specific whole-act interception before verb/target resolution (e.g.
 	// Fate of Atlantis turning a "page_N" of the Lost Dialogue book).
-	if (interceptGameAct(a, errorOut))
-		return true;
+	bool interceptHandled = false;
+	bool interceptOk = interceptGameAct(a, errorOut, interceptHandled);
+	if (interceptHandled)
+		return interceptOk;
 
 	int verbId = -1;
 	if (!resolveVerb(verbStr, verbId)) {

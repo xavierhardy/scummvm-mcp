@@ -14,6 +14,7 @@ from utils import McpClient
 
 INTRO_POLL_SECS = 0.5
 ROOM_CANYON = 63
+ROOM_BOOK = 83  # the Lost Dialogue close-up
 ROOM_BOAT = 42
 ROOM_GATEWAY = 82
 ROOM_ATLANTIS = 48
@@ -32,12 +33,24 @@ DIR_FROM_CITY = {
     "north": "South of Thera.",
 }
 
+# The five pages of the Lost Dialogue and a phrase unique to each. Page 3 is the
+# one that matters (it carries the randomised bearing); the others prove the
+# whole book can be paged through.
+BOOK_PAGES = (
+    (1, "Plato's Lost Dialogue"),
+    (2, "tenfold error"),
+    (3, "of the City"),
+    (4, "Orichalcum"),
+    (5, "colossus"),
+)
+
 PERMANENT = (
     "unknown verb",
     "unknown target",
     "must be",
     "out of bounds",
     "is negative",
+    "already open",  # the book page on show; retrying cannot change it
 )
 
 
@@ -267,16 +280,35 @@ def _find_jeep_behind_mountain(client: McpClient) -> None:
         sleep(1.5)
 
 
-def _read_heading_page(client: McpClient) -> str:
-    """Turn to the Lost Dialogue's heading page (page_3) and return its text."""
+def _read_page(client: McpClient, page: int, needle: str = "") -> str:
+    """Turn the open Lost Dialogue to *page* and return the text it prints."""
     page_text = ""
     for _ in range(8):
-        result = _act(client, "look_at", "page_3")
+        result = _act(client, "look_at", f"page_{page}")
         page_text = _msgs(result)
-        if "Lesser" in page_text and "of the City" in page_text:
+        if needle.lower() in page_text.lower() and page_text:
             break
         sleep(2.0)
     return page_text
+
+
+def _read_heading_page(client: McpClient) -> str:
+    """Turn to the Lost Dialogue's heading page (page_3) and return its text."""
+    return _read_page(client, 3, "of the City")
+
+
+def _open_page(client: McpClient) -> int:
+    """The page number the book currently shows (0 if the book is not open)."""
+    for obj in _state(client).get("objects", []):
+        name = obj.get("name", "")
+        if name.startswith("page_") and obj.get("state_name") == "open":
+            return int(name[len("page_") :])
+    return 0
+
+
+def _close_book(client: McpClient) -> dict:
+    """Shut the Lost Dialogue close-up, returning to the room it was opened in."""
+    return _act(client, "close", "book")
 
 
 def _open_storage_locker(client: McpClient) -> None:

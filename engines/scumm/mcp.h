@@ -412,17 +412,19 @@ protected:
 
 	// Fate of Atlantis "Lost Dialogue" close-up (Indy4): a full-screen, tabbed
 	// reference book. When it is open toolState exposes its pages as synthetic
-	// "page_N" objects and toolAct turns to a page (running its page script) so
-	// an MCP client can read every page — including the randomised Thera ->
-	// Atlantis heading — using only the standard tools (no mouse/screenshot).
-	// Overridden by the Indy4 leaf.
+	// "page_N" objects plus the "book" itself, and toolAct turns to a page or
+	// closes the book, so an MCP client can read the whole dialogue — including
+	// the randomised Thera -> Atlantis heading — and leave the close-up again
+	// using only the standard tools (no mouse/screenshot). Indy4 leaf.
 	virtual bool isInAtlantisBook() const { return false; }
 
 	// Intercept a whole act() call before verb resolution (e.g. Fate of Atlantis
-	// turning a book page). Return true if the call was fully handled (streaming
-	// started). Default does nothing.
-	virtual bool interceptGameAct(const Common::JSONObject &args, Common::String &errorOut) {
-		(void)args; (void)errorOut; return false;
+	// turning a book page). Set 'handled' when the call belongs to the game hook,
+	// and return whether it succeeded (errorOut describes a handled failure).
+	// Default handles nothing.
+	virtual bool interceptGameAct(const Common::JSONObject &args, Common::String &errorOut,
+	                              bool &handled) {
+		(void)args; (void)errorOut; handled = false; return false;
 	}
 
 	// Register all tools with the server.
