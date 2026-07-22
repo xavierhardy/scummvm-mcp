@@ -2,7 +2,7 @@
   "protocol": "ScummVM MCP",
   "protocolVersion": "2025-03-26",
   "transport": "Streamable HTTP (JSON-RPC 2.0 over HTTP + SSE)",
-  "scope": "All SCUMM engine games (MI1, MI2, Indiana Jones, DOTT, Sam & Max, etc.)",
+  "scope": "SCUMM engine games (MI1, MI2, Indiana Jones, DOTT, Sam & Max, etc.) and Broken Sword 1 (sword1). The core tools — state / act / answer / walk / skip — and this wire protocol are shared across engines via a common bridge base (engines/mcp_bridge.*); each engine maps them onto its own world model.",
   "activationConfig": "mcp=true",
   "server": {
     "name": "scummvm",
@@ -27,7 +27,10 @@
       "method": "initialize",
       "params": {
         "protocolVersion": "2025-03-26",
-        "clientInfo": { "name": "my-client", "version": "1.0" }
+        "clientInfo": {
+          "name": "my-client",
+          "version": "1.0"
+        }
       }
     },
     "initialize_response": {
@@ -35,23 +38,39 @@
       "id": 1,
       "result": {
         "protocolVersion": "2025-03-26",
-        "serverInfo": { "name": "scummvm", "version": "1.0" },
-        "capabilities": { "tools": { "listChanged": true } }
+        "serverInfo": {
+          "name": "scummvm",
+          "version": "1.0"
+        },
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
       }
     }
   },
-
   "methods": {
     "initialize": {
       "description": "Handshake. Client declares its protocol version; server replies with its capabilities and identity.",
       "params": {
         "protocolVersion": "string",
-        "clientInfo": { "name": "string", "version": "string" }
+        "clientInfo": {
+          "name": "string",
+          "version": "string"
+        }
       },
       "result": {
         "protocolVersion": "string",
-        "serverInfo": { "name": "string", "version": "string" },
-        "capabilities": { "tools": { "listChanged": "boolean" } }
+        "serverInfo": {
+          "name": "string",
+          "version": "string"
+        },
+        "capabilities": {
+          "tools": {
+            "listChanged": "boolean"
+          }
+        }
       }
     },
     "tools/list": {
@@ -59,7 +78,12 @@
       "params": {},
       "result": {
         "tools": [
-          { "name": "string", "description": "string", "inputSchema": {}, "outputSchema": {} }
+          {
+            "name": "string",
+            "description": "string",
+            "inputSchema": {},
+            "outputSchema": {}
+          }
         ]
       }
     },
@@ -77,7 +101,6 @@
       "result": {}
     }
   },
-
   "tools": [
     {
       "name": "state",
@@ -91,23 +114,37 @@
       "outputSchema": {
         "type": "object",
         "properties": {
-          "room":      { "type": "integer", "description": "Current room number" },
-          "room_name": { "type": "string",  "description": "Human-readable room name" },
+          "room": {
+            "type": "integer",
+            "description": "Current room number"
+          },
+          "room_name": {
+            "type": "string",
+            "description": "Human-readable room name"
+          },
           "position": {
             "type": "object",
             "properties": {
-              "x": { "type": "integer" },
-              "y": { "type": "integer" }
+              "x": {
+                "type": "integer"
+              },
+              "y": {
+                "type": "integer"
+              }
             }
           },
           "verbs": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Verb names currently available in the UI (e.g. walk_to, look_at, pick_up)"
           },
           "inventory": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Names of items in the player's inventory"
           },
           "objects": {
@@ -115,20 +152,40 @@
             "items": {
               "type": "object",
               "properties": {
-                "id":               { "type": "integer" },
-                "name":             { "type": "string" },
-                "state":            { "type": "integer" },
-                "state_name":       { "type": "string", "description": "Human-readable state, present only for objects that have one (e.g. a door's \"opened\"/\"closed\", or the Monkey Island seagull's \"eating\"/\"flying away\"). Omitted otherwise. Localised to the game's language." },
-                "visible":          { "type": "boolean" },
-                "pathway":          { "type": "boolean" },
-                "compatible_verbs": { "type": "array", "items": { "type": "string" } }
+                "id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "integer"
+                },
+                "state_name": {
+                  "type": "string",
+                  "description": "Human-readable state, present only for objects that have one (e.g. a door's \"opened\"/\"closed\", or the Monkey Island seagull's \"eating\"/\"flying away\"). Omitted otherwise. Localised to the game's language."
+                },
+                "visible": {
+                  "type": "boolean"
+                },
+                "pathway": {
+                  "type": "boolean"
+                },
+                "compatible_verbs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               }
             },
             "description": "Objects visible in the current room"
           },
           "actors": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Names of actors present in the current room"
           },
           "messages": {
@@ -136,9 +193,19 @@
             "items": {
               "type": "object",
               "properties": {
-                "text":  { "type": "string" },
-                "actor": { "type": "string" },
-                "type":  { "type": "string", "enum": ["dialog", "system"] }
+                "text": {
+                  "type": "string"
+                },
+                "actor": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "dialog",
+                    "system"
+                  ]
+                }
               }
             },
             "description": "Dialog lines buffered since the last state call (cleared on read)"
@@ -151,8 +218,12 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "id":    { "type": "integer" },
-                    "label": { "type": "string" }
+                    "id": {
+                      "type": "integer"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -164,22 +235,78 @@
       "examples": [
         {
           "description": "Read game state",
-          "request":  { "jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": { "name": "state", "arguments": {} } },
+          "request": {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+              "name": "state",
+              "arguments": {}
+            }
+          },
           "response": {
-            "jsonrpc": "2.0", "id": 10,
+            "jsonrpc": "2.0",
+            "id": 10,
             "result": {
-              "content": [{ "type": "text", "text": "{\"room\":3,\"room_name\":\"The Scumm Bar\",...}" }],
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"room\":3,\"room_name\":\"The Scumm Bar\",...}"
+                }
+              ],
               "structuredContent": {
                 "room": 3,
                 "room_name": "The Scumm Bar",
-                "position": { "x": 320, "y": 140 },
-                "verbs": ["open","close","give","pick_up","look_at","talk_to","walk_to","push","pull","use"],
-                "inventory": ["sword","idol"],
-                "objects": [
-                  { "id": 42, "name": "mug", "state": 1, "visible": true, "pathway": false, "compatible_verbs": ["look_at","pick_up"] },
-                  { "id": 43, "name": "door", "state": 0, "state_name": "closed", "visible": true, "pathway": false, "compatible_verbs": ["open","close","walk_to"] }
+                "position": {
+                  "x": 320,
+                  "y": 140
+                },
+                "verbs": [
+                  "open",
+                  "close",
+                  "give",
+                  "pick_up",
+                  "look_at",
+                  "talk_to",
+                  "walk_to",
+                  "push",
+                  "pull",
+                  "use"
                 ],
-                "actors": ["guybrush","pirate"],
+                "inventory": [
+                  "sword",
+                  "idol"
+                ],
+                "objects": [
+                  {
+                    "id": 42,
+                    "name": "mug",
+                    "state": 1,
+                    "visible": true,
+                    "pathway": false,
+                    "compatible_verbs": [
+                      "look_at",
+                      "pick_up"
+                    ]
+                  },
+                  {
+                    "id": 43,
+                    "name": "door",
+                    "state": 0,
+                    "state_name": "closed",
+                    "visible": true,
+                    "pathway": false,
+                    "compatible_verbs": [
+                      "open",
+                      "close",
+                      "walk_to"
+                    ]
+                  }
+                ],
+                "actors": [
+                  "guybrush",
+                  "pirate"
+                ],
                 "messages": [],
                 "question": null
               }
@@ -188,7 +315,6 @@
         }
       ]
     },
-
     {
       "name": "act",
       "type": "streaming",
@@ -202,18 +328,32 @@
           },
           "target1": {
             "oneOf": [
-              { "type": "string",  "description": "Primary target by name (from state.objects or state.actors)" },
-              { "type": "integer", "description": "Primary target by numeric object ID (from state.objects[].id)" }
+              {
+                "type": "string",
+                "description": "Primary target by name (from state.objects or state.actors)"
+              },
+              {
+                "type": "integer",
+                "description": "Primary target by numeric object ID (from state.objects[].id)"
+              }
             ]
           },
           "target2": {
             "oneOf": [
-              { "type": "string",  "description": "Secondary target by name (for two-object verbs like use)" },
-              { "type": "integer", "description": "Secondary target by numeric object ID" }
+              {
+                "type": "string",
+                "description": "Secondary target by name (for two-object verbs like use)"
+              },
+              {
+                "type": "integer",
+                "description": "Secondary target by numeric object ID"
+              }
             ]
           }
         },
-        "required": ["verb"],
+        "required": [
+          "verb"
+        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -222,13 +362,35 @@
       "examples": [
         {
           "description": "Look at a named object",
-          "request":  { "jsonrpc": "2.0", "id": 20, "method": "tools/call", "params": { "name": "act", "arguments": { "verb": "look_at", "target1": "mug" } } },
+          "request": {
+            "jsonrpc": "2.0",
+            "id": 20,
+            "method": "tools/call",
+            "params": {
+              "name": "act",
+              "arguments": {
+                "verb": "look_at",
+                "target1": "mug"
+              }
+            }
+          },
           "response": {
-            "jsonrpc": "2.0", "id": 20,
+            "jsonrpc": "2.0",
+            "id": 20,
             "result": {
-              "content": [{ "type": "text", "text": "{\"messages\":[{\"text\":\"It's a wooden mug.\",\"actor\":\"guybrush\"}]}" }],
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"messages\":[{\"text\":\"It's a wooden mug.\",\"actor\":\"guybrush\"}]}"
+                }
+              ],
               "structuredContent": {
-                "messages": [{ "text": "It's a wooden mug.", "actor": "guybrush" }],
+                "messages": [
+                  {
+                    "text": "It's a wooden mug.",
+                    "actor": "guybrush"
+                  }
+                ],
                 "inventory_added": [],
                 "inventory_removed": []
               }
@@ -237,25 +399,76 @@
         },
         {
           "description": "Use one object on another",
-          "request":  { "jsonrpc": "2.0", "id": 21, "method": "tools/call", "params": { "name": "act", "arguments": { "verb": "use", "target1": "key", "target2": "door" } } }
+          "request": {
+            "jsonrpc": "2.0",
+            "id": 21,
+            "method": "tools/call",
+            "params": {
+              "name": "act",
+              "arguments": {
+                "verb": "use",
+                "target1": "key",
+                "target2": "door"
+              }
+            }
+          }
         },
         {
           "description": "Walk to a named walk-box / hotspot",
-          "request":  { "jsonrpc": "2.0", "id": 22, "method": "tools/call", "params": { "name": "act", "arguments": { "verb": "walk_to", "target1": "archway" } } }
+          "request": {
+            "jsonrpc": "2.0",
+            "id": 22,
+            "method": "tools/call",
+            "params": {
+              "name": "act",
+              "arguments": {
+                "verb": "walk_to",
+                "target1": "archway"
+              }
+            }
+          }
         },
         {
           "description": "Talk to an actor, which returns a question with choices",
-          "request":  { "jsonrpc": "2.0", "id": 23, "method": "tools/call", "params": { "name": "act", "arguments": { "verb": "talk_to", "target1": "pirate" } } },
+          "request": {
+            "jsonrpc": "2.0",
+            "id": 23,
+            "method": "tools/call",
+            "params": {
+              "name": "act",
+              "arguments": {
+                "verb": "talk_to",
+                "target1": "pirate"
+              }
+            }
+          },
           "response": {
-            "jsonrpc": "2.0", "id": 23,
+            "jsonrpc": "2.0",
+            "id": 23,
             "result": {
-              "content": [{ "type": "text", "text": "..." }],
+              "content": [
+                {
+                  "type": "text",
+                  "text": "..."
+                }
+              ],
               "structuredContent": {
-                "messages": [{ "text": "Arr, what do ye want?", "actor": "pirate" }],
+                "messages": [
+                  {
+                    "text": "Arr, what do ye want?",
+                    "actor": "pirate"
+                  }
+                ],
                 "question": {
                   "choices": [
-                    { "id": 1, "label": "I want to be a pirate!" },
-                    { "id": 2, "label": "Have you seen the Governor?" }
+                    {
+                      "id": 1,
+                      "label": "I want to be a pirate!"
+                    },
+                    {
+                      "id": 2,
+                      "label": "Have you seen the Governor?"
+                    }
                   ]
                 }
               }
@@ -264,7 +477,6 @@
         }
       ]
     },
-
     {
       "name": "answer",
       "type": "streaming",
@@ -272,9 +484,14 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer", "description": "1-based choice index from state.question.choices[].id" }
+          "id": {
+            "type": "integer",
+            "description": "1-based choice index from state.question.choices[].id"
+          }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -283,11 +500,20 @@
       "examples": [
         {
           "description": "Select the first dialog choice",
-          "request":  { "jsonrpc": "2.0", "id": 30, "method": "tools/call", "params": { "name": "answer", "arguments": { "id": 1 } } }
+          "request": {
+            "jsonrpc": "2.0",
+            "id": 30,
+            "method": "tools/call",
+            "params": {
+              "name": "answer",
+              "arguments": {
+                "id": 1
+              }
+            }
+          }
         }
       ]
     },
-
     {
       "name": "walk",
       "type": "streaming",
@@ -295,10 +521,19 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "x": { "type": "integer", "description": "Target X pixel coordinate (auto-clamped to [0, roomWidth-1])" },
-          "y": { "type": "integer", "description": "Target Y pixel coordinate (auto-clamped to [0, roomHeight-1])" }
+          "x": {
+            "type": "integer",
+            "description": "Target X pixel coordinate (auto-clamped to [0, roomWidth-1])"
+          },
+          "y": {
+            "type": "integer",
+            "description": "Target Y pixel coordinate (auto-clamped to [0, roomHeight-1])"
+          }
         },
-        "required": ["x", "y"],
+        "required": [
+          "x",
+          "y"
+        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -307,16 +542,37 @@
       "examples": [
         {
           "description": "Walk to screen-centre",
-          "request":  { "jsonrpc": "2.0", "id": 40, "method": "tools/call", "params": { "name": "walk", "arguments": { "x": 160, "y": 120 } } }
+          "request": {
+            "jsonrpc": "2.0",
+            "id": 40,
+            "method": "tools/call",
+            "params": {
+              "name": "walk",
+              "arguments": {
+                "x": 160,
+                "y": 120
+              }
+            }
+          }
         },
         {
           "description": "Out-of-bounds coordinates are clamped automatically",
-          "request":  { "jsonrpc": "2.0", "id": 41, "method": "tools/call", "params": { "name": "walk", "arguments": { "x": 99999, "y": -50 } } },
+          "request": {
+            "jsonrpc": "2.0",
+            "id": 41,
+            "method": "tools/call",
+            "params": {
+              "name": "walk",
+              "arguments": {
+                "x": 99999,
+                "y": -50
+              }
+            }
+          },
           "note": "Clamped to (roomWidth-1, 0) before the walk is issued"
         }
       ]
     },
-
     {
       "name": "skip",
       "type": "streaming",
@@ -326,10 +582,11 @@
         "properties": {},
         "additionalProperties": false
       },
-      "outputSchema": { "$ref": "#/definitions/stateChanges" }
+      "outputSchema": {
+        "$ref": "#/definitions/stateChanges"
+      }
     }
   ],
-
   "gameTools": {
     "description": "Tools registered only for specific games (in addition to the core tools). Always confirm availability via tools/list — they are absent for games that do not support them.",
     "tools": [
@@ -341,12 +598,23 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "note":  { "type": "string", "description": "Single note: one of c d e f g a b C (C is the high octave)." },
-            "notes": { "type": "array", "items": { "type": "string" }, "description": "Optional sequence of note strings to play in order, e.g. ['e','c','e','d']." }
+            "note": {
+              "type": "string",
+              "description": "Single note: one of c d e f g a b C (C is the high octave)."
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional sequence of note strings to play in order, e.g. ['e','c','e','d']."
+            }
           },
           "additionalProperties": false
         },
-        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+        "outputSchema": {
+          "$ref": "#/definitions/stateChanges"
+        }
       },
       {
         "name": "shoot_cannon",
@@ -356,13 +624,24 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "x": { "type": "integer", "description": "Screen X to aim at (0–639); pass a boat's x from state.objects." },
-            "y": { "type": "integer", "description": "Screen Y to aim at (0–479); pass a boat's y from state.objects." }
+            "x": {
+              "type": "integer",
+              "description": "Screen X to aim at (0–639); pass a boat's x from state.objects."
+            },
+            "y": {
+              "type": "integer",
+              "description": "Screen Y to aim at (0–479); pass a boat's y from state.objects."
+            }
           },
-          "required": ["x", "y"],
+          "required": [
+            "x",
+            "y"
+          ],
           "additionalProperties": false
         },
-        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+        "outputSchema": {
+          "$ref": "#/definitions/stateChanges"
+        }
       },
       {
         "name": "ride_bike",
@@ -374,7 +653,9 @@
           "properties": {},
           "additionalProperties": false
         },
-        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+        "outputSchema": {
+          "$ref": "#/definitions/stateChanges"
+        }
       },
       {
         "name": "switch_character",
@@ -384,12 +665,19 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "name": { "type": "string", "description": "Name of the kid to control, as listed in state.available_characters (e.g. 'dave')." }
+            "name": {
+              "type": "string",
+              "description": "Name of the kid to control, as listed in state.available_characters (e.g. 'dave')."
+            }
           },
-          "required": ["name"],
+          "required": [
+            "name"
+          ],
           "additionalProperties": false
         },
-        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+        "outputSchema": {
+          "$ref": "#/definitions/stateChanges"
+        }
       },
       {
         "name": "dial",
@@ -399,16 +687,22 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "number": { "type": "string", "description": "Number to dial, as a string of keypad keys: digits 0-9 plus '*' and '#' (e.g. '1234')." }
+            "number": {
+              "type": "string",
+              "description": "Number to dial, as a string of keypad keys: digits 0-9 plus '*' and '#' (e.g. '1234')."
+            }
           },
-          "required": ["number"],
+          "required": [
+            "number"
+          ],
           "additionalProperties": false
         },
-        "outputSchema": { "$ref": "#/definitions/stateChanges" }
+        "outputSchema": {
+          "$ref": "#/definitions/stateChanges"
+        }
       }
     ]
   },
-
   "debugTools": {
     "description": "Diagnostic tools registered only when mcp_debug=true in the game's scummvm.ini section. Engine-version-agnostic unless noted. Intended for debugging and test-fixture authoring, not normal play; their results are free-form (no fixed outputSchema). keystroke/mouse_move/mouse_click run on the next engine frame.",
     "tools": [
@@ -419,8 +713,14 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "from": { "type": "integer", "description": "First SCUMM var index to return (default 0)." },
-            "to":   { "type": "integer", "description": "Last SCUMM var index to return (inclusive, default 127)." }
+            "from": {
+              "type": "integer",
+              "description": "First SCUMM var index to return (default 0)."
+            },
+            "to": {
+              "type": "integer",
+              "description": "Last SCUMM var index to return (inclusive, default 127)."
+            }
           },
           "additionalProperties": false
         }
@@ -432,12 +732,26 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "key":   { "type": "string",  "description": "A single ASCII character ('a','C','1') or a name ('Escape','Return','Space','Tab','Backspace','F1'..'F12','Up','Down','Left','Right')." },
-            "ctrl":  { "type": "boolean", "description": "Hold Ctrl modifier (default false)." },
-            "shift": { "type": "boolean", "description": "Hold Shift modifier (default false)." },
-            "alt":   { "type": "boolean", "description": "Hold Alt modifier (default false)." }
+            "key": {
+              "type": "string",
+              "description": "A single ASCII character ('a','C','1') or a name ('Escape','Return','Space','Tab','Backspace','F1'..'F12','Up','Down','Left','Right')."
+            },
+            "ctrl": {
+              "type": "boolean",
+              "description": "Hold Ctrl modifier (default false)."
+            },
+            "shift": {
+              "type": "boolean",
+              "description": "Hold Shift modifier (default false)."
+            },
+            "alt": {
+              "type": "boolean",
+              "description": "Hold Alt modifier (default false)."
+            }
           },
-          "required": ["key"],
+          "required": [
+            "key"
+          ],
           "additionalProperties": false
         }
       },
@@ -448,10 +762,19 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "x": { "type": "integer", "description": "X coordinate." },
-            "y": { "type": "integer", "description": "Y coordinate." }
+            "x": {
+              "type": "integer",
+              "description": "X coordinate."
+            },
+            "y": {
+              "type": "integer",
+              "description": "Y coordinate."
+            }
           },
-          "required": ["x", "y"],
+          "required": [
+            "x",
+            "y"
+          ],
           "additionalProperties": false
         }
       },
@@ -462,12 +785,27 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "x":      { "type": "integer", "description": "X coordinate." },
-            "y":      { "type": "integer", "description": "Y coordinate." },
-            "button": { "type": "string",  "description": "Mouse button: 'left' (default), 'right', or 'middle'." },
-            "double": { "type": "boolean", "description": "True for a double click (two clicks within ~250ms). Default false." }
+            "x": {
+              "type": "integer",
+              "description": "X coordinate."
+            },
+            "y": {
+              "type": "integer",
+              "description": "Y coordinate."
+            },
+            "button": {
+              "type": "string",
+              "description": "Mouse button: 'left' (default), 'right', or 'middle'."
+            },
+            "double": {
+              "type": "boolean",
+              "description": "True for a double click (two clicks within ~250ms). Default false."
+            }
           },
-          "required": ["x", "y"],
+          "required": [
+            "x",
+            "y"
+          ],
           "additionalProperties": false
         }
       },
@@ -488,10 +826,18 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "slot":        { "type": "integer", "description": "Save slot index to write (e.g. 2 -> <target>.s02)." },
-            "description": { "type": "string",  "description": "Optional label stored in the save header (default \"mcp save\")." }
+            "slot": {
+              "type": "integer",
+              "description": "Save slot index to write (e.g. 2 -> <target>.s02)."
+            },
+            "description": {
+              "type": "string",
+              "description": "Optional label stored in the save header (default \"mcp save\")."
+            }
           },
-          "required": ["slot"],
+          "required": [
+            "slot"
+          ],
           "additionalProperties": false
         }
       },
@@ -502,15 +848,19 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "speed": { "type": "integer", "description": "Talk speed on the 0..255 scale (0 = slowest, 255 = fastest)." }
+            "speed": {
+              "type": "integer",
+              "description": "Talk speed on the 0..255 scale (0 = slowest, 255 = fastest)."
+            }
           },
-          "required": ["speed"],
+          "required": [
+            "speed"
+          ],
           "additionalProperties": false
         }
       }
     ]
   },
-
   "definitions": {
     "stateChanges": {
       "type": "object",
@@ -521,19 +871,51 @@
           "items": {
             "type": "object",
             "properties": {
-              "text":  { "type": "string" },
-              "actor": { "type": "string" },
-              "type":  { "type": "string", "enum": ["dialog", "system"] }
+              "text": {
+                "type": "string"
+              },
+              "actor": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "dialog",
+                  "system"
+                ]
+              }
             }
           },
           "description": "Dialog lines spoken during the action"
         },
-        "inventory_added":   { "type": "array", "items": { "type": "string" }, "description": "Items added to inventory" },
-        "inventory_removed": { "type": "array", "items": { "type": "string" }, "description": "Items removed from inventory" },
-        "room_changed": { "type": "integer", "description": "New room number (only present if the room changed)" },
+        "inventory_added": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Items added to inventory"
+        },
+        "inventory_removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Items removed from inventory"
+        },
+        "room_changed": {
+          "type": "integer",
+          "description": "New room number (only present if the room changed)"
+        },
         "position": {
           "type": "object",
-          "properties": { "x": { "type": "integer" }, "y": { "type": "integer" } },
+          "properties": {
+            "x": {
+              "type": "integer"
+            },
+            "y": {
+              "type": "integer"
+            }
+          },
           "description": "Final player position"
         },
         "question": {
@@ -544,8 +926,12 @@
               "items": {
                 "type": "object",
                 "properties": {
-                  "id":    { "type": "integer" },
-                  "label": { "type": "string" }
+                  "id": {
+                    "type": "integer"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -553,6 +939,28 @@
           "description": "Present if a dialog choice is pending after the action"
         }
       }
+    }
+  },
+  "engineNotes": {
+    "scumm": {
+      "scope": "All SCUMM versions V0-V8.",
+      "coordinates": "Room/screen pixel coordinates.",
+      "verbs": "Per-game verb bar (or a fixed fallback set for single-cursor games), reported in state.verbs.",
+      "objects": "state.objects carries id, name, state/state_name, compatible_verbs, pathway.",
+      "extraTools": "Game-specific: play_note, shoot_cannon, ride_bike, switch_character, dial. Debug adds set_talk_speed."
+    },
+    "sword-family": {
+      "scope": "Broken Sword 1 (sword1). The contract is written to extend to Broken Sword 2 (sword2) unchanged; only the engine adapter differs.",
+      "interface": "One-click game: a left click runs an object's interaction script, a right click looks at it. There is no verb bar.",
+      "verbs": "A fixed set, always: look_at (right click), and interact / use / talk_to / pick_up (all left click), plus walk_to. state.verbs advertises it.",
+      "coordinates": "World (compact) coordinates everywhere — the space of the compacts' o_xcoord/o_ycoord and mouse boxes, and of scriptVars MOUSE_X/MOUSE_Y. Scroll-invariant. Screen coordinates appear only inside debug.",
+      "objectNaming": "Broken Sword attaches no name to a scene object, so the bridge ships naming tables and every unnamed compact falls back to 'object_<section>_<index>', derived from its (fixed) compact id. That fallback is a first-class target: act accepts it, a raw decimal id, an 0x-prefixed hex id, an authored name, or an inventory item name.",
+      "objects": "state.objects carries id, name, kind (floor/character/object/hotspot), position (mouse-box centre) and box ([x1,y1,x2,y2], inclusive). The player is excluded and reported as state.position ({x,y,dir}).",
+      "inventory": "state.inventory carries name, pocket number and, when the game provides one, a description (the item's own text).",
+      "canAct": "state.can_act is false while the game is not accepting input (cutscene, fade, control panel); act/walk/answer are rejected until it is true.",
+      "question": "A pending conversation is the subject bar: state.question.choices are its topics; answer(id) picks the 1-based slot.",
+      "walk": "walk(x,y) drives the floor compact under (x,y); a point on no floor returns a validation error listing the screen's floor boxes.",
+      "debug": "The debug tool (mcp_debug) has sections vars / compacts / pockets / system; 'compacts' is the dump used to author the object-name tables."
     }
   }
 }

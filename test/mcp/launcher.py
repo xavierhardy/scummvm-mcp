@@ -174,6 +174,17 @@ GAME_PATHS = {
         "COMI_DEMO_PATH",
         "/Users/xhardy/Personal/llm/scummvm/games/COMIDEMO",
     ),
+    "sword1-demo": os.environ.get(
+        "SWORD1_DEMO_PATH",
+        "/Users/xhardy/Personal/llm/scummvm/games/broken-sword-1-demo",
+    ),
+}
+
+# Save-file naming is per engine: SCUMM writes "<target>.sNN", while sword1
+# writes "sword1.NNN" (SwordEngine::getSaveStateName). Games not listed here use
+# the SCUMM form.
+_SAVE_NAME_FMT = {
+    "sword1-demo": "sword1.{slot:03d}",
 }
 
 
@@ -187,9 +198,17 @@ def require_game_path(game_id: str) -> None:
 
 
 def save_slot_path(game_id: str, slot: int) -> str:
-    """Path to the committed save file for *game_id*'s *slot* (``<game>.sNN``)."""
+    """Path to the committed save file for *game_id*'s *slot*.
+
+    Defaults to the SCUMM ``<game>.sNN`` form; see ``_SAVE_NAME_FMT`` for the
+    engines that name their saves differently.
+    """
+    fmt = _SAVE_NAME_FMT.get(game_id, "{game_id}.s{slot:02d}")
     return os.path.join(
-        os.path.dirname(__file__), "save_slots", game_id, f"{game_id}.s{slot:02d}"
+        os.path.dirname(__file__),
+        "save_slots",
+        game_id,
+        fmt.format(game_id=game_id, slot=slot),
     )
 
 

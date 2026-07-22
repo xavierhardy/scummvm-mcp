@@ -1197,6 +1197,18 @@ int Logic::fnISpeak(Object *cpt, int32 id, int32 cdt, int32 textNo, int32 spr, i
 
 	SwordEngine::_systemVars.textNumber = textNo;
 
+	// Feed the line to the MCP server. Deliberately above the showText branch
+	// below, which skips lockText() entirely when subtitles are off and speech is
+	// running: an MCP client wants every spoken line regardless of the audio and
+	// subtitle settings. The lock/unlock pair is the engine's own normal path,
+	// and the whole block is skipped when no MCP server is running.
+	if (_vm->mcpEnabled()) {
+		char *mcpText = _objMan->lockText(textNo);
+		if (mcpText)
+			_vm->mcpOnSpeech((int)id, Common::String(mcpText), cdt == 0 && spr == 0);
+		_objMan->unlockText(textNo);
+	}
+
 	// first setup the talk animation
 	if (cdt && (!spr)) { // if 'cdt' is non-zero but 'spr' is zero - 'cdt' is an anim table tag
 		AnimSet *animTab = (AnimSet *)((uint8 *)_resMan->openFetchRes(cdt) + sizeof(Header));

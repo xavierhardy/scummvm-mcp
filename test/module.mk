@@ -59,9 +59,21 @@ endif
 
 ifeq ($(ENABLE_SCUMM), STATIC_PLUGIN)
 	TESTS += $(srcdir)/test/engines/scumm/*.h
-	# normalizeActionName (mcp_actionname.o, pulled from libscumm.a) only needs
-	# the engine-independent MCP string helpers, not the whole engine runtime.
-	TEST_LIBS += engines/scumm/libscumm.a backends/networking/mcp/mcp_server.o
+	TEST_LIBS += engines/scumm/libscumm.a
+endif
+
+ifeq ($(ENABLE_SWORD1), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/sword1/*.h
+	TEST_LIBS += engines/sword1/libsword1.a
+endif
+
+# The MCP naming/normalization helpers are shared by the per-engine MCP test
+# suites. They are listed as bare objects rather than engines/libengines.a so
+# that engine.o's GUI/base globals stay out of the cxxtest runner — the same
+# reasoning that already applies to mcp_server.o. Listed once even when several
+# engines are enabled, so the object is not passed to the linker twice.
+ifneq (,$(filter STATIC_PLUGIN,$(ENABLE_SCUMM) $(ENABLE_SWORD1)))
+	TEST_LIBS += backends/networking/mcp/mcp_server.o engines/mcp_bridge_text.o
 endif
 
 #

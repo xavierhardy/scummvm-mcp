@@ -423,6 +423,11 @@ bool MoviePlayer::playVideo() {
 			_vm->_system->updateScreen();
 		}
 
+		// This loop polls events itself and never calls pollInput(), so without a
+		// pump here the MCP server is frozen for the whole movie — which is
+		// exactly when a client wants to call `skip`.
+		_vm->mcpPump();
+
 		Common::Event event;
 		while (_vm->_system->getEventManager()->pollEvent(event))
 			if ((event.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START && event.customType == kActionEscape) || event.type == Common::EVENT_LBUTTONUP)

@@ -239,54 +239,16 @@ static const char *dialogIconLabel(int gameId, int objNum) {
 // ---------------------------------------------------------------------------
 
 ScummMcpBridge::ScummMcpBridge(ScummEngine *vm)
-	: _vm(vm),
-	  _enabled(false),
-	  _skipToolEnabled(false),
-	  _debugToolsEnabled(false),
-	  _server(nullptr),
-	  _nextMessageSeq(1),
-	  _frameCounter(0),
-	  _streaming(false),
-	  _sseStartFrame(0),
-	  _sseDoneAtFrame(0),
-	  _sseStuckAtFrame(0),
-	  _sseLastEventFrame(0),
+	: MCP::McpBridge(vm),
+	  _vm(vm),
 	  _sseEgoMoved(false),
 	  _sseAllowLongCutscene(false),
 	  _sseTargetObject(0),
-	  _ssePreRoom(0),
-	  _ssePrePosX(0),
-	  _ssePrePosY(0),
 	  _ssePendingSecondClick(false),
 	  _sseClickMouseX(0),
 	  _sseClickMouseY(0),
 	  _ssePrevNoteValue(0),
 	  _sseLastNoteFedFrame(0) {
-	if (!_vm) return;
-
-	_enabled = ConfMan.getBool("mcp");
-	if (!_enabled) return;
-
-	_skipToolEnabled = ConfMan.hasKey("mcp_skip_tool") && ConfMan.getBool("mcp_skip_tool");
-	_debugToolsEnabled = ConfMan.hasKey("mcp_debug") && ConfMan.getBool("mcp_debug");
-
-	int port = ConfMan.hasKey("mcp_port") ? ConfMan.getInt("mcp_port") : 23456;
-	Common::String host = ConfMan.hasKey("mcp_host") ? ConfMan.get("mcp_host") : "127.0.0.1";
-	_server = new Networking::McpServer(port, "scummvm", "1.0", host);
-	if (!_server->isListening()) {
-		delete _server;
-		_server = nullptr;
-		_enabled = false;
-		return;
-	}
-	_server->setToolHandler(this);
-}
-
-void ScummMcpBridge::init() {
-	// registerTools() dispatches through virtual hooks, so it must run after the
-	// object is fully constructed — never from a base constructor.
-	if (_server)
-		registerTools();
 }
 
 ScummMcpBridge *ScummMcpBridge::create(ScummEngine *vm) {
@@ -371,17 +333,14 @@ byte &ScummMcpBridge::vmLeftBtnPressed() const             { return _vm->_leftBt
 byte &ScummMcpBridge::vmRightBtnPressed() const            { return _vm->_rightBtnPressed; }
 
 ScummMcpBridge::~ScummMcpBridge() {
-	delete _server;
 }
 
 // ---------------------------------------------------------------------------
-// Game-loop hook
+// Game-loop hook. Called by MCP::McpBridge::pump() after the frame counter has
+// advanced and before the server is serviced.
 // ---------------------------------------------------------------------------
 
-void ScummMcpBridge::pump() {
-	if (!_enabled || !_server) return;
-	++_frameCounter;
-
+void ScummMcpBridge::pumpGame() {
 	// V7 (The Dig, Full Throttle) — ScummEngine_v7::actorTalk does not call the
 	// base ScummEngine::actorTalk, so the onActorLine hook in actor.cpp is not
 	// triggered for these games. Poll _charsetBuffer + the talking-actor var
@@ -477,66 +436,30 @@ void ScummMcpBridge::pump() {
 	}
 	if (_vm && _vm->_game.id == GID_SAMNMAX && !hasPendingQuestion() && !_v7DialogChoices.empty())
 		_v7DialogChoices.clear();
-
-	_server->pump();
 }
 
 // ---------------------------------------------------------------------------
 // Message capture from engine
 // ---------------------------------------------------------------------------
 
-void ScummMcpBridge::pushMessage(const char *type, int actorId, const Common::String &text) {
-	if (!_enabled || text.empty()) return;
-	MessageEntry m;
-	m.seq = _nextMessageSeq++;
-	m.frame = _frameCounter;
-	m.room = _vm ? _vm->_currentRoom : 0;
-	m.actorId = actorId;
-	m.type = type;
-	m.text = text;
-	_messages.push_back(m);
-	const uint kMaxMessages = 512;
-	if (_messages.size() > kMaxMessages)
-		_messages.remove_at(0);
+int ScummMcpBridge::currentRoomForMessages() const {
+	return _vm ? _vm->_currentRoom : 0;
 }
 
-void ScummMcpBridge::onActorLine(int actorId, const Common::String &text) {
-	// V6 (Sam & Max) and V7 (The Dig / Full Throttle): spoken lines arrive
-	// straight from _charsetBuffer (actor.cpp and the V7 pump() both feed this
-	// hook), prefixed by one or more 0xFF-coded 4-byte talkie/sound blocks
-	// (0xFF <code> <id-lo> <id-hi>). Strip them, then drop the fragments that
-	// hold only embedded sound codes with no readable text — e.g. Sam & Max's
-	// voice-only reaction cues, which would otherwise surface as garbage
-	// "messages". Restricted to V6/V7 so older text engines pass through
-	// untouched.
-	if (_vm && _vm->_game.version >= 6) {
-		const byte *p = (const byte *)text.c_str();
-		const byte *end = p + text.size();
-		while (p + 3 < end && *p == 0xFF)
-			p += 4;
-		Common::String line((const char *)p);
-		// Require at least two ASCII letters: a real spoken line is a word, while
-		// a leftover sound-code fragment (e.g. 0xFF 0x0A 'L') carries at most a
-		// stray byte that happens to fall in the letter range.
-		int letters = 0;
-		for (uint i = 0; i < line.size(); ++i) {
-			byte c = (byte)line[i];
-			if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))
-				++letters;
-		}
-		bool hasAlnum = (letters >= 2);
-		if (!hasAlnum)
-			return;
-		pushMessage("actor", actorId, line);
-		return;
-	}
-	pushMessage("actor", actorId, text);
+// V6 (Sam & Max) and V7 (The Dig / Full Throttle): spoken lines arrive straight
+// from _charsetBuffer (actor.cpp and the V7 pumpGame() both feed onActorLine),
+// prefixed by the original interpreter's 0xFF-coded talkie/sound blocks. Older
+// text engines pass through untouched.
+bool ScummMcpBridge::stripTalkieMetadata() const {
+	return _vm && _vm->_game.version >= 6;
 }
-void ScummMcpBridge::onSystemLine(const Common::String &text) {
-	pushMessage("system", -1, text);
-}
-void ScummMcpBridge::onDialogPrompt(const Common::String &text) {
-	pushMessage("dialog", -1, text);
+
+Common::String ScummMcpBridge::messageActorName(int actorId) const {
+	int objId = _vm->actorToObj(actorId);
+	// Only include the actor name if the object ID is within bounds
+	if (_vm->_numGlobalObjects > 0 && objId >= _vm->_numGlobalObjects)
+		return Common::String();
+	return getObjName(const_cast<ScummMcpBridge *>(this), objId);
 }
 
 void ScummMcpBridge::collectSamnMaxDialogChoices(Common::Array<V7Choice> &out) {
@@ -757,345 +680,48 @@ const byte *ScummMcpBridge::callGetObjOrActorName(int obj) const {
 // Tool registration
 // ---------------------------------------------------------------------------
 
-Common::JSONValue *ScummMcpBridge::buildChangesSchema() const {
+void ScummMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
+	(void)props;
+}
+
+Common::String ScummMcpBridge::debugToolDescription() const {
+	return "Return raw engine state for diagnostics: room id, ego position, "
+	       "_userPut, _mouse, _virtualMouse, _leftBtnPressed, _rightBtnPressed, "
+	       "_mouseAndKeyboardStat, _keyPressed, _currentRoom, plus a slice of "
+	       "SCUMM script vars (0..127 by default; pass 'from' and 'to' to widen). "
+	       "Engine-version-agnostic.";
+}
+
+Common::JSONValue *ScummMcpBridge::buildDebugSchema() const {
 	Common::JSONObject props;
-	props.setVal("inventory_added", mcpProp("array",   "Names of items added to inventory"));
-	props.setVal("room_changed",    mcpProp("integer", "New room number (only present if room changed)"));
-	Common::JSONObject posProps;
-	posProps.setVal("x", mcpProp("integer", "X coordinate"));
-	posProps.setVal("y", mcpProp("integer", "Y coordinate"));
-	Common::JSONObject posSchema;
-	posSchema.setVal("type",       mcpJsonString("object"));
-	posSchema.setVal("properties", new Common::JSONValue(posProps));
-	props.setVal("position",        new Common::JSONValue(posSchema));
-	props.setVal("objects_changed", mcpProp("array",  "Objects whose state changed: [{name, old_state, new_state}]"));
-	props.setVal("messages",        mcpProp("array",  "Dialog/narration lines spoken during the action: [{text, actor?}]"));
-	props.setVal("question",        mcpProp("object", "Pending dialog question if action ended with one: {choices:[{id,label}]}"));
-	props.setVal("boats_remaining", mcpProp("integer", "CMI cannon minigame only: war-canoes still afloat after the shot (drops by one per boat sunk; 0 means the minigame is won)."));
+	props.setVal("from", mcpProp("integer",
+	    "First SCUMM var index to return (default 0)."));
+	props.setVal("to", mcpProp("integer",
+	    "Last SCUMM var index to return (inclusive, default 127)."));
 	return mcpObjectSchema(props);
 }
 
-void ScummMcpBridge::registerTools() {
-	// --- state ---
-	{
-		Common::JSONObject inputProps;
-		Common::JSONObject outputProps;
-		Common::JSONObject roomProps;
-		roomProps.setVal("id", mcpProp("integer", "Current room ID"));
-		roomProps.setVal("name", mcpProp("string", "Human-readable room name (optional)"));
-		Common::JSONObject roomSchema;
-		roomSchema.setVal("type", mcpJsonString("object"));
-		roomSchema.setVal("properties", new Common::JSONValue(roomProps));
-		outputProps.setVal("room", new Common::JSONValue(roomSchema));
-
-		Common::JSONObject positionProps;
-		positionProps.setVal("x", mcpProp("integer", "X coordinate"));
-		positionProps.setVal("y", mcpProp("integer", "Y coordinate"));
-		Common::JSONObject positionSchema;
-		positionSchema.setVal("type", mcpJsonString("object"));
-		positionSchema.setVal("properties", new Common::JSONValue(positionProps));
-		outputProps.setVal("position", new Common::JSONValue(positionSchema));
-
-		auto makeStringArray = []() -> Common::JSONValue * {
-			Common::JSONObject arr;
-			arr.setVal("type",  mcpJsonString("array"));
-			arr.setVal("items", mcpProp("string"));
-			return new Common::JSONValue(arr);
-		};
-		outputProps.setVal("verbs",     makeStringArray());
-		outputProps.setVal("inventory", makeStringArray());
-
-		// Game-specific extra state fields (e.g. Maniac Mansion's controlled kid).
-		augmentStateSchema(outputProps);
-
-		Common::JSONObject objectItemProps;
-		objectItemProps.setVal("id",              mcpProp("integer", "Object ID"));
-		objectItemProps.setVal("name",            mcpProp("string",  "Object name"));
-		objectItemProps.setVal("state",           mcpProp("integer", "Object state"));
-		objectItemProps.setVal("state_name",      mcpProp("string",  "Human-readable state (e.g. a door's 'opened'/'closed'); omitted when the object has no named state"));
-		objectItemProps.setVal("x",               mcpProp("integer", "X coordinate"));
-		objectItemProps.setVal("y",               mcpProp("integer", "Y coordinate"));
-		objectItemProps.setVal("pathway",         mcpProp("boolean", "Is pathway/exit"));
-		objectItemProps.setVal("compatible_verbs",mcpProp("array",   "Verbs that have script handlers for this object"));
-		Common::JSONObject objectItem;
-		objectItem.setVal("type",       mcpJsonString("object"));
-		objectItem.setVal("properties", new Common::JSONValue(objectItemProps));
-		Common::JSONObject objectsArray;
-		objectsArray.setVal("type",  mcpJsonString("array"));
-		objectsArray.setVal("items", new Common::JSONValue(objectItem));
-		outputProps.setVal("objects", new Common::JSONValue(objectsArray));
-
-		// actors[] removed — NPCs now appear in objects[] with compatible_verbs
-
-		Common::JSONObject msgItemProps;
-		msgItemProps.setVal("text",  mcpProp("string", "Message text"));
-		msgItemProps.setVal("actor", mcpProp("string", "Actor name (optional)"));
-		Common::JSONObject msgItem;
-		msgItem.setVal("type",       mcpJsonString("object"));
-		msgItem.setVal("properties", new Common::JSONValue(msgItemProps));
-		Common::JSONObject messagesArray;
-		messagesArray.setVal("type",  mcpJsonString("array"));
-		messagesArray.setVal("items", new Common::JSONValue(msgItem));
-		outputProps.setVal("messages", new Common::JSONValue(messagesArray));
-
-		Common::JSONObject choiceItemProps;
-		choiceItemProps.setVal("id",    mcpProp("integer", "1-based choice index"));
-		choiceItemProps.setVal("label", mcpProp("string",  "Choice text"));
-		Common::JSONObject choiceItem;
-		choiceItem.setVal("type",       mcpJsonString("object"));
-		choiceItem.setVal("properties", new Common::JSONValue(choiceItemProps));
-		Common::JSONObject choicesArray;
-		choicesArray.setVal("type",  mcpJsonString("array"));
-		choicesArray.setVal("items", new Common::JSONValue(choiceItem));
-		Common::JSONObject questionProps;
-		questionProps.setVal("choices", new Common::JSONValue(choicesArray));
-		Common::JSONObject questionSchema;
-		questionSchema.setVal("type",       mcpJsonString("object"));
-		questionSchema.setVal("properties", new Common::JSONValue(questionProps));
-		outputProps.setVal("question", new Common::JSONValue(questionSchema));
-
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "state";
-		spec.description =
-		    "Returns the current game state: room, position, inventory, scene objects "
-		    "(including NPCs with their compatible_verbs — always includes talk_to), "
-		    "active verbs, latest messages (cleared after reading), "
-		    "and pending dialog question if any. The player character is never listed. "
-		    "Objects with a meaningful state expose a human-readable 'state_name' "
-		    "(e.g. a door reads 'opened'/'closed'); doors advertise the 'open'/'close' verbs. "
-		    "Use act(verb='talk_to', target1=<npc_name>) to speak to an NPC.";
-		spec.inputSchema  = mcpObjectSchema(inputProps);
-		spec.outputSchema = mcpObjectSchema(outputProps);
-		spec.streaming    = false;
-		_server->registerTool(spec);
-	}
-
-	// Shared output schema factory for streaming tools (used here and by leaf
-	// classes registering their own streaming tools).
-	auto makeChangesSchema = [this]() -> Common::JSONValue * { return buildChangesSchema(); };
-
-	// --- act ---
-	{
-		Common::JSONObject props;
-		props.setVal("verb",    mcpProp("string", "Verb name (e.g. 'open', 'use'). Required."));
-		props.setVal("target1", mcpPropOneOf("string", "integer",
-		    "Primary target: name or numeric id of an object/inventory item "
-		    "currently present in state (objects[] or inventory[]). "
-		    "NPCs appear in objects[] and can be targeted by name. "
-		    "For 'use X on Y', this is X."));
-		props.setVal("target2", mcpPropOneOf("string", "integer",
-		    "Secondary target for 'use X on Y' (Y): name or numeric id, "
-		    "must currently exist in state."));
-		const char *req[] = {"verb"};
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "act";
-		spec.description =
-		    "Perform a verb action on one or two named targets. Blocks until the "
-		    "action/cutscene sequence completes, streaming dialog and events via SSE, "
-		    "then returns state changes. For walking to specific coordinates, use 'walk'. "
-		    "IMPORTANT: Actions are sequential - only one can be in progress at a time. "
-		    "Wait for the previous act/answer/walk call to complete before sending the next one. "
-		    "Fails if a question is pending (use 'answer' first) or another action is running.";
-		spec.inputSchema  = mcpObjectSchema(props, req, 1);
-		spec.outputSchema = makeChangesSchema();
-		spec.streaming    = true;
-		_server->registerTool(spec);
-	}
-
-	// --- answer ---
-	{
-		Common::JSONObject props;
-		props.setVal("id", mcpProp("integer", "1-indexed dialog choice (1 = first option shown in state.question.choices)."));
-		const char *req[] = {"id"};
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "answer";
-		spec.description =
-		    "Select a dialog choice by 1-based index. Blocks until the conversation "
-		    "sequence completes, streaming events via SSE, then returns state changes. "
-		    "IMPORTANT: Actions are sequential - only one can be in progress at a time. "
-		    "Wait for the previous act/answer/walk call to complete before sending the next one. "
-		    "Fails if no question is currently pending or another action is running.";
-		spec.inputSchema  = mcpObjectSchema(props, req, 1);
-		spec.outputSchema = makeChangesSchema();
-		spec.streaming    = true;
-		_server->registerTool(spec);
-	}
-
-	// --- walk ---
-	{
-		Common::JSONObject props;
-		props.setVal("x", mcpProp("integer", "Target X pixel coordinate (auto-clamped to room bounds)"));
-		props.setVal("y", mcpProp("integer", "Target Y pixel coordinate (auto-clamped to room bounds)"));
-		const char *req[] = {"x", "y"};
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "walk";
-		spec.description =
-		    "Walk ego to explicit (x, y) pixel coordinates in the current room. "
-		    "Out-of-bounds values are automatically clamped to the room bounds. "
-		    "Use 'act' with verb='walk_to' and target1=<name> to walk to a named object. "
-		    "Blocks until the walk completes and returns state changes.";
-		spec.inputSchema  = mcpObjectSchema(props, req, 2);
-		spec.outputSchema = makeChangesSchema();
-		spec.streaming    = true;
-		_server->registerTool(spec);
-	}
-
-	// --- skip ---
-	if (_skipToolEnabled) {
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "skip";
-		spec.description =
-		    "Skip/cancel current action or cutscene by simulating an Escape key press. "
-		    "Useful for skipping long intros or animations. Returns state changes.";
-		spec.inputSchema  = nullptr;  // No input required
-		spec.outputSchema = makeChangesSchema();
-		spec.streaming    = true;
-		_server->registerTool(spec);
-	}
-
-
-	// Game-specific tools (registered only for the games that provide them).
-	registerGameTools();
-
-	// --- debug tools (gated by mcp_debug ini option) ---
-	if (_debugToolsEnabled) {
-		// debug — return raw engine state for diagnostics
-		{
-			Networking::McpServer::ToolSpec spec;
-			spec.name = "debug";
-			spec.description =
-			    "Return raw engine state for diagnostics: room id, ego position, "
-			    "_userPut, _mouse, _virtualMouse, _leftBtnPressed, _rightBtnPressed, "
-			    "_mouseAndKeyboardStat, _keyPressed, _currentRoom, plus a slice of "
-			    "SCUMM script vars (0..127 by default; pass 'from' and 'to' to widen). "
-			    "Engine-version-agnostic.";
-			Common::JSONObject props;
-			props.setVal("from", mcpProp("integer",
-			    "First SCUMM var index to return (default 0)."));
-			props.setVal("to", mcpProp("integer",
-			    "Last SCUMM var index to return (inclusive, default 127)."));
-			spec.inputSchema  = mcpObjectSchema(props);
-			spec.outputSchema = nullptr;
-			spec.streaming    = false;
-			_server->registerTool(spec);
-		}
-		// keystroke — inject a key event
-		{
-			Networking::McpServer::ToolSpec spec;
-			spec.name = "keystroke";
-			spec.description =
-			    "Inject a keyboard keystroke into the engine. Sets _keyPressed so "
-			    "the next engine frame processes it. Useful for skipping cutscenes "
-			    "(Escape), opening menus, or sending game-specific shortcuts.";
-			Common::JSONObject props;
-			props.setVal("key", mcpProp("string",
-			    "Key to press: a single ASCII character ('a', 'C', '1'), or a name "
-			    "('Escape', 'Return', 'Space', 'Tab', 'Backspace', 'F1'..'F12', "
-			    "'Up', 'Down', 'Left', 'Right')."));
-			props.setVal("ctrl",  mcpProp("boolean", "Hold Ctrl modifier (default false)."));
-			props.setVal("shift", mcpProp("boolean", "Hold Shift modifier (default false)."));
-			props.setVal("alt",   mcpProp("boolean", "Hold Alt modifier (default false)."));
-			const char *req[] = {"key"};
-			spec.inputSchema  = mcpObjectSchema(props, req, 1);
-			spec.outputSchema = nullptr;
-			spec.streaming    = false;
-			_server->registerTool(spec);
-		}
-		// mouse_move — set the virtual mouse position
-		{
-			Networking::McpServer::ToolSpec spec;
-			spec.name = "mouse_move";
-			spec.description =
-			    "Move the virtual mouse cursor to (x, y) in room/screen coordinates. "
-			    "Updates _mouse, _virtualMouse, and VAR_VIRT_MOUSE_X/Y so the engine "
-			    "and scripts read the new position. Does not click.";
-			Common::JSONObject props;
-			props.setVal("x", mcpProp("integer", "X coordinate."));
-			props.setVal("y", mcpProp("integer", "Y coordinate."));
-			const char *req[] = {"x", "y"};
-			spec.inputSchema  = mcpObjectSchema(props, req, 2);
-			spec.outputSchema = nullptr;
-			spec.streaming    = false;
-			_server->registerTool(spec);
-		}
-		// mouse_click — simulate a mouse click at (x, y)
-		{
-			Networking::McpServer::ToolSpec spec;
-			spec.name = "mouse_click";
-			spec.description =
-			    "Simulate a mouse click at (x, y). The engine processes the click "
-			    "the same way as a real player click (walks ego, runs verb script, "
-			    "etc.). Set 'double' for a double click. Button defaults to left.";
-			Common::JSONObject props;
-			props.setVal("x", mcpProp("integer", "X coordinate."));
-			props.setVal("y", mcpProp("integer", "Y coordinate."));
-			props.setVal("button", mcpProp("string",
-			    "Mouse button: 'left' (default), 'right', or 'middle'."));
-			props.setVal("double", mcpProp("boolean",
-			    "True for a double click (two clicks within ~250ms). Default false."));
-			const char *req[] = {"x", "y"};
-			spec.inputSchema  = mcpObjectSchema(props, req, 2);
-			spec.outputSchema = nullptr;
-			spec.streaming    = false;
-			_server->registerTool(spec);
-		}
-		// screenshot — capture the current frame to the screenshot path
-		{
-			Networking::McpServer::ToolSpec spec;
-			spec.name = "screenshot";
-			spec.description =
-			    "Save a PNG screenshot of the current frame to the configured "
-			    "screenshot path (auto-numbered, like the in-app screenshot key). "
-			    "Useful for visually inspecting the game state. Engine-agnostic.";
-			spec.inputSchema  = nullptr;  // No input required
-			spec.outputSchema = nullptr;
-			spec.streaming    = false;
-			_server->registerTool(spec);
-		}
-		// save_state — write the current game to a save slot
-		{
-			Networking::McpServer::ToolSpec spec;
-			spec.name = "save_state";
-			spec.description =
-			    "Save the current game to a save slot, the same way the in-game "
-			    "save menu does. Writes <target>.s<NN> in the active save path, so "
-			    "it can be used to capture reusable save states for tests. Returns "
-			    "the slot and whether the save was accepted. Engine-version-agnostic.";
-			Common::JSONObject props;
-			props.setVal("slot", mcpProp("integer",
-			    "Save slot index to write (e.g. 2 -> <target>.s02)."));
-			props.setVal("description", mcpProp("string",
-			    "Optional human-readable label stored in the save header "
-			    "(default \"mcp save\")."));
-			const char *req[] = {"slot"};
-			spec.inputSchema  = mcpObjectSchema(props, req, 1);
-			spec.outputSchema = nullptr;
-			spec.streaming    = false;
-			_server->registerTool(spec);
-		}
-		// set_talk_speed — force the text/talk speed at runtime
-		{
-			Networking::McpServer::ToolSpec spec;
-			spec.name = "set_talk_speed";
-			spec.description =
-			    "Force the game's text/talk speed at runtime, the same way the "
-			    "in-game speech-speed control does. Takes 'speed' on the 0..255 "
-			    "scale used by the --talkspeed option (0 = slowest, 255 = fastest, "
-			    "instant text). Needed for titles that run a boot script which "
-			    "overrides the configured talkspeed (e.g. the Fate of Atlantis "
-			    "demo), where the startup setting never takes. Updates ConfMan and "
-			    "the live VAR_CHARINC so it sticks for the rest of the session. "
-			    "Engine-version-agnostic.";
-			Common::JSONObject props;
-			props.setVal("speed", mcpProp("integer",
-			    "Talk speed on the 0..255 scale (0 = slowest, 255 = fastest)."));
-			const char *req[] = {"speed"};
-			spec.inputSchema  = mcpObjectSchema(props, req, 1);
-			spec.outputSchema = nullptr;
-			spec.streaming    = false;
-			_server->registerTool(spec);
-		}
-	}
+void ScummMcpBridge::registerDebugTools() {
+	// set_talk_speed — force the text/talk speed at runtime
+	Networking::McpServer::ToolSpec spec;
+	spec.name = "set_talk_speed";
+	spec.description =
+	    "Force the game's text/talk speed at runtime, the same way the "
+	    "in-game speech-speed control does. Takes 'speed' on the 0..255 "
+	    "scale used by the --talkspeed option (0 = slowest, 255 = fastest, "
+	    "instant text). Needed for titles that run a boot script which "
+	    "overrides the configured talkspeed (e.g. the Fate of Atlantis "
+	    "demo), where the startup setting never takes. Updates ConfMan and "
+	    "the live VAR_CHARINC so it sticks for the rest of the session. "
+	    "Engine-version-agnostic.";
+	Common::JSONObject props;
+	props.setVal("speed", mcpProp("integer",
+	    "Talk speed on the 0..255 scale (0 = slowest, 255 = fastest)."));
+	const char *req[] = {"speed"};
+	spec.inputSchema  = mcpObjectSchema(props, req, 1);
+	spec.outputSchema = nullptr;
+	spec.streaming    = false;
+	_server->registerTool(spec);
 }
 
 // ---------------------------------------------------------------------------
@@ -1105,51 +731,12 @@ void ScummMcpBridge::registerTools() {
 Common::JSONValue *ScummMcpBridge::callTool(const Common::String &name,
                                              const Common::JSONValue &args,
                                              Common::String &errorOut) {
-	if (!_vm) {
-		errorOut = "No game loaded";
-		return nullptr;
-	}
-	if (name == "state")
-		return toolState(args, errorOut);
-	if (name == "act") {
-		if (!toolAct(args, errorOut)) return nullptr;
-		return nullptr; // streaming started
-	}
-	if (name == "answer") {
-		if (!toolAnswer(args, errorOut)) return nullptr;
-		return nullptr;
-	}
-	if (name == "walk") {
-		if (!toolWalk(args, errorOut)) return nullptr;
-		return nullptr;
-	}
-	if (name == "skip") {
-		if (!toolSkip(args, errorOut)) return nullptr;
-		return nullptr;
-	}
-	if (name == "debug")        return toolDebug(args, errorOut);
-	if (name == "keystroke")    {
-		if (!toolKeystroke(args, errorOut)) return nullptr;
-		return new Common::JSONValue(Common::JSONObject());
-	}
-	if (name == "mouse_move")   {
-		if (!toolMouseMove(args, errorOut)) return nullptr;
-		return new Common::JSONValue(Common::JSONObject());
-	}
-	if (name == "mouse_click")  {
-		if (!toolMouseClick(args, errorOut)) return nullptr;
-		return new Common::JSONValue(Common::JSONObject());
-	}
-	if (name == "screenshot")   return toolScreenshot(args, errorOut);
-	if (name == "save_state")   return toolSaveState(args, errorOut);
-	if (name == "set_talk_speed") return toolSetTalkSpeed(args, errorOut);
-	// Game-specific tools (shoot_cannon, …) handled by the leaf class.
-	bool handled = false;
-	Common::JSONValue *gameResult = dispatchGameTool(name, args, errorOut, handled);
-	if (handled)
-		return gameResult;
-	errorOut = "Unknown tool: " + name;
-	return nullptr;
+	// set_talk_speed is the one SCUMM-only tool. Handling it here rather than in
+	// dispatchGameTool() keeps it working for the game leaves, which override
+	// dispatchGameTool() for their own tools.
+	if (name == "set_talk_speed")
+		return toolSetTalkSpeed(args, errorOut);
+	return MCP::McpBridge::callTool(name, args, errorOut);
 }
 
 // ---------------------------------------------------------------------------
@@ -2447,76 +2034,6 @@ bool ScummMcpBridge::toolSkip(const Common::JSONValue &args, Common::String &err
 // Debug tools: 'debug', 'keystroke', 'mouse_move', 'mouse_click'
 // ---------------------------------------------------------------------------
 
-// Map a JSON 'key' value to a Common::KeyState. Single ASCII chars map to
-// their Common::KeyCode (which equals the ASCII byte for printable letters
-// and digits). Named keys ('Escape', 'Return', 'F1', 'Up'...) map via a
-// small table. Returns false on unknown name.
-static bool jsonKeyToKeyState(const Common::String &name, bool ctrl, bool shift, bool alt,
-                                Common::KeyState &out) {
-	struct NamedKey { const char *name; Common::KeyCode kc; };
-	static const NamedKey kNamed[] = {
-		{"Escape",    Common::KEYCODE_ESCAPE},
-		{"Return",    Common::KEYCODE_RETURN},
-		{"Enter",     Common::KEYCODE_RETURN},
-		{"Space",     Common::KEYCODE_SPACE},
-		{"Tab",       Common::KEYCODE_TAB},
-		{"Backspace", Common::KEYCODE_BACKSPACE},
-		{"Delete",    Common::KEYCODE_DELETE},
-		{"Up",        Common::KEYCODE_UP},
-		{"Down",      Common::KEYCODE_DOWN},
-		{"Left",      Common::KEYCODE_LEFT},
-		{"Right",     Common::KEYCODE_RIGHT},
-		{"F1",        Common::KEYCODE_F1},
-		{"F2",        Common::KEYCODE_F2},
-		{"F3",        Common::KEYCODE_F3},
-		{"F4",        Common::KEYCODE_F4},
-		{"F5",        Common::KEYCODE_F5},
-		{"F6",        Common::KEYCODE_F6},
-		{"F7",        Common::KEYCODE_F7},
-		{"F8",        Common::KEYCODE_F8},
-		{"F9",        Common::KEYCODE_F9},
-		{"F10",       Common::KEYCODE_F10},
-		{"F11",       Common::KEYCODE_F11},
-		{"F12",       Common::KEYCODE_F12},
-		{nullptr,     Common::KEYCODE_INVALID}
-	};
-
-	Common::KeyCode kc = Common::KEYCODE_INVALID;
-	uint16 ascii = 0;
-
-	if (name.size() == 1) {
-		byte ch = (byte)name[0];
-		ascii = ch;
-		// Lower-case letters and digits map directly to their KEYCODE values.
-		// Upper-case letters use the lowercase keycode + Shift modifier.
-		if (ch >= 'A' && ch <= 'Z') {
-			kc = (Common::KeyCode)(ch - 'A' + 'a');
-			shift = true;
-		} else {
-			kc = (Common::KeyCode)ch;
-		}
-	} else {
-		for (int i = 0; kNamed[i].name; ++i) {
-			if (name.equalsIgnoreCase(kNamed[i].name)) { kc = kNamed[i].kc; break; }
-		}
-		if (kc == Common::KEYCODE_INVALID) return false;
-		// Set ASCII for keys that have a printable equivalent
-		if (kc == Common::KEYCODE_RETURN)    ascii = 13;
-		else if (kc == Common::KEYCODE_TAB)  ascii = 9;
-		else if (kc == Common::KEYCODE_SPACE) ascii = ' ';
-		else if (kc == Common::KEYCODE_ESCAPE) ascii = 27;
-		else if (kc == Common::KEYCODE_BACKSPACE) ascii = 8;
-	}
-
-	byte flags = 0;
-	if (ctrl)  flags |= Common::KBD_CTRL;
-	if (shift) flags |= Common::KBD_SHIFT;
-	if (alt)   flags |= Common::KBD_ALT;
-
-	out = Common::KeyState(kc, ascii, flags);
-	return true;
-}
-
 Common::JSONValue *ScummMcpBridge::toolSaveState(const Common::JSONValue &args, Common::String &errorOut) {
 	if (!args.isObject() || !args.asObject().contains("slot") ||
 	    !args.asObject()["slot"]->isIntegerNumber()) {
@@ -2920,39 +2437,14 @@ Common::JSONValue *ScummMcpBridge::toolDebug(const Common::JSONValue &args, Comm
 }
 
 
-bool ScummMcpBridge::toolKeystroke(const Common::JSONValue &args, Common::String &errorOut) {
-	if (!args.isObject()) {
-		errorOut = "keystroke: arguments must be an object with a 'key' field";
-		return false;
-	}
-	const Common::JSONObject &a = args.asObject();
-	if (!a.contains("key") || !a["key"]->isString()) {
-		errorOut = "keystroke: 'key' string is required";
-		return false;
-	}
-	bool ctrl  = a.contains("ctrl")  && a["ctrl"]->isBool()  && a["ctrl"]->asBool();
-	bool shift = a.contains("shift") && a["shift"]->isBool() && a["shift"]->asBool();
-	bool alt   = a.contains("alt")   && a["alt"]->isBool()   && a["alt"]->asBool();
+// The base class owns the keystroke / mouse_move / mouse_click schemas and
+// argument parsing; these three overrides are the SCUMM-specific effect.
 
-	Common::KeyState ks;
-	if (!jsonKeyToKeyState(a["key"]->asString(), ctrl, shift, alt, ks)) {
-		errorOut = "keystroke: unknown key '" + a["key"]->asString() + "'";
-		return false;
-	}
+void ScummMcpBridge::injectKey(const Common::KeyState &ks) {
 	_vm->_keyPressed = ks;
-	return true;
 }
 
-bool ScummMcpBridge::toolMouseMove(const Common::JSONValue &args, Common::String &errorOut) {
-	if (!args.isObject()) { errorOut = "mouse_move: arguments must be an object"; return false; }
-	const Common::JSONObject &a = args.asObject();
-	if (!a.contains("x") || !a["x"]->isIntegerNumber() ||
-	    !a.contains("y") || !a["y"]->isIntegerNumber()) {
-		errorOut = "mouse_move: integer 'x' and 'y' are required";
-		return false;
-	}
-	int x = (int)a["x"]->asIntegerNumber();
-	int y = (int)a["y"]->asIntegerNumber();
+void ScummMcpBridge::injectMouseMove(int x, int y) {
 	_vm->_mouse.x        = x;
 	_vm->_mouse.y        = y;
 	_vm->_virtualMouse.x = x;
@@ -2961,32 +2453,11 @@ bool ScummMcpBridge::toolMouseMove(const Common::JSONValue &args, Common::String
 	if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = y;
 	if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = x;
 	if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = y;
-	return true;
 }
 
-bool ScummMcpBridge::toolMouseClick(const Common::JSONValue &args, Common::String &errorOut) {
-	if (!args.isObject()) { errorOut = "mouse_click: arguments must be an object"; return false; }
-	const Common::JSONObject &a = args.asObject();
-	if (!a.contains("x") || !a["x"]->isIntegerNumber() ||
-	    !a.contains("y") || !a["y"]->isIntegerNumber()) {
-		errorOut = "mouse_click: integer 'x' and 'y' are required";
-		return false;
-	}
-	int x = (int)a["x"]->asIntegerNumber();
-	int y = (int)a["y"]->asIntegerNumber();
-	Common::String button = "left";
-	if (a.contains("button") && a["button"]->isString()) button = a["button"]->asString();
-	bool isDouble = a.contains("double") && a["double"]->isBool() && a["double"]->asBool();
-
+void ScummMcpBridge::injectMouseClick(int x, int y, const Common::String &button, bool isDouble) {
 	// Position the mouse first.
-	_vm->_mouse.x        = x;
-	_vm->_mouse.y        = y;
-	_vm->_virtualMouse.x = x;
-	_vm->_virtualMouse.y = y;
-	if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = x;
-	if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = y;
-	if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = x;
-	if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = y;
+	injectMouseMove(x, y);
 
 	// msClicked = 2, msDown = 1 (both bits set on a real button press).
 	const byte kClicked = 2;
@@ -3011,70 +2482,17 @@ bool ScummMcpBridge::toolMouseClick(const Common::JSONValue &args, Common::Strin
 	if (isDouble) {
 		_vm->_lastInputScriptTime = _vm->_system->getMillis();  // mark "first click was just now"
 	}
-	return true;
-}
-
-Common::JSONValue *ScummMcpBridge::toolScreenshot(const Common::JSONValue &args, Common::String &errorOut) {
-	(void)args;
-	if (!_vm || !_vm->_system) {
-		errorOut = "screenshot: no system available";
-		return nullptr;
-	}
-	// Save to the configured screenshot path, auto-numbered, exactly like the
-	// in-app "save screenshot" action. Engine-version-agnostic.
-	_vm->_system->saveScreenshot();
-	Common::JSONObject out;
-	out.setVal("saved", mcpJsonBool(true));
-	return new Common::JSONValue(out);
 }
 
 // ---------------------------------------------------------------------------
 // Streaming pump
 // ---------------------------------------------------------------------------
 
-void ScummMcpBridge::emitPendingMessages() {
-	while (!_messages.empty()) {
-		const MessageEntry &m = _messages[0];
-		_sseMessages.push_back(m);
-		_sseLastEventFrame = _frameCounter;
-		Common::JSONObject params;
-		if (m.actorId >= 0) {
-			int objId = _vm->actorToObj(m.actorId);
-			// Only include actor name if the object ID is within bounds
-			if (_vm->_numGlobalObjects <= 0 || objId < _vm->_numGlobalObjects) {
-				Common::String actorName = getObjName(this, objId);
-				if (!actorName.empty()) {
-					Common::String safe = safeUtf8(mcpLowerTrimmed(actorName));
-					params.setVal("actor", mcpJsonString(safe));
-				}
-			}
-		}
-		Common::String cleanText = cleanGameText(safeUtf8(m.text));
-		if (!cleanText.empty()) {
-			params.setVal("text", mcpJsonString(cleanText));
-			params.setVal("type", mcpJsonString(safeUtf8(m.type)));
-			_server->emitNotification(params);
-		}
-		_messages.remove_at(0);
-	}
-}
+// SCUMM's slots in the shared pumpStream() skeleton. The generic stages
+// (message drain, room-change close, stuck close, timeout, settle) live in
+// MCP::McpBridge::pumpStream(); these overrides carry the SCUMM specifics.
 
-void ScummMcpBridge::pumpStream() {
-	if (!_streaming) return;
-
-	emitPendingMessages();
-
-	// Game-specific early streaming step (e.g. Full Throttle's INSANE bike
-	// fight): may end the frame before the generic settle/close logic runs.
-	if (pumpStreamGameEarly())
-		return;
-
-	// Per-frame game-specific streaming step: the CMI cannon-aim machine, the V7
-	// dialog verb-script watcher, the Loom note watcher / note-feed, etc. Runs
-	// before the close/timeout checks so its effects (e.g. resetting the settle
-	// window) are seen this frame. See the leaf classes' pumpStreamGame().
-	pumpStreamGame();
-
+void ScummMcpBridge::pumpStreamTrack() {
 	// Track whether ego moved at any point during this stream.
 	{
 		Actor *ego = getEgoActor();
@@ -3112,70 +2530,54 @@ void ScummMcpBridge::pumpStream() {
 			_sseLastEventFrame = _frameCounter;
 		}
 	}
+}
 
-	// Early-close: if the room has already changed, there is nothing left to settle —
-	// no dialogue will appear in the old room and accessing old-room state is unsafe.
-	if ((int)_vm->_currentRoom != _ssePreRoom) {
-		debug(1, "mcp: room changed to %d during stream, closing immediately", _vm->_currentRoom);
-		Common::JSONObject changes = buildStateChanges();
-		_streaming = false;
-		_server->endStream(new Common::JSONValue(changes), true);
-		return;
-	}
+bool ScummMcpBridge::streamRoomChanged() const {
+	return (int)_vm->_currentRoom != _ssePreRoom;
+}
 
-	// Early-exit: stuck (no speech, user-put locked).
-	// This includes both idle and animated states (e.g., cutscenes with ego moving).
-	// Use a short timeout when no events have occurred yet (action had no visible
-	// effect and completed quickly), and a longer one when we've seen activity.
-	// V8 (CMI) exception: userPut locked with no talkDelay means the dialog script
-	// is between lines deciding what to say next — not frozen. isActionDone() already
-	// guards this via its own userPut check, so skip stuck-close entirely here.
-	{
-		bool stuck = _vm->_talkDelay == 0 && _vm->_userPut <= 0;
-		if (_vm->_game.version == 8 && _vm->_userPut <= 0)
-			stuck = false;
-		if (stuck) {
-			if (_sseStuckAtFrame == 0) _sseStuckAtFrame = _frameCounter;
-			bool hadActivity = _sseLastEventFrame > 0 || _sseEgoMoved;
-			uint32 stuckLimit = hadActivity ? 90 : 15;
-			if (_frameCounter - _sseStuckAtFrame > stuckLimit) {
-				debug(1, "mcp: action stuck for %d frames — closing stream", stuckLimit);
-				Common::JSONObject changes = buildStateChanges();
-				_streaming = false;
-				_server->endStream(new Common::JSONValue(changes), true);
-				return;
-			}
-		} else {
-			_sseStuckAtFrame = 0;
-		}
-	}
+// Stuck: no speech, user-put locked. This includes both idle and animated
+// states (e.g. cutscenes with ego moving). V8 (CMI) exception: userPut locked
+// with no talkDelay means the dialog script is between lines deciding what to
+// say next — not frozen. isActionDone() already guards this via its own userPut
+// check, so skip stuck-close entirely there.
+bool ScummMcpBridge::isStreamStuck() const {
+	if (_vm->_game.version == 8 && _vm->_userPut <= 0)
+		return false;
+	return _vm->_talkDelay == 0 && _vm->_userPut <= 0;
+}
 
-	// Hard timeout: 600 frames (~20 s) since the last event (or stream start).
-	// For V7 (Dig/FT) and V8 (CMI) — and for Loom's play_note hatch cutscene
-	// (_sseAllowLongCutscene) — anchor to _sseLastEventFrame so that each new
-	// dialog line resets the deadline: long exchanges and room-transition
-	// cutscenes (e.g. walking out of a scene while characters talk, or the
-	// egg-hatch's Hetchel/cygnet dialogue) don't time out between lines. Those
-	// can run far longer than two minutes, so the absolute 3600-frame (~120 s)
-	// ceiling only guards the older games; where the per-event deadline applies
-	// it (still firing 20 s after dialogue genuinely stalls) is the sole safety
-	// net. Other pre-V7 streams keep the start-anchored 600-frame deadline, so a
-	// scene with ambient looping dialogue (the Indy3 student-mob office) still
-	// terminates promptly instead of being held open by background chatter.
-	{
-		bool perEventDeadline = (_vm->_game.version >= 7 || _sseAllowLongCutscene);
-		uint32 timeoutAnchor = (perEventDeadline && _sseLastEventFrame > 0)
-		    ? _sseLastEventFrame : _sseStartFrame;
-		bool absoluteTimeout = (_vm->_game.version < 7) && (_frameCounter - _sseStartFrame > 3600);
-		if (absoluteTimeout || _frameCounter - timeoutAnchor > 600) {
-			debug(1, "mcp: stream timeout (anchor=%u, start=%u, last=%u, now=%u)",
-			      timeoutAnchor, _sseStartFrame, _sseLastEventFrame, _frameCounter);
-			_streaming = false;
-			_server->endStream(nullptr, false, "action timed out");
-			return;
-		}
-	}
+bool ScummMcpBridge::streamHadActivity() const {
+	return _sseLastEventFrame > 0 || _sseEgoMoved;
+}
 
+// Short budget when the action had no visible effect and completed quickly, a
+// longer one once activity has been seen.
+uint32 ScummMcpBridge::stuckFrames(bool hadActivity) const {
+	return hadActivity ? 90 : 15;
+}
+
+// The 3600-frame (~120 s) absolute ceiling only guards the older games; where
+// the per-event deadline applies (see streamTimeoutAnchor) it — still firing
+// 20 s after dialogue genuinely stalls — is the sole safety net.
+uint32 ScummMcpBridge::absoluteTimeoutFrames() const {
+	return (_vm->_game.version < 7) ? 3600 : 0;
+}
+
+// For V7 (Dig/FT) and V8 (CMI) — and for Loom's play_note hatch cutscene
+// (_sseAllowLongCutscene) — anchor to _sseLastEventFrame so that each new dialog
+// line resets the deadline: long exchanges and room-transition cutscenes (e.g.
+// walking out of a scene while characters talk, or the egg-hatch's
+// Hetchel/cygnet dialogue) don't time out between lines. Other pre-V7 streams
+// keep the start-anchored deadline, so a scene with ambient looping dialogue
+// (the Indy3 student-mob office) still terminates promptly instead of being held
+// open by background chatter.
+uint32 ScummMcpBridge::streamTimeoutAnchor() const {
+	bool perEventDeadline = (_vm->_game.version >= 7 || _sseAllowLongCutscene);
+	return (perEventDeadline && _sseLastEventFrame > 0) ? _sseLastEventFrame : _sseStartFrame;
+}
+
+void ScummMcpBridge::pumpStreamMid() {
 	// Clear the simulated mouse-button msDown bit a couple frames after the click
 	// so that the dialog input script (V7 script 69) does not see a held button.
 	if (_sseButtonClearFrame != 0 && _frameCounter >= _sseButtonClearFrame) {
@@ -3183,12 +2585,11 @@ void ScummMcpBridge::pumpStream() {
 		_vm->_rightBtnPressed &= ~0x01; // clear msDown (Dig pickup deselect)
 		_sseButtonClearFrame = 0;
 	}
+}
 
-	// Late per-frame game-specific streaming step: deferred synthetic clicks that
-	// must run after the button-clear pass above (the Dig pickup-deselect and the
-	// V7 use-item / dialog-choice clicks). See the leaf classes' pumpStreamGameLate().
-	pumpStreamGameLate();
-
+// Runs after pumpStreamGameLate() (the Dig pickup-deselect and the V7 use-item /
+// dialog-choice clicks), immediately before the settle decision.
+void ScummMcpBridge::pumpStreamPreSettle() {
 	// Sam & Max context-cursor click: cycle the verb cursor to _sseSnmCursorTarget
 	// over the target (right-clicks), then left-click. Drives talk_to (mouth, 877)
 	// and 'use' on no-verb-7 objects like the DeSoto (use/operate, 878).
@@ -3316,23 +2717,13 @@ void ScummMcpBridge::pumpStream() {
 			}
 		}
 	}
+}
 
-	bool done = isActionDone();
-	if (done) {
-		if (_sseDoneAtFrame == 0) {
-			_sseDoneAtFrame = _frameCounter;
-			debug(1, "mcp: action looks done at frame %d, settling (egoMoved=%d, lastEvent=%d)",
-			      _frameCounter, _sseEgoMoved, _sseLastEventFrame);
-		}
-
-		// If a new message arrived after we first thought we were done, the action
-		// script was still running — reset the window to wait for it to finish.
-		if (_sseLastEventFrame > _sseDoneAtFrame) {
-			debug(1, "mcp: new event at frame %d after done at %d, extending window",
-			      _sseLastEventFrame, _sseDoneAtFrame);
-			_sseDoneAtFrame = _sseLastEventFrame;
-		}
-
+// The generic settle machinery (latching _sseDoneAtFrame, extending it on a new
+// event) lives in MCP::McpBridge::pumpStream(); this override is the SCUMM
+// decision about whether a settled stream may actually close.
+bool ScummMcpBridge::shouldCloseStream() const {
+	{
 		// V7: hasPendingQuestion() returns true whenever VAR_VERB_SCRIPT differs
 		// from the baseline, even during an answer stream that started in dialog
 		// mode. Suppress it for V7 here — dialog detection uses v7DialogReady.
@@ -3441,12 +2832,9 @@ void ScummMcpBridge::pumpStream() {
 
 			debug(1, "mcp: closing stream at frame %d (question=%d, settled=%d, settleFrames=%d)",
 				_frameCounter, questionReady, settled, settleFrames);
-			Common::JSONObject changes = buildStateChanges();
-			_streaming = false;
-			_server->endStream(new Common::JSONValue(changes), true);
+			return true;
 		}
-	} else {
-		_sseDoneAtFrame = 0;
+		return false;
 	}
 }
 

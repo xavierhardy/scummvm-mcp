@@ -77,6 +77,22 @@ public:
 	void fnEndMenu();
 	void checkTopMenu();
 	void setToTargetState();
+
+	// --- MCP bridge support -------------------------------------------------
+	// Both take _menuMutex: the 100 Hz vblCallback timer thread also touches the
+	// menu, so the bridge must never read or write _subjectBar directly.
+
+	// Copy the open subject bar's topic ids (one per IN_SUBJECT slot) so the MCP
+	// `state` tool can report the pending conversation choices.
+	void mcpSubjectIds(Common::Array<uint32> &out) const;
+
+	// Choose subject-bar slot `slot` (1-based) as if the player had clicked it.
+	// Sets OBJECT_HELD exactly as the real button-down does and latches the
+	// choice; logicChooser() commits it on the next LOGIC_choose cycle, which is
+	// what the real button-up would have done. Returns false when the subject bar
+	// is not open or the slot is out of range.
+	bool mcpChooseSubject(uint8 slot);
+
 	static const MenuObject _objectDefs[TOTAL_pockets + 1];
 
 private:
@@ -84,6 +100,9 @@ private:
 	void buildMenu();
 	void showMenu(uint8 menuType);
 	byte _subjectBarStatus;
+	// Subject-bar slot latched by mcpChooseSubject(), committed by the next
+	// logicChooser() call. 0 when no MCP choice is pending.
+	uint8 _mcpForcedChoice = 0;
 	byte _objectBarStatus;
 	int8 _fadeSubject;
 	int8 _fadeObject;

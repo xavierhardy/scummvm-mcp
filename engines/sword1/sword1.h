@@ -67,6 +67,7 @@ class ResMan;
 class ObjectMan;
 class Menu;
 class Control;
+class Sword1McpBridge;
 
 struct SystemVars {
 	bool             runningFromCd;
@@ -105,6 +106,7 @@ class SwordEngine : public Engine {
 	friend class SwordConsole;
 	friend class Screen;
 	friend class Control;
+	friend class Sword1McpBridge;
 
 public:
 	SwordEngine(OSystem *syst, const ADGameDescription *gameDesc);
@@ -140,6 +142,15 @@ public:
 	void setMenuToTargetState();
 
 	void showDebugInfo();
+
+	// Service the MCP server from a place where the main loop is not running
+	// (a palette fade, the control panel, a cutscene). Reentrancy-guarded and a
+	// no-op unless mcp=true. See Sword1McpBridge and MCP::McpBridge::pumpTransportOnly().
+	void mcpPump();
+	// True when an MCP server is running, so hot paths can skip their hook.
+	bool mcpEnabled() const { return _mcpBridge != nullptr; }
+	// Feed a spoken line to the MCP server (called from Logic::fnISpeak).
+	void mcpOnSpeech(int compactId, const Common::String &text, bool isVoiceOver);
 
 protected:
 	// Engine APIs
@@ -193,6 +204,8 @@ private:
 	Sound       *_sound;
 	Menu        *_menu;
 	Control     *_control;
+	Sword1McpBridge *_mcpBridge = nullptr;
+	bool        _inMcpPump = false;  // reentrancy guard for mcpPump()
 	static const uint8  _cdList[TOTAL_SECTIONS];
 	static const CdFile _pcCdFileList[];
 	static const CdFile _macCdFileList[];

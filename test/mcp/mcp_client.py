@@ -137,20 +137,31 @@ class McpClient:
         if "error" in data:
             raise RuntimeError(f"Initialize error: {data['error']}")
 
-    def state(self) -> dict[str, Any]:
-        """Get current game state (sync call)."""
+    def call_tool(
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Call any non-streaming tool by name (e.g. a game-specific ``debug``).
+
+        The dedicated wrappers (``state``, ``act``, ...) are the ergonomic path;
+        this is the escape hatch for tools without one, such as sword1's
+        section-flagged ``debug``.
+        """
         payload = {
             "jsonrpc": "2.0",
             "id": self._next_id(),
             "method": "tools/call",
-            "params": {"name": "state", "arguments": {}},
+            "params": {"name": name, "arguments": arguments or {}},
         }
         resp = self._client.post(self._url, json=payload, headers=self._headers())
         data = resp.json()
 
         if "error" in data:
-            raise RuntimeError(f"State error: {data['error']}")
+            raise RuntimeError(f"{name} error: {data['error']}")
         return self._extract_result(data)
+
+    def state(self) -> dict[str, Any]:
+        """Get current game state (sync call)."""
+        return self.call_tool("state")
 
     def debug(self) -> dict[str, Any]:
         """Get current game state (sync call)."""

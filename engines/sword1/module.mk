@@ -7,6 +7,8 @@ MODULE_OBJS := \
 	debug.o \
 	eventman.o \
 	logic.o \
+	mcp.o \
+	mcp_names.o \
 	memman.o \
 	menu.o \
 	metaengine.o \

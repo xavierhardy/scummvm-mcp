@@ -25,6 +25,7 @@
 #include "sword1/objectman.h"
 #include "sword1/mouse.h"
 #include "sword1/logic.h"
+#include "sword1/mcp.h"
 #include "sword1/sound.h"
 #include "sword1/screen.h"
 #include "sword1/swordres.h"
@@ -50,6 +51,26 @@ SwordEngine::SwordEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	_features = gameDesc->flags;
 	_systemVars.platform = gameDesc->platform;
 
+	_mouseState = 0;
+	_resMan = 0;
+	_objectMan = 0;
+	_screen = 0;
+	_mouse = 0;
+	_logic = 0;
+	_sound = 0;
+	_menu = 0;
+	_control = 0;
+
+	// Create the MCP bridge first thing, so the server binds its port before
+	// anything that can block: setDebugger() below brings up the GUI manager,
+	// which on macOS with no real display stalls on its first redraw, and
+	// init() then starts with initGraphics(). A bridge created after either
+	// would leave a client waiting on a port nobody is listening on. The bridge
+	// only reaches the subsystems above from a tool call, which cannot happen
+	// until the main loop starts pumping the server.
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = Sword1McpBridge::create(this);
+
 	// Add default file directories
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "music");
@@ -62,20 +83,10 @@ SwordEngine::SwordEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	//SearchMan.addSubDirectoryMatching(gameDataDir, "english"); // PSX Demo  // Comes from AD
 	//SearchMan.addSubDirectoryMatching(gameDataDir, "italian"); // PSX Demo  // Comes from AD
 
-	setDebugger(new SwordConsole(this));
-
-	_mouseState = 0;
-	_resMan = 0;
-	_objectMan = 0;
-	_screen = 0;
-	_mouse = 0;
-	_logic = 0;
-	_sound = 0;
-	_menu = 0;
-	_control = 0;
 }
 
 SwordEngine::~SwordEngine() {
+	delete _mcpBridge;
 	delete _control;
 	delete _logic;
 	delete _menu;
@@ -89,6 +100,14 @@ SwordEngine::~SwordEngine() {
 Common::Error SwordEngine::init() {
 
 	initGraphics(640, 480);
+
+	// Create the debugger only now: GUI::Debugger's constructor builds a
+	// ConsoleDialog, which brings up the GUI manager and forces a full redraw.
+	// Doing that from the engine constructor — before initGraphics() has set the
+	// game's own graphics mode — deadlocks in the backend's buffer swap when
+	// there is no real display (headless macOS). Every other engine, SCUMM
+	// included, creates its debugger after graphics setup for the same reason.
+	setDebugger(new SwordConsole(this));
 
 	checkCdFiles();
 
@@ -1024,6 +1043,13 @@ uint8 SwordEngine::mainLoop() {
 			_sound->setCrossFadeIncrement();
 			_logic->updateScreenParams(); // sets scrolling
 
+			// Every compact has run its logic for this cycle, so the MCP server
+			// reports a settled snapshot; and a click it injects executes on the
+			// *next* Logic::engine(), exactly as a real click does (Mouse::engine
+			// runs at the end of the cycle).
+			if (_mcpBridge)
+				_mcpBridge->pump();
+
 			_screen->draw();
 
 			showDebugInfo();
@@ -1108,6 +1134,13 @@ void SwordEngine::waitForFade() {
 
 void SwordEngine::pollInput(uint32 delay) { //copied and mutilated from sky.cpp
 
+	// pollInput() is also reached from waitForFade(), askForCd() and
+	// Control::getPlayerOptions(), where mainLoop() is not running. Without a
+	// pump here the MCP server would be unreachable — and a client's socket
+	// would simply hang — for the whole of a fade, a CD prompt or an open
+	// control panel.
+	mcpPump();
+
 	Common::Event event;
 	uint32 start = _system->getMillis();
 
@@ -1154,6 +1187,22 @@ void SwordEngine::pollInput(uint32 delay) { //copied and mutilated from sky.cpp
 			_system->delayMillis(10);
 
 	} while (_system->getMillis() < start + delay);
+}
+
+void SwordEngine::mcpPump() {
+	if (!_mcpBridge || _inMcpPump)
+		return;
+	// Never advances the bridge's frame counter: streaming budgets stay in
+	// game-cycle units, which only mainLoop() produces. MCP::McpBridge's
+	// wall-clock timeout is what covers a stream that starts here.
+	_inMcpPump = true;
+	_mcpBridge->pumpTransportOnly();
+	_inMcpPump = false;
+}
+
+void SwordEngine::mcpOnSpeech(int compactId, const Common::String &text, bool isVoiceOver) {
+	if (_mcpBridge)
+		_mcpBridge->onSpeech(compactId, text, isVoiceOver);
 }
 
 bool SwordEngine::mouseIsActive() {

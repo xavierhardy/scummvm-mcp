@@ -424,8 +424,35 @@ void Menu::setToTargetState() {
 	}
 }
 
+void Menu::mcpSubjectIds(Common::Array<uint32> &out) const {
+	Common::StackLock lock(const_cast<Common::Mutex &>(_menuMutex));
+	out.clear();
+	if (_subjectBarStatus != MENU_OPEN)
+		return;
+	for (uint32 i = 0; i < Logic::_scriptVars[IN_SUBJECT] && i < ARRAYSIZE(_subjectBar); i++)
+		out.push_back(_subjectBar[i]);
+}
+
+bool Menu::mcpChooseSubject(uint8 slot) {
+	Common::StackLock lock(_menuMutex);
+	if (_subjectBarStatus != MENU_OPEN || slot < 1 ||
+	    slot > Logic::_scriptVars[IN_SUBJECT] || slot > ARRAYSIZE(_subjectBar))
+		return false;
+	Logic::_scriptVars[OBJECT_HELD] = _subjectBar[slot - 1];
+	_mcpForcedChoice = slot;
+	refreshMenus();
+	return true;
+}
+
 int Menu::logicChooser(Object *compact) {
 	Common::StackLock lock(_menuMutex);
+	// An MCP-driven choice stands in for the player's button-up: commit it here,
+	// exactly where a real selection would have been committed.
+	if (_mcpForcedChoice) {
+		_mcpForcedChoice = 0;
+		compact->o_logic = LOGIC_script;
+		return 1;
+	}
 	uint8 objSelected = 0;
 	if (_objectBarStatus == MENU_OPEN)
 		objSelected = checkMenuClick(MENU_TOP);

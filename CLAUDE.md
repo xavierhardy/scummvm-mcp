@@ -40,24 +40,41 @@ showed it. The wire protocol is documented in `docs/protocols/mcp.json`.
 | Path | Role |
 |------|------|
 | `backends/networking/mcp/mcp_server.{h,cpp}` | Engine-agnostic MCP transport: TCP listener, HTTP framing, JSON-RPC 2.0 dispatch, SSE streaming, tool registry (`IToolHandler`), and pure string/JSON helpers (`mcpNormalizeSpaces`, `mcpSanitizeString`, `mcpJson*`). |
-| `engines/scumm/mcp.{h,cpp}` | `ScummMcpBridge` — the SCUMM-specific `IToolHandler`. Builds the state snapshot, implements every tool, runs the per-frame streaming state machine, and contains the game/engine-version-specific logic. The large file. |
-| `engines/scumm/mcp_actionname.cpp` | `normalizeActionName` + `mcpStripNamePadding`, deliberately kept free of `ScummEngine` so unit tests can link them without the whole engine. |
+| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM and Broken Sword. |
+| `engines/mcp_bridge_text.cpp` | `normalizeActionName` + the verb-alias table, `mcpStripNamePadding`, `mcpCleanGameText`, `mcpJsonKeyToKeyState` — deliberately free of `Engine` so both engines' unit tests link them without a running engine. |
+| `engines/scumm/mcp.{h,cpp}` (+ `mcp_subclasses.h`, `mcp_v*/mcp_classic.cpp`) | `ScummMcpBridge : MCP::McpBridge` — the SCUMM adapter. Builds the state snapshot, implements every SCUMM tool, and holds the game/engine-version-specific logic. The large file. |
+| `engines/scumm/mcp_actionname.cpp` | A shim: `Scumm::mcpStripNamePadding` forwards to the shared `MCP::` version (kept for the external symbol the SCUMM unit test forward-declares). |
+| `engines/sword1/mcp.{h,cpp}` | `Sword1McpBridge : MCP::McpBridge` — the Broken Sword 1 adapter (one-click game; world coordinates; click injection replays `Mouse::engine()`). Written to extend to Broken Sword 2 unchanged. |
+| `engines/sword1/mcp_names.{h,cpp}` | Broken Sword naming tables (pockets, symbolic compact ids, screens) + the `object_<section>_<index>` fallback resolver. Engine-free, so its unit test links without the engine. |
 
 Enable / configure via the game's `scummvm.ini` `[gameid]` section:
 `mcp=true`, `mcp_port=N`, `mcp_host=...`, `mcp_skip_tool=true`,
-`mcp_debug=true`. Engine versions differ a lot (V0 Maniac C64 → V8 Curse of
-Monkey Island); much of `mcp.cpp` branches on the engine version and the
-specific game.
+`mcp_debug=true` — read once in `MCP::McpBridge`'s constructor, so they work
+identically for every engine. SCUMM engine versions differ a lot (V0 Maniac C64
+→ V8 Curse of Monkey Island); much of `scumm/mcp.cpp` branches on the engine
+version and the specific game. Per-engine tool semantics are documented under
+`engineNotes` in `docs/protocols/mcp.json`.
+
+**Adding a new engine**: subclass `MCP::McpBridge`, implement the pure-virtual
+tools + streaming hooks, create it from the engine (bind the server *before* any
+blocking GUI init — see how `SwordEngine` builds the bridge first thing in its
+constructor and creates its debugger only after `initGraphics()`), pump it once
+per game cycle, and pump-transport-only from any place the main loop stalls
+(fades, cutscenes, modal panels).
 
 ### MCP server tests
 
-- **C++ unit tests** — `test/engines/scumm/mcp.h` (CxxTest). Covers the
-  engine-independent helpers only (no running engine). Wired into `make test`
-  via `test/module.mk` when `ENABLE_SCUMM=STATIC_PLUGIN`.
+- **C++ unit tests** — `test/engines/scumm/mcp.h` and
+  `test/engines/sword1/mcp.h` (CxxTest). Cover the engine-independent helpers
+  only (no running engine). Wired into `make test` via `test/module.mk` under
+  `ENABLE_SCUMM=STATIC_PLUGIN` / `ENABLE_SWORD1=STATIC_PLUGIN`; the shared
+  `mcp_server.o` + `mcp_bridge_text.o` are linked once for whichever is enabled.
 - **Python integration tests** — `test/mcp/`. Launch a real headless ScummVM
   per game and drive the MCP server over HTTP, asserting on game state. ~10
-  games (V0–V8), plus pure-Python unit tests in `test/mcp/test_unit.py`. See
-  `test/mcp/README.md` for the full game/fixture map.
+  SCUMM games (V0–V8) plus Broken Sword 1 (`test_sword1.py`, engine `sword1`),
+  and pure-Python unit tests in `test/mcp/test_unit.py`. See
+  `test/mcp/README.md` for the full game/fixture map. (`launcher._SAVE_NAME_FMT`
+  maps a game to its engine's save-file naming — sword1 uses `sword1.NNN`.)
 
 ## Architecture — MCP benchmark (`scummvm_bench/`)
 

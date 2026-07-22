@@ -10,6 +10,7 @@
 #define SCUMM_MCP_H
 
 #include "backends/networking/mcp/mcp_server.h"
+#include "engines/mcp_bridge.h"
 
 #include "common/array.h"
 #include "common/formats/json.h"
@@ -23,7 +24,7 @@ class ScummEngine;
 class Actor;
 struct ObjectData;
 
-class ScummMcpBridge : public Networking::McpServer::IToolHandler {
+class ScummMcpBridge : public MCP::McpBridge {
 public:
 	// Factory: pick the bridge subclass for the running game. Games with their
 	// own specialisation get a dedicated leaf class; every other game falls back
@@ -35,44 +36,21 @@ public:
 	explicit ScummMcpBridge(ScummEngine *vm);
 	~ScummMcpBridge() override;
 
-	// Finish construction: register tools with the server. Must run after the
-	// object is fully constructed (it dispatches through virtual hooks that a
-	// base constructor could not reach). Called by create().
-	void init();
-
-	virtual void pump();
-
-	virtual void onActorLine(int actorId, const Common::String &text);
-	virtual void onSystemLine(const Common::String &text);
-	virtual void onDialogPrompt(const Common::String &text);
-
 	// V7-only: invoked once per frame, just before the engine draws/clears the
 	// blast text queue. The bridge snapshots dialog-choice text + click target
 	// coordinates so toolState can expose the real labels and toolAnswer /
 	// pumpStream can route the click to the correct screen position.
 	virtual void onV7BlastTextSnapshot();
 
-	static Common::String normalizeActionName(const Common::String &action);
-
 	// Accessor for protected getObjOrActorName used by helpers.
 	const byte *callGetObjOrActorName(int obj) const;
 
-	// IToolHandler
+	// set_talk_speed is SCUMM-only; everything else is dispatched by the base.
 	Common::JSONValue *callTool(const Common::String &name,
-	                             const Common::JSONValue &args,
-	                             Common::String &errorOut) override;
-	void pumpStream() override;
+	                            const Common::JSONValue &args,
+	                            Common::String &errorOut) override;
 
 protected:
-	struct MessageEntry {
-		uint64 seq;
-		uint32 frame;
-		byte room;
-		int actorId;
-		Common::String type;
-		Common::String text;
-	};
-
 	struct NamedEntity {
 		enum Kind { kInventory, kObject, kActor };
 		Kind kind;
@@ -109,15 +87,15 @@ protected:
 
 	// Register any tools specific to this game (shoot_cannon, ride_bike, dial,
 	// switch_character, play_note, …). Called at the end of registerTools().
-	virtual void registerGameTools() {}
+	void registerGameTools() override {}
 	// Add game-specific fields to the `state` tool's output schema.
-	virtual void augmentStateSchema(Common::JSONObject &outputProps) { (void)outputProps; }
+	void augmentStateSchema(Common::JSONObject &outputProps) override { (void)outputProps; }
 	// Handle a tool call the base callTool() did not recognise. Set handled=true
 	// if consumed. Return value follows the IToolHandler contract (null for
 	// streaming/void tools).
-	virtual Common::JSONValue *dispatchGameTool(const Common::String &name,
-	                                            const Common::JSONValue &args,
-	                                            Common::String &errorOut, bool &handled) {
+	Common::JSONValue *dispatchGameTool(const Common::String &name,
+	                                    const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override {
 		(void)name; (void)args; (void)errorOut; handled = false; return nullptr;
 	}
 	// Replace/augment the active verb list in toolState (e.g. a fixed fallback
@@ -156,19 +134,19 @@ protected:
 	// right after the generic pre-step bookkeeping and before the close/timeout
 	// checks. Use this for steps whose effects should be visible to the generic
 	// settle/close logic on the same frame (e.g. resetting the settle window).
-	virtual void pumpStreamGame() {}
+	void pumpStreamGame() override {}
 	// Late per-frame game-specific streaming step, called from pumpStream() after
 	// the generic timeout/button-clear logic and just before the settle/close
 	// decision. Use this for deferred synthetic clicks (Dig pickup-deselect, the
 	// V7 use-item and dialog-choice clicks) that must run after the button-clear
 	// pass so they don't have their freshly-set button state cleared the same
 	// frame. Default does nothing.
-	virtual void pumpStreamGameLate() {}
+	void pumpStreamGameLate() override {}
 	// Early per-frame streaming hook, run at the very top of pumpStream (before
 	// the generic settle/close logic). Return true to end the frame immediately
 	// (e.g. Full Throttle's bike fight, which runs inside INSANE's own loop and
 	// only wants to wait for the section to resolve). Default does nothing.
-	virtual bool pumpStreamGameEarly() { return false; }
+	bool pumpStreamGameEarly() override { return false; }
 	// Reset any game-specific per-stream state. Called from snapshotPreAction().
 	virtual void resetGameStream() {}
 	// True while a game-specific streaming state machine is still working (e.g.
@@ -254,22 +232,12 @@ protected:
 	// (filtering the blank panel slots) from those objects.
 	void collectSamnMaxDialogChoices(Common::Array<V7Choice> &out);
 
+	// The engine, as its concrete type. MCP::McpBridge::_engine points at the
+	// same object; keeping a typed alias here is what lets the SCUMM-specific
+	// half of the bridge stay unchanged.
 	ScummEngine *_vm;
-	bool _enabled;
-	bool _skipToolEnabled;
-	bool _debugToolsEnabled;
-	Networking::McpServer *_server;
 
-	Common::Array<MessageEntry> _messages;
-	uint64 _nextMessageSeq;
-	uint32 _frameCounter;
-
-	// Streaming (action/answer/walk) state
-	bool _streaming;
-	uint32 _sseStartFrame;
-	uint32 _sseDoneAtFrame;
-	uint32 _sseStuckAtFrame;
-	uint32 _sseLastEventFrame;  // Frame of most recent message received during stream
+	// Streaming (action/answer/walk) state beyond the shared base's.
 	bool _sseEgoMoved;          // ego moved at any point during this stream
 	// Loom's play_note hatches the egg into a long cutscene that keeps streaming
 	// dialogue well past the usual pre-V7 timeout. Only that tool sets this, so
@@ -294,9 +262,6 @@ protected:
 	int                   _ssePreActiveScriptCount = 0;
 	int                   _sseLastActiveScriptCount = 0;
 	Common::Array<ObjStateSnap> _ssePreObjectStates;
-	int _ssePreRoom;
-	int _ssePrePosX, _ssePrePosY;
-	Common::Array<MessageEntry> _sseMessages;
 	bool _ssePendingSecondClick;
 	int _sseClickMouseX, _sseClickMouseY;
 	Common::Array<Common::KeyCode> _ssePendingNotes;
@@ -348,10 +313,6 @@ protected:
 	// the actor before a click counts as a click ON it, so the machinery
 	// never left-clicks on the same pump frame that warped the mouse.
 	bool _sseSnmHovered = false;
-	// Auto-release frame for stand-alone mouse_click (debug tool): the engine
-	// expects a button-down followed by a button-up; without the release V7
-	// scripts treat the click as a drag and skip the action handler.
-	uint32 _debugButtonReleaseFrame = 0;
 	// V7 use-item: deferred scene click after arming the inventory cursor.
 	// The engine needs a frame between arming the cursor in the inventory
 	// click handler and firing the scene click so the held-item state is
@@ -382,23 +343,50 @@ protected:
 	// early; we must wait for the dialog response (actorTalk lines) to play out.
 	bool _sseAnswerStream = false;
 
-	void pushMessage(const char *type, int actorId, const Common::String &text);
+	// --- MCP::McpBridge overrides ------------------------------------------
 
 	// Tool implementations
-	Common::JSONValue *toolState(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolAct(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolAnswer(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut);
-
-	// Debug tools (gated by mcp_debug ini option). Engine-version-agnostic.
-	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut);
-	Common::JSONValue *toolSaveState(const Common::JSONValue &args, Common::String &errorOut);
+	Common::JSONValue *toolState(const Common::JSONValue &args, Common::String &errorOut) override;
+	bool toolAct(const Common::JSONValue &args, Common::String &errorOut) override;
+	bool toolAnswer(const Common::JSONValue &args, Common::String &errorOut) override;
+	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut) override;
+	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut) override;
+	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut) override;
+	// SCUMM defers to its own requestSave(), which the same scummLoop() iteration
+	// processes later in the frame, rather than saving inline.
+	Common::JSONValue *toolSaveState(const Common::JSONValue &args, Common::String &errorOut) override;
 	Common::JSONValue *toolSetTalkSpeed(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolKeystroke(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolMouseMove(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolMouseClick(const Common::JSONValue &args, Common::String &errorOut);
-	Common::JSONValue *toolScreenshot(const Common::JSONValue &args, Common::String &errorOut);
+
+	// Input injection
+	void injectKey(const Common::KeyState &ks) override;
+	void injectMouseMove(int x, int y) override;
+	void injectMouseClick(int x, int y, const Common::String &button, bool isDouble) override;
+
+	// Text handling
+	Common::String messageActorName(int actorId) const override;
+	int currentRoomForMessages() const override;
+	bool stripTalkieMetadata() const override;
+
+	// Tool registration
+	Common::String debugToolDescription() const override;
+	Common::JSONValue *buildDebugSchema() const override;
+	void augmentChangesSchema(Common::JSONObject &props) override;
+	void registerDebugTools() override;
+
+	// Per-frame engine step (V7 talk-line polling, S&M blast snapshot, …).
+	void pumpGame() override;
+
+	// Streaming
+	bool streamRoomChanged() const override;
+	bool isStreamStuck() const override;
+	bool streamHadActivity() const override;
+	uint32 stuckFrames(bool hadActivity) const override;
+	uint32 absoluteTimeoutFrames() const override;
+	uint32 streamTimeoutAnchor() const override;
+	bool shouldCloseStream() const override;
+	void pumpStreamTrack() override;
+	void pumpStreamMid() override;
+	void pumpStreamPreSettle() override;
 
 	// Loom segment detection (full Loom or the Loom mini-game in Passport to
 	// Adventure). Overridden by the Loom / Passport leaves.
@@ -427,21 +415,14 @@ protected:
 		(void)args; (void)errorOut; handled = false; return false;
 	}
 
-	// Register all tools with the server.
-	void registerTools();
-	// Shared output schema for streaming tools (act/answer/walk/…); also used by
-	// leaf classes that register their own streaming tools.
-	Common::JSONValue *buildChangesSchema() const;
-
 	// Streaming helpers
-	void snapshotPreAction();
-	Common::JSONObject buildStateChanges() const;
-	void emitPendingMessages();
+	void snapshotPreAction() override;
+	Common::JSONObject buildStateChanges() const override;
 
 	// Game-state helpers
 	Actor *getEgoActor() const;
-	bool hasPendingQuestion() const;
-	bool isActionDone() const;
+	bool hasPendingQuestion() const override;
+	bool isActionDone() const override;
 
 	void buildEntityMap(Common::Array<NamedEntity> &entities) const;
 	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
@@ -455,7 +436,7 @@ protected:
 	// Convert raw text in the game's native dialog code page (e.g. CP-850, CP-1252)
 	// to UTF-8 so non-ASCII labels round-trip correctly through MCP JSON.
 	// Falls back to byte-level sanitization when the engine is unavailable.
-	Common::String safeUtf8(const Common::String &raw) const;
+	Common::String safeUtf8(const Common::String &raw) const override;
 
 	// Selectability helpers: mirror the engine's findObject() / getActorFromPos() rules
 	// so that non-interactive entities are excluded from the MCP entity list.

@@ -71,6 +71,7 @@ _FIXTURE_INDEX = {
     "monkey_bar": 17,
     "monkey_kitchen": 18,
     "monkey_prison": 19,
+    "sword1": 20,
 }
 
 
@@ -230,6 +231,12 @@ def comi_s3_client() -> Iterator[McpClient]:
 def comi_s4_client() -> Iterator[McpClient]:
     """Curse of Monkey Island demo (slot 4, the cannon minigame)."""
     yield from _client("comi-demo", "comi_s4", save_slot=4)
+
+
+@pytest.fixture
+def sword1_client() -> Iterator[McpClient]:
+    """Broken Sword 1 demo (slot 1: George on rue Jarry, outside the café)."""
+    yield from _client("sword1-demo", "sword1", save_slot=1, checkpoint=True)
 
 
 # ---------------------------------------------------------------------------
