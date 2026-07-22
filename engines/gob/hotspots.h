@@ -28,6 +28,7 @@
 #ifndef GOB_HOTSPOTS_H
 #define GOB_HOTSPOTS_H
 
+#include "common/array.h"
 #include "common/stack.h"
 
 #include "gob/util.h"
@@ -105,6 +106,22 @@ public:
 
 	/** implementation of oPlaytoons_F_1B code*/
 	void createButton();
+
+	/** A plain description of one live hotspot, for the MCP bridge. */
+	struct McpDesc {
+		uint16 id;
+		uint16 index;
+		uint16 left, top, right, bottom;
+		uint16 flags;
+		uint16 key;
+		uint16 type;
+		uint8  cursor;
+		uint16 window;
+		bool   hasEnter, hasLeave, hasPos;
+	};
+
+	/** Describe the currently filled, enabled hotspots (MCP bridge). */
+	void mcpList(Common::Array<McpDesc> &out) const;
 
 #ifdef USE_TTS
 	bool hoveringOverHotspot() const;

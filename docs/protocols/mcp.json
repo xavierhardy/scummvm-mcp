@@ -987,6 +987,20 @@
       "question": "A pending conversation is the sentence chooser at the bottom of the screen: state.question.choices are the options on offer; answer(id) selects the 1-based displayed sentence (the same mapping as the keyboard digit shortcuts).",
       "changes": "objects_changed reports objects that became visible or hidden during an action ({name, old_state, new_state} with visible/hidden), which is how silent scene changes (moving the curtain revealing the wig) surface.",
       "debug": "The debug tool (mcp_debug) has sections gamestate / objects / items / system."
+    },
+    "woodruff": {
+      "scope": "The Bizarre Adventures of Woodruff and the Schnibble (gob engine).",
+      "interface": "Script-driven, one-click point-and-click game: no verb bar and no object model, just rectangular hotspots. act on a world object walks Woodruff up to the object first (a dedicated floor walk to its base) and then clicks it — so beckoning characters are reached and their dialogue fires in a single call instead of just answering \"come closer\". Exits (pathways) are clicked directly, since they already walk Woodruff to the screen edge and change room. The bridge dispatches every action by replaying real cursor input.",
+      "verbs": "A fixed set, always: interact (the default click) and use, plus walk_to. There is no separate look verb — interact examines, talks, opens and picks up as the target dictates. pick_up / open / close / talk_to / push / pull are accepted as interact aliases. state.verbs advertises it.",
+      "coordinates": "Game pixel coordinates (the 640x480 hotspot/cursor space; scroll and screen offsets are applied internally). walk(x,y) clicks the floor at that point. Screen coordinates appear only inside the debug tools.",
+      "objectNaming": "Names come from the game's own status-bar text: the bridge parks the cursor on each hotspot (a hover sweep) to capture the name the game draws, then turns it into a stable identifier (lower-cased, spaces to underscores, leading article stripped). Exits keep their 'to_...' form and are flagged as pathways. Unnamed hotspots fall back to hotspot_<id>. naming_pending is true while a fresh screen is still being swept.",
+      "objects": "state.objects carries id (hotspot id), name, label (the raw status-bar text), position (rect centre x/y) and pathway (true for exits). Woodruff himself is listed as an object (woodruff).",
+      "inventory": "state.inventory lists carried items (name + label + slot id). No save support, so items are learned live: after every action the bridge opens the game's own inventory overlay, reads the item names the overlay draws, and closes it again.",
+      "use": "'use <item> on <target>' selects the inventory item onto the cursor through the real overlay, then clicks the target (Woodruff walks over first). target1 is matched against the inventory only for use, so a world object sharing an item's name stays reachable with interact.",
+      "canAct": "state.can_act is false while an action, walk or cutscene is playing out; act/walk are rejected until the game is waiting for input again.",
+      "question": "This game has no MCP dialog chooser: conversations play as scripted lines surfaced in messages, so answer is not used.",
+      "skip": "The game has no save states; skip breaks the intro videos one at a time. Once the game is interactive skip is rejected with \"nothing to skip\", which is the done signal for an intro-skip loop.",
+      "debug": "The debug tool (mcp_debug) has sections system / hotspots / text_items / vars, plus screenshot / mouse_move / mouse_click / keystroke."
     }
   }
 }

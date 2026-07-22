@@ -58,6 +58,8 @@ MODULE_OBJS := \
 	inter_v7.o \
 	map.o \
 	map_v1.o \
+	mcp.o \
+	mcp_names.o \
 	map_v2.o \
 	metaengine.o \
 	mult.o \

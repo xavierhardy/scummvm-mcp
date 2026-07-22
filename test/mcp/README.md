@@ -29,6 +29,7 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | Broken Sword 1: Shadow of the Templars (demo) | sword1 | `sword1-demo` | `test_sword1.py` | `SWORD1_DEMO_PATH` |
 | Beneath a Steel Sky (CD) | sky | `sky` | `test_sky.py` | `SKY_PATH` |
 | Flight of the Amazon Queen (talkie) | queen | `queen` | `test_queen.py` | `QUEEN_PATH` |
+| Woodruff and the Schnibble | gob | `woodruff` | `test_woodruff.py` | `WOODRUFF_PATH` |
 
 Each test **skips** (not fails) when its game data is missing. Point the env var
 at the data folder if it is not at the built-in default. Flight of the Amazon

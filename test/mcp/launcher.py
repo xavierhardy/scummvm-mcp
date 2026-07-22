@@ -70,7 +70,7 @@ def _launch_args(
     save_path: str,
 ) -> list[str]:
     """Build the ScummVM command line for ``game_id``."""
-    if game_id in ("atlantis",):
+    if game_id in ("atlantis", "woodruff"):
         # No save slot — these games start from scratch and handle their own intro.
         return [scummvm_binary, "-c", ini_path, game_id]
     return [
@@ -192,6 +192,10 @@ GAME_PATHS = {
     "queen": os.environ.get(
         "QUEEN_PATH",
         "/Applications/Flight of the Amazon Queen.app/Contents/Resources/game/game",
+    ),
+    "woodruff": os.environ.get(
+        "WOODRUFF_PATH",
+        "/Users/xhardy/Personal/llm/scummvm/games/woodruff",
     ),
 }
 

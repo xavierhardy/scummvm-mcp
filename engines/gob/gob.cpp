@@ -41,6 +41,7 @@
 #include "gob/gob.h"
 #include "gob/global.h"
 #include "gob/hotspots.h"
+#include "gob/mcp.h"
 #include "gob/util.h"
 #include "gob/dataio.h"
 #include "gob/game.h"
@@ -131,6 +132,11 @@ GobEngine::GobEngine(OSystem *syst) : Engine(syst), _rnd("gob") {
 
 	_pauseStart = 0;
 
+	// Create the MCP bridge first thing, so the server binds its port before
+	// anything can block on startup. No-op unless mcp=true is configured.
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = GobMcpBridge::create(this);
+
 	// Setup mixer
 	bool muteSFX   = ConfMan.getBool("mute") || ConfMan.getBool("sfx_mute");
 	bool muteMusic = ConfMan.getBool("mute") || ConfMan.getBool("music_mute");
@@ -152,7 +158,23 @@ GobEngine::GobEngine(OSystem *syst) : Engine(syst), _rnd("gob") {
 
 GobEngine::~GobEngine() {
 	deinitGameParts();
+	delete _mcpBridge;
 	//_console is deleted by Engine
+}
+
+void GobEngine::mcpPumpInput() {
+	if (_mcpBridge)
+		_mcpBridge->pumpFromInput();
+}
+
+void GobEngine::mcpOnTextDrawn(const char *text, int16 x, int16 y, int16 surface) {
+	if (_mcpBridge)
+		_mcpBridge->onTextDrawn(text, x, y, surface);
+}
+
+void GobEngine::mcpOnInputPoll(uint8 handleMouse) {
+	if (_mcpBridge)
+		_mcpBridge->onInputPoll(handleMouse);
 }
 
 const char *GobEngine::getLangDesc(int16 language) const {

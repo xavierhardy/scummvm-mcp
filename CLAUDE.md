@@ -40,7 +40,7 @@ showed it. The wire protocol is documented in `docs/protocols/mcp.json`.
 | Path | Role |
 |------|------|
 | `backends/networking/mcp/mcp_server.{h,cpp}` | Engine-agnostic MCP transport: TCP listener, HTTP framing, JSON-RPC 2.0 dispatch, SSE streaming, tool registry (`IToolHandler`), and pure string/JSON helpers (`mcpNormalizeSpaces`, `mcpSanitizeString`, `mcpJson*`). |
-| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM, Broken Sword, Beneath a Steel Sky and Flight of the Amazon Queen. |
+| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM, Broken Sword, Beneath a Steel Sky, Flight of the Amazon Queen and Woodruff (gob). |
 | `engines/mcp_bridge_text.cpp` | `normalizeActionName` + the verb-alias table, `mcpStripNamePadding`, `mcpCleanGameText`, `mcpJsonKeyToKeyState` — deliberately free of `Engine` so both engines' unit tests link them without a running engine. |
 | `engines/scumm/mcp.{h,cpp}` (+ `mcp_subclasses.h`, `mcp_v*/mcp_classic.cpp`) | `ScummMcpBridge : MCP::McpBridge` — the SCUMM adapter. Builds the state snapshot, implements every SCUMM tool, and holds the game/engine-version-specific logic. The large file. |
 | `engines/scumm/mcp_actionname.cpp` | A shim: `Scumm::mcpStripNamePadding` forwards to the shared `MCP::` version (kept for the external symbol the SCUMM unit test forward-declares). |
@@ -49,6 +49,8 @@ showed it. The wire protocol is documented in `docs/protocols/mcp.json`.
 | `engines/sky/mcp.{h,cpp}` | `SkyMcpBridge : MCP::McpBridge` — the Beneath a Steel Sky adapter (two-button game; game/compact coordinates). Every action replays real input: warp the virtual cursor + press a button, and `Mouse::mouseEngine()` does the rest; inventory acts drive the game's own top icon bar through a per-frame click machine. Names come from the game data (cursorText / compact names). |
 | `engines/sky/mcp_names.{h,cpp}` | BASS naming tables (talkable-character ids, screen names). Engine-free, so its unit test links without the engine. |
 | `engines/queen/mcp.{h,cpp}` | `QueenMcpBridge : MCP::McpBridge` — the Flight of the Amazon Queen adapter (verb-panel game). `act` builds the finished command in the panel's own encoding and hands it to `Command::mcpExecute()`; dialogues answer through the digit-shortcut path `Talk::selectSentence()` already polls. |
+| `engines/gob/mcp.{h,cpp}` | `GobMcpBridge : MCP::McpBridge` — the Woodruff (gob engine) adapter (script-driven one-click game; no verb bar, no object model — just rectangular `Hotspots`). Every action replays real cursor input through `Util::processInput`; a single left click is walk-to-then-default-action. Object/inventory names are harvested live from the status-bar text the game draws (`Draw_v2` DRAW_PRINTTEXT) by parking the cursor on each hotspot (name sweep) and by opening the game's own inventory overlay after each action. |
+| `engines/gob/mcp_names.{h,cpp}` | Woodruff naming helpers (hover-label → identifier, exit detection, TOT file → room name/id). Engine-free, so its unit test links without the engine. |
 
 Enable / configure via the game's `scummvm.ini` `[gameid]` section:
 `mcp=true`, `mcp_port=N`, `mcp_host=...`, `mcp_skip_tool=true`,
@@ -68,7 +70,8 @@ per game cycle, and pump-transport-only from any place the main loop stalls
 ### MCP server tests
 
 - **C++ unit tests** — `test/engines/scumm/mcp.h`,
-  `test/engines/sword1/mcp.h` and `test/engines/sky/mcp.h` (CxxTest). Cover
+  `test/engines/sword1/mcp.h`, `test/engines/sky/mcp.h` and
+  `test/engines/gob/mcp.h` (CxxTest). Cover
   the engine-independent helpers only (no running engine). Wired into
   `make test` via `test/module.mk` under the matching
   `ENABLE_<ENGINE>=STATIC_PLUGIN`; the shared `mcp_server.o` +
@@ -76,8 +79,10 @@ per game cycle, and pump-transport-only from any place the main loop stalls
 - **Python integration tests** — `test/mcp/`. Launch a real headless ScummVM
   per game and drive the MCP server over HTTP, asserting on game state. ~10
   SCUMM games (V0–V8) plus Broken Sword 1 (`test_sword1.py`, engine `sword1`),
-  Beneath a Steel Sky (`test_sky.py`, engine `sky`) and Flight of the Amazon
-  Queen (`test_queen.py`, engine `queen`),
+  Beneath a Steel Sky (`test_sky.py`, engine `sky`), Flight of the Amazon
+  Queen (`test_queen.py`, engine `queen`) and Woodruff
+  (`test_woodruff.py`, engine `gob` — no save support, so it starts fresh and
+  skips the intro like the atlantis/ft demos),
   and pure-Python unit tests in `test/mcp/test_unit.py`. See
   `test/mcp/README.md` for the full game/fixture map. (`launcher._SAVE_NAME_FMT`
   maps a game to its engine's save-file naming — sword1 uses `sword1.NNN`,
@@ -137,7 +142,7 @@ root or point them at the surrounding ScummVM source (not ours to lint).
 ```bash
 # Build the engine (produces ./scummvm). First time:
 ./configure --disable-all-engines --enable-engine=scumm --enable-engine=scumm-7-8 \
-    --enable-engine=sword1 --enable-engine=sky --enable-engine=queen
+    --enable-engine=sword1 --enable-engine=sky --enable-engine=queen --enable-engine=gob
 make
 
 # C++ unit tests (CxxTest). Needs a `python` on PATH for cxxtestgen — if only

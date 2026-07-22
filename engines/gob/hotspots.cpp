@@ -816,6 +816,9 @@ uint16 Hotspots::check(uint8 handleMouse, int16 delay, uint16 &id, uint16 &index
 	uint16 key = 0;
 	while (key == 0) {
 
+		// The script is polling for player input (MCP bridge idle detection).
+		_vm->mcpOnInputPoll(handleMouse);
+
 		if (_vm->_inter->_terminate || _vm->shouldQuit()) {
 			if (handleMouse)
 				_vm->_draw->blitCursor();
@@ -1878,6 +1881,33 @@ int16 Hotspots::findCursor(uint16 x, uint16 y) const {
 	}
 
 	return cursor;
+}
+
+void Hotspots::mcpList(Common::Array<McpDesc> &out) const {
+	out.clear();
+	for (int i = 0; (i < kHotspotCount) && !_hotspots[i].isEnd(); i++) {
+		const Hotspot &spot = _hotspots[i];
+
+		if (spot.isDisabled() || !spot.isFilled())
+			continue;
+
+		McpDesc desc;
+		desc.id       = spot.id;
+		desc.index    = i;
+		desc.left     = spot.left;
+		desc.top      = spot.top;
+		desc.right    = spot.right;
+		desc.bottom   = spot.bottom;
+		desc.flags    = spot.flags;
+		desc.key      = spot.key;
+		desc.type     = (uint16)spot.getType();
+		desc.cursor   = spot.getCursor();
+		desc.window   = spot.getWindow();
+		desc.hasEnter = spot.funcEnter != 0;
+		desc.hasLeave = spot.funcLeave != 0;
+		desc.hasPos   = spot.funcPos != 0;
+		out.push_back(desc);
+	}
 }
 
 void Hotspots::createButton() {

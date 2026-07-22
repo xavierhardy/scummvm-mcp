@@ -74,6 +74,7 @@ _FIXTURE_INDEX = {
     "sword1": 20,
     "sky": 21,
     "queen": 22,
+    "woodruff": 23,
 }
 
 
@@ -279,3 +280,12 @@ def atlantis_client() -> Iterator[McpClient]:
 def ft_client() -> Iterator[McpClient]:
     """Full Throttle demo (no save support; ordered storyline walkthrough)."""
     yield from _client("ft-demo", "ft")
+
+
+@pytest.fixture(scope="session")
+def woodruff_client() -> Iterator[McpClient]:
+    """The Bizarre Adventures of Woodruff and the Schnibble (Gob engine).
+
+    No save support: the whole run is one ordered sequence on a single instance,
+    started fresh and skipped past the intro (like the atlantis/ft demos)."""
+    yield from _client("woodruff", "woodruff")

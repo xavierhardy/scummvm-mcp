@@ -98,6 +98,13 @@ void McpBridge::init() {
 void McpBridge::pump() {
 	if (!_enabled || !_server) return;
 	++_frameCounter;
+	// If the SSE client vanished mid-action the server abandons the stream
+	// without telling us; drop our half too or every later action is rejected
+	// with "another action is already in progress".
+	if (_streaming && !_server->isStreaming()) {
+		debug(1, "mcp: stream abandoned by client, resetting");
+		_streaming = false;
+	}
 	pumpGame();
 	_server->pump();
 }
