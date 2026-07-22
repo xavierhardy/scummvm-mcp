@@ -66,13 +66,17 @@ ifeq ($(ENABLE_SWORD1), STATIC_PLUGIN)
 	TESTS += $(srcdir)/test/engines/sword1/*.h
 	TEST_LIBS += engines/sword1/libsword1.a
 endif
+ifeq ($(ENABLE_SKY), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/sky/*.h
+	TEST_LIBS += engines/sky/libsky.a
+endif
 
 # The MCP naming/normalization helpers are shared by the per-engine MCP test
 # suites. They are listed as bare objects rather than engines/libengines.a so
 # that engine.o's GUI/base globals stay out of the cxxtest runner — the same
 # reasoning that already applies to mcp_server.o. Listed once even when several
 # engines are enabled, so the object is not passed to the linker twice.
-ifneq (,$(filter STATIC_PLUGIN,$(ENABLE_SCUMM) $(ENABLE_SWORD1)))
+ifneq (,$(filter STATIC_PLUGIN,$(ENABLE_SCUMM) $(ENABLE_SWORD1) $(ENABLE_SKY)))
 	TEST_LIBS += backends/networking/mcp/mcp_server.o engines/mcp_bridge_text.o
 endif
 

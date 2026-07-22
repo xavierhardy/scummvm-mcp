@@ -42,8 +42,9 @@ namespace MCP {
 // long-running game action into an SSE call.
 //
 // Everything that needs to know what a room, an object or a verb *is* stays in
-// the per-engine subclass, reached through the hooks below. Two subclasses
-// exist today: Scumm::ScummMcpBridge and Sword1::Sword1McpBridge.
+// the per-engine subclass, reached through the hooks below. Four subclasses
+// exist today: Scumm::ScummMcpBridge, Sword1::Sword1McpBridge,
+// Sky::SkyMcpBridge and Queen::QueenMcpBridge.
 //
 // Construction is two-phase: construct the leaf, then call init(). Tool
 // registration dispatches through virtual hooks, so it cannot run from a base

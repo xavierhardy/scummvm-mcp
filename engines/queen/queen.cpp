@@ -41,6 +41,7 @@
 #include "queen/grid.h"
 #include "queen/input.h"
 #include "queen/logic.h"
+#include "queen/mcp.h"
 #include "queen/resource.h"
 #include "queen/sound.h"
 #include "queen/talk.h"
@@ -53,9 +54,16 @@ QueenEngine::QueenEngine(OSystem *syst)
 	_display(nullptr), _graphics(nullptr), _grid(nullptr), _input(nullptr), _logic(nullptr),
 	_sound(nullptr), _resource(nullptr), _walk(nullptr), _gameStarted(false),
 	randomizer("queen") {
+	// Create the MCP bridge first thing, so the server binds its port before
+	// anything that can block (initGraphics() at the top of run()). The bridge
+	// only reaches the subsystems from a tool call, which is rejected until
+	// run() has built them.
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = QueenMcpBridge::create(this);
 }
 
 QueenEngine::~QueenEngine() {
+	delete _mcpBridge;
 	delete _bam;
 	delete _resource;
 	delete _bankMan;
@@ -163,6 +171,28 @@ void QueenEngine::update(bool checkPlayerInput) {
 		}
 	}
 	_sound->updateMusic();
+
+	// update() is the game's one heartbeat — the main loop, cutaways, walks
+	// and dialogues all run through it — so pumping here keeps the MCP server
+	// responsive everywhere, and pumping *after* checkKeys() lets an injected
+	// key verb survive into the next poll of Input::keyVerb().
+	if (_mcpBridge)
+		_mcpBridge->pump();
+}
+
+void QueenEngine::mcpOnSpeech(const char *actorName, const char *sentence) {
+	if (_mcpBridge)
+		_mcpBridge->onSpeech(actorName, sentence);
+}
+
+void QueenEngine::mcpOnTalkOptions(const char options[5][256], int count) {
+	if (_mcpBridge)
+		_mcpBridge->onTalkOptions(options, count);
+}
+
+void QueenEngine::mcpOnTalkOptionsDone() {
+	if (_mcpBridge)
+		_mcpBridge->onTalkOptionsDone();
 }
 
 bool QueenEngine::canLoadOrSave() const {

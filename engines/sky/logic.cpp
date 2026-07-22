@@ -1957,6 +1957,14 @@ bool Logic::fnStartMenu(uint32 firstObject, uint32 b, uint32 c) {
 	uint i;
 	firstObject /= 4;
 
+	// Tell the MCP bridge where the inventory variables live, so it can read
+	// the inventory without the icon bar being open.
+	{
+		SkyEngine *vm = (SkyEngine *)g_engine;
+		if (vm && vm->mcpEnabled())
+			vm->mcpOnStartMenu(firstObject);
+	}
+
 	// (1) FIRST, SET UP THE 2 ARROWS SO THEY APPEAR ON SCREEN
 
 	Compact *cpt = _skyCompact->fetchCpt(47);
@@ -2577,6 +2585,11 @@ bool Logic::fnPrintf(uint32 a, uint32 b, uint32 c) {
 }
 
 void Logic::stdSpeak(Compact *target, uint32 textNum, uint32 animNum, uint32 base) {
+	// Report the line to the MCP bridge, whether or not subtitles are on.
+	SkyEngine *vm = (SkyEngine *)g_engine;
+	if (vm && vm->mcpEnabled())
+		vm->mcpOnSpeech(_skyCompact->findCptId(target), textNum);
+
 	animNum += target->megaSet / NEXT_MEGA_SET;
 	animNum &= 0xFF;
 

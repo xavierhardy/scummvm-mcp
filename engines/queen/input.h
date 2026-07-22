@@ -83,6 +83,17 @@ public:
 
 	Verb keyVerb() const { return _keyVerb; }
 
+	bool isDialogueRunning() const { return _dialogueRunning; }
+
+	//! MCP bridge injection: pretend the verb's shortcut key was pressed.
+	void mcpSetKeyVerb(Verb v) { _keyVerb = v; }
+
+	//! MCP bridge injection: quit a running cutaway, as the skip key would.
+	void mcpQuitCutaway() {
+		if (_cutawayRunning && _canQuit)
+			_cutawayQuit = true;
+	}
+
 	Common::Point getMousePos() const;
 
 	int mouseButton() const { return _mouseButton; }

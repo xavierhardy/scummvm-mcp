@@ -62,6 +62,7 @@ class Control;
 class MusicBase;
 class Debugger;
 class SkyCompact;
+class SkyMcpBridge;
 
 enum SkyAction {
 	kSkyActionNone,
@@ -120,6 +121,17 @@ public:
 	bool canSaveGameStateCurrently();
 	int	giveCurrentScreen();
 
+	// MCP bridge hooks. All no-ops unless mcp=true. See Sky::SkyMcpBridge.
+	// mcpEnabled() is false when the server is off, so the capture hooks in
+	// Logic don't pay for lookups nobody will read.
+	bool mcpEnabled() const;
+	// Transport-only service from secondary loops (intro, pause, panel).
+	void mcpPump();
+	// Called from Logic::stdSpeak for every spoken line.
+	void mcpOnSpeech(uint16 compactId, uint32 textNum);
+	// Called from Logic::fnStartMenu with the inventory variable base.
+	void mcpOnStartMenu(uint32 firstVar);
+
 protected:
 	// Engine APIs
 	Common::Error init();
@@ -136,6 +148,9 @@ protected:
 	bool hasFeature(EngineFeature f) const override;
 
 	byte _fastMode;
+
+	SkyMcpBridge *_mcpBridge = nullptr;
+	bool _inMcpPump = false; // reentrancy guard for mcpPump()
 
 	void delay(int32 amount);
 	void handleKey();

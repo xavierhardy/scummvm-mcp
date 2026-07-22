@@ -27,9 +27,13 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | The Dig (demo) | V7 | `dig-demo` | `test_dig.py`, `test_dig_wreck.py` | `DIG_DEMO_PATH` |
 | The Curse of Monkey Island (demo) | V8 | `comi-demo` | `test_comi.py`, `test_comi_cannon.py`, `test_comi_s3.py` | `COMI_DEMO_PATH` |
 | Broken Sword 1: Shadow of the Templars (demo) | sword1 | `sword1-demo` | `test_sword1.py` | `SWORD1_DEMO_PATH` |
+| Beneath a Steel Sky (CD) | sky | `sky` | `test_sky.py` | `SKY_PATH` |
+| Flight of the Amazon Queen (talkie) | queen | `queen` | `test_queen.py` | `QUEEN_PATH` |
 
 Each test **skips** (not fails) when its game data is missing. Point the env var
-at the data folder if it is not at the built-in default.
+at the data folder if it is not at the built-in default. Flight of the Amazon
+Queen additionally needs `queen.tbl`, which the launcher serves automatically
+from the repository's `dists/engine-data` via `extrapath`.
 
 > **These tests share one Python project with `scummvm_bench`.** There is no
 > longer a `test/mcp/pyproject.toml` or venv — the single project lives at
@@ -98,6 +102,9 @@ via the `xdist_group` mark.
   `from utils import …` keeps working.
 - `assertions.py` — `assert_inventory_contains`, `assert_room`,
   `assert_message_contains`, `assert_no_talkie_garbage`, …
+- `sword1_helpers.py` / `sky_helpers.py` / `queen_helpers.py` — per-engine
+  world-model helpers for the non-SCUMM games (verb sets, readiness polls,
+  walkthrough segments).
 - `conftest.py` — the per-game pytest fixtures described above.
 - `test_unit.py` — unit tests for the `utils`/`assertions` helpers (no game).
 

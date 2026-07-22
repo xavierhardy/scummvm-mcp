@@ -11,6 +11,8 @@ MODULE_OBJS := \
 	intro.o \
 	inventory.o \
 	logic.o \
+	mcp.o \
+	mcp_names.o \
 	metaengine.o \
 	mouse.o \
 	screen.o \

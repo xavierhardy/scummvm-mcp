@@ -328,6 +328,25 @@ void Command::updatePlayer() {
 	}
 }
 
+void Command::mcpExecute(Verb action, int16 subj1, int16 subj2, int16 noun, int16 px, int16 py) {
+	// Reset any half-built player command, then install the finished one
+	// exactly as the grab*() path would have left it; the main loop's
+	// JWM_EXECUTE branch then runs executeCurrentAction() as usual.
+	clear(false);
+	_mouseKey = Input::MOUSE_LBUTTON;
+	_selPosX = px;
+	_selPosY = py;
+	_state.verb = VERB_NONE;
+	_state.action = VERB_NONE;
+	_state.subject[0] = subj1;
+	_state.subject[1] = subj2;
+	_state.noun = noun;
+	_state.selNoun = noun;
+	_state.commandLevel = subj2 != 0 ? 2 : 1;
+	_state.selAction = action;
+	_vm->logic()->joeWalk(JWM_EXECUTE);
+}
+
 void Command::readCommandsFrom(byte *&ptr) {
 	uint16 i;
 

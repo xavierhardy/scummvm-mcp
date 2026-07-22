@@ -72,6 +72,8 @@ _FIXTURE_INDEX = {
     "monkey_kitchen": 18,
     "monkey_prison": 19,
     "sword1": 20,
+    "sky": 21,
+    "queen": 22,
 }
 
 
@@ -237,6 +239,20 @@ def comi_s4_client() -> Iterator[McpClient]:
 def sword1_client() -> Iterator[McpClient]:
     """Broken Sword 1 demo (slot 1: George on rue Jarry, outside the café)."""
     yield from _client("sword1-demo", "sword1", save_slot=1, checkpoint=True)
+
+
+@pytest.fixture
+def sky_client() -> Iterator[McpClient]:
+    """Beneath a Steel Sky (slot 1: Foster on screen 0, top of the walkway,
+    right after the intro)."""
+    yield from _client("sky", "sky", save_slot=1, checkpoint=True)
+
+
+@pytest.fixture
+def queen_client() -> Iterator[McpClient]:
+    """Flight of the Amazon Queen (slot 1: Joe locked in the hotel room,
+    right after the intro)."""
+    yield from _client("queen", "queen", save_slot=1, checkpoint=True)
 
 
 # ---------------------------------------------------------------------------

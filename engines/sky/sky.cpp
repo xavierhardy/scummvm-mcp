@@ -33,6 +33,7 @@
 #include "sky/grid.h"
 #include "sky/intro.h"
 #include "sky/logic.h"
+#include "sky/mcp.h"
 #include "sky/mouse.h"
 #include "sky/music/adlibmusic.h"
 #include "sky/music/gmmusic.h"
@@ -101,9 +102,17 @@ SkyEngine::SkyEngine(OSystem *syst)
 	_skyDisk    = nullptr;
 	_skyControl = nullptr;
 	_skyCompact = nullptr;
+
+	// Create the MCP bridge first thing, so the server binds its port before
+	// anything that can block (initGraphics() in init(), the intro). The
+	// bridge only reaches the subsystems after attach() has wired them up;
+	// every tool call before that is rejected.
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = SkyMcpBridge::create(this);
 }
 
 SkyEngine::~SkyEngine() {
+	delete _mcpBridge;
 	delete _skyLogic;
 	delete _skySound;
 	delete _skyMusic;
@@ -258,6 +267,13 @@ Common::Error SkyEngine::go() {
 		}
 
 		_skyLogic->engine();
+
+		// Every compact has run its logic for this cycle, so the MCP server
+		// reports a settled snapshot; and a click it injects executes on the
+		// *next* Mouse::mouseEngine(), exactly as a real click does.
+		if (_mcpBridge)
+			_mcpBridge->pump();
+
 		_skyScreen->processSequence();
 		_skyScreen->recreate();
 		_skyScreen->spriteEngine();
@@ -483,6 +499,10 @@ Common::Error SkyEngine::init() {
 
 	_debugger = new Debugger(_skyLogic, _skyMouse, _skyScreen, _skyCompact);
 	setDebugger(_debugger);
+
+	if (_mcpBridge)
+		_mcpBridge->attach(_skyLogic, _skyMouse, _skyText, _skyCompact, _skyControl, _skySound);
+
 	return Common::kNoError;
 }
 
@@ -516,8 +536,38 @@ void *SkyEngine::fetchItem(uint32 num) {
 	return _itemList[num];
 }
 
+bool SkyEngine::mcpEnabled() const {
+	return _mcpBridge && _mcpBridge->isEnabled();
+}
+
+void SkyEngine::mcpPump() {
+	if (!_mcpBridge || _inMcpPump)
+		return;
+	// Never advances the bridge's frame counter: streaming budgets stay in
+	// game-cycle units, which only go()'s main loop produces. The bridge's
+	// wall-clock timeout covers a stream stuck in a secondary loop.
+	_inMcpPump = true;
+	_mcpBridge->pumpTransportOnly();
+	_inMcpPump = false;
+}
+
+void SkyEngine::mcpOnSpeech(uint16 compactId, uint32 textNum) {
+	if (_mcpBridge)
+		_mcpBridge->onSpeech(compactId, textNum);
+}
+
+void SkyEngine::mcpOnStartMenu(uint32 firstVar) {
+	if (_mcpBridge)
+		_mcpBridge->onStartMenu(firstVar);
+}
+
 void SkyEngine::delay(int32 amount) {
 	Common::Event event;
+
+	// delay() is also reached from the intro, the pause loop and the control
+	// panel, where go()'s main loop is not running. Without a pump here the
+	// MCP server would be unreachable for their whole duration.
+	mcpPump();
 
 	uint32 start = _system->getMillis();
 	_action = kSkyActionNone;

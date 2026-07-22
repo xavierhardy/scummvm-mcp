@@ -80,6 +80,7 @@ class Graphics;
 class Grid;
 class Input;
 class Logic;
+class QueenMcpBridge;
 class Resource;
 class Sound;
 class Walk;
@@ -116,6 +117,14 @@ public:
 	void subtitles(bool enable) { _subtitles = enable; }
 
 	void update(bool checkPlayerInput = false);
+
+	// MCP bridge hooks. All no-ops unless mcp=true. See Queen::QueenMcpBridge.
+	bool mcpEnabled() const { return _mcpBridge != nullptr; }
+	// Called from Talk::speak() for every line said in-game.
+	void mcpOnSpeech(const char *actorName, const char *sentence);
+	// Called from Talk::selectSentence() when dialogue options are shown/done.
+	void mcpOnTalkOptions(const char options[5][256], int count);
+	void mcpOnTalkOptionsDone();
 
 	bool canLoadOrSave() const;
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
@@ -154,6 +163,8 @@ protected:
 	bool _subtitles;
 	uint32 _lastUpdateTime;
 	bool _gameStarted;
+
+	QueenMcpBridge *_mcpBridge;
 
 	BamScene *_bam;
 	BankManager *_bankMan;

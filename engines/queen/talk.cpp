@@ -542,6 +542,9 @@ bool Talk::speak(const char *sentence, Person *person, const char *voiceFilePref
 		return personWalking;
 	}
 
+	// Report the line to the MCP bridge, whether or not subtitles are on.
+	_vm->mcpOnSpeech(person->name, sentence);
+
 	if (0 == strcmp(person->name, "FAYE-H") ||
 		0 == strcmp(person->name, "FRANK-H") ||
 		0 == strcmp(person->name, "AZURA-H") ||
@@ -1262,6 +1265,10 @@ int16 Talk::selectSentence() {
 		if (sentenceCount > 0) {
 			int oldZone = 0;
 
+			// Publish the options to the MCP bridge; its `answer` tool injects
+			// the digit verb the loop below polls for.
+			_vm->mcpOnTalkOptions(_talkString, sentenceCount);
+
 			while (0 == selectedSentence && !_vm->input()->talkQuit() && !_vm->shouldQuit()) {
 				_vm->update();
 
@@ -1334,6 +1341,9 @@ int16 Talk::selectSentence() {
 
 	_vm->input()->clearKeyVerb();
 	_vm->input()->clearMouseButton();
+
+	// The chooser is gone (a sentence was picked or the talk quit).
+	_vm->mcpOnTalkOptionsDone();
 
 	debug(6, "Selected sentence %i", selectedSentence);
 

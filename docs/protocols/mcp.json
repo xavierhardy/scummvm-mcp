@@ -961,6 +961,32 @@
       "question": "A pending conversation is the subject bar: state.question.choices are its topics; answer(id) picks the 1-based slot.",
       "walk": "walk(x,y) drives the floor compact under (x,y); a point on no floor returns a validation error listing the screen's floor boxes.",
       "debug": "The debug tool (mcp_debug) has sections vars / compacts / pockets / system; 'compacts' is the dump used to author the object-name tables."
+    },
+    "sky": {
+      "scope": "Beneath a Steel Sky (sky).",
+      "interface": "Two-button game with no verb bar: one button examines a hotspot, the other walks Foster there and runs its interaction script. The bridge dispatches every action by replaying real input — it warps the engine's virtual cursor and presses a button, and the game's own mouse engine does the rest.",
+      "verbs": "A fixed set, always: look_at (examine button), and interact / use / talk_to / pick_up (action button), plus walk_to. state.verbs advertises it.",
+      "coordinates": "Game (compact) coordinates everywhere — the space of Compact::xcood/ycood and the mouse hit boxes. The visible play area spans (128,136)..(447,327). Screen coordinates appear only inside the debug tools.",
+      "objectNaming": "Names come from the game's own data: an object's cursorText string (the label the game shows on hover — these are live, so examining the junk pile can rename it to robot_shell) with the authored compact name as fallback, normalized and de-duplicated (door, door_2). Floors are all named 'floor'.",
+      "objects": "state.objects carries id (compact id), name, kind (floor/character/hotspot), position (hit-box centre) and box ([x1,y1,x2,y2]). Foster is excluded and reported as state.position ({x,y,dir}).",
+      "inventory": "state.inventory lists the items the game's icon bar would show (name + compact id). act on an inventory item is played out through the real icon bar: the bridge holds the cursor on the top line until the bar drops, clicks the icon (arming OBJECT_HELD), then clicks the second target.",
+      "canAct": "state.can_act mirrors the engine's own mouse gate (MOUSE_STATUS/MOUSE_STOP); act/walk are rejected while it is false (scripted sequence in progress).",
+      "question": "A pending conversation is the text chooser: state.question.choices are the on-screen options, top to bottom; answer(id) clicks the 1-based choice.",
+      "walk": "walk(x,y) clicks the floor compact under (x,y); a point on no floor returns a validation error listing the screen's floor boxes.",
+      "debug": "The debug tool (mcp_debug) has sections vars / compacts / compact:<id> / system; 'compacts' dumps the current screen's mouse list with names and hit boxes."
+    },
+    "queen": {
+      "scope": "Flight of the Amazon Queen (queen).",
+      "interface": "Verb-panel game (open/close/move/give/use/pick up/talk to/look at). act maps one-to-one onto the game's own command machinery: the bridge builds the finished command (verb + subjects in the panel's encoding) and the engine executes it exactly as a mouse-built sentence — including walking Joe over, cutaways and dialogues.",
+      "verbs": "The panel set, always: open, close, move, give, use, pick_up, talk_to, look_at, plus walk_to. 'interact' is accepted as an alias for use. state.verbs advertises it.",
+      "coordinates": "Room pixel coordinates (320x200 with the room area above y=150). walk(x,y) walks Joe to a room position.",
+      "objectNaming": "Names come from the game's own object-name table, normalized, stripped of control characters and de-duplicated (sheets, sheets_2). The game renames objects as their state changes (sheets becomes other_sheet, the radiator becomes radiator_with_sheet_rope).",
+      "objects": "state.objects carries id (room-relative object number), name, kind (object/person), pathway (true for exits), position (authored x/y when present) and default_verb (the object's own default action). Joe is reported as state.position.",
+      "inventory": "state.inventory lists every carried item (name + item number).",
+      "canAct": "state.can_act is false during cutaways and dialogues; act/walk are rejected until it is true.",
+      "question": "A pending conversation is the sentence chooser at the bottom of the screen: state.question.choices are the options on offer; answer(id) selects the 1-based displayed sentence (the same mapping as the keyboard digit shortcuts).",
+      "changes": "objects_changed reports objects that became visible or hidden during an action ({name, old_state, new_state} with visible/hidden), which is how silent scene changes (moving the curtain revealing the wig) surface.",
+      "debug": "The debug tool (mcp_debug) has sections gamestate / objects / items / system."
     }
   }
 }

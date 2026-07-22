@@ -29,6 +29,13 @@ def _write_ini(game_id: str, game_path: str, port: int, scummvm_log: str) -> str
             "game_path": game_path,
             "mcp_port": port,
             "logfile": scummvm_log,
+            # The repo's engine-data dir, for engines that need a data file
+            # from the ScummVM distribution (queen.tbl for FOTAQ).
+            "extra_path": os.path.normpath(
+                os.path.join(
+                    os.path.dirname(__file__), "..", "..", "dists", "engine-data"
+                )
+            ),
         }
     tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
     ini_path = os.path.join(tmpdir, "scummvm.ini")
@@ -178,13 +185,23 @@ GAME_PATHS = {
         "SWORD1_DEMO_PATH",
         "/Users/xhardy/Personal/llm/scummvm/games/broken-sword-1-demo",
     ),
+    "sky": os.environ.get(
+        "SKY_PATH",
+        "/Applications/Beneath a Steel Sky.app/Contents/Resources/game/game",
+    ),
+    "queen": os.environ.get(
+        "QUEEN_PATH",
+        "/Applications/Flight of the Amazon Queen.app/Contents/Resources/game/game",
+    ),
 }
 
 # Save-file naming is per engine: SCUMM writes "<target>.sNN", while sword1
-# writes "sword1.NNN" (SwordEngine::getSaveStateName). Games not listed here use
-# the SCUMM form.
+# writes "sword1.NNN" (SwordEngine::getSaveStateName) and sky writes
+# "SKY-VM.NNN" (SkyEngine::getSaveStateName). Games not listed here use the
+# SCUMM form ("queen.sNN" matches it already).
 _SAVE_NAME_FMT = {
     "sword1-demo": "sword1.{slot:03d}",
+    "sky": "SKY-VM.{slot:03d}",
 }
 
 

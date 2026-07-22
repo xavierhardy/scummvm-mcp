@@ -40,12 +40,15 @@ showed it. The wire protocol is documented in `docs/protocols/mcp.json`.
 | Path | Role |
 |------|------|
 | `backends/networking/mcp/mcp_server.{h,cpp}` | Engine-agnostic MCP transport: TCP listener, HTTP framing, JSON-RPC 2.0 dispatch, SSE streaming, tool registry (`IToolHandler`), and pure string/JSON helpers (`mcpNormalizeSpaces`, `mcpSanitizeString`, `mcpJson*`). |
-| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM and Broken Sword. |
+| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM, Broken Sword, Beneath a Steel Sky and Flight of the Amazon Queen. |
 | `engines/mcp_bridge_text.cpp` | `normalizeActionName` + the verb-alias table, `mcpStripNamePadding`, `mcpCleanGameText`, `mcpJsonKeyToKeyState` — deliberately free of `Engine` so both engines' unit tests link them without a running engine. |
 | `engines/scumm/mcp.{h,cpp}` (+ `mcp_subclasses.h`, `mcp_v*/mcp_classic.cpp`) | `ScummMcpBridge : MCP::McpBridge` — the SCUMM adapter. Builds the state snapshot, implements every SCUMM tool, and holds the game/engine-version-specific logic. The large file. |
 | `engines/scumm/mcp_actionname.cpp` | A shim: `Scumm::mcpStripNamePadding` forwards to the shared `MCP::` version (kept for the external symbol the SCUMM unit test forward-declares). |
 | `engines/sword1/mcp.{h,cpp}` | `Sword1McpBridge : MCP::McpBridge` — the Broken Sword 1 adapter (one-click game; world coordinates; click injection replays `Mouse::engine()`). Written to extend to Broken Sword 2 unchanged. |
 | `engines/sword1/mcp_names.{h,cpp}` | Broken Sword naming tables (pockets, symbolic compact ids, screens) + the `object_<section>_<index>` fallback resolver. Engine-free, so its unit test links without the engine. |
+| `engines/sky/mcp.{h,cpp}` | `SkyMcpBridge : MCP::McpBridge` — the Beneath a Steel Sky adapter (two-button game; game/compact coordinates). Every action replays real input: warp the virtual cursor + press a button, and `Mouse::mouseEngine()` does the rest; inventory acts drive the game's own top icon bar through a per-frame click machine. Names come from the game data (cursorText / compact names). |
+| `engines/sky/mcp_names.{h,cpp}` | BASS naming tables (talkable-character ids, screen names). Engine-free, so its unit test links without the engine. |
+| `engines/queen/mcp.{h,cpp}` | `QueenMcpBridge : MCP::McpBridge` — the Flight of the Amazon Queen adapter (verb-panel game). `act` builds the finished command in the panel's own encoding and hands it to `Command::mcpExecute()`; dialogues answer through the digit-shortcut path `Talk::selectSentence()` already polls. |
 
 Enable / configure via the game's `scummvm.ini` `[gameid]` section:
 `mcp=true`, `mcp_port=N`, `mcp_host=...`, `mcp_skip_tool=true`,
@@ -64,17 +67,21 @@ per game cycle, and pump-transport-only from any place the main loop stalls
 
 ### MCP server tests
 
-- **C++ unit tests** — `test/engines/scumm/mcp.h` and
-  `test/engines/sword1/mcp.h` (CxxTest). Cover the engine-independent helpers
-  only (no running engine). Wired into `make test` via `test/module.mk` under
-  `ENABLE_SCUMM=STATIC_PLUGIN` / `ENABLE_SWORD1=STATIC_PLUGIN`; the shared
-  `mcp_server.o` + `mcp_bridge_text.o` are linked once for whichever is enabled.
+- **C++ unit tests** — `test/engines/scumm/mcp.h`,
+  `test/engines/sword1/mcp.h` and `test/engines/sky/mcp.h` (CxxTest). Cover
+  the engine-independent helpers only (no running engine). Wired into
+  `make test` via `test/module.mk` under the matching
+  `ENABLE_<ENGINE>=STATIC_PLUGIN`; the shared `mcp_server.o` +
+  `mcp_bridge_text.o` are linked once for whichever is enabled.
 - **Python integration tests** — `test/mcp/`. Launch a real headless ScummVM
   per game and drive the MCP server over HTTP, asserting on game state. ~10
   SCUMM games (V0–V8) plus Broken Sword 1 (`test_sword1.py`, engine `sword1`),
+  Beneath a Steel Sky (`test_sky.py`, engine `sky`) and Flight of the Amazon
+  Queen (`test_queen.py`, engine `queen`),
   and pure-Python unit tests in `test/mcp/test_unit.py`. See
   `test/mcp/README.md` for the full game/fixture map. (`launcher._SAVE_NAME_FMT`
-  maps a game to its engine's save-file naming — sword1 uses `sword1.NNN`.)
+  maps a game to its engine's save-file naming — sword1 uses `sword1.NNN`,
+  sky uses `SKY-VM.NNN`.)
 
 ## Architecture — MCP benchmark (`scummvm_bench/`)
 
@@ -129,7 +136,8 @@ root or point them at the surrounding ScummVM source (not ours to lint).
 
 ```bash
 # Build the engine (produces ./scummvm). First time:
-./configure --disable-all-engines --enable-engine=scumm --enable-engine=scumm-7-8
+./configure --disable-all-engines --enable-engine=scumm --enable-engine=scumm-7-8 \
+    --enable-engine=sword1 --enable-engine=sky --enable-engine=queen
 make
 
 # C++ unit tests (CxxTest). Needs a `python` on PATH for cxxtestgen — if only
@@ -194,9 +202,9 @@ blindly:
 When working on the MCP server, its tests, or the MCP bench:
 
 - **Stay in scope.** Limit changes to the MCP server (`backends/networking/mcp/`,
-  `engines/scumm/mcp*.cpp/.h`), `test/mcp/`, and `scummvm_bench/`. Avoid editing
-  the rest of the engine; touch shared engine code only when there is no
-  alternative, and keep it minimal.
+  `engines/mcp_bridge*`, the per-engine adapters `engines/{scumm,sword1,sky,queen}/mcp*`),
+  `test/mcp/`, and `scummvm_bench/`. Avoid editing the rest of the engine; touch
+  shared engine code only when there is no alternative, and keep it minimal.
 - **Do not break retro-compatibility.** A change made for one game must not break
   other games, other SCUMM engine versions, or upstream behaviour. The bridge is
   shared by every SCUMM game from V0 to V8 — gate game- or version-specific

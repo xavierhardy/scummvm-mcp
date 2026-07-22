@@ -112,6 +112,11 @@ void Text::fnTextModule(uint32 textInfoId, uint32 textNo) {
 	fnSetFont(0);
 }
 
+Common::String Text::getTextString(uint32 textNr) {
+	getText(textNr);
+	return Common::String(_textBuffer);
+}
+
 void Text::getText(uint32 textNr) { //load text #"textNr" into textBuffer
 	if (patchMessage(textNr))
 		return;

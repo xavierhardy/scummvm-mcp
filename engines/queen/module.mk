@@ -12,6 +12,7 @@ MODULE_OBJS := \
 	input.o \
 	journal.o \
 	logic.o \
+	mcp.o \
 	metaengine.o \
 	midiadlib.o \
 	music.o \

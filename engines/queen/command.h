@@ -105,6 +105,13 @@ public:
 	//! get player input and construct command from it
 	void updatePlayer();
 
+	//! install a fully-constructed command (MCP bridge), as the grab*() path
+	//! would have built it: subjects use the panel encoding (positive = room
+	//! object number, negative = inventory item number), `noun` is the room-
+	//! relative number of the primary room object and (px, py) is where the
+	//! selecting click would have landed. The main loop executes it next.
+	void mcpExecute(Verb action, int16 subj1, int16 subj2, int16 noun, int16 px, int16 py);
+
 	//! read all command arrays from stream
 	void readCommandsFrom(byte *&ptr);
 

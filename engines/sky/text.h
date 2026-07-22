@@ -60,6 +60,11 @@ public:
 	void changeTextSpriteColor(uint8 *sprData, uint8 newCol);
 	uint32 giveCurrentCharSet();
 
+	// Decode text number `textNr` and return it as a string, without
+	// rendering it. Used by the MCP bridge for object names, spoken lines and
+	// chooser options.
+	Common::String getTextString(uint32 textNr);
+
 	uint32 _numLetters;	//no of chars in message
 
 private:
