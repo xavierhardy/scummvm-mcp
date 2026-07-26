@@ -29,13 +29,25 @@
 
 namespace Gob {
 
-// Turn a hover label the game drew ("A trash heap", "TO STAIRS STREET") into a
-// stable target identifier: MCP::McpBridge::normalizeActionName() plus leading
-// article ("a"/"an"/"the") and leading "to" stripped, everything outside
-// [a-z0-9_] dropped. Empty when nothing survives.
+// Decode a string the game drew into UTF-8. Woodruff stores its text in the DOS
+// OEM code page (CP850) even in its Windows release, so the localised versions
+// draw accented letters as single high bytes ("d\x82tritus"); left alone they
+// are not valid UTF-8 and every accented character is lost on the wire.
+Common::String mcpGobTextToUtf8(const Common::String &text);
+
+// Fold the accented Latin letters of a UTF-8 string onto their ASCII base
+// letter ("détritus" -> "detritus"). The localised releases draw accented text,
+// which would otherwise be dropped from the identifiers altogether.
+Common::String mcpGobFoldAccents(const Common::String &utf8);
+
+// Turn a hover label the game drew ("A trash heap", "Un recueil de détritus")
+// into a stable target identifier: accents folded, then
+// MCP::McpBridge::normalizeActionName() plus a leading article ("a"/"an"/"the",
+// "un"/"une"/"le"/"la"/"les") stripped and everything outside [a-z0-9_]
+// dropped. Empty when nothing survives.
 Common::String mcpGobObjectName(const Common::String &label);
 
-// True when a hover label reads like a screen exit ("TO THE ...").
+// True when a hover label reads like a screen exit ("TO THE ...", "VERS LA ...").
 bool mcpGobIsExitLabel(const Common::String &label);
 
 // The fallback identifier for an unnamed hotspot.

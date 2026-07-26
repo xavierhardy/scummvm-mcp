@@ -43,10 +43,12 @@ class GobEngine;
 // declares rectangular hotspots (Hotspots) and then sits in a wait loop
 // (Hotspots::check) polling the mouse and keyboard. There is no verb bar and no
 // engine-side object model — everything an agent can do, a player does by
-// pointing and clicking. The bridge therefore replays real input: `act`
-// resolves its target to a hotspot, pushes a synthetic mouse-move plus a
-// button press into the EventManager, and holds the button down for a few
-// frames so the script's own polling sees a complete click. Because the engine
+// pointing and clicking, and one click on a hotspot is the whole interaction:
+// the game walks the character over and runs the hotspot's script itself. The
+// bridge therefore replays real input: `act` resolves its target to a hotspot,
+// pushes a synthetic mouse-move plus a button press into the EventManager, and
+// holds the button down for a few frames so the script's own polling sees a
+// complete click. Because the engine
 // re-reads the event queue from every one of its blocking loops
 // (Util::processInput), this works identically in the game proper, in menus
 // and during dialogue choices.
@@ -90,9 +92,11 @@ protected:
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut) override;
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut) override;
 
+	Common::String stateToolDescription() const override;
 	Common::String debugToolDescription() const override;
 	Common::JSONValue *buildDebugSchema() const override;
 	void augmentStateSchema(Common::JSONObject &outputProps) override;
+	void augmentChangesSchema(Common::JSONObject &props) override;
 
 	// Reject every tool until GobEngine::run() has built the subsystems (the
 	// bridge is created in the GobEngine constructor so the port binds first).
@@ -124,7 +128,10 @@ protected:
 	uint32 stuckFrames(bool hadActivity) const override { return hadActivity ? 45 : 10; }
 	uint32 timeoutFrames() const override { return 250; }          // ~10 s without an event
 	uint32 absoluteTimeoutFrames() const override { return 2500; } // ~100 s
-	uint32 settleFrames() const override { return 8; }
+	// A little over half a second of quiet before a settled action is reported:
+	// the game routinely goes from "walk finished" to "and now the character
+	// speaks" with a couple of idle frames in between.
+	uint32 settleFrames() const override { return 14; }
 	uint32 wallClockTimeoutMs() const override { return 180000; }
 	// Anchor the deadline to the last sign of life: videos and scripted
 	// sequences run long while still progressing.
@@ -144,7 +151,7 @@ private:
 		kStepClickItem,   // click the inventory slot `slotId` (resolved live)
 		kStepWaitOverlay, // wait (up to notBeforeFrame) for the menu overlay
 		kStepWaitWorld,   // wait (up to notBeforeFrame) for the overlay to close
-		kStepWaitIdle     // wait for the walk to finish (up to notBeforeFrame)
+		kStepWaitReady    // wait (up to notBeforeFrame) until a click would land
 	};
 	struct Step {
 		StepKind kind;
@@ -160,6 +167,15 @@ private:
 	// Is the game still carrying out a commanded action (Woodruff keeps
 	// polling for input while the character walks)? See gameBusy() in the cpp.
 	bool gameBusy() const;
+
+	// Would a click land right now, or would the script swallow it? False
+	// while the character is mid-animation — including the few seconds an
+	// action takes to wind down after its dialogue is over. Everything the
+	// bridge injects (clicks, cursor moves) waits for this.
+	bool readyForClick() const;
+
+	// Are the character-controller script variables in range?
+	bool actionVarsReadable() const;
 
 	// Are the engine subsystems constructed yet?
 	bool engineReady() const;
@@ -188,6 +204,14 @@ private:
 	// Push a full click (press now, release a few frames later) at game
 	// coordinates.
 	void queueClick(int gameX, int gameY, bool right);
+
+	// Same, but preceded by a wait until the game would honour the click. Used
+	// by everything an agent asks for.
+	void queueClickWhenReady(int gameX, int gameY, bool right);
+
+	// A click driving the inventory overlay; runs ahead of a tool click that is
+	// still waiting for that overlay to close.
+	void queueOverlayClick(int gameX, int gameY, bool right);
 
 	// Execute one queued synthetic-input step per frame.
 	void pumpSteps();
@@ -225,7 +249,7 @@ private:
 	// Resolve an `act` target (a learned name, "hotspot_<id>", or a bare id)
 	// to a hotspot description.
 	bool resolveTarget(const Common::String &name, Hotspots::McpDesc &out,
-	                   Common::String &errorOut, bool *isPathwayOut = nullptr) const;
+	                   Common::String &errorOut) const;
 
 	GobEngine *_vm;
 
@@ -238,9 +262,6 @@ private:
 	// Frame the previous step executed at (paces press/release pairs whose
 	// exact frames are not known when queued).
 	uint32 _lastStepFrame;
-	// kStepWaitIdle two-phase state: set once the issued walk registers as busy,
-	// so the wait holds for the walk to finish rather than proceeding early.
-	bool _idleSawBusy;
 
 	// Frame of the most recent Hotspots::check() poll with a live mouse.
 	uint32 _lastInputPollFrame;
@@ -310,6 +331,10 @@ private:
 	Common::Array<Hotspots::McpDesc> _invSlots;
 	uint _invSlotIndex;
 	Common::Array<InventoryItem> _invPending;
+	// The world screen the refresh left behind, served by `state` while the
+	// overlay is up (the live screen is MENU.tot then).
+	Common::String _worldTot;
+	Common::Array<ObjectEntry> _worldObjects;
 	// Latest item name the overlay drew in its status area; attributed to the
 	// slot the refresh is dwelling on when it moves off it.
 	Common::String _invCapturedLabel;

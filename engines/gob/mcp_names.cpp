@@ -23,10 +23,56 @@
 
 #include "engines/mcp_bridge.h"
 
+#include "common/ustr.h"
+
 namespace Gob {
 
+// The ASCII stand-in for the Latin-1 supplement letters, U+00C0 to U+00FF.
+// Nothing else is folded: the rest of the range (and everything above it) is
+// left to the [a-z0-9_] filter in mcpGobObjectName().
+static const char *const kLatin1Folded[64] = {
+	"A", "A", "A", "A", "A", "A", "AE", "C",   // C0-C7
+	"E", "E", "E", "E", "I", "I", "I", "I",    // C8-CF
+	"D", "N", "O", "O", "O", "O", "O", "",     // D0-D7 (D7 = multiplication sign)
+	"O", "U", "U", "U", "U", "Y", "TH", "ss",  // D8-DF
+	"a", "a", "a", "a", "a", "a", "ae", "c",   // E0-E7
+	"e", "e", "e", "e", "i", "i", "i", "i",    // E8-EF
+	"d", "n", "o", "o", "o", "o", "o", "",     // F0-F7 (F7 = division sign)
+	"o", "u", "u", "u", "u", "y", "th", "y"    // F8-FF
+};
+
+Common::String mcpGobFoldAccents(const Common::String &utf8) {
+	Common::U32String wide = utf8.decode(Common::kUtf8);
+	Common::String out;
+	for (uint i = 0; i < wide.size(); i++) {
+		uint32 cp = wide[i];
+		if (cp < 0x80) {
+			out += (char)cp;
+		} else if (cp >= 0xC0 && cp <= 0xFF) {
+			out += kLatin1Folded[cp - 0xC0];
+		} else if (cp == 0x152 || cp == 0x153) {  // OE / oe ligature
+			out += cp == 0x152 ? "OE" : "oe";
+		} else {
+			// Anything else has no ASCII stand-in; drop it like the filter
+			// in mcpGobObjectName() would.
+			out += ' ';
+		}
+	}
+	return out;
+}
+
+Common::String mcpGobTextToUtf8(const Common::String &text) {
+	// Pure ASCII (every English line, and most of the localised ones) is already
+	// UTF-8; only pay for the conversion when it is not.
+	for (uint i = 0; i < text.size(); i++) {
+		if ((byte)text[i] >= 0x80)
+			return text.decode(Common::kDos850).encode(Common::kUtf8);
+	}
+	return text;
+}
+
 Common::String mcpGobObjectName(const Common::String &label) {
-	Common::String name = MCP::McpBridge::normalizeActionName(label);
+	Common::String name = MCP::McpBridge::normalizeActionName(mcpGobFoldAccents(label));
 
 	// Keep the identifier plain: [a-z0-9_] only.
 	Common::String plain;
@@ -45,8 +91,9 @@ Common::String mcpGobObjectName(const Common::String &label) {
 	while (collapsed.size() && collapsed.lastChar() == '_')
 		collapsed.deleteLastChar();
 
-	// Strip a leading article; exits keep their "to_..." form.
-	const char *prefixes[] = {"a_", "an_", "the_"};
+	// Strip a leading article; exits keep their "to_..."/"vers_..." form.
+	const char *prefixes[] = {"a_", "an_", "the_",          // English
+	                          "un_", "une_", "le_", "la_", "les_"};  // French
 	for (uint i = 0; i < ARRAYSIZE(prefixes); i++) {
 		if (collapsed.hasPrefix(prefixes[i]) &&
 		    collapsed.size() > strlen(prefixes[i])) {
@@ -58,8 +105,10 @@ Common::String mcpGobObjectName(const Common::String &label) {
 }
 
 bool mcpGobIsExitLabel(const Common::String &label) {
-	Common::String name = MCP::McpBridge::normalizeActionName(label);
-	return name.hasPrefix("to_");
+	Common::String name = MCP::McpBridge::normalizeActionName(mcpGobFoldAccents(label));
+	// The exits are the labels that name where they lead: "TO STAIRS STREET" in
+	// English, "VERS LA RUE DE L'ESCALIER" in French.
+	return name.hasPrefix("to_") || name.hasPrefix("vers_");
 }
 
 Common::String mcpGobHotspotFallbackName(uint16 id) {

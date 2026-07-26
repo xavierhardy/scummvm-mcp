@@ -67,7 +67,6 @@ GobMcpBridge::GobMcpBridge(GobEngine *vm)
 	  _sweepReturnX(0),
 	  _sweepReturnY(0),
 	  _lastStepFrame(0),
-	  _idleSawBusy(false),
 	  _lastDrawnTextFrame(0),
 	  _inventoryKnown(false),
 	  _inventoryDirty(true),
@@ -126,7 +125,9 @@ void GobMcpBridge::onTextDrawn(const char *text, int16 x, int16 y, int16 surface
 	(void)surface;
 	_lastDrawnTextFrame = _frameCounter;
 	DrawnText dt;
-	dt.text = text;
+	// The game's own code page, decoded once here so names, labels and dialogue
+	// all reach the client as UTF-8.
+	dt.text = mcpGobTextToUtf8(text);
 	dt.x = x;
 	dt.y = y;
 	dt.frame = _frameCounter;
@@ -306,29 +307,13 @@ void GobMcpBridge::pumpSteps() {
 		if (inventoryOverlayOpen() && _frameCounter < s.notBeforeFrame)
 			return;
 		break;
-	case kStepWaitIdle: {
-		// Wait for the walk we just issued to play out before the interaction
-		// click. A single grace window is not enough: the walk may not have
-		// registered as "busy" yet when we first look, so we would consume the
-		// step while Woodruff is still standing at his start (and a beckoning
-		// character then just says "come closer"). Wait in two phases instead —
-		// first for the walk to *start*, then for it to *finish*.
-		if (gameBusy())
-			_idleSawBusy = true;
-		if (_frameCounter >= s.notBeforeFrame)
-			break; // safety timeout
-		if (!_idleSawBusy) {
-			// Give the walk time to begin; if none materialises (already
-			// adjacent) proceed once the short start window has elapsed.
-			if (_frameCounter - _lastStepFrame < 30)
-				return;
-			break;
-		}
-		// Walk started: hold until it finishes and input is accepted again.
-		if (gameBusy() || !waitingForInput())
+	case kStepWaitReady:
+		// Hold the click back until the script would honour it. The safety
+		// timeout matters: on a screen where the animation flag never clears,
+		// clicking late still beats never clicking at all.
+		if (!readyForClick() && _frameCounter < s.notBeforeFrame)
 			return;
 		break;
-	}
 	default:
 		break;
 	}
@@ -387,9 +372,11 @@ void GobMcpBridge::cancelNameSweep() {
 }
 
 void GobMcpBridge::pumpNameSweep() {
-	if (!engineReady() || !waitingForInput() || !_steps.empty())
+	// Never take the cursor away while the game is animating: the status bar it
+	// paints then belongs to the action, not to whatever the sweep points at.
+	if (!engineReady() || !readyForClick() || !_steps.empty())
 		return;
-	if (gameBusy() || _invState != kInvIdle)
+	if (_invState != kInvIdle)
 		return;
 	// During a stream, only sweep once the action has settled into idle.
 	if (isStreaming() && _sseDoneAtFrame == 0)
@@ -465,34 +452,32 @@ bool GobMcpBridge::inventoryOverlayOpen() const {
 void GobMcpBridge::pumpInventoryRefresh() {
 	if (!engineReady() || _vm->getGameType() != kGameTypeWoodruff)
 		return;
-	if (!_steps.empty() || isStreaming())
+	if (isStreaming())
+		return;
+	// A tool click that is still waiting for the game to be ready must not
+	// deadlock the refresh it is waiting on: keep going in that case, and let
+	// the refresh's own clicks jump ahead of it (see queueOverlayClick()).
+	if (!_steps.empty() && _steps[0].kind != kStepWaitReady)
 		return;
 
 	switch (_invState) {
 	case kInvIdle:
 		if (!_inventoryDirty)
 			return;
-		if (!waitingForInput() || gameBusy() || _sweepIndex >= 0)
+		// Opening the game's own menu on top of a running animation is the most
+		// intrusive thing the bridge does; wait until the game is truly idle.
+		if (!readyForClick() || _sweepIndex >= 0)
 			return;
 		if (inventoryOverlayOpen())
 			return; // the player-visible menu is open; not ours to drive
 		if (_frameCounter - _lastDrawnTextFrame < 8)
 			return;
+		// Remember the world the refresh is leaving, so `state` keeps reporting
+		// it while the overlay is up.
+		_worldTot = _vm->_game->_curTotFile;
+		buildObjectList(_worldObjects);
 		// Open the overlay in the middle of the screen.
-		{
-			Step press;
-			press.kind = kStepPress;
-			press.x = 320;
-			press.y = 240;
-			press.right = true;
-			press.slotId = 0;
-			press.notBeforeFrame = _frameCounter;
-			_steps.push_back(press);
-			Step release = press;
-			release.kind = kStepRelease;
-			release.notBeforeFrame = _frameCounter + 3;
-			_steps.push_back(release);
-		}
+		queueOverlayClick(320, 240, true);
 		_invState = kInvOpening;
 		_invStateFrame = _frameCounter;
 		_invCapturedLabel.clear();
@@ -538,7 +523,7 @@ void GobMcpBridge::pumpInventoryRefresh() {
 			if (_frameCounter - _invStateFrame < 40)
 				return;
 			// Empty inventory: dismiss the banner with a left click.
-			queueClick(320, 400, false);
+			queueOverlayClick(320, 400, false);
 			_invState = kInvClosing;
 			_invStateFrame = _frameCounter;
 			return;
@@ -561,7 +546,7 @@ void GobMcpBridge::pumpInventoryRefresh() {
 		_invSlotIndex++;
 		if (_invSlotIndex >= _invSlots.size()) {
 			// Done; close with a right click (toggles the overlay away).
-			queueClick(320, 400, true);
+			queueOverlayClick(320, 400, true);
 			_invState = kInvClosing;
 			_invStateFrame = _frameCounter;
 			return;
@@ -576,7 +561,7 @@ void GobMcpBridge::pumpInventoryRefresh() {
 		if (inventoryOverlayOpen()) {
 			if (_frameCounter - _invStateFrame > 75) {
 				// Stuck in the overlay; try a plain left click to dismiss.
-				queueClick(320, 400, false);
+				queueOverlayClick(320, 400, false);
 				_invStateFrame = _frameCounter;
 			}
 			return;
@@ -640,6 +625,44 @@ void GobMcpBridge::pushButton(bool down, bool right, int gameX, int gameY) {
 	g_system->getEventManager()->pushEvent(event);
 }
 
+// Queue a click on behalf of a tool: hold it back until the game would honour
+// it (see readyForClick()), then play it out. Everything an agent asks for goes
+// through here; the bridge's own housekeeping clicks use queueClick() directly,
+// since they run only when the game is already idle.
+void GobMcpBridge::queueClickWhenReady(int gameX, int gameY, bool right) {
+	cancelNameSweep();
+	Step ready;
+	ready.kind = kStepWaitReady;
+	ready.x = ready.y = 0;
+	ready.right = false;
+	ready.slotId = 0;
+	ready.notBeforeFrame = _frameCounter + 150; // ~6s safety timeout
+	_steps.push_back(ready);
+	queueClick(gameX, gameY, right);
+}
+
+// A click belonging to the inventory-overlay machine. It runs ahead of a tool
+// click that is still waiting for the game to be ready — that click is waiting
+// for this very overlay to close.
+void GobMcpBridge::queueOverlayClick(int gameX, int gameY, bool right) {
+	if (_steps.empty() || _steps[0].kind != kStepWaitReady) {
+		queueClick(gameX, gameY, right);
+		return;
+	}
+	Step press;
+	press.kind = kStepPress;
+	press.x = gameX;
+	press.y = gameY;
+	press.right = right;
+	press.slotId = 0;
+	press.notBeforeFrame = _frameCounter;
+	_steps.insert_at(0, press);
+	Step release = press;
+	release.kind = kStepRelease;
+	release.notBeforeFrame = _frameCounter + 3;
+	_steps.insert_at(1, release);
+}
+
 // Queue a complete click: press now, release a few frames later so the
 // scripts' polling loops see the button held down.
 void GobMcpBridge::queueClick(int gameX, int gameY, bool right) {
@@ -675,7 +698,7 @@ void GobMcpBridge::injectMouseMove(int x, int y) {
 
 void GobMcpBridge::injectMouseClick(int x, int y, const Common::String &button, bool isDouble) {
 	(void)isDouble;
-	queueClick(x, y, button == "right");
+	queueClickWhenReady(x, y, button == "right");
 }
 
 // ---------------------------------------------------------------------------
@@ -686,27 +709,43 @@ bool GobMcpBridge::waitingForInput() const {
 	return _frameCounter - _lastInputPollFrame <= 3;
 }
 
-// Woodruff's character controller tracks the commanded action in a handful of
-// script globals: VAR(kWoodruffActionTarget) holds the clicked hotspot id and
-// VAR(kWoodruffWalkCycle)/VAR(kWoodruffActionKind) count the walk that carries
-// it out. All return to 0 once the action has fully played out, giving a
-// reliable "still busy" signal even though the script keeps polling for input
-// the whole time (a player may redirect the walk mid-way).
+// Woodruff's character controller keeps two script globals worth reading. The
+// script polls for input the whole time (a player may redirect a walk mid-way),
+// so neither of them can be replaced by "is the game reading the mouse".
+//
+//   VAR(kWoodruffActionTarget) — the id of the hotspot the last click resolved
+//     to (a floor click included; the walk area is a hotspot too). Non-zero
+//     from the click until the walk and its action have played out: this is
+//     "still carrying out my click".
+//   VAR(kWoodruffActionKind)   — set while the character is playing a scripted
+//     animation, and for a few seconds after an action while it winds down.
+//     Clicks that arrive in that window are swallowed by the script, so the
+//     bridge must not inject one (or move the cursor) until it clears.
+//
+// VAR(932), their neighbour, is the per-frame animation phase — it toggles
+// constantly and means nothing here.
 enum {
-	kWoodruffWalkCycle    = 932,
 	kWoodruffActionKind   = 933,
 	kWoodruffActionTarget = 934
 };
 
+// Can the script variables be read at all? (They are sized by the game.)
+bool GobMcpBridge::actionVarsReadable() const {
+	return engineReady() && _vm->getGameType() == kGameTypeWoodruff &&
+	       _vm->_inter->_variables->getSize() / 4 > kWoodruffActionTarget;
+}
+
 bool GobMcpBridge::gameBusy() const {
-	if (!engineReady())
+	return actionVarsReadable() && VAR(kWoodruffActionTarget) != 0;
+}
+
+bool GobMcpBridge::readyForClick() const {
+	if (!waitingForInput() || gameBusy())
 		return false;
-	if (_vm->getGameType() != kGameTypeWoodruff)
+	// The bridge's own inventory overlay owns the screen while it is up.
+	if (_invState != kInvIdle)
 		return false;
-	if (_vm->_inter->_variables->getSize() / 4 <= kWoodruffActionTarget)
-		return false;
-	return VAR(kWoodruffWalkCycle) != 0 || VAR(kWoodruffActionKind) != 0 ||
-	       VAR(kWoodruffActionTarget) != 0;
+	return !actionVarsReadable() || VAR(kWoodruffActionKind) == 0;
 }
 
 void GobMcpBridge::collectHotspots(Common::Array<Hotspots::McpDesc> &out) const {
@@ -757,10 +796,8 @@ void GobMcpBridge::buildObjectList(Common::Array<ObjectEntry> &out) const {
 }
 
 bool GobMcpBridge::resolveTarget(const Common::String &name, Hotspots::McpDesc &out,
-                                 Common::String &errorOut, bool *isPathwayOut) const {
+                                 Common::String &errorOut) const {
 	Common::String normalized = normalizeActionName(name);
-	if (isPathwayOut)
-		*isPathwayOut = false;
 
 	Common::Array<ObjectEntry> objects;
 	buildObjectList(objects);
@@ -768,8 +805,6 @@ bool GobMcpBridge::resolveTarget(const Common::String &name, Hotspots::McpDesc &
 	for (uint i = 0; i < objects.size(); i++) {
 		if (objects[i].name == normalized) {
 			out = objects[i].desc;
-			if (isPathwayOut)
-				*isPathwayOut = mcpGobIsExitLabel(objects[i].label);
 			return true;
 		}
 	}
@@ -780,8 +815,6 @@ bool GobMcpBridge::resolveTarget(const Common::String &name, Hotspots::McpDesc &
 		for (uint i = 0; i < objects.size(); i++) {
 			if ((int)(objects[i].desc.id & 0x0FFF) == wantedId) {
 				out = objects[i].desc;
-				if (isPathwayOut)
-					*isPathwayOut = mcpGobIsExitLabel(objects[i].label);
 				return true;
 			}
 		}
@@ -805,6 +838,40 @@ int GobMcpBridge::currentRoomForMessages() const {
 // Tool: state
 // ---------------------------------------------------------------------------
 
+Common::String GobMcpBridge::stateToolDescription() const {
+	return "Returns the current game state: screen (id + TOT name), the screen's "
+	       "named hotspots, the inventory, the two verbs, and the lines the game "
+	       "has drawn since the last read (cleared after reading). This is a "
+	       "one-click game: every objects[] entry — scenery, characters and exits "
+	       "alike — is acted on with act(verb='interact', target1=<name>), which "
+	       "walks Woodruff over and runs the hotspot's own script. Exits carry "
+	       "pathway=true. Names are harvested from the status-bar text the game "
+	       "shows a player, so they are only final once naming_pending is false. "
+	       "Nothing is accepted while can_act is false. This game asks no dialog "
+	       "questions: conversations play out as messages, so answer is never used.";
+}
+
+// { "type": "array", "items": { "type": "object", "properties": props } }
+static Common::JSONValue *objectArraySchema(Common::JSONObject &props) {
+	Common::JSONObject item;
+	item.setVal("type",       mcpJsonString("object"));
+	item.setVal("properties", new Common::JSONValue(props));
+	Common::JSONObject arr;
+	arr.setVal("type",  mcpJsonString("array"));
+	arr.setVal("items", new Common::JSONValue(item));
+	return new Common::JSONValue(arr);
+}
+
+// Drop a property the shared (SCUMM-shaped) schema declares but this snapshot
+// never fills, so what the schema promises is what an agent actually gets.
+static void dropProp(Common::JSONObject &props, const char *key) {
+	Common::JSONObject::iterator it = props.find(key);
+	if (it == props.end())
+		return;
+	delete it->_value;
+	props.erase(key);
+}
+
 void GobMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 	outputProps.setVal("can_act", mcpProp("boolean",
 	    "False while the game is not accepting input (video, scripted sequence). "
@@ -813,21 +880,84 @@ void GobMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 	    "True while object names are still being resolved (the bridge hovers "
 	    "each new hotspot to learn the name the game shows a player). Call "
 	    "state again shortly for the final names."));
+
+	// Woodruff's snapshot differs from the SCUMM one the shared schema
+	// describes: restate the collections it fills differently, and drop what it
+	// never fills. Everything an agent may echo back into act() has to be
+	// declared, or a client validating the result against this schema rejects it.
+	{
+		Common::JSONObject props;
+		props.setVal("id",      mcpProp("integer", "Hotspot id; usable as an act() target."));
+		props.setVal("name",    mcpProp("string",  "Object name, as act() expects it."));
+		props.setVal("label",   mcpProp("string",
+		    "The raw status-bar text the game shows for this hotspot, in the "
+		    "game's own language. Absent until the name sweep has read it."));
+		props.setVal("x",       mcpProp("integer", "X coordinate of the hotspot centre."));
+		props.setVal("y",       mcpProp("integer", "Y coordinate of the hotspot centre."));
+		props.setVal("pathway", mcpProp("boolean",
+		    "Present and true when the hotspot leads to another screen."));
+		outputProps.setVal("objects", objectArraySchema(props));
+	}
+	{
+		Common::JSONObject props;
+		props.setVal("name",  mcpProp("string",  "Item name, as act(verb='use') expects it."));
+		props.setVal("label", mcpProp("string",  "The raw name the inventory overlay draws for it."));
+		props.setVal("id",    mcpProp("integer", "Inventory slot id."));
+		outputProps.setVal("inventory", objectArraySchema(props));
+	}
+	{
+		Common::JSONObject props;
+		props.setVal("text", mcpProp("string", "Line of game text."));
+		props.setVal("type", mcpProp("string", "Always 'text' — this engine does not attribute lines."));
+		outputProps.setVal("messages", objectArraySchema(props));
+	}
+	// No ego position is exposed (Woodruff is listed among the objects), and the
+	// game never raises a dialog question.
+	dropProp(outputProps, "position");
+	dropProp(outputProps, "question");
+}
+
+void GobMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
+	{
+		Common::JSONObject msgProps;
+		msgProps.setVal("text", mcpProp("string", "Line of game text drawn during the action."));
+		msgProps.setVal("type", mcpProp("string", "Always 'text'."));
+		props.setVal("messages", objectArraySchema(msgProps));
+	}
+	props.setVal("room_changed", mcpProp("integer",
+	    "The new screen id, present only when the action moved to another screen."));
+	// The bridge reports the screen change and the lines that were said; it has
+	// no object states, no inventory diff and no dialog questions to report.
+	dropProp(props, "inventory_added");
+	dropProp(props, "inventory_removed");
+	dropProp(props, "position");
+	dropProp(props, "objects_changed");
+	dropProp(props, "question");
 }
 
 Common::JSONValue *GobMcpBridge::toolState(const Common::JSONValue &, Common::String &) {
 	Common::JSONObject out;
 
+	// While the bridge has the game's inventory overlay open, the live screen is
+	// MENU.tot and its hotspots are the item slots. That is bridge bookkeeping,
+	// not a screen the agent moved to, so report the world it came from (and
+	// can_act=false, since a click would land in the overlay).
+	const bool overlayBusy = _invState != kInvIdle;
+
 	Common::JSONObject roomObj;
-	roomObj.setVal("id", mcpJsonInt(mcpGobScreenId(_vm->_game->_curTotFile)));
-	roomObj.setVal("name", mcpJsonString(mcpGobScreenName(_vm->_game->_curTotFile)));
+	const Common::String &tot = overlayBusy ? _worldTot : _vm->_game->_curTotFile;
+	roomObj.setVal("id", mcpJsonInt(mcpGobScreenId(tot)));
+	roomObj.setVal("name", mcpJsonString(mcpGobScreenName(tot)));
 	out.setVal("room", new Common::JSONValue(roomObj));
 
-	out.setVal("can_act", mcpJsonBool(waitingForInput()));
+	out.setVal("can_act", mcpJsonBool(waitingForInput() && !overlayBusy));
 
 	Common::JSONArray objects;
 	Common::Array<ObjectEntry> entries;
-	buildObjectList(entries);
+	if (overlayBusy)
+		entries = _worldObjects;
+	else
+		buildObjectList(entries);
 	for (uint i = 0; i < entries.size(); i++) {
 		const ObjectEntry &e = entries[i];
 		Common::JSONObject o;
@@ -976,7 +1106,7 @@ bool GobMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 		// Suppress the game's "Use <item> on ..." command bar from messages.
 		_useCmdLabel = _inventory[invIndex].label;
 
-		queueClick(320, 240, true); // open the overlay
+		queueClickWhenReady(320, 240, true); // open the overlay
 		Step wait;
 		wait.kind = kStepWaitOverlay;
 		wait.x = wait.y = 0;
@@ -1023,59 +1153,18 @@ bool GobMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 		return false;
 	}
 
-	bool pathway = false;
 	Hotspots::McpDesc target;
-	if (!resolveTarget(name1, target, errorOut, &pathway)) {
+	if (!resolveTarget(name1, target, errorOut)) {
 		errorOut = "act: " + errorOut;
 		return false;
 	}
 
-	int cx = (target.left + target.right) / 2;
-	int cy = (target.top + target.bottom) / 2;
-
-	if (pathway) {
-		// Exits already walk Woodruff to the screen edge and change room; a
-		// single click is enough (an approach walk would fight the transition).
-		queueClick(cx, cy, right);
-	} else {
-		// Walk Woodruff up to the object first, then act on it. Clicking a far
-		// object only makes him amble partway (and a beckoning character just
-		// says "come closer"), so a dedicated floor walk to the object's base
-		// gets him adjacent and the interaction fires on the following click.
-		cancelNameSweep();
-		Step wp;
-		wp.kind = kStepPress;
-		wp.x = cx;
-		wp.y = target.bottom;
-		wp.right = false;
-		wp.slotId = 0;
-		wp.notBeforeFrame = _frameCounter;
-		_steps.push_back(wp);
-		Step wr = wp;
-		wr.kind = kStepRelease;
-		wr.notBeforeFrame = _frameCounter + 3;
-		_steps.push_back(wr);
-		_idleSawBusy = false;
-		Step idle;
-		idle.kind = kStepWaitIdle;
-		idle.x = idle.y = 0;
-		idle.right = false;
-		idle.slotId = 0;
-		idle.notBeforeFrame = _frameCounter + 250; // ~10s safety timeout
-		_steps.push_back(idle);
-		Step ip;
-		ip.kind = kStepPress;
-		ip.x = cx;
-		ip.y = cy;
-		ip.right = right;
-		ip.slotId = 0;
-		ip.notBeforeFrame = 0;
-		_steps.push_back(ip);
-		Step ir = ip;
-		ir.kind = kStepRelease;
-		ir.notBeforeFrame = 0;
-		_steps.push_back(ir);
-	}
+	// One click on the target is the whole action: the game walks Woodruff over
+	// and runs the hotspot's script itself, for objects, characters and exits
+	// alike. (Driving the walk separately and clicking again afterwards only
+	// re-issues the action and, when the script has already started talking,
+	// throws a stray click into the conversation.)
+	queueClickWhenReady((target.left + target.right) / 2, (target.top + target.bottom) / 2, right);
 	_inventoryDirty = true;
 	beginStream();
 	_sseSkipFast = false;
@@ -1110,7 +1199,7 @@ bool GobMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &error
 	int y = (int)args.asObject()["y"]->asIntegerNumber();
 
 	_useCmdLabel.clear();
-	queueClick(x, y, false);
+	queueClickWhenReady(x, y, false);
 	_inventoryDirty = true;
 	beginStream();
 	_sseSkipFast = false;
