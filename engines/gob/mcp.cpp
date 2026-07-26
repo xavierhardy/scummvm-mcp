@@ -251,10 +251,30 @@ void GobMcpBridge::pumpSteps() {
 		return;
 	Step s = _steps[0];
 	switch (s.kind) {
+	case kStepHover: {
+		// Put the cursor on the target and let the game notice it before the
+		// button goes down. See the kStepHover comment in the header: pressing
+		// in the same breath as the move leaves the scripts acting on whatever
+		// the cursor was previously over.
+		if (_frameCounter < s.notBeforeFrame)
+			return;
+		Step &st = _steps[0];
+		if (!st.hoverSent) {
+			pushMouseMove(st.x, st.y);
+			st.hoverSent  = true;
+			st.hoverFrame = _frameCounter;
+			return; // never press on the same frame as the move
+		}
+		// Wait for the engine to register the hover, but never longer than
+		// kHoverMaxFrames: a click on bare floor enters no hotspot at all.
+		if (_frameCounter - st.hoverFrame < kHoverMaxFrames &&
+		    !hoverRegistered(st.x, st.y))
+			return;
+		break;
+	}
 	case kStepPress:
 		if (_frameCounter < s.notBeforeFrame)
 			return;
-		pushMouseMove(s.x, s.y);
 		pushButton(true, s.right, s.x, s.y);
 		break;
 	case kStepRelease:
@@ -278,18 +298,22 @@ void GobMcpBridge::pumpSteps() {
 			int cy = (spots[i].top + spots[i].bottom) / 2;
 			// Replace this step with a plain click at the slot.
 			_steps.remove_at(0);
-			Step press;
+			Step hover;
+			hover.kind = kStepHover;
+			hover.x = cx;
+			hover.y = cy;
+			hover.right = false;
+			hover.slotId = 0;
+			hover.notBeforeFrame = _frameCounter;
+			_steps.insert_at(0, hover);
+			Step press = hover;
 			press.kind = kStepPress;
-			press.x = cx;
-			press.y = cy;
-			press.right = false;
-			press.slotId = 0;
 			press.notBeforeFrame = _frameCounter;
-			_steps.insert_at(0, press);
+			_steps.insert_at(1, press);
 			Step release = press;
 			release.kind = kStepRelease;
 			release.notBeforeFrame = _frameCounter + 3;
-			_steps.insert_at(1, release);
+			_steps.insert_at(2, release);
 			return;
 		}
 		// Slot not on screen (yet); give the overlay a moment, then give up.
@@ -317,6 +341,7 @@ void GobMcpBridge::pumpSteps() {
 	default:
 		break;
 	}
+	debug(2, "mcp: step kind=%d (%d,%d) done at frame %u", (int)s.kind, s.x, s.y, _frameCounter);
 	_steps.remove_at(0);
 	_lastStepFrame = _frameCounter;
 }
@@ -641,6 +666,7 @@ void GobMcpBridge::queueClickWhenReady(int gameX, int gameY, bool right) {
 	queueClick(gameX, gameY, right);
 }
 
+
 // A click belonging to the inventory-overlay machine. It runs ahead of a tool
 // click that is still waiting for the game to be ready — that click is waiting
 // for this very overlay to close.
@@ -649,25 +675,64 @@ void GobMcpBridge::queueOverlayClick(int gameX, int gameY, bool right) {
 		queueClick(gameX, gameY, right);
 		return;
 	}
-	Step press;
+	Step hover;
+	hover.kind = kStepHover;
+	hover.x = gameX;
+	hover.y = gameY;
+	hover.right = right;
+	hover.slotId = 0;
+	hover.notBeforeFrame = _frameCounter;
+	_steps.insert_at(0, hover);
+	Step press = hover;
 	press.kind = kStepPress;
-	press.x = gameX;
-	press.y = gameY;
-	press.right = right;
-	press.slotId = 0;
 	press.notBeforeFrame = _frameCounter;
-	_steps.insert_at(0, press);
+	_steps.insert_at(1, press);
 	Step release = press;
 	release.kind = kStepRelease;
 	release.notBeforeFrame = _frameCounter + 3;
-	_steps.insert_at(1, release);
+	_steps.insert_at(2, release);
 }
 
-// Queue a complete click: press now, release a few frames later so the
-// scripts' polling loops see the button held down.
+// Has the engine taken notice of the cursor sitting at these coordinates?
+// True once the hotspot it reports as hovered is the one covering the point
+// (or once there is nothing there to hover).
+bool GobMcpBridge::hoverRegistered(int gameX, int gameY) const {
+	if (!engineReady())
+		return true;
+
+	Common::Array<Hotspots::McpDesc> spots;
+	collectHotspots(spots);
+
+	uint16 wanted = 0;
+	for (uint i = 0; i < spots.size(); i++) {
+		const Hotspots::McpDesc &d = spots[i];
+		if (gameX < d.left || gameX > d.right || gameY < d.top || gameY > d.bottom)
+			continue;
+		wanted = d.id;
+		break;
+	}
+	if (wanted == 0)
+		return true; // nothing to enter here — don't hold the click back
+
+	return _vm->_game->_hotspots->mcpCurrentId() == wanted;
+}
+
+// Queue a complete click: hover the target so the game's enter() handler runs,
+// press, then release a few frames later so the scripts' polling loops see the
+// button held down.
 void GobMcpBridge::queueClick(int gameX, int gameY, bool right) {
 	// A real action owns the cursor from here; drop any hover sweep.
 	cancelNameSweep();
+
+	Step hover;
+	hover.kind = kStepHover;
+	hover.x = gameX;
+	hover.y = gameY;
+	hover.right = right;
+	hover.slotId = 0;
+	hover.notBeforeFrame = _frameCounter;
+	_steps.push_back(hover);
+
 	Step press;
 	press.kind = kStepPress;
 	press.x = gameX;
@@ -1164,7 +1229,11 @@ bool GobMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	// alike. (Driving the walk separately and clicking again afterwards only
 	// re-issues the action and, when the script has already started talking,
 	// throws a stray click into the conversation.)
-	queueClickWhenReady((target.left + target.right) / 2, (target.top + target.bottom) / 2, right);
+	{
+		int cx = (target.left + target.right) / 2;
+		int cy = (target.top + target.bottom) / 2;
+		queueClickWhenReady(cx, cy, right);
+	}
 	_inventoryDirty = true;
 	beginStream();
 	_sseSkipFast = false;

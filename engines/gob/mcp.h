@@ -46,12 +46,12 @@ class GobEngine;
 // pointing and clicking, and one click on a hotspot is the whole interaction:
 // the game walks the character over and runs the hotspot's script itself. The
 // bridge therefore replays real input: `act` resolves its target to a hotspot,
-// pushes a synthetic mouse-move plus a button press into the EventManager, and
-// holds the button down for a few frames so the script's own polling sees a
-// complete click. Because the engine
-// re-reads the event queue from every one of its blocking loops
-// (Util::processInput), this works identically in the game proper, in menus
-// and during dialogue choices.
+// moves the cursor onto it, waits for the engine to register the hover, and
+// only then pushes a button press, held down for a few frames so the script's
+// own polling sees a complete click (see kStepHover — the hover is not
+// cosmetic, the scripts act on it). Because the engine re-reads the event
+// queue from every one of its blocking loops (Util::processInput), this works
+// identically in the game proper, in menus and during dialogue choices.
 //
 // Woodruff shows an object's name next to the cursor while hovering: the
 // hotspot's "position" script draws it every frame. The bridge captures every
@@ -145,20 +145,37 @@ private:
 
 	// A queued synthetic-input step, played out one frame at a time so the
 	// scripts' own polling sees a complete press/release cycle.
+	// kStepHover exists because the scripts key off the *hover*, not the click:
+	// entering a hotspot runs its enter() handler, which is what tells the game
+	// what the player is pointing at (it is also what sets VAR(17)). Moving the
+	// cursor and pressing in the same breath means the click is resolved before
+	// any of that has run, and the action then plays out against the previously
+	// hovered hotspot — the game performs the action without walking there,
+	// drawing the character a second time at the target, or waits forever for a
+	// walk it never set up. A real mouse always hovers before it clicks.
 	enum StepKind {
-		kStepPress,       // move to (x, y) + button down
+		kStepHover,       // move to (x, y), wait for the game to register it
+		kStepPress,       // button down
 		kStepRelease,     // button up
 		kStepClickItem,   // click the inventory slot `slotId` (resolved live)
 		kStepWaitOverlay, // wait (up to notBeforeFrame) for the menu overlay
 		kStepWaitWorld,   // wait (up to notBeforeFrame) for the overlay to close
 		kStepWaitReady    // wait (up to notBeforeFrame) until a click would land
 	};
+
+	// Frames to wait for the hover to register before pressing anyway.
+	static const uint32 kHoverMaxFrames = 15;
 	struct Step {
 		StepKind kind;
 		int x, y;        // game coordinates
 		bool right;      // right instead of left button
 		uint16 slotId;   // kStepClickItem: the inventory slot hotspot id
 		uint32 notBeforeFrame;
+		// kStepHover: set once the move has been pushed. The move cannot be
+		// tied to notBeforeFrame — a step sitting behind a wait does not run on
+		// the frame it was queued on — so the hover tracks its own start.
+		bool hoverSent = false;
+		uint32 hoverFrame = 0;
 	};
 
 	// Is a script sitting in an input wait loop right now?
@@ -201,9 +218,12 @@ private:
 	void pumpNameSweep();
 	void cancelNameSweep();
 
-	// Push a full click (press now, release a few frames later) at game
-	// coordinates.
+	// Push a full click (hover, press, release) at game coordinates.
 	void queueClick(int gameX, int gameY, bool right);
+
+	// Has the engine registered the cursor sitting at these coordinates, i.e.
+	// run the enter() handler of the hotspot there? See kStepHover.
+	bool hoverRegistered(int gameX, int gameY) const;
 
 	// Same, but preceded by a wait until the game would honour the click. Used
 	// by everything an agent asks for.
@@ -262,6 +282,7 @@ private:
 	// Frame the previous step executed at (paces press/release pairs whose
 	// exact frames are not known when queued).
 	uint32 _lastStepFrame;
+
 
 	// Frame of the most recent Hotspots::check() poll with a live mouse.
 	uint32 _lastInputPollFrame;

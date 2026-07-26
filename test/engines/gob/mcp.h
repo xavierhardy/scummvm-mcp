@@ -36,12 +36,53 @@ public:
 		TS_ASSERT_EQUALS(Gob::mcpGobObjectName(""), "");
 	}
 
+	// --- Localised text -----------------------------------------------------
+	// The game stores its text in the DOS OEM code page (CP850) even in its
+	// Windows release, so a localised release draws accented letters as single
+	// high bytes. Left alone they are not valid UTF-8 and are lost on the wire.
+	void test_text_to_utf8() {
+		// Pure ASCII is already UTF-8 and must come back untouched.
+		TS_ASSERT_EQUALS(Gob::mcpGobTextToUtf8("A trash heap"), "A trash heap");
+		// 0x82 = e-acute, 0x85 = a-grave in CP850.
+		TS_ASSERT_EQUALS(Gob::mcpGobTextToUtf8("Un recueil de d\x82tritus"),
+		                 "Un recueil de d\xC3\xA9tritus");
+		TS_ASSERT_EQUALS(Gob::mcpGobTextToUtf8("Etes-vous \x85 jour"),
+		                 "Etes-vous \xC3\xA0 jour");
+	}
+
+	void test_fold_accents() {
+		TS_ASSERT_EQUALS(Gob::mcpGobFoldAccents("d\xC3\xA9tritus"), "detritus");
+		TS_ASSERT_EQUALS(Gob::mcpGobFoldAccents("\xC3\xA9trange"), "etrange");
+		TS_ASSERT_EQUALS(Gob::mcpGobFoldAccents("gar\xC3\xA7on"), "garcon");
+		TS_ASSERT_EQUALS(Gob::mcpGobFoldAccents("plain"), "plain");
+	}
+
+	// Accented identifiers stay typeable, and the French articles are stripped
+	// like the English ones. The labels arrive already decoded (the bridge
+	// converts once, in onTextDrawn), so these are the UTF-8 forms — decoding
+	// again here would turn valid UTF-8 into mojibake.
+	void test_object_name_localised() {
+		TS_ASSERT_EQUALS(Gob::mcpGobObjectName("Un recueil de d\xC3\xA9tritus"),
+		                 "recueil_de_detritus");
+		TS_ASSERT_EQUALS(Gob::mcpGobObjectName("Un \xC3\xA9trange dispositif"),
+		                 "etrange_dispositif");
+		TS_ASSERT_EQUALS(Gob::mcpGobObjectName("Une botte en cuir"), "botte_en_cuir");
+		TS_ASSERT_EQUALS(Gob::mcpGobObjectName("Un badaud"), "badaud");
+	}
+
 	// --- Exit detection -----------------------------------------------------
 	void test_exit_labels() {
 		TS_ASSERT(Gob::mcpGobIsExitLabel("TO STAIRS STREET"));
 		TS_ASSERT(Gob::mcpGobIsExitLabel("To the street of the sad Boozook"));
 		TS_ASSERT(!Gob::mcpGobIsExitLabel("A trash heap"));
 		TS_ASSERT(!Gob::mcpGobIsExitLabel("onlooker"));
+	}
+
+	// The exits name where they lead in the game's own language.
+	void test_exit_labels_localised() {
+		TS_ASSERT(Gob::mcpGobIsExitLabel("VERS LA RUE DE L'ESCALIER"));
+		TS_ASSERT(Gob::mcpGobIsExitLabel("VERS LA RUE DU BOUZOUK TRISTE"));
+		TS_ASSERT(!Gob::mcpGobIsExitLabel("Un recueil de d\xC3\xA9tritus"));
 	}
 
 	// --- Fallback names & target parsing ------------------------------------

@@ -123,6 +123,14 @@ public:
 	/** Describe the currently filled, enabled hotspots (MCP bridge). */
 	void mcpList(Common::Array<McpDesc> &out) const;
 
+	/** The hotspot the cursor is currently inside, 0 for none (MCP bridge).
+	 *
+	 *  This is the hover the scripts react to: entering a hotspot runs its
+	 *  enter() handler, which is what sets up the game's idea of what the
+	 *  player is pointing at. The bridge waits for it before clicking.
+	 */
+	uint16 mcpCurrentId() const { return _currentId; }
+
 #ifdef USE_TTS
 	bool hoveringOverHotspot() const;
 	void addHotspotTTSText(const Common::String &text, uint16 x1, uint16 y1, uint16 x2, uint16 y2, int16 surf);
