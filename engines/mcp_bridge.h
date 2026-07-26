@@ -132,6 +132,10 @@ protected:
 	                                            Common::String &errorOut, bool &handled) {
 		(void)name; (void)args; (void)errorOut; handled = false; return nullptr;
 	}
+	// Description shown for the `state` tool. The default describes the SCUMM
+	// snapshot; engines whose state carries different fields override it so the
+	// text an agent reads matches what it actually gets back.
+	virtual Common::String stateToolDescription() const;
 	// Description shown for the `debug` tool (engines expose different state).
 	virtual Common::String debugToolDescription() const;
 	// Input schema for the `debug` tool. Ownership passes to the server.

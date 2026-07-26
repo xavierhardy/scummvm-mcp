@@ -222,6 +222,16 @@ Common::JSONValue *McpBridge::buildChangesSchema() const {
 	return mcpObjectSchema(props);
 }
 
+Common::String McpBridge::stateToolDescription() const {
+	return "Returns the current game state: room, position, inventory, scene objects "
+	       "(including NPCs with their compatible_verbs — always includes talk_to), "
+	       "active verbs, latest messages (cleared after reading), "
+	       "and pending dialog question if any. The player character is never listed. "
+	       "Objects with a meaningful state expose a human-readable 'state_name' "
+	       "(e.g. a door reads 'opened'/'closed'); doors advertise the 'open'/'close' verbs. "
+	       "Use act(verb='talk_to', target1=<npc_name>) to speak to an NPC.";
+}
+
 Common::String McpBridge::debugToolDescription() const {
 	return "Return raw engine state for diagnostics.";
 }
@@ -312,14 +322,7 @@ void McpBridge::registerTools() {
 
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "state";
-		spec.description =
-		    "Returns the current game state: room, position, inventory, scene objects "
-		    "(including NPCs with their compatible_verbs — always includes talk_to), "
-		    "active verbs, latest messages (cleared after reading), "
-		    "and pending dialog question if any. The player character is never listed. "
-		    "Objects with a meaningful state expose a human-readable 'state_name' "
-		    "(e.g. a door reads 'opened'/'closed'); doors advertise the 'open'/'close' verbs. "
-		    "Use act(verb='talk_to', target1=<npc_name>) to speak to an NPC.";
+		spec.description = stateToolDescription();
 		spec.inputSchema  = mcpObjectSchema(inputProps);
 		spec.outputSchema = mcpObjectSchema(outputProps);
 		spec.streaming    = false;

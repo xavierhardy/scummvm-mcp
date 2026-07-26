@@ -882,8 +882,18 @@ Common::JSONValue *McpServer::handleToolsList() {
 		tool.setVal("name",        mcpJsonString(t.name));
 		tool.setVal("description", mcpJsonString(t.description));
 		// Deep-copy schemas so the server retains ownership.
-		if (t.inputSchema)
+		if (t.inputSchema) {
 			tool.setVal("inputSchema",  new Common::JSONValue(*t.inputSchema));
+		} else {
+			// `inputSchema` is mandatory in the MCP tool definition, so a tool
+			// that takes no arguments still has to advertise an empty object
+			// schema. Omitting it makes strict clients (which validate the whole
+			// tools/list result before using any of it) reject the server
+			// outright — i.e. every tool disappears because `skip` or
+			// `screenshot` was registered.
+			Common::JSONObject noArgs;
+			tool.setVal("inputSchema", mcpObjectSchema(noArgs));
+		}
 		if (t.outputSchema)
 			tool.setVal("outputSchema", new Common::JSONValue(*t.outputSchema));
 		tools.push_back(new Common::JSONValue(tool));

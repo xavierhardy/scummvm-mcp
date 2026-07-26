@@ -132,6 +132,17 @@ static Common::String cleanObjectName(const char *raw) {
 	return out;
 }
 
+// True for a non-empty run of decimal digits, i.e. a target given as an id
+// rather than as a name.
+static bool allDigits(const Common::String &s) {
+	if (s.empty())
+		return false;
+	for (uint i = 0; i < s.size(); i++)
+		if (s[i] < '0' || s[i] > '9')
+			return false;
+	return true;
+}
+
 bool QueenMcpBridge::canAct() const {
 	if (_vm->input()->cutawayRunning() || _vm->input()->isDialogueRunning())
 		return false;
@@ -193,6 +204,28 @@ void QueenMcpBridge::collectInventory(Common::Array<uint16> &items,
 	}
 }
 
+void QueenMcpBridge::clampToRoom(int &x, int &y) const {
+	// The union of the room's walk areas is the walkable extent of the room —
+	// wider than the 320-pixel screen in a scrolling room, and never reaching
+	// into the verb panel below ROOM_ZONE_HEIGHT.
+	uint16 room = _vm->logic()->currentRoom();
+	uint16 areaMax = _vm->grid()->areaMax(room);
+	int x1 = 0, y1 = 0, x2 = GAME_SCREEN_WIDTH - 1, y2 = ROOM_ZONE_HEIGHT - 1;
+	if (areaMax > 0) {
+		const Box &first = _vm->grid()->area(room, 1)->box;
+		x1 = first.x1; y1 = first.y1; x2 = first.x2; y2 = first.y2;
+		for (uint16 i = 2; i <= areaMax; i++) {
+			const Box &b = _vm->grid()->area(room, i)->box;
+			x1 = MIN<int>(x1, b.x1);
+			y1 = MIN<int>(y1, b.y1);
+			x2 = MAX<int>(x2, b.x2);
+			y2 = MAX<int>(y2, b.y2);
+		}
+	}
+	x = CLIP<int>(x, x1, x2);
+	y = CLIP<int>(y, y1, y2);
+}
+
 bool QueenMcpBridge::resolveTarget(const Common::String &name, int16 &subject, int16 &relNum,
                                    Common::String &errorOut) const {
 	subject = 0;
@@ -200,11 +233,15 @@ bool QueenMcpBridge::resolveTarget(const Common::String &name, int16 &subject, i
 	// Same cleanup the advertised names went through, so any state name (and
 	// even the raw authored form) round-trips.
 	Common::String normalized = cleanObjectName(name.c_str());
+	// `act` advertises "name or numeric id", so the ids state publishes have to
+	// resolve too: objects[].id (room-relative) first, then inventory[].id.
+	int numeric = allDigits(normalized) ? atoi(normalized.c_str()) : 0;
 
 	Common::Array<RoomObject> objects;
 	collectRoomObjects(objects);
 	for (uint i = 0; i < objects.size(); i++) {
-		if (objects[i].name == normalized) {
+		if (objects[i].name == normalized ||
+		    (numeric > 0 && objects[i].relNum == (int16)numeric)) {
 			subject = (int16)objects[i].absNum;
 			relNum = objects[i].relNum;
 			return true;
@@ -215,7 +252,8 @@ bool QueenMcpBridge::resolveTarget(const Common::String &name, int16 &subject, i
 	Common::Array<Common::String> itemNames;
 	collectInventory(items, itemNames);
 	for (uint i = 0; i < items.size(); i++) {
-		if (itemNames[i] == normalized) {
+		if (itemNames[i] == normalized ||
+		    (numeric > 0 && items[i] == (uint16)numeric)) {
 			subject = -(int16)items[i];
 			return true;
 		}
@@ -281,10 +319,72 @@ int QueenMcpBridge::currentRoomForMessages() const {
 // Tool: state
 // ---------------------------------------------------------------------------
 
+Common::String QueenMcpBridge::stateToolDescription() const {
+	return "Returns the current game state: room (id + data name), Joe's position, "
+	       "the room's named objects and people, the inventory, the nine panel verbs, "
+	       "the lines said since the last read (cleared after reading) and the pending "
+	       "dialogue question if any. Joe himself is never listed. Every objects[] entry "
+	       "carries a 'kind' ('object' or 'person'), plus 'pathway' when it leads out of "
+	       "the room, 'position' when the game authors a walk-to spot for it and "
+	       "'default_verb' (what a right-click would do) when it has one. Objects and "
+	       "inventory items can be targeted by 'name' or by 'id' in act(). "
+	       "Use act(verb='talk_to', target1=<person_name>) to start a dialogue, then "
+	       "answer(id=N) for each question. Nothing is accepted while can_act is false.";
+}
+
+// { "type": "array", "items": { "type": "object", "properties": props } }
+static Common::JSONValue *objectArraySchema(Common::JSONObject &props) {
+	Common::JSONObject item;
+	item.setVal("type",       mcpJsonString("object"));
+	item.setVal("properties", new Common::JSONValue(props));
+	Common::JSONObject arr;
+	arr.setVal("type",  mcpJsonString("array"));
+	arr.setVal("items", new Common::JSONValue(item));
+	return new Common::JSONValue(arr);
+}
+
 void QueenMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 	outputProps.setVal("can_act", mcpProp("boolean",
 	    "False while the game is not accepting a new command (cutaway, dialogue). "
 	    "act/walk are rejected until it turns true again."));
+
+	// FOTAQ's snapshot differs from the SCUMM one the shared schema describes, so
+	// restate the three collections it fills differently. Everything an agent may
+	// echo back into `act` has to be declared, or a client that validates the
+	// result against this schema rejects it.
+	{
+		Common::JSONObject props;
+		props.setVal("id",   mcpProp("integer", "Room-relative object number; usable as an act() target."));
+		props.setVal("name", mcpProp("string",  "Object name, as act() expects it."));
+		props.setVal("kind", mcpProp("string",  "'object' or 'person' (a person can be talked to)."));
+		props.setVal("pathway", mcpProp("boolean",
+		    "Present and true when the object leads to another room."));
+		Common::JSONObject posProps;
+		posProps.setVal("x", mcpProp("integer", "X coordinate"));
+		posProps.setVal("y", mcpProp("integer", "Y coordinate"));
+		Common::JSONObject posSchema;
+		posSchema.setVal("type",        mcpJsonString("object"));
+		posSchema.setVal("properties",  new Common::JSONValue(posProps));
+		posSchema.setVal("description",
+		    mcpJsonString("The walk-to spot the game authors for this object, when it has one."));
+		props.setVal("position", new Common::JSONValue(posSchema));
+		props.setVal("default_verb", mcpProp("string",
+		    "The verb a right-click would use on this object, when it has one."));
+		outputProps.setVal("objects", objectArraySchema(props));
+	}
+	{
+		Common::JSONObject props;
+		props.setVal("name", mcpProp("string",  "Item name, as act() expects it."));
+		props.setVal("id",   mcpProp("integer", "Item number; usable as an act() target."));
+		outputProps.setVal("inventory", objectArraySchema(props));
+	}
+	{
+		Common::JSONObject props;
+		props.setVal("text",  mcpProp("string", "Line of game text."));
+		props.setVal("actor", mcpProp("string", "Who said it (absent for narration)."));
+		props.setVal("type",  mcpProp("string", "'actor', 'system' or 'dialog'."));
+		outputProps.setVal("messages", objectArraySchema(props));
+	}
 }
 
 // The non-empty dialogue options as (1-based display id, label) pairs.
@@ -369,6 +469,25 @@ Common::JSONValue *QueenMcpBridge::toolState(const Common::JSONValue &, Common::
 	for (uint i = 0; i < ARRAYSIZE(kVerbs); i++)
 		verbs.push_back(mcpJsonString(kVerbs[i].name));
 	out.setVal("verbs", new Common::JSONValue(verbs));
+
+	// The lines said since the last read, cleared after reading (SCUMM
+	// behaviour). Without this an agent has no way to see what was said while
+	// can_act was false — the intro talks for minutes before handing over.
+	Common::JSONArray messages;
+	for (uint i = 0; i < _messages.size(); i++) {
+		Common::String text = MCP::mcpCleanGameText(safeUtf8(_messages[i].text));
+		if (text.empty())
+			continue;
+		Common::JSONObject m;
+		m.setVal("text", mcpJsonString(text));
+		Common::String actor = messageActorName(_messages[i].actorId);
+		if (!actor.empty())
+			m.setVal("actor", mcpJsonString(actor));
+		m.setVal("type", mcpJsonString(_messages[i].type));
+		messages.push_back(new Common::JSONValue(m));
+	}
+	_messages.clear();
+	out.setVal("messages", new Common::JSONValue(messages));
 
 	if (hasPendingQuestion()) {
 		Common::JSONObject question;
@@ -480,6 +599,11 @@ bool QueenMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	}
 	int x = (int)args.asObject()["x"]->asIntegerNumber();
 	int y = (int)args.asObject()["y"]->asIntegerNumber();
+	// The tool advertises out-of-bounds coordinates as clamped, so clamp them
+	// here: a y in the verb panel or an x past the end of a scrolling room would
+	// otherwise leave Walk::moveJoe() with no area to aim at and Joe would just
+	// say he cannot get there.
+	clampToRoom(x, y);
 
 	// An empty command at a room position is exactly a plain click there:
 	// executeCurrentAction()'s wrong-action path walks Joe to the spot.

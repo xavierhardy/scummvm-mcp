@@ -74,6 +74,7 @@ protected:
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut) override;
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut) override;
 
+	Common::String stateToolDescription() const override;
 	Common::String debugToolDescription() const override;
 	Common::JSONValue *buildDebugSchema() const override;
 	void augmentStateSchema(Common::JSONObject &outputProps) override;
@@ -136,6 +137,10 @@ private:
 	// Current inventory as item numbers, with normalized names.
 	void collectInventory(Common::Array<uint16> &items,
 	                      Common::Array<Common::String> &names) const;
+
+	// Clamp a walk target to the walkable extent of the current room, as the
+	// `walk` tool's description promises.
+	void clampToRoom(int &x, int &y) const;
 
 	// Resolve a tool target to the panel's subject encoding: > 0 room object
 	// (absolute), < 0 inventory item (-itemNum). `relNum` carries the room-
