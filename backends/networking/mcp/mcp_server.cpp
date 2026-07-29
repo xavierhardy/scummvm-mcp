@@ -847,21 +847,56 @@ Common::JSONValue *McpServer::handleRequest(const Common::JSONValue &req, bool &
 	if (!obj.contains("method") || !obj["method"]->isString()) return nullptr;
 	Common::String methodStr = obj["method"]->asString();
 	debug(1, "mcp: handling request method '%s'", methodStr.c_str());
-	if (methodStr == "initialize")  return handleInitialize();
+	if (methodStr == "initialize")  return handleInitialize(req);
 	if (methodStr == "tools/list")  return handleToolsList();
 	if (methodStr == "tools/call")  return handleToolCall(req, startedStream);
 	if (methodStr == "ping")        return new Common::JSONValue(Common::JSONObject());
 	return nullptr;
 }
 
-Common::JSONValue *McpServer::handleInitialize() {
+// Revisions of the MCP specification this server speaks. The wire shape it
+// uses — JSON-RPC over HTTP with an SSE stream, tools/list and tools/call — is
+// unchanged across all three, so the negotiated version is the client's choice
+// rather than a behavioural switch. Newest first.
+static const char *const kSupportedProtocols[] = {
+	"2025-06-18",
+	"2025-03-26",
+	"2024-11-05",
+};
+
+Common::JSONValue *McpServer::handleInitialize(const Common::JSONValue &req) {
 	_sessionId = Common::String::format("%s-%08x%08x", _serverName.c_str(),
 	             (unsigned)_frameCounter,
 	             (unsigned)((uintptr_t)this >> 4));
 	debug(1, "mcp: initialize: generated session ID '%s'", _sessionId.c_str());
 
+	// Echo the client's requested revision when we know it, and fall back to
+	// the newest we support otherwise. Answering with a revision the client did
+	// not ask for is legal but risky: a client that only accepts what it
+	// offered treats the mismatch as a failed handshake and quietly registers
+	// none of our tools, which looks to the user like a server that never
+	// finishes connecting.
+	Common::String negotiated = kSupportedProtocols[0];
+	if (req.isObject()) {
+		const Common::JSONObject &reqObj = req.asObject();
+		if (reqObj.contains("params") && reqObj["params"]->isObject()) {
+			const Common::JSONObject &params = reqObj["params"]->asObject();
+			if (params.contains("protocolVersion") &&
+			    params["protocolVersion"]->isString()) {
+				Common::String wanted = params["protocolVersion"]->asString();
+				for (uint i = 0; i < ARRAYSIZE(kSupportedProtocols); ++i) {
+					if (wanted == kSupportedProtocols[i]) {
+						negotiated = wanted;
+						break;
+					}
+				}
+			}
+		}
+	}
+	debug(1, "mcp: initialize: protocol version '%s'", negotiated.c_str());
+
 	Common::JSONObject o;
-	o.setVal("protocolVersion", mcpJsonString("2025-03-26"));
+	o.setVal("protocolVersion", mcpJsonString(negotiated));
 	Common::JSONObject caps;
 	Common::JSONObject toolsCaps;
 	toolsCaps.setVal("listChanged", mcpJsonBool(true));

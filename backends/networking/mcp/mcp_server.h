@@ -165,7 +165,7 @@ private:
 	                       const Common::String &body);
 	void handleJsonRpc(const Common::String &body, const Common::String &sessionHdr);
 	Common::JSONValue *handleRequest(const Common::JSONValue &req, bool &startedStream);
-	Common::JSONValue *handleInitialize();
+	Common::JSONValue *handleInitialize(const Common::JSONValue &req);
 	Common::JSONValue *handleToolsList();
 	Common::JSONValue *handleToolCall(const Common::JSONValue &req, bool &startedStream);
 
