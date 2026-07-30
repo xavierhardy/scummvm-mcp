@@ -123,8 +123,17 @@ private:
 
 	Common::Array<ToolSpec> _tools;
 
+	// A session holds a unique id that a client must echo on subsequent
+	// requests. Multiple sessions let the readiness probe, the observer and
+	// the agent each hold one without stepping on each other.
+	struct Session {
+		Common::String id;
+		uint32 createdAtFrame;
+	};
+	static const uint kMaxSessions = 4;
+
 	int _listenFd;
-	Common::String _sessionId;
+	Common::Array<Session> _sessions;
 
 	Common::Array<ClientEntry> _clients;
 	int _nextClientId;
@@ -168,6 +177,14 @@ private:
 	Common::JSONValue *handleInitialize(const Common::JSONValue &req);
 	Common::JSONValue *handleToolsList();
 	Common::JSONValue *handleToolCall(const Common::JSONValue &req, bool &startedStream);
+
+	// --- Session helpers ---
+	// Find a session by id, or return -1.
+	int findSession(const Common::String &id) const;
+	// Generate a new session id, evicting the oldest if at capacity.
+	Common::String createSession();
+	// Remove a session by id.
+	void removeSession(const Common::String &id);
 
 	// --- Response helpers ---
 	void writeJsonRpcResult(const Common::JSONValue *id,

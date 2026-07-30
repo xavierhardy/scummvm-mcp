@@ -746,7 +746,10 @@ void McpServer::handleHttpRequest(const Common::String &method,
 	}
 
 	if (method == "DELETE") {
-		_sessionId.clear();
+		if (!sessionHdr.empty())
+			removeSession(sessionHdr);
+		else
+			_sessions.clear();
 		writeHttpResponse(200, "", "");
 		return;
 	}
@@ -796,14 +799,18 @@ void McpServer::handleJsonRpc(const Common::String &body, const Common::String &
 	bool isInitialize = root.contains("method") && root["method"]->isString()
 	                    && root["method"]->asString() == "initialize";
 
-	// Session validation: once we have issued a session id, every request other
-	// than a fresh initialize must echo it back. Matched against the parsed
-	// method so a tool argument containing the literal "initialize" cannot
-	// bypass it. (The server tracks a single session — see handleInitialize.)
-	if (!_sessionId.empty() && !isInitialize &&
-	    (sessionHdr.empty() || sessionHdr != _sessionId)) {
-		debug(1, "mcp: session validation failed: expected '%s', got '%s'",
-			_sessionId.c_str(), sessionHdr.empty() ? "(empty)" : sessionHdr.c_str());
+	// Session validation: once we have issued any session ids, every request
+	// other than a fresh initialize must echo a known session id back. Multiple
+	// sessions let the readiness probe, the observer and the agent each hold
+	// one. The server keeps at most kMaxSessions (4), evicting the oldest when
+	// a new one is created at capacity.
+	if (!_sessions.empty() && !isInitialize &&
+	    (sessionHdr.empty() || findSession(sessionHdr) < 0)) {
+		if (sessionHdr.empty())
+			debug(1, "mcp: session validation failed: expected a session, got (empty)");
+		else
+			debug(1, "mcp: session validation failed: unknown session '%s'",
+			      sessionHdr.c_str());
 		writeHttpResponse(404, "", "");
 		delete parsed;
 		return;
@@ -833,8 +840,9 @@ void McpServer::handleJsonRpc(const Common::String &body, const Common::String &
 		writeJsonRpcError(id, -32601, "Method not found");
 	} else {
 		Common::String extra;
-		if (isInitialize && !_sessionId.empty())
-			extra = "Mcp-Session-Id: " + _sessionId + "\r\n";
+		// On initialize, tell the client its assigned session id.
+		if (isInitialize && !_sessions.empty())
+			extra = "Mcp-Session-Id: " + _sessions.back().id + "\r\n";
 		writeJsonRpcResult(id, result, extra);
 	}
 	delete parsed;
@@ -865,10 +873,8 @@ static const char *const kSupportedProtocols[] = {
 };
 
 Common::JSONValue *McpServer::handleInitialize(const Common::JSONValue &req) {
-	_sessionId = Common::String::format("%s-%08x%08x", _serverName.c_str(),
-	             (unsigned)_frameCounter,
-	             (unsigned)((uintptr_t)this >> 4));
-	debug(1, "mcp: initialize: generated session ID '%s'", _sessionId.c_str());
+	Common::String sessionId = createSession();
+	debug(1, "mcp: initialize: generated session ID '%s'", sessionId.c_str());
 
 	// Echo the client's requested revision when we know it, and fall back to
 	// the newest we support otherwise. Answering with a revision the client did
@@ -1182,6 +1188,50 @@ void McpServer::drainToolQueue() {
 		delete next.args;
 		delete next.id;
 		(void)dispatched;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Session helpers
+// ---------------------------------------------------------------------------
+
+int McpServer::findSession(const Common::String &id) const {
+	for (uint i = 0; i < _sessions.size(); ++i) {
+		if (_sessions[i].id == id)
+			return (int)i;
+	}
+	return -1;
+}
+
+Common::String McpServer::createSession() {
+	Common::String id = Common::String::format("%s-%08x%08x", _serverName.c_str(),
+	                     (unsigned)_frameCounter,
+	                     (unsigned)((uintptr_t)this >> 4));
+
+	// Evict the oldest session when at capacity.
+	if (_sessions.size() >= kMaxSessions) {
+		uint oldest = 0;
+		for (uint i = 1; i < _sessions.size(); ++i) {
+			if (_sessions[i].createdAtFrame < _sessions[oldest].createdAtFrame)
+				oldest = i;
+		}
+		debug(1, "mcp: evicting oldest session '%s' to make room for '%s'",
+		      _sessions[oldest].id.c_str(), id.c_str());
+		_sessions.remove_at(oldest);
+	}
+
+	Session session;
+	session.id = id;
+	session.createdAtFrame = _frameCounter;
+	_sessions.push_back(session);
+	return id;
+}
+
+void McpServer::removeSession(const Common::String &id) {
+	int idx = findSession(id);
+	if (idx >= 0) {
+		debug(1, "mcp: removing session '%s'", id.c_str());
+		_sessions.remove_at((uint)idx);
 	}
 }
 
