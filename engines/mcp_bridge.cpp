@@ -70,7 +70,9 @@ McpBridge::McpBridge(Engine *engine, const Common::String &serverName,
 
 	int port = ConfMan.hasKey("mcp_port") ? ConfMan.getInt("mcp_port") : 23456;
 	Common::String host = ConfMan.hasKey("mcp_host") ? ConfMan.get("mcp_host") : "127.0.0.1";
-	_server = new Networking::McpServer(port, serverName, serverVersion, host);
+	int maxSessions = ConfMan.hasKey("mcp_max_sessions") ? ConfMan.getInt("mcp_max_sessions") : 4;
+	if (maxSessions < 1) maxSessions = 1;
+	_server = new Networking::McpServer(port, serverName, serverVersion, host, maxSessions);
 	if (!_server->isListening()) {
 		delete _server;
 		_server = nullptr;

@@ -59,7 +59,8 @@ public:
 
 	McpServer(int port, const Common::String &serverName,
 	          const Common::String &serverVersion,
-	          const Common::String &bindHost = "127.0.0.1");
+	          const Common::String &bindHost = "127.0.0.1",
+	          int maxSessions = 4);
 	~McpServer();
 
 	// Returns true if the listening socket was successfully bound.
@@ -130,8 +131,7 @@ private:
 		Common::String id;
 		uint32 createdAtFrame;
 	};
-	static const uint kMaxSessions = 4;
-
+	int _maxSessions;
 	int _listenFd;
 	Common::Array<Session> _sessions;
 

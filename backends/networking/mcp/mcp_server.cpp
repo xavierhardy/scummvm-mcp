@@ -433,11 +433,13 @@ bool parseHttpRequest(Common::String &inBuffer,
 
 McpServer::McpServer(int port, const Common::String &serverName,
                      const Common::String &serverVersion,
-                     const Common::String &bindHost)
+                     const Common::String &bindHost,
+                     int maxSessions)
 	: _port(port),
 	  _serverName(serverName),
 	  _serverVersion(serverVersion),
 	  _bindHost(bindHost),
+	  _maxSessions(maxSessions),
 	  _handler(nullptr),
 	  _listenFd(-1),
 	  _nextClientId(1),
@@ -1209,7 +1211,7 @@ Common::String McpServer::createSession() {
 	                     (unsigned)((uintptr_t)this >> 4));
 
 	// Evict the oldest session when at capacity.
-	if (_sessions.size() >= kMaxSessions) {
+	if (_maxSessions > 0 && _sessions.size() >= (uint)_maxSessions) {
 		uint oldest = 0;
 		for (uint i = 1; i < _sessions.size(); ++i) {
 			if (_sessions[i].createdAtFrame < _sessions[oldest].createdAtFrame)
