@@ -80,8 +80,12 @@ endif
 # that engine.o's GUI/base globals stay out of the cxxtest runner — the same
 # reasoning that already applies to mcp_server.o. Listed once even when several
 # engines are enabled, so the object is not passed to the linker twice.
+# They land after the archives above, so — as with the libcommon/libformats
+# cycle — the archives they draw on (JSON parsing, Common::String) have to be
+# repeated afterwards for linkers that resolve archives strictly in order.
 ifneq (,$(filter STATIC_PLUGIN,$(ENABLE_SCUMM) $(ENABLE_SWORD1) $(ENABLE_SKY) $(ENABLE_GOB)))
-	TEST_LIBS += backends/networking/mcp/mcp_server.o engines/mcp_bridge_text.o
+	TEST_LIBS += backends/networking/mcp/mcp_server.o engines/mcp_bridge_text.o \
+		common/libcommon.a common/formats/libformats.a common/libcommon.a
 endif
 
 #
