@@ -7,7 +7,7 @@ from fastmcp import Client
 from scummvm_bench.backend import ScriptStep
 from scummvm_bench.harness.base import RunContext
 
-from ._base import GAMES_DIR, Walkthrough, _msgs
+from ._base import Walkthrough, _msgs
 
 # ---------------------------------------------------------------------------
 # The Dig demo (save slot 1) — start -> hub -> wreck -> pull wire -> back -> dig
@@ -82,8 +82,6 @@ DIG = Walkthrough(
     save_slot=1,
     initial_room=15,
     expected_goals=9,
-    game_path_env="DIG_DEMO_PATH",
-    game_path_default=str(GAMES_DIR / "Dig"),
     initial_inventory=["look_at", "trowel"],
     dynamic_real=True,
     real_harness_factory=lambda wt: DigRealHarness(wt),

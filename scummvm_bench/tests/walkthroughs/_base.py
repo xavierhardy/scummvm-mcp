@@ -11,7 +11,6 @@ Monkey Island has its own dedicated tests (``mock_harness.py`` +
 
 import asyncio
 import copy
-import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,11 +18,11 @@ from pathlib import Path
 from fastmcp import Client
 
 from scummvm_bench.backend import MockBackend, ScriptStep
+from scummvm_bench.game_paths import game_path as configured_game_path
 from scummvm_bench.harness.base import HarnessRunner, RunContext
 
 # walkthroughs -> tests -> scummvm_bench -> scummvm repo root
 REPO = Path(__file__).resolve().parents[3]
-GAMES_DIR = REPO.parent.parent / "games"  # .../llm/scummvm/games
 
 Call = tuple[str, dict[str, object]]
 
@@ -38,8 +37,6 @@ class Walkthrough:
     expected_goals: int
     calls: list[Call]
     steps: list[ScriptStep]
-    game_path_env: str
-    game_path_default: str
     settle_targets: tuple[object, ...] = field(default_factory=tuple)
     initial_inventory: list[str] = field(default_factory=list)
     # Games with non-deterministic dialog drive the live game with a bespoke
@@ -65,7 +62,12 @@ class Walkthrough:
         return len(self.calls)
 
     def game_path(self) -> str:
-        return os.environ.get(self.game_path_env, self.game_path_default)
+        """The machine's data folder for this game, or "" when unconfigured.
+
+        Comes from the non-committed ``game_paths.local.toml`` (or the game's
+        env var); the real-run tests skip when it is "" or does not exist.
+        """
+        return configured_game_path(self.game_id)
 
     def save_file(self) -> Path:
         return (

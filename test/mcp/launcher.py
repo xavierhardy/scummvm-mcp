@@ -4,12 +4,20 @@
 Renders a per-game ini, isolates saves, and spawns ScummVM with MCP enabled, plus
 the ``GAME_PATHS`` map and the ``require_*`` skip guards. Imported via ``utils``
 for back-compat.
+
+Game data lives outside the repository and sits somewhere different on every
+machine, so no game-data path belongs in tracked code. ``GAME_PATHS`` is read
+from the non-committed ``game_paths.local.toml`` at the repository root (see
+``game_paths.local.toml.example``), optionally overridden per game by the
+environment variables in ``_GAME_PATH_ENV``. A game configured by neither, or
+pointed at a folder that does not exist, skips its tests.
 """
 
 import os
 import shutil
 import subprocess
 import tempfile
+import tomllib
 
 
 def _logs_dir() -> str:
@@ -150,54 +158,76 @@ def launch_scummvm(
     return proc
 
 
-GAME_PATHS = {
-    "monkey-ega-demo": os.environ.get("MONKEY_DEMO_PATH", "/home/pi/games/MonkeyDemo"),
-    "monkey-ega-demo-de": os.environ.get(
-        "MONKEY_DEMO_DE_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/monkey1-dos-ega-demo-de",
-    ),
-    "maniac-c64": os.environ.get("MANIAC_C64_PATH", "/home/pi/games/ManiacC64"),
-    "atlantis": os.environ.get(
-        "ATLANTIS_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/atlantis-dos-demo1-en",
-    ),
-    "samnmax": os.environ.get(
-        "SAMNMAX_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/samnmax-dos-demo-en",
-    ),
-    "dig-demo": os.environ.get(
-        "DIG_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/Dig",
-    ),
-    "ft-demo": os.environ.get(
-        "FT_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/ft-dos-demo",
-    ),
-    "pass": os.environ.get(
-        "PASS_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/pass",
-    ),
-    "comi-demo": os.environ.get(
-        "COMI_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/COMIDEMO",
-    ),
-    "sword1-demo": os.environ.get(
-        "SWORD1_DEMO_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/broken-sword-1-demo",
-    ),
-    "sky": os.environ.get(
-        "SKY_PATH",
-        "/Applications/Beneath a Steel Sky.app/Contents/Resources/game/game",
-    ),
-    "queen": os.environ.get(
-        "QUEEN_PATH",
-        "/Applications/Flight of the Amazon Queen.app/Contents/Resources/game/game",
-    ),
-    "woodruff": os.environ.get(
-        "WOODRUFF_PATH",
-        "/Users/xhardy/Personal/llm/scummvm/games/woodruff",
-    ),
+# game id -> the environment variable that can point at its data folder. The
+# folders themselves are per-machine and are deliberately NOT in this file: they
+# live in the non-committed game_paths.local.toml (see the .example file), or
+# come from the env var. A game with neither configured skips its tests.
+_GAME_PATH_ENV = {
+    "monkey-ega-demo": "MONKEY_DEMO_PATH",
+    "monkey-ega-demo-de": "MONKEY_DEMO_DE_PATH",
+    "maniac-c64": "MANIAC_C64_PATH",
+    "zak": "ZAK_PATH",
+    "pass": "PASS_DEMO_PATH",
+    "monkey2": "MONKEY2_PATH",
+    "atlantis": "ATLANTIS_DEMO_PATH",
+    "samnmax": "SAMNMAX_DEMO_PATH",
+    "tentacle": "TENTACLE_PATH",
+    "ft-demo": "FT_DEMO_PATH",
+    "dig-demo": "DIG_DEMO_PATH",
+    "comi-demo": "COMI_DEMO_PATH",
+    "sword1-demo": "SWORD1_DEMO_PATH",
+    "sky": "SKY_PATH",
+    "queen": "QUEEN_PATH",
+    "woodruff": "WOODRUFF_PATH",
 }
+
+LOCAL_PATHS_FILE = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "game_paths.local.toml")
+)
+
+
+def _local_game_paths() -> dict[str, str]:
+    """Return the per-machine game folders from the non-committed local config.
+
+    The repository root's ``game_paths.local.toml`` (or whatever
+    ``MCP_GAME_PATHS_FILE`` points at) is a ``[games]`` table of game id ->
+    folder::
+
+        [games]
+        sky = "~/games/sky/Contents/Resources/game/game"
+
+    It is gitignored, which is the whole point: game data is not in the tree and
+    where it sits differs per machine, so no path belongs in tracked code. An
+    absent file — the normal case on a machine with no game data — just means no
+    game is configured and every game test skips.
+    """
+    path = os.environ.get("MCP_GAME_PATHS_FILE") or LOCAL_PATHS_FILE
+    if not os.path.isfile(path):
+        return {}
+    with open(path, "rb") as config_file:
+        raw = tomllib.load(config_file)
+    games = raw.get("games", {})
+    if not isinstance(games, dict):
+        raise ValueError(f"{path}: [games] must be a table of game id -> folder")
+    return {game_id: os.path.expanduser(str(f)) for game_id, f in games.items()}
+
+
+def _resolve_game_paths() -> dict[str, str]:
+    """Folders from the local config, overridden by the per-game env vars.
+
+    Games configured by neither are left out of the map entirely, so
+    :func:`require_game_path` skips them with a pointer to the local config.
+    """
+    local = _local_game_paths()
+    resolved = dict(local)
+    for game_id, env_var in _GAME_PATH_ENV.items():
+        folder = os.environ.get(env_var)
+        if folder:
+            resolved[game_id] = os.path.expanduser(folder)
+    return resolved
+
+
+GAME_PATHS = _resolve_game_paths()
 
 # Save-file naming is per engine: SCUMM writes "<target>.sNN", while sword1
 # writes "sword1.NNN" (SwordEngine::getSaveStateName) and sky writes
@@ -210,12 +240,18 @@ _SAVE_NAME_FMT = {
 
 
 def require_game_path(game_id: str) -> None:
-    """Skip test if game files are not found."""
+    """Skip the test unless *game_id*'s data folder is configured and present."""
     import pytest
 
     path = GAME_PATHS.get(game_id)
-    if not path or not os.path.isdir(path):
-        pytest.skip(f"Game files not found at {path}")
+    if not path:
+        env_var = _GAME_PATH_ENV.get(game_id, f"<{game_id} path env var>")
+        pytest.skip(
+            f"{game_id} has no data folder configured — add it under [games] in "
+            f"{LOCAL_PATHS_FILE} (see game_paths.local.toml.example) or set {env_var}"
+        )
+    if not os.path.isdir(path):
+        pytest.skip(f"{game_id} game data not found at {path}")
 
 
 def save_slot_path(game_id: str, slot: int) -> str:

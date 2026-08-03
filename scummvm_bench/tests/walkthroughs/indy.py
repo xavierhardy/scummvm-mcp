@@ -7,7 +7,7 @@ from fastmcp import Client
 from scummvm_bench.backend import ScriptStep
 from scummvm_bench.harness.base import RunContext
 
-from ._base import GAMES_DIR, Walkthrough, _msgs
+from ._base import Walkthrough, _msgs
 
 # ---------------------------------------------------------------------------
 # Indy3 segment of Passport to Adventure (save slot 3) — the boxing gym fight
@@ -249,8 +249,6 @@ INDY3 = Walkthrough(
     save_slot=3,
     initial_room=25,
     expected_goals=30,
-    game_path_env="PASS_PATH",
-    game_path_default=str(GAMES_DIR / "pass"),
     dynamic_real=True,
     real_harness_factory=lambda wt: IndyRealHarness(wt),
     calls=[

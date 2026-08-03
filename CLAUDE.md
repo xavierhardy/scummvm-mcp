@@ -215,6 +215,15 @@ When working on the MCP server, its tests, or the MCP bench:
   shared by every SCUMM game from V0 to V8 — gate game- or version-specific
   behaviour behind the appropriate version/game checks rather than changing
   common paths. When in doubt, prefer an additive, narrowly-scoped branch.
+- **Never put a machine-specific path in tracked code.** Game-data folders (and
+  anything else that differs per checkout) go **only** in the non-committed
+  `game_paths.local.toml` at the repository root — no defaults in Python, in
+  `bench.toml`, or in any other committed file. `game_paths.local.toml.example`
+  documents the format and is the file that *is* committed. Both trees read it:
+  `test/mcp/launcher.py` (`GAME_PATHS`) and `scummvm_bench/scummvm_bench/
+  game_paths.py`, each with its own copy of the loader. A per-game environment
+  variable may override an entry. **A game with no data folder configured is
+  skipped** — never failed — in both the MCP tests and the MCP bench.
 - The two Python test trees share one project/venv (`scummvm_bench/pyproject.toml`,
   whose `testpaths` include `../test/mcp`). The vendored `scummvm_bench/scummvm_bench/
   mcp_client.py` must still stay a self-contained copy — keep the **runtime package**

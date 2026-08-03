@@ -1,0 +1,39 @@
+# Per-machine game-data folders, shared by the MCP integration tests
+# (test/mcp) and the MCP bench (scummvm_bench).
+#
+# Game data is not in the repository and sits somewhere different on every
+# machine, so this is the ONLY place a game-data path may live: tracked code
+# must never carry one. Copy this file next to it and edit:
+#
+#   cp game_paths.local.toml.example game_paths.local.toml
+#
+# `game_paths.local.toml` is gitignored. A per-game environment variable (listed
+# below) overrides the entry here; a game configured by neither is **skipped**,
+# in both test trees — never failed.
+#
+# `~` is expanded. Point at the folder that directly holds the game's data
+# files — for the GOG/Mac bundles that is two levels below the .app, under
+# Contents/Resources/game/game.
+#
+# `MCP_GAME_PATHS_FILE=/path/to/other.toml` reads a different file instead.
+
+[games]
+# --- SCUMM ---------------------------------------------------------------
+monkey-ega-demo = "~/games/monkey1-dos-ega-demo-en"       # MONKEY_DEMO_PATH
+monkey-ega-demo-de = "~/games/monkey1-dos-ega-demo-de"    # MONKEY_DEMO_DE_PATH
+maniac-c64 = "~/games/maniac-c64-demo-en"                 # MANIAC_C64_PATH
+zak = "~/games/zak"                                       # ZAK_PATH
+pass = "~/games/pass-dos-en"                              # PASS_DEMO_PATH
+monkey2 = "~/games/monkeyisland2"                         # MONKEY2_PATH
+atlantis = "~/games/atlantis-dos-demo1-en"                # ATLANTIS_DEMO_PATH
+samnmax = "~/games/samnmax-dos-cd-demo-en"                # SAMNMAX_DEMO_PATH
+tentacle = "~/games/dott"                                 # TENTACLE_PATH
+ft-demo = "~/games/ft-dos-demo-en"                        # FT_DEMO_PATH
+dig-demo = "~/games/dig-dos-demo-en"                      # DIG_DEMO_PATH
+comi-demo = "~/games/comi-win-large-demo-en"              # COMI_DEMO_PATH
+
+# --- Other engines -------------------------------------------------------
+sword1-demo = "~/games/broken-sword-1-demo"               # SWORD1_DEMO_PATH
+sky = "~/games/sky/Contents/Resources/game/game"          # SKY_PATH
+queen = "~/games/queen/Contents/Resources/game/game"      # QUEEN_PATH
+woodruff = "~/games/woodruff"                             # WOODRUFF_PATH

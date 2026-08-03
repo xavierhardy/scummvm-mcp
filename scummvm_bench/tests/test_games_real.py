@@ -2,7 +2,8 @@
 
 Each launches a real headless ScummVM and drives the captured walkthrough to
 100% of the game's goals. A game is skipped individually if its data/save is
-absent; point the per-game env var (e.g. ``DIG_DEMO_PATH``) at the data folder.
+absent; configure its data folder in the non-committed ``game_paths.local.toml``
+at the repository root (or via the per-game env var, e.g. ``DIG_DEMO_PATH``).
 """
 
 import os
@@ -10,6 +11,7 @@ import os
 import pytest
 from walkthroughs import REPO, WALKTHROUGHS
 
+from scummvm_bench.game_paths import missing_path_reason
 from scummvm_bench.goals import get_goal_set
 from scummvm_bench.models import GameSpec, RunSpec
 from scummvm_bench.session import BenchSession, SessionConfig
@@ -25,6 +27,8 @@ def test_real_full_run(game_id: str) -> None:
     wt = WALKTHROUGHS[game_id]
     if not os.access(SCUMMVM_BIN, os.X_OK):
         pytest.skip(f"scummvm binary missing: {SCUMMVM_BIN}")
+    if not wt.game_path():
+        pytest.skip(missing_path_reason(game_id))
     if not os.path.isdir(wt.game_path()):
         pytest.skip(f"{game_id} game data missing: {wt.game_path()}")
     if not wt.save_file().is_file():

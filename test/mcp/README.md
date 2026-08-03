@@ -31,10 +31,13 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | Flight of the Amazon Queen (talkie) | queen | `queen` | `test_queen.py` | `QUEEN_PATH` |
 | Woodruff and the Schnibble | gob | `woodruff` | `test_woodruff.py` | `WOODRUFF_PATH` |
 
-Each test **skips** (not fails) when its game data is missing. Point the env var
-at the data folder if it is not at the built-in default. Flight of the Amazon
-Queen additionally needs `queen.tbl`, which the launcher serves automatically
-from the repository's `dists/engine-data` via `extrapath`.
+Game-data folders are per-machine and are **never** in tracked code: list them
+under `[games]` in the non-committed `game_paths.local.toml` at the repository
+root (see `game_paths.local.toml.example`), or set the env var above, which
+overrides the file. Each test **skips** (not fails) when its game has no folder
+configured or the folder is missing. Flight of the Amazon Queen additionally
+needs `queen.tbl`, which the launcher serves automatically from the repository's
+`dists/engine-data` via `extrapath`.
 
 > **These tests share one Python project with `scummvm_bench`.** There is no
 > longer a `test/mcp/pyproject.toml` or venv — the single project lives at

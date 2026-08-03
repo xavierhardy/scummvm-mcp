@@ -319,6 +319,9 @@ core.*
 venv/
 .venv/
 scummvm.ini
+# Per-machine game-data folders for the MCP tests and the bench.
+# Tracked code must never carry a machine-specific path; see the .example file.
+/game_paths.local.toml
 .pytest_cache/
 .ruff_cache/
 /test/mcp/PROMPT.md

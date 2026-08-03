@@ -7,7 +7,7 @@ from fastmcp import Client
 from scummvm_bench.backend import ScriptStep
 from scummvm_bench.harness.base import RunContext
 
-from ._base import GAMES_DIR, Walkthrough, _msgs
+from ._base import Walkthrough, _msgs
 
 # ---------------------------------------------------------------------------
 # Curse of Monkey Island demo (save slot 1) — the cannon-room dialog
@@ -229,8 +229,6 @@ COMI = Walkthrough(
     save_slot=1,
     initial_room=3,
     expected_goals=16,
-    game_path_env="COMI_DEMO_PATH",
-    game_path_default=str(GAMES_DIR / "COMIDEMO"),
     initial_inventory=["helium_balloons"],
     dynamic_real=True,
     real_harness_factory=lambda wt: ComiRealHarness(wt),

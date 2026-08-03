@@ -2,7 +2,7 @@
 
 from scummvm_bench.backend import ScriptStep
 
-from ._base import GAMES_DIR, Walkthrough, _door, _inv, _msgs, _pickup
+from ._base import Walkthrough, _door, _inv, _msgs, _pickup
 
 # ---------------------------------------------------------------------------
 # Maniac Mansion C64 demo (save slot 1) — the full 29-goal collectathon
@@ -27,8 +27,6 @@ MANIAC = Walkthrough(
     # Every reachable room, both light switches and every carriable item: the
     # full goal set in goals/maniac_mansion_c64_demo.py (== get_goal_set total).
     expected_goals=29,
-    game_path_env="MANIAC_C64_PATH",
-    game_path_default=str(GAMES_DIR / "ManiacMansionDemo/Games/ManiacMansion"),
     calls=[
         ("state", {}),  # 1  state_outside
         ("act", {"verb": "walk_to", "target1": "front_door"}),  # 2  approach

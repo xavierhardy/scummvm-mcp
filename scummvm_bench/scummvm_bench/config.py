@@ -8,6 +8,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .game_paths import game_path
 from .models import GameSpec, LocalModelSpec
 from .session import SessionConfig
 
@@ -55,10 +56,17 @@ def _coerce_int(value: object) -> int | None:
 
 
 def _game_from_dict(entry: dict[str, object]) -> GameSpec:
+    """Build a :class:`GameSpec`, taking its data folder from the local config.
+
+    A config file may still pin ``path`` explicitly, but it should not: game-data
+    folders are per-machine and belong in the non-committed
+    ``game_paths.local.toml`` (see :mod:`scummvm_bench.game_paths`). Games with
+    no folder configured keep an empty ``game_path`` and are skipped by callers.
+    """
     game_id = str(entry["id"])
     return GameSpec(
         game_id=game_id,
-        game_path=str(entry.get("path", "")),
+        game_path=str(entry.get("path") or game_path(game_id)),
         save_slot=_coerce_int(entry.get("save_slot")),
         ini_template=(
             str(entry["ini_template"]) if entry.get("ini_template") else None

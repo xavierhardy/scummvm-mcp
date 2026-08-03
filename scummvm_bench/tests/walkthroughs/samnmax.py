@@ -7,7 +7,7 @@ from fastmcp import Client
 from scummvm_bench.backend import ScriptStep
 from scummvm_bench.harness.base import RunContext
 
-from ._base import GAMES_DIR, Walkthrough, _msgs
+from ._base import Walkthrough, _msgs
 
 # ---------------------------------------------------------------------------
 # Sam & Max Hit the Road demo (save slot 1) — office -> street -> DeSoto
@@ -111,8 +111,6 @@ SAMNMAX = Walkthrough(
     save_slot=1,
     initial_room=7,
     expected_goals=10,
-    game_path_env="SAMNMAX_DEMO_PATH",
-    game_path_default=str(GAMES_DIR / "samnmax-dos-demo-en"),
     initial_inventory=["max_the_object"],
     dynamic_real=True,
     real_harness_factory=lambda wt: SamnmaxRealHarness(wt),
