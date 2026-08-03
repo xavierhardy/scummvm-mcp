@@ -28,6 +28,13 @@ namespace Scumm {
 class McpBridgeV0 : public ScummMcpBridge {
 public:
 	explicit McpBridgeV0(ScummEngine *vm) : ScummMcpBridge(vm) {}
+
+protected:
+	// The early SCUMM verb bar has no OBIM slots: verb id 1 is "Open", a real
+	// bar verb in both Maniac Mansion and Zak McKracken. (V0 is already exempt
+	// from the base class's id-1 skip; this extends the same treatment to the
+	// V1/V2 ports, where "Open" would otherwise be missing from state.verbs.)
+	bool includeBarVerbId1() const override { return true; }
 };
 
 class McpBridgeManiac : public McpBridgeV0 {
@@ -196,6 +203,24 @@ public:
 protected:
 	void applyGameVerbs(Common::JSONArray &verbsArr,
 	                    Common::Array<VerbInfo> &activeVerbs, bool questionPending) override;
+};
+
+// Day of the Tentacle is V6 but kept the classic V3-V5 text verb bar (and the
+// verb-id layout that goes with it), so it opts out of the V6 icon-verb and
+// icon-dialog heuristics and names its verbs itself.
+class McpBridgeTentacle : public McpBridgeV6 {
+public:
+	explicit McpBridgeTentacle(ScummEngine *vm) : McpBridgeV6(vm) {}
+
+protected:
+	bool usesTextVerbBar() const override { return true; }
+	void applyGameVerbs(Common::JSONArray &verbsArr,
+	                    Common::Array<VerbInfo> &activeVerbs, bool questionPending) override;
+	bool resolveGameVerb(const Common::String &normalized, int &verbId) const override;
+
+private:
+	struct TentacleVerb { int id; const char *name; const char *label; };
+	static const TentacleVerb kVerbs[];
 };
 
 // --- V7: blast-text dialog SCUMM (The Dig, Full Throttle) ------------------

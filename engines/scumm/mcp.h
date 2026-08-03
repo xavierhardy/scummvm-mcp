@@ -160,6 +160,13 @@ protected:
 	// hidden from the exposed verb bar. Games where id 1 is a real bar verb
 	// (Monkey Island's "Open") override this to expose it. Default: hide it.
 	virtual bool includeBarVerbId1() const { return false; }
+	// True when the game drives its interface from the classic V3-V5 *text* verb
+	// bar (labelled slots, dialog choices replacing the saved bar) rather than
+	// the image/icon verb model Sam & Max introduced with V6. It is the SCUMM
+	// version by default, but Day of the Tentacle is a V6 game that kept the
+	// text bar, so its leaf overrides this to keep the V6 icon heuristics (verb
+	// id -> canonical name, icon-dialog detection) from firing on it.
+	virtual bool usesTextVerbBar() const;
 	// Force an otherwise-unselectable/unnamed scene object into the entity map
 	// under a stable, action-friendly name (e.g. Monkey Island's kitchen plank,
 	// authored as an untouchable, unnamed hotspot). Return "" to leave the

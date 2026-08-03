@@ -5,7 +5,7 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 
 - **Python integration tests** (this folder) — launch a real headless ScummVM
   per game and drive the MCP server over HTTP, asserting on room/inventory/
-  dialog/message state. ~104 tests across the games below, plus **41 pure unit
+  dialog/message state. ~122 tests across the games below, plus **41 pure unit
   tests** (`test_unit.py`) for the helper functions that need no game.
 - **C++ unit tests** — `test/engines/scumm/mcp.h` (CxxTest) covers the
   engine-independent MCP string helpers (`normalizeActionName`,
@@ -17,12 +17,15 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | Game | Engine | `game_id` | Test files | Path env var |
 |------|:------:|-----------|------------|--------------|
 | Maniac Mansion (C64 demo) | V0 | `maniac-c64` | `test_maniac_c64.py`, `test_maniac_phone.py` | `MANIAC_C64_PATH` |
+| Zak McKracken and the Alien Mindbenders | V2 | `zak` | `test_zak.py` | `ZAK_PATH` |
 | Indiana Jones 3 (Passport demo) | V3 | `pass` | `test_indy3.py`, `test_indy3_travel.py` | `PASS_DEMO_PATH` |
 | Loom (Passport demo) | V3 | `pass` | `test_loom.py`, `test_loom_leaf.py` | `PASS_DEMO_PATH` |
 | Monkey Island 1 (EGA demo) | V4 | `monkey-ega-demo` | `test_monkey.py` | `MONKEY_DEMO_PATH` |
 | Monkey Island 1 (German EGA demo) | V4 | `monkey-ega-demo-de` | `test_monkey_de.py` | `MONKEY_DEMO_DE_PATH` |
+| Monkey Island 2: LeChuck's Revenge | V5 | `monkey2` | `test_monkey2.py` | `MONKEY2_PATH` |
 | Indiana Jones 4: Fate of Atlantis (demo) | V5 | `atlantis` | `test_atlantis.py` | `ATLANTIS_DEMO_PATH` |
 | Sam & Max Hit the Road (demo) | V6 | `samnmax` | `test_samnmax.py`, `test_samnmax_carnival_tickets.py` | `SAMNMAX_DEMO_PATH` |
+| Day of the Tentacle | V6 | `tentacle` | `test_tentacle.py` | `TENTACLE_PATH` |
 | Full Throttle (demo) | V7 | `ft-demo` | `test_ft.py` | `FT_DEMO_PATH` |
 | The Dig (demo) | V7 | `dig-demo` | `test_dig.py`, `test_dig_wreck.py` | `DIG_DEMO_PATH` |
 | The Curse of Monkey Island (demo) | V8 | `comi-demo` | `test_comi.py`, `test_comi_cannon.py`, `test_comi_s3.py` | `COMI_DEMO_PATH` |
@@ -38,6 +41,13 @@ overrides the file. Each test **skips** (not fails) when its game has no folder
 configured or the folder is missing. Flight of the Amazon Queen additionally
 needs `queen.tbl`, which the launcher serves automatically from the repository's
 `dists/engine-data` via `extrapath`.
+
+Zak McKracken, Monkey Island 2 and Day of the Tentacle are **full games**, not
+demos, so their coverage is deliberately shallow — compatibility smoke tests
+(verb bar, objects, a few verb dispatches, dialog for MI2) run from a committed
+slot-1 save captured right after each intro. MI2's floppy copy protection is
+bypassed by that save: the potion-mixer screen only needs to be cleared once,
+which is what capturing the slot did.
 
 > **These tests share one Python project with `scummvm_bench`.** There is no
 > longer a `test/mcp/pyproject.toml` or venv — the single project lives at

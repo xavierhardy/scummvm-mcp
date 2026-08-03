@@ -266,6 +266,7 @@ ScummMcpBridge *ScummMcpBridge::create(ScummEngine *vm) {
 		case GID_MONKEY:     bridge = new McpBridgeMonkey(vm);      break;
 		case GID_PASS:       bridge = new McpBridgePassport(vm);    break;
 		case GID_SAMNMAX:    bridge = new McpBridgeSamnMax(vm);     break;
+		case GID_TENTACLE:   bridge = new McpBridgeTentacle(vm);    break;
 		case GID_DIG:        bridge = new McpBridgeDig(vm);         break;
 		case GID_FT:         bridge = new McpBridgeFullThrottle(vm); break;
 		case GID_CMI:        bridge = new McpBridgeComi(vm);        break;
@@ -818,7 +819,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	// V6+ games use image verbs (kImageVerbType) with no text labels. Build the
 	// verb list from the canonical verbid -> name table for any image-type slots
 	// not already captured by the text path above.
-	if (_vm->_game.version >= 6 && !questionPending) {
+	if (!usesTextVerbBar() && !questionPending) {
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid || vs.saveid != 0) continue;
@@ -1097,7 +1098,7 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 					++choiceCount;
 				}
 			}
-		} else if (_vm->_game.version >= 6) {
+		} else if (!usesTextVerbBar()) {
 			// V6+/V8 dialog choices are usually non-action verb slots. In COMI (V8)
 			// they are full sentences and may not always follow curmode conventions.
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
@@ -1844,7 +1845,7 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 
 	int current = 0;
 	int chosenSlot = -1;
-	if (_vm->_game.version >= 6) {
+	if (!usesTextVerbBar()) {
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (!vs.verbid || vs.saveid != 0) continue;
@@ -3013,7 +3014,7 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 				choiceList.push_back(new Common::JSONValue(choice));
 				++choiceCount;
 			}
-		} else if (_vm->_game.version >= 6) {
+		} else if (!usesTextVerbBar()) {
 			// V6+/V8 dialog choices are represented as non-action verb slots.
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 				const VerbSlot &vs = _vm->_verbs[slot];
@@ -3167,7 +3168,7 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 	// one non-standard active verb exists (the topic choices).
 	// V7 (Dig/FT) uses no permanent verb bar (single-cursor model), so there are
 	// no saved action verbs; instead dialog choices appear as sentence-like slots.
-	if (_vm->_game.version >= 6) {
+	if (!usesTextVerbBar()) {
 		bool hasActiveSavedAction = false;
 		bool hasActiveDialog = false;
 		int sentenceLikeChoices = 0;
@@ -3387,6 +3388,13 @@ bool ScummMcpBridge::isActorSelectable(int actorId) const {
 	}
 }
 
+bool ScummMcpBridge::usesTextVerbBar() const {
+	// V3-V5 (and the V0-V2 family) label their verb slots with text and swap the
+	// bar out for text dialog choices; V6+ moved to image verbs and icon dialogs.
+	// Leaves override where the version alone gets it wrong (Day of the Tentacle).
+	return _vm && _vm->_game.version <= 5;
+}
+
 void ScummMcpBridge::findOpenCloseVerbIds(int &openVerb, int &closeVerb) const {
 	openVerb = 0;
 	closeVerb = 0;
@@ -3488,7 +3496,7 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		// They are kept in the list so the agent can navigate, but flagged separately.
 		if (!e.visible) {
 			bool hasWalkTo = false, hasOther = false;
-			if (_vm->_game.version >= 6) {
+			if (!usesTextVerbBar()) {
 				// V6+ verbs are image-based: identify walk_to by verbid (13) directly.
 				for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 					const VerbSlot &vs = _vm->_verbs[slot];
@@ -3782,7 +3790,7 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		return true;
 
 	// V6+: standard action verbs are image-based. Resolve by verbid directly.
-	if (_vm->_game.version >= 6) {
+	if (!usesTextVerbBar()) {
 		const V6VerbEntry *entry = nullptr;
 		for (int i = 0; kV6CanonicalVerbs[i].name; ++i) {
 			if (normalized == kV6CanonicalVerbs[i].name) { entry = &kV6CanonicalVerbs[i]; break; }
@@ -3805,9 +3813,10 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		}
 	}
 
-	// V5 and below: if no text label matched for walk_to, take the first active verb slot.
-	// Skipped for V6+ where walk_to is always verbid 13 and handled by kFallback below.
-	if (normalized == "walk_to" && _vm->_game.version < 6) {
+	// Text-verb-bar games: if no text label matched for walk_to, take the first
+	// active verb slot. Skipped for the image-verb games, where walk_to is always
+	// verbid 13 and handled by kFallback below.
+	if (normalized == "walk_to" && usesTextVerbBar()) {
 		for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 			const VerbSlot &vs = _vm->_verbs[slot];
 			if (vs.verbid && vs.saveid == 0 && vs.curmode == 1) {

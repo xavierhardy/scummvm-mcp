@@ -77,8 +77,11 @@ per game cycle, and pump-transport-only from any place the main loop stalls
   `ENABLE_<ENGINE>=STATIC_PLUGIN`; the shared `mcp_server.o` +
   `mcp_bridge_text.o` are linked once for whichever is enabled.
 - **Python integration tests** — `test/mcp/`. Launch a real headless ScummVM
-  per game and drive the MCP server over HTTP, asserting on game state. ~10
-  SCUMM games (V0–V8) plus Broken Sword 1 (`test_sword1.py`, engine `sword1`),
+  per game and drive the MCP server over HTTP, asserting on game state. ~13
+  SCUMM games (V0–V8) — mostly demos, plus three full games covered by
+  compatibility smoke tests only (Zak McKracken `test_zak.py`, Monkey Island 2
+  `test_monkey2.py`, Day of the Tentacle `test_tentacle.py`) — plus
+  Broken Sword 1 (`test_sword1.py`, engine `sword1`),
   Beneath a Steel Sky (`test_sky.py`, engine `sky`), Flight of the Amazon
   Queen (`test_queen.py`, engine `queen`) and Woodruff
   (`test_woodruff.py`, engine `gob` — no save support, so it starts fresh and

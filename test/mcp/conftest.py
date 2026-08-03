@@ -75,6 +75,9 @@ _FIXTURE_INDEX = {
     "sky": 21,
     "queen": 22,
     "woodruff": 23,
+    "zak": 24,
+    "tentacle": 25,
+    "monkey2": 26,
 }
 
 
@@ -254,6 +257,27 @@ def queen_client() -> Iterator[McpClient]:
     """Flight of the Amazon Queen (slot 1: Joe locked in the hotel room,
     right after the intro)."""
     yield from _client("queen", "queen", save_slot=1, checkpoint=True)
+
+
+# The three full games below are checkpointed right after their intro (they are
+# not demos, so there is no short scripted opening to replay per test).
+@pytest.fixture
+def zak_client() -> Iterator[McpClient]:
+    """Zak McKracken (V2, slot 1: Zak's bedroom, room 1, right after the intro)."""
+    yield from _client("zak", "zak", save_slot=1, checkpoint=True)
+
+
+@pytest.fixture
+def tentacle_client() -> Iterator[McpClient]:
+    """Day of the Tentacle (V6, slot 1: Bernard in the mansion lobby, room 34)."""
+    yield from _client("tentacle", "tentacle", save_slot=1, checkpoint=True)
+
+
+@pytest.fixture
+def monkey2_client() -> Iterator[McpClient]:
+    """Monkey Island 2 (V5, slot 1: Guybrush on the Scabb Island dock, room 7,
+    right after the intro — walking on triggers Largo's toll-bridge dialog)."""
+    yield from _client("monkey2", "monkey2", save_slot=1, checkpoint=True)
 
 
 # ---------------------------------------------------------------------------
