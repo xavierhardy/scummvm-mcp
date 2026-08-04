@@ -702,6 +702,13 @@ Common::JSONValue *ScummMcpBridge::buildDebugSchema() const {
 	return mcpObjectSchema(props);
 }
 
+void ScummMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
+	outputProps.setVal("can_act", mcpProp("boolean",
+	    "False while the game is not taking input — an intro, a cutscene, a "
+	    "scripted sequence. act() and walk() are rejected until it turns true. "
+	    "Skip or wait; nothing else will work."));
+}
+
 void ScummMcpBridge::registerDebugTools() {
 	// set_talk_speed — force the text/talk speed at runtime
 	Networking::McpServer::ToolSpec spec;
@@ -1034,6 +1041,11 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	}
 	out.setVal("messages", new Common::JSONValue(msgsArr));
 	_messages.clear();
+
+	// The same flag act() and walk() enforce. Without it in the snapshot, a
+	// client cannot tell a cutscene from a room where nothing has a name yet,
+	// and every other engine's bridge already says so.
+	out.setVal("can_act", mcpJsonBool(_vm->_userPut > 0));
 
 	if (questionPending) {
 		int choiceCount = 0;

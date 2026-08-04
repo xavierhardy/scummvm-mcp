@@ -89,7 +89,7 @@ protected:
 	// switch_character, play_note, …). Called at the end of registerTools().
 	void registerGameTools() override {}
 	// Add game-specific fields to the `state` tool's output schema.
-	void augmentStateSchema(Common::JSONObject &outputProps) override { (void)outputProps; }
+	void augmentStateSchema(Common::JSONObject &outputProps) override;
 	// Handle a tool call the base callTool() did not recognise. Set handled=true
 	// if consumed. Return value follows the IToolHandler contract (null for
 	// streaming/void tools).
