@@ -669,6 +669,17 @@ bool SkyMcpBridge::toolSkip(const Common::JSONValue &, Common::String &errorOut)
 		errorOut = "skip: tool is disabled (set mcp_skip_tool=true)";
 		return false;
 	}
+	// The intro is not the game loop: it watches for the skip *action* and
+	// never looks at a click, and no game cycle runs while it plays, so a
+	// stream started here would wait out its whole budget and time the call
+	// out. Pushing the action is what the player's own key does.
+	if (SkyEngine::_systemVars && !SkyEngine::_systemVars->pastIntro) {
+		Common::Event event;
+		event.type = Common::EVENT_CUSTOM_ENGINE_ACTION_START;
+		event.customType = kSkyActionSkip;
+		g_system->getEventManager()->pushEvent(event);
+		return true;
+	}
 	// Logic::talk() cuts the current line short on a click (kSkyActionSkipLine
 	// does exactly this).
 	_mouse->logicClick();
