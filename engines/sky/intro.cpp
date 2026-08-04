@@ -941,6 +941,14 @@ bool Intro::escDelay(uint32 msecs) {
 
 		_system->delayMillis(nDelay);
 
+		// The intro runs before go()'s main loop and never goes through
+		// SkyEngine::delay(), so this is the only place the MCP server can be
+		// serviced while it plays. Without it the port is open for the whole
+		// intro and answers nothing at all: a client connects, waits, and
+		// times out before the game has started.
+		if (SkyEngine *vm = (SkyEngine *)g_engine)
+			vm->mcpPump();
+
 		_skyScreen->processSequence();
 		_system->updateScreen();
 	} while (nDelay == 20);
