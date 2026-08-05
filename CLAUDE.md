@@ -169,6 +169,35 @@ uv run --no-sync ty check --project "$PWD" ../test/mcp
 Game data is not in the repo. Tests look for it via per-game env vars and skip
 when it is missing (see `test/mcp/README.md`).
 
+**Every spawned instance must be headless on _both_ SDL drivers**
+(`SDL_AUDIODRIVER=dummy` *and* `SDL_VIDEODRIVER=dummy`, set by
+`test/mcp/launcher.py` and the bench's vendored copy in
+`scummvm_bench/mcp_client.py`). This is not cosmetic — it is what makes the
+suites survive `-n auto`, measured on one game with four instances up:
+
+| drivers | result |
+|---------|--------|
+| audio=dummy video=dummy | 15 game frames/s, every instance starts |
+| audio=dummy video=**real** | **1 frame/s** at 3% CPU — the compositor paces the engine |
+| audio=**real** video=dummy | the 2nd instance and beyond **never start** (the audio device is exclusive, so they block before binding their MCP port) |
+
+## Diagnosing a suite full of `httpx.ReadTimeout`
+
+Client timeouts spread across unrelated games usually mean the *engine frame
+rate* collapsed, not that the MCP server hung. Every streaming budget in the
+bridge is counted in engine frames (`timeoutFrames()` 600, `settleFrames()` 10,
+…), so an engine at 1 fps stretches them ~15x and each action outlives the
+client's 60 s HTTP timeout (`MCP_TIMEOUT_SECS`). Before suspecting the server:
+
+- Compare `debug.frame_counter` over a fixed wall-clock window, one instance
+  alone vs. several up. A collapse there is the whole story.
+- Check CPU: blocked (low CPU) points at a driver/device, spinning (pegged)
+  at a real loop.
+- A/B the server itself with `mcp=true` vs `mcp=false` on the same game and
+  count frames (`o5_breakHere` lines in the `debuglevel=11` log). The bridge
+  costs nothing measurable, and the transport polls non-blocking once per
+  frame, so an equal count clears it.
+
 ## Debugging the MCP server
 
 - **Engine debug log:** run with `--debugflags=mcp --debuglevel=11` to trace
