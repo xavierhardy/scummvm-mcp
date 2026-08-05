@@ -75,8 +75,6 @@ def server(request) -> tuple[int, object]:
 
 def test_two_clients_can_hold_sessions_simultaneously(server) -> None:
     """Two clients initialise against one instance; both call state successfully."""
-    import os as _os
-
     port = server[0]
     client1 = McpClient(MCP_HOST, port)
     client2 = McpClient(MCP_HOST, port)

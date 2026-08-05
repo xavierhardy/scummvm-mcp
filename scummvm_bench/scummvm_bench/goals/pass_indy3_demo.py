@@ -151,7 +151,8 @@ GOALS = {
         ),
         _goal(
             "reach_office_via_103",
-            "In the corridor, go through the door (103) next to the gym (into the office)",
+            "In the corridor, go through the door (103) next to the gym "
+            "(into the office)",
             on_room_changed(ROOM_OFFICE),
         ),
         _goal(

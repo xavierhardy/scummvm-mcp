@@ -9,7 +9,9 @@ the room the player was in *before* a call without an extra round-trip per call.
 import copy
 import keyword
 import threading
+import types
 from collections.abc import Callable
+from typing import cast
 
 from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware, MiddlewareContext
@@ -173,7 +175,14 @@ class BenchProxy:
         added = result.get("inventory_added")
         removed = result.get("inventory_removed")
         if isinstance(added, list) or isinstance(removed, list):
-            inv = [i for i in updated.get("inventory", []) if isinstance(i, str)]
+            # The cache is dict[str, object], so the inventory has to be
+            # narrowed to a list before it can be iterated.
+            cached = updated.get("inventory")
+            inv = (
+                [i for i in cached if isinstance(i, str)]
+                if isinstance(cached, list)
+                else []
+            )
             for item in removed if isinstance(removed, list) else []:
                 if isinstance(item, str) and item in inv:
                     inv.remove(item)
@@ -261,9 +270,15 @@ def _make_forwarder(
     source = f"def _forward({params}):\n    return _dispatch({name!r}, {{{payload}}})\n"
     namespace: dict[str, object] = {"_dispatch": dispatch}
     exec(source, namespace)  # noqa: S102 - schema is server-controlled, names validated
+    # exec puts the function into a dict[str, object], so it comes back as
+    # `object`. Narrowing to FunctionType is what makes __name__ assignable —
+    # a bare Callable has no settable __name__ — and the cast then restores
+    # the declared signature.
     forwarder = namespace["_forward"]
-    forwarder.__name__ = name  # type: ignore[attr-defined]
-    return forwarder  # type: ignore[return-value]
+    if not isinstance(forwarder, types.FunctionType):
+        raise TypeError(f"exec did not define _forward for tool {name!r}")
+    forwarder.__name__ = name
+    return cast(Callable[..., dict[str, object]], forwarder)
 
 
 class _RecordingMiddleware(Middleware):

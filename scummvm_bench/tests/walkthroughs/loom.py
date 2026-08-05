@@ -192,7 +192,8 @@ class LoomRealHarness:
                 "notes"
             ) or ["d", "d", "c", "d"]  # interact_dye_pot
             await point_cast(549, dye)  # dye_green
-            # Back to the cliff; open the sky (it is on the right) with the Opening draft.
+            # Back to the cliff; open the sky (it is on the right) with the
+            # Opening draft.
             await go_pathway(543, 41)
             await go_pathway(540, 39)
             await go_pathway(509, 36)  # return to the first room (re-entry #1)

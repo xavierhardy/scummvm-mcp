@@ -399,7 +399,8 @@ INDY3 = Walkthrough(
                 **_msgs(
                     (
                         "indy",
-                        "Now I have everything I need to begin my quest for my father and the Holy Grail!",
+                        "Now I have everything I need to begin my quest "
+                        "for my father and the Holy Grail!",
                     )
                 ),
                 "inventory_added": ["old_book"],

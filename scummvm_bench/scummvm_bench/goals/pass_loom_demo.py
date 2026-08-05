@@ -138,7 +138,8 @@ GOALS = {
         ),
         _goal(
             "play_eced_egg",
-            'Play the Opening draft (e-c-e-d) on the egg: "Thank goodness you\'re still here!"',
+            "Play the Opening draft (e-c-e-d) on the egg: "
+            '"Thank goodness you\'re still here!"',
             on_message_contains("Thank goodness you're still here"),
         ),
         _goal(
