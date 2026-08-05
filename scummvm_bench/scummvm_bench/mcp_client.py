@@ -247,8 +247,13 @@ def launch_scummvm(
     args.append(f"--talkspeed={talkspeed}")
     args.append(game_id)
 
+    # Headless on both counts: a real audio device is exclusive (a second
+    # instance would block instead of starting) and a real window lets the
+    # compositor pace the engine, which starves the frame-counted budgets the
+    # MCP bridge measures every action against.
     env = os.environ.copy()
     env["SDL_AUDIODRIVER"] = "dummy"
+    env["SDL_VIDEODRIVER"] = "dummy"
 
     stdout_file = open(stdout_path, "w")
     stderr_file = open(stderr_path, "w")

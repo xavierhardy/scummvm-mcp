@@ -100,7 +100,7 @@ def _open_log_handles(game_id: str, port: int, args: list[str], ini_path: str):
     stderr_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.stderr")
     with open(log_file, "w") as logf:
         logf.write(f"Command: {' '.join(args)}\n")
-        logf.write("Environment: SDL_AUDIODRIVER=dummy\n")
+        logf.write("Environment: SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy\n")
         logf.write(f"Config: {ini_path}\n")
         logf.write("=" * 80 + "\n\n")
     return open(log_file, "a"), open(stderr_file, "a"), log_file, stderr_file
@@ -128,9 +128,16 @@ def launch_scummvm(
     save_path = _resolve_save_path(game_id, ini_path, isolate_saves)
     args = _launch_args(game_id, scummvm_binary, ini_path, save_slot, save_path)
 
-    # Launch with no video/audio
+    # Launch with no video/audio. Both drivers matter once instances run in
+    # parallel: a real audio device is exclusive, so every instance after the
+    # first blocks and never binds its MCP port, and a real window leaves the
+    # compositor pacing the engine — four windows measured 1 game frame/s
+    # instead of 15. Every streaming budget in the bridge is counted in engine
+    # frames, so at 1 fps an action that normally settles in a second outlives
+    # the client's HTTP timeout and the test fails as a spurious hang.
     env = os.environ.copy()
     env["SDL_AUDIODRIVER"] = "dummy"
+    env["SDL_VIDEODRIVER"] = "dummy"
 
     stdout_file, stderr_fh, log_file, stderr_file = _open_log_handles(
         game_id, port, args, ini_path
