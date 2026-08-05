@@ -327,6 +327,14 @@ private:
 	Common::String _sweepCaptured;
 	// Hover names learned so far, keyed by nameKeyFor(). "" = swept, nameless.
 	Common::HashMap<Common::String, Common::String> _nameCache;
+	// Sweeps that came back with nothing, per key. A character the player has
+	// just interacted with is re-registered under a fresh hotspot id and paints
+	// no hover label while it settles, so the first empty sweep must not brand
+	// it nameless for good — that would leave the character addressable only as
+	// hotspot_<id> for the rest of the room. Emptiness is only cached once a
+	// hotspot has come back empty kMaxEmptySweeps times.
+	Common::HashMap<Common::String, int> _emptySweeps;
+	static const int kMaxEmptySweeps = 3;
 	// Frame of the most recent drawn-text row, to keep sweeps out of windows
 	// where dialogue is still being written to the screen.
 	uint32 _lastDrawnTextFrame;

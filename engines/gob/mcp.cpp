@@ -424,8 +424,10 @@ void GobMcpBridge::pumpNameSweep() {
 		if (_sweepSpots.empty())
 			return;
 		const uint kMaxCache = 512;
-		if (_nameCache.size() > kMaxCache)
+		if (_nameCache.size() > kMaxCache) {
 			_nameCache.clear();
+			_emptySweeps.clear();
+		}
 		_sweepReturnX = _vm->_global->_inter_mouseX;
 		// Never park the cursor back on the top edge: that is the hover zone
 		// that opens the game's own menu bar.
@@ -453,9 +455,19 @@ void GobMcpBridge::pumpNameSweep() {
 	if (_sweepCaptured.empty() && dwelledFrames < kSweepGraceFrames)
 		return;
 
-	_nameCache[nameKeyFor(_sweepSpots[_sweepIndex])] = _sweepCaptured;
-	debug(2, "mcp: name sweep: hotspot %u -> '%s'",
-	      _sweepSpots[_sweepIndex].id & 0x0FFF, _sweepCaptured.c_str());
+	Common::String key = nameKeyFor(_sweepSpots[_sweepIndex]);
+	if (_sweepCaptured.empty() && _emptySweeps[key] + 1 < kMaxEmptySweeps) {
+		// Nothing painted: leave the hotspot uncached so a later sweep can try
+		// again (see _emptySweeps). Only the last attempt records the emptiness.
+		_emptySweeps[key]++;
+		debug(2, "mcp: name sweep: hotspot %u -> '' (attempt %d, will retry)",
+		      _sweepSpots[_sweepIndex].id & 0x0FFF, _emptySweeps[key]);
+	} else {
+		_nameCache[key] = _sweepCaptured;
+		_emptySweeps.erase(key);
+		debug(2, "mcp: name sweep: hotspot %u -> '%s'",
+		      _sweepSpots[_sweepIndex].id & 0x0FFF, _sweepCaptured.c_str());
+	}
 	_sweepCaptured.clear();
 
 	_sweepIndex++;
