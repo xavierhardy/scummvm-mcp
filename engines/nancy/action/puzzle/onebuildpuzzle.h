@@ -51,6 +51,11 @@ public:
 protected:
 	Common::String getRecordTypeName() const override { return "OneBuildPuzzle"; }
 
+	// Nancy 12 repurposed the piece's trailing flag byte into the rotation the
+	// piece must be in to be accepted, with this value standing in for the
+	// pre-placed flag it used to be.
+	static const uint8 kPrePlacedRotation = 10;
+
 	struct Piece : RenderObject {
 		Piece() : RenderObject(0) {}
 
@@ -60,6 +65,9 @@ protected:
 		Common::Rect slotRect;
 		Common::Rect homeRect;
 		uint8 defaultRotation = 0;
+		// Rotation the piece must be in to be accepted into its slot. Always 0
+		// before Nancy 12, which is why older games only accept upright pieces.
+		uint8 requiredRotation = 0;
 		bool isPreRotated = false;
 
 		// Runtime
@@ -67,7 +75,7 @@ protected:
 		int curRotation = 0;
 		bool placed = false;
 
-		// Rotations 1-3 only built when canRotateAll or isPreRotated
+		// Rotations 1-3 only built when canRotateAll or the piece starts rotated
 		Graphics::ManagedSurface rotateSurfaces[4];
 		bool hasSurface[4] = {};
 
@@ -89,14 +97,17 @@ protected:
 	bool _orderedPlacement = false; // Pieces must be placed in a specific order
 	Common::Array<int16> _placementOrder; // 1-indexed piece IDs in required placement order
 
-	// --- Nancy 10 additions ---
+	// Stacking order of the pieces that start out already placed, 1-indexed.
+	// TODO: not applied yet; pre-placed pieces keep their array order.
+	Common::Array<int16> _preplacedZOrder;
 
-	// TODO: runtime role unknown; parsed for round-trip but not consumed.
-	bool _legacyOrderedFlag = false;
-	Common::Array<int16> _legacyPlacementOrder;
+	// --- Nancy 10 additions ---
 
 	// Filename only (no SoundDescription metadata).
 	Common::String _extraSoundName;
+
+	// Cursor type shown while hovering or carrying a piece (Nancy 10+).
+	int16 _pieceCursorType = 0;
 
 	// Post-placement sprite-sheet animation. _animRectA is the on-screen
 	// rect where the animation plays AND the click hotspot the user must
@@ -106,8 +117,17 @@ protected:
 	Common::Rect _animRectB;
 	int16 _animLayout[6] = {}; // cols, framesPerStep, baseX, baseY, spacing, totalRows
 	SoundDescription _animSound1;
-	SoundDescription _animSound2;
-	bool _hasFinalAnim = false;   // true when _animRectA is non-empty
+	SoundDescription _animSound2;  // "bad" noise played when the crank is turned before the puzzle is solved
+	bool _hasFinalAnim = false;   // true when _animRectA is non-empty (the animation atlas region)
+	bool _hasCrank = false;       // true when _animRectB is non-empty; the puzzle is solved by turning the crank
+
+	// Forks can only be dragged onto / released inside this region (the
+	// contraption area), not the whole viewport. Empty when the puzzle has no
+	// such constraint.
+	Common::Rect _placementZone;
+
+	// Nancy12: pieces with an empty home rect start scattered inside this zone.
+	Common::Rect _scatterZone;
 
 	Common::Array<Piece> _pieces;
 
@@ -166,10 +186,6 @@ protected:
 	uint16 _piecesPlaced = 0;    // Number of pieces correctly placed so far
 	uint32 _timerEnd = 0;        // Millisecond timestamp when the current timer expires
 
-	// Final-animation gating: after all pieces are placed on a puzzle that
-	// has _animRectA defined, _waitingForFinalAnim is set and the puzzle
-	// stalls in kIdle until the user clicks _animRectA.
-	bool _waitingForFinalAnim = false;
 	bool _finalAnimDone = false;
 
 	// Final-animation runtime state (matches original `+0xc35`/`+0xc33` per-tick counters).
@@ -194,12 +210,19 @@ protected:
 
 	// --- Internal methods ---
 
+	// Read a good/bad caption block: three AUTOTEXT keys then three inline
+	// texts; each caption uses its key if known, else the inline text.
+	void readPlacementTexts(Common::SeekableReadStream &stream, Common::Array<Common::String> &out);
+	void setPieceCursor();
+
 	void playPickupSound();
 	void playRotateSoundAndStartTimer();
 	void playDropSound();
 	void playGoodPlacementSound();
 	void playBadPlacementSound();
 	void checkAllPlaced();
+	// Place a piece at a random spot inside _scatterZone (Nancy12 empty-home pieces)
+	void scatterPiece(Piece &p);
 	void rotatePiece(int pieceIdx);
 	void updateDragPosition(Common::Point mouseVP);
 	// Update the render object for a piece (set _drawSurface and moveTo gameRect)
@@ -212,6 +235,9 @@ protected:
 	// Final-animation helpers.
 	void startFinalAnimation();
 	void stepFinalAnimation();
+	// After a crank turn finishes: solve if every fork is placed, otherwise
+	// play the "bad" noise and let the player try again.
+	void finishCrankTurn();
 };
 
 } // End of namespace Action

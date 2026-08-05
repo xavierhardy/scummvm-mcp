@@ -199,7 +199,7 @@ const char *const leventType[] = {
 	"mouseUpOutSide",
 	"mouseWithin",
 
-	"atartUp",
+	"startUp",
 
 	"menuCallback",
 
@@ -215,6 +215,23 @@ const char *leventType2str(LEvent type) {
 		return leventType[type];
 
 	warning("BUILDBOT: Unknown leventType: %d", type);
+	return "<unknown>";
+}
+
+const char *const eventHandlerSourceType[] = {
+	"NoneHandler",
+	"PrimaryHandler",
+	"SpriteHandler",
+	"CastHandler",
+	"FrameHandler",
+	"MovieHandler",
+};
+
+const char *eventHandlerSourceType2str(EventHandlerSourceType type) {
+	if (type <= kMovieHandler)
+		return eventHandlerSourceType[type];
+
+	warning("BUILDBOT: Unknown EventHandlerSourceType: %d", type);
 	return "<unknown>";
 }
 

@@ -1352,6 +1352,12 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			scene.sceneObjects = updatedScene.sceneObjects;
 			scene.sceneAnimations = updatedScene.sceneAnimations;
 			scene.sceneRegions = updatedScene.sceneRegions;
+			const int playerCombatLoadout = script->getPlayerCombatLoadout();
+			if (playerState.entity && playerState.combatLoadout != playerCombatLoadout &&
+					!Player::syncCombatLoadoutVisual(
+						_engine, updatedState, playerState, playerCombatLoadout)) {
+				return false;
+			}
 			if (preservePaletteState) {
 				memcpy(scene.palette, previousPalette, sizeof(scene.palette));
 				scene.targetPaletteBrightness = previousPaletteBrightness;
@@ -1478,8 +1484,10 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			return !didTransition &&
 				!interaction.mutatedRuntimeState &&
 				!interaction.requestPlayerGotoXZ &&
+				!interaction.requestPlayerGotoZ &&
 				interaction.lightingCommand == kStartupLightingCommandNone &&
 				!interaction.requestMainMenu &&
+				!interaction.requestDemoEnding &&
 				interaction.dialogueNpcName.empty() &&
 				interaction.dialogueContinuationTag.empty() &&
 				interaction.continuationTag.empty() &&
@@ -1643,7 +1651,8 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 						!exitInteraction.dialogueContinuationTag.empty() ||
 						!exitInteraction.modalText.value.empty() ||
 						exitInteraction.lightingCommand != kStartupLightingCommandNone ||
-						exitInteraction.requestPlayerGotoXZ) {
+						exitInteraction.requestPlayerGotoXZ ||
+						exitInteraction.requestPlayerGotoZ) {
 					debugC(1, kDebugRoom,
 						"Harvester: room exit command for '%s' produced unsupported deferred output; preserving accumulated state",
 						scene.state.roomName.c_str());
@@ -3833,7 +3842,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 				}
 				Script *script = _engine.getScript();
 				if (!showingInspectText && !isPlayerCombatLocked() && script && playerState.entity &&
-						script->getPlayerCurrentHitPoints() > 0) {
+						script->getPlayerCurrentHitPoints() > 0 && !script->isPlayerControlPaused()) {
 					playerState.hasMoveTarget = false;
 					playerState.turnActive = false;
 					playerState.turnTargetFacing = -1;
@@ -4085,6 +4094,9 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 					Common::Error exitError = runRoomExitCommands();
 					if (exitError.getCode() != Common::kNoError)
 						return exitError;
+					// Native closeup exits return through room_setup so the parent on-enter command runs.
+					if (canExitCloseupToParent)
+						flow.requestCloseupParentRestart();
 					return Common::kNoError;
 				}
 
@@ -4298,10 +4310,11 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 			break;
 		}
 
-		const bool playerCanAct =
-			_engine.getScript() &&
-			_engine.getScript()->getPlayerCurrentHitPoints() > 0;
-		if (!playerCanAct && (moveLeft || moveRight || moveUp || moveDown ||
+		Script *script = _engine.getScript();
+		const bool playerAlive = script && script->getPlayerCurrentHitPoints() > 0;
+		const bool playerControlPaused = script && script->isPlayerControlPaused();
+		const bool playerCanAct = playerAlive && !playerControlPaused;
+		if (!playerAlive && (moveLeft || moveRight || moveUp || moveDown ||
 				playerState.hasMoveTarget || playerState.turnActive ||
 				playerState.attackActive || playerState.hitActive)) {
 			attackModifierHeld = false;
@@ -4309,23 +4322,25 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 		}
 
 		bool playerAdvancedThisFrame = false;
-		Common::Error combatError = resolvePlayerAttackContact();
-		if (combatError.getCode() != Common::kNoError)
-			return combatError;
-		if (flow.hasPendingMainMenuReturn())
-			return Common::kNoError;
-		if (!pendingRoomChange.empty()) {
-			if (!stowCarriedRoomItemToInventory())
-				return Common::kReadingFailed;
-			break;
-		}
-		if (Player::updateAttackAnimationState(_engine, playerState)) {
-			needsRedraw = true;
-		}
-		if (Player::updateHitAnimationState(
-				_engine, scene.state, scene.sceneObjects, scene.sceneAnimations, playerState)) {
-			playerAdvancedThisFrame = true;
-			needsRedraw = true;
+		Common::Error combatError = Common::kNoError;
+		if (!playerControlPaused) {
+			combatError = resolvePlayerAttackContact();
+			if (combatError.getCode() != Common::kNoError)
+				return combatError;
+			if (flow.hasPendingMainMenuReturn())
+				return Common::kNoError;
+			if (!pendingRoomChange.empty()) {
+				if (!stowCarriedRoomItemToInventory())
+					return Common::kReadingFailed;
+				break;
+			}
+			if (Player::updateAttackAnimationState(_engine, playerState))
+				needsRedraw = true;
+			if (Player::updateHitAnimationState(
+					_engine, scene.state, scene.sceneObjects, scene.sceneAnimations, playerState)) {
+				playerAdvancedThisFrame = true;
+				needsRedraw = true;
+			}
 		}
 		const bool keyboardAttackRequested =
 			attackModifierHeld && (moveLeft || moveRight || moveUp || moveDown);
@@ -4355,7 +4370,7 @@ Common::Error RoomSystem::runRoomLoop(Flow &flow, const Common::String &targetNa
 				}
 			}
 		}
-		if (!playerState.attackActive && !playerState.hitActive &&
+		if (playerCanAct && !playerState.attackActive && !playerState.hitActive &&
 				Player::updateTurnAnimationState(playerState)) {
 			playerAdvancedThisFrame = true;
 			needsRedraw = true;

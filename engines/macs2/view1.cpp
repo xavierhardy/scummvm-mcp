@@ -40,14 +40,9 @@ namespace Macs2 {
 namespace {
 constexpr int kNumLoadedCursors = 33;
 
-// drawAllCharacters (1008:90a2) local_14: animation slot for current orientation.
-uint16 resolveAnimSlotIndex(const GameObject *obj) {
-	if ((int16)obj->_overloadAnimTriggerDirection < 0 ||
-		obj->_overloadAnimTriggerDirection != obj->_orientation) {
-		return obj->_orientation;
-	}
-	return 0x15;
-}
+// Button lookup table at data segment offset 0x26, 1-indexed
+// Binary: local_4 = 1..7, each iteration reads *(local_4 * 2 + 0x26) as index into cursor array
+const uint16 kLookupTable[8] = {9, 15, 14, 27, 29, 16, 17, 9}; // index 0 unused
 
 Common::String joinDebugStrings(const Common::StringArray &strings) {
 	Common::String result;
@@ -176,7 +171,9 @@ bool View1::shouldShowScummVerbUI() const {
 		return false;
 	if (_isShowingTextBox || _isShowingDialoguePanel)
 		return false;
-	if (_uiPanelState == kUiPanelContainerInventory || _uiPanelState == kUiPanelSaveLoad)
+	// Keep the strip visible during container inventory so items can be taken
+	// into the protagonist inventory (Drop/Take is suppressed on that panel).
+	if (_uiPanelState == kUiPanelSaveLoad)
 		return false;
 	if (g_engine->_scriptExecutor->_cursorMode == Script::MouseMode::Disabled)
 		return false;
@@ -288,6 +285,10 @@ void View1::closeInventory() {
 }
 
 void View1::setInventorySource(GameObject *newInventorySource) {
+	if (newInventorySource == nullptr) {
+		warning("Tried to set inventory source to a null object");
+		return;
+	}
 	_inventorySource = newInventorySource;
 	// Rebuild inventory list from all objects whose SceneIndex matches.
 	// Binary (syncInventoryObjectList at 1008:071e) checks: object.sceneIndex == actorIndex + 0x400.
@@ -575,11 +576,13 @@ void View1::drawCurrentSpeaker(Graphics::ManagedSurface &s) {
 	// Draw the border
 	const int portraitWidth = MAX<int>(leftPortrait ? leftPortrait->_width : 0, rightPortrait ? rightPortrait->_width : 0);
 	const int portraitHeight = MAX<int>(leftPortrait ? leftPortrait->_height : 0, rightPortrait ? rightPortrait->_height : 0);
-	const Common::Point borderSize(portraitWidth + 0xD, portraitHeight + 0xD);
+	const int borderPad = g_engine->portraitBorderPad();
+	const int contentInset = g_engine->portraitContentInset();
+	const Common::Point borderSize(portraitWidth + borderPad, portraitHeight + borderPad);
 	drawBorder(currentSpeechActData.position, borderSize, s);
 
 	// Draw the portrait over the border
-	Common::Point pos = currentSpeechActData.position + Common::Point(7, 7);
+	Common::Point pos = currentSpeechActData.position + Common::Point(contentInset, contentInset);
 	drawSprite(pos, frame->_width, frame->_height, frame->_data.data(), s, false);
 	delete frame;
 	delete leftPortrait;
@@ -731,8 +734,12 @@ void View1::showStringBox(const Common::StringArray &sa) {
 	// This calculation can be found at l0037_B368:
 	// int borderWidth = 10;
 	// int padding = 3;
-	int totalWidth = g_engine->measureStrings(sa) + 0x12;
-	int totalHeight = g_engine->measureStringsVertically(sa) + 0x10;
+	const int padW = g_engine->dialogPadW();
+	const int padH = g_engine->dialogPadH();
+	const int textInset = g_engine->dialogTextInset();
+	const int lineHeight = g_engine->dialogLineHeight();
+	int totalWidth = g_engine->measureStrings(sa) + padW;
+	int totalHeight = g_engine->measureStringsVertically(sa) + padH;
 	g_engine->_textLog.push_back(Common::String::format(
 									 "Render text box: lines=%u pos=(%d,%d) size=(%d,%d) text=\"", sa.size(),
 									 _stringBoxPosition.x, _stringBoxPosition.y, totalWidth, totalHeight) +
@@ -741,23 +748,28 @@ void View1::showStringBox(const Common::StringArray &sa) {
 	Graphics::ManagedSurface s = getSurface();
 	drawBorder(_stringBoxPosition, Common::Point(totalWidth, totalHeight), s);
 	// TODO range based
-	int lineOffset = _stringBoxPosition.y + 0x9;
+	int lineOffset = _stringBoxPosition.y + textInset;
 	for (auto iter = sa.begin(); iter < sa.end(); iter++) {
-		logRenderedText("TextBox", _stringBoxPosition.x + 0x9, lineOffset, *iter);
-		renderString(_stringBoxPosition.x + 0x9, lineOffset, *iter);
-		lineOffset += g_engine->maxGlyphHeight + 2;
+		logRenderedText("TextBox", _stringBoxPosition.x + textInset, lineOffset, *iter);
+		renderString(_stringBoxPosition.x + textInset, lineOffset, *iter);
+		lineOffset += lineHeight;
 	}
 }
 
 void View1::drawPathfindingPoints(Graphics::ManagedSurface &s) {
 	GlyphData xData;
-	g_engine->findGlyph('x', xData);
+	int xOffset = 0;
+	int yOffset = 0;
+	if (g_engine->findGlyph('x', xData)) {
+		xOffset = xData._width / 2;
+		yOffset = xData._height / 2;
+	}
 	for (int i = 0; i < 16; i++) {
 		PathfindingPoint &current = g_engine->pathfindingPoints[i];
-		renderString(current._position.x - xData._width * 0.5, current._position.y - xData._height * 0.5, "x");
+		renderString(current._position.x - xOffset, current._position.y - yOffset, "x");
 
 		Common::String number = Common::String::format("%u", i);
-		renderString(current._position.x - xData._width * 0.5 + 10, current._position.y - xData._height * 0.5 + 10, number.c_str());
+		renderString(current._position.x - xOffset + 10, current._position.y - yOffset + 10, number.c_str());
 
 		for (uint8 adjacentIndex : current._adjacentPoints) {
 			if (adjacentIndex >= g_engine->pathfindingPoints.size()) {
@@ -927,19 +939,22 @@ bool View1::handleDialogueChoiceClick(int clickY, int clickX) {
 	// Checks if click is within text box bounds (X+9..X+W-9, Y+9..Y+H-9).
 	// Iterates choice entries to find which line was clicked.
 	// Stores script index at scene+0x53B7 and clears scene+0x53B9.
-	const int boxW = g_engine->measureStrings(_drawnStringBox) + 0x12;
-	const int boxH = g_engine->measureStringsVertically(_drawnStringBox) + 0x10;
-	if (clickX < _stringBoxPosition.x + 9 || clickY < _stringBoxPosition.y + 9 ||
-		clickX > _stringBoxPosition.x + boxW - 9 || clickY > _stringBoxPosition.y + boxH - 9) {
+	const int padW = g_engine->dialogPadW();
+	const int padH = g_engine->dialogPadH();
+	const int textInset = g_engine->dialogTextInset();
+	const int boxW = g_engine->measureStrings(_drawnStringBox) + padW;
+	const int boxH = g_engine->measureStringsVertically(_drawnStringBox) + padH;
+	if (clickX < _stringBoxPosition.x + textInset || clickY < _stringBoxPosition.y + textInset ||
+		clickX > _stringBoxPosition.x + boxW - textInset || clickY > _stringBoxPosition.y + boxH - textInset) {
 		return false;
 	}
 
-	int lineHeight = g_engine->maxGlyphHeight + 2;
-	int firstLineY = _stringBoxPosition.y + 9;
+	int lineHeight = g_engine->dialogLineHeight();
+	int firstLineY = _stringBoxPosition.y + textInset;
 	int relY = clickY - firstLineY;
 	debug("handleDialogueChoiceClick: clickY=%d firstLineY=%d relY=%d lineHeight=%d clickedLine=%d",
-		  clickY, firstLineY, relY, (relY >= 0 && lineHeight > 0) ? relY / lineHeight : -1, lineHeight);
-	if (relY >= 0 && lineHeight > 0) {
+		  clickY, firstLineY, relY, lineHeight, relY >= 0 ? relY / lineHeight : -1);
+	if (relY >= 0) {
 		int clickedLine = relY / lineHeight;
 		int cumulativeLines = 0;
 		for (uint i = 0; i < _dialogueChoiceLineCounts.size(); i++) {
@@ -1885,8 +1900,6 @@ bool View1::handlePanelRelease(const MouseUpMessage &msg) {
 		shouldClose = true;
 		break;
 	case kUiPanelInventory:
-		shouldClose = (_clickedButtonIndex == 6);
-		break;
 	case kUiPanelContainerInventory:
 		shouldClose = (_clickedButtonIndex == 6);
 		break;
@@ -2004,7 +2017,7 @@ bool View1::msgAction(const ActionMessage &msg) {
 	case Macs2::kMacs2ActionMenu:
 		return msgKeypress(KeypressMessage(Common::KeyState(Common::KEYCODE_n, 'n')));
 	case Macs2::kMacs2ActionGameSpeed:
-		g_engine->_gameSpeedMode = (g_engine->_gameSpeedMode + 1) % 3;
+		g_engine->setGameSpeedMode(g_engine->_gameSpeedMode + 1);
 		debug("Game speed mode: %u", g_engine->_gameSpeedMode);
 		return true;
 	case Macs2::kMacs2ActionOpenGMM:
@@ -2086,7 +2099,7 @@ bool View1::msgKeypress(const KeypressMessage &msg) {
 		// Select a visible dialogue option by number key.
 		// Register a dialogue choice and act upon it
 		uint8 numberPressed = msg.ascii - '1' + 1;
-		if (numberPressed >= 1 && numberPressed <= _dialogueChoiceCount && _isDialogueChoiceInputActive) {
+		if (numberPressed <= _dialogueChoiceCount && _isDialogueChoiceInputActive) {
 			handleTextBoxInput();
 			dismissDialoguePanel();
 			_isDialogueChoiceInputActive = false;
@@ -2117,9 +2130,7 @@ void View1::draw() {
 
 	// Handle highlighting
 
-	if (_currentMode != ViewMode::VM_HELP) {
-		drawAllCharacters(&s, true);
-	}
+	drawAllCharacters(&s, true);
 	drawOverlayTextEntries();
 	if (shouldDrawPathfindingOverlay()) {
 		drawPathfindingPoints(s);
@@ -2137,10 +2148,10 @@ void View1::draw() {
 	if (_isShowingTextBox || _isShowingDialoguePanel) {
 		showStringBox(_drawnStringBox);
 		if (_isDialogueChoiceInputActive && g_engine->enhancementEnabled(kEnhUIUX)) {
-			int lineHeight = g_engine->maxGlyphHeight + 2;
-			int firstLineY = _stringBoxPosition.y + 9;
+			int lineHeight = g_engine->dialogLineHeight();
+			int firstLineY = _stringBoxPosition.y + g_engine->dialogTextInset();
 			int relY = mousePos.y - firstLineY;
-			if (relY >= 0 && lineHeight > 0) {
+			if (relY >= 0) {
 				int hoveredLine = relY / lineHeight;
 				int cumulativeLines = 0;
 				for (uint i = 0; i < _dialogueChoiceLineCounts.size(); i++) {
@@ -2269,17 +2280,17 @@ bool View1::tick() {
 			} else {
 				se->_musicControlVolume = vol;
 			}
-			g_engine->getAdlib()->setVolume(g_engine->scaledMusicVolume(se->_musicControlVolume));
+			g_engine->getMusic()->setVolume(g_engine->scaledMusicVolume(se->_musicControlVolume));
 		} else {
 			// Fade in: volume += step. When >= 63: stop music.
 			int vol = (int)se->_musicControlVolume + (int)musicStep;
 			if (vol >= 0x3F) {
 				se->_musicControlMode = 0;
 				se->_activeMusicSlot = 0;
-				g_engine->getAdlib()->stopMusic();
+				g_engine->getMusic()->stopMusic();
 			} else {
 				se->_musicControlVolume = vol;
-				g_engine->getAdlib()->setVolume(g_engine->scaledMusicVolume(se->_musicControlVolume));
+				g_engine->getMusic()->setVolume(g_engine->scaledMusicVolume(se->_musicControlVolume));
 			}
 		}
 	}
@@ -2429,7 +2440,7 @@ bool View1::tick() {
 				}
 			} else if (executor->_waitForPcmSound) {
 				drawSceneUpdate();
-				if (!g_engine->isCurrentSoundPlaying()) {
+				if (!g_engine->isSamplePlaying()) {
 					debugC(kDebugScript, "waitForSound complete");
 					executor->debugLogActorWalkState("waitForSound complete");
 					executor->_waitForPcmSound = false;
@@ -2443,7 +2454,7 @@ bool View1::tick() {
 				}
 			} else if (executor->_waitForAdlibReady) {
 				drawSceneUpdate();
-				if (g_engine->getAdlib()->isPlaybackReady()) {
+				if (g_engine->getMusic()->isPlaybackReady()) {
 					executor->_waitForAdlibReady = false;
 					g_engine->runScriptExecutor();
 				}
@@ -2562,7 +2573,7 @@ void View1::drawAllCharacters(Graphics::ManagedSurface *surface, bool fullUpdate
 				}
 			}
 
-			const uint16 animSlot = resolveAnimSlotIndex(obj);
+			const uint16 animSlot = g_engine->resolveAnimSlotIndex(obj);
 
 			if (!obj->isAnimSlotLoaded(animSlot)) {
 				executor->setScriptError(10);
@@ -2638,7 +2649,7 @@ void View1::drawAllCharacters(Graphics::ManagedSurface *surface, bool fullUpdate
 
 			const int16 drawX = charX - (frameWidth >> 1) + frame._offsetX;
 			const int16 drawY = (charY - frameHeight) - walkabilityOffset + frame._offsetY;
-			const uint8 depthThreshold = (uint8)charY;
+			const uint8 depthThreshold = g_engine->depthThresholdForY(charY);
 			const byte *pixelData = frame._data.data();
 
 			// drawAllCharacters @ 1008:9573-9754: drawAnimFrame / drawAnimFrameShaded / drawAnimFrameDepth
@@ -2905,7 +2916,7 @@ void View1::drawSpriteClipped(uint16 x, uint16 y, Common::Rect &clippingRect, ui
 			if (val != 0) {
 				const int px = x + currentX;
 				const int py = y + currentY;
-				if (clippingRect.contains(px, py) && px >= 0 && px < s.w && py >= 0 && py < s.h)
+				if (clippingRect.contains(px, py) && px < s.w && py < s.h)
 					s.setPixel(px, py, val);
 			}
 		}
@@ -3078,8 +3089,11 @@ void View1::showSpeechAct(uint16 characterIndex, const Common::Array<Common::Str
 	currentSpeechActData.position = position;
 	currentSpeechActData.onRightSide = onRightSide;
 
-	const int totalWidth = g_engine->measureStrings(strings) + 0x12;
-	const int totalHeight = g_engine->measureStringsVertically(strings) + 0x10;
+	const int padW = g_engine->dialogPadW();
+	const int padH = g_engine->dialogPadH();
+	const int portraitGap = g_engine->portraitTextGap();
+	const int totalWidth = g_engine->measureStrings(strings) + padW;
+	const int totalHeight = g_engine->measureStringsVertically(strings) + padH;
 	int stringBoxX = position.x;
 	int stringBoxY = position.y;
 	Common::Point portraitBoxPosition = position;
@@ -3090,10 +3104,10 @@ void View1::showSpeechAct(uint16 characterIndex, const Common::Array<Common::Str
 		const int portraitWidth = MAX<int>(leftPortrait ? leftPortrait->_width : 0, rightPortrait ? rightPortrait->_width : 0);
 		if (portraitWidth > 0) {
 			if (onRightSide) {
-				stringBoxX = position.x - portraitWidth - 0x12 - totalWidth;
+				stringBoxX = position.x - portraitWidth - portraitGap - totalWidth;
 				portraitBoxPosition.x = stringBoxX + totalWidth + 4;
 			} else {
-				stringBoxX = position.x + portraitWidth + 0x12;
+				stringBoxX = position.x + portraitWidth + portraitGap;
 			}
 		}
 		delete leftPortrait;
@@ -3418,8 +3432,7 @@ bool Character::isWalkable(const Common::Point &p) const {
 	return Macs2Engine::isWalkabilityWalkable(lookupWalkability(p));
 }
 
-Character::Character() {
-	_pathfindingOverlay = Common::Array<uint8>(kScreenWidth * kGameHeight, 0);
+Character::Character() : _pathfindingOverlay(kScreenWidth * kGameHeight, 0) {
 }
 
 bool Character::calculatePath(Common::Point target) {
@@ -3450,6 +3463,10 @@ bool Character::calculatePath(Common::Point target) {
 			// due to calculatePath being invoked with swapped source/dest params.
 			// This means the gate check is "can node see CHARACTER" and the flood-fill
 			// checks "any node reachable from DEST" AND "any node visible from CHARACTER".
+			// TODO: validate this with a playthought:
+			//   PVS-Studio V764: Possible incorrect order of arguments passed to
+			//   'canNodeConnectSourceToTarget' function: 'target' and 'charPos'.
+			// I didn't had any issues in previous runs
 			if (canNodeConnectSourceToTarget(i, target, charPos, reachable, nodeCount)) {
 				// Recompute cost (binary does this twice)
 				costToDest = g_engine->euclideanDistance(nodePos, target);
@@ -3641,7 +3658,7 @@ uint8 Character::getMirroredAnimation(uint8 original) const {
 }
 
 bool Character::fillCurrentAnimationFrame(uint16 advanceMode, Macs2::AnimFrame &out) {
-	const uint16 animSlot = resolveAnimSlotIndex(_gameObject);
+	const uint16 animSlot = g_engine->resolveAnimSlotIndex(_gameObject);
 
 	_shouldMirrorCurrentAnimation = false;
 
@@ -3810,7 +3827,7 @@ void Character::update() {
 	// = AnimSlot.wAnimSpeed (slot+0x0C). Stored in _blobWalkSpeeds.
 	uint16 animSpeed = 2; // default fallback
 	uint8 orient = _gameObject->_orientation;
-	if (orient >= 1 && orient <= 0x15 && (uint)(orient - 1) < _gameObject->_blobWalkSpeeds.size()) {
+	if (orient >= 1 && orient <= g_engine->maxAnimSlots() && (uint)(orient - 1) < _gameObject->_blobWalkSpeeds.size()) {
 		animSpeed = _gameObject->_blobWalkSpeeds[orient - 1];
 		if (animSpeed == 0)
 			animSpeed = 2;
@@ -3935,99 +3952,97 @@ void Character::update() {
 	// After loop: if pixelsMoved != walkSpeed -> revert pos to savedPos and cancel path.
 	int pixelsMoved = 0;
 	Common::Point savedPos = pos;
-	if (walkSpeed > 0) {
-		for (int stepCounter = 1; stepCounter <= walkSpeed; stepCounter++) {
-			savedPos = pos; // Binary: savedX/savedY at top of each iteration
-			// Bresenham: if error >= deltaX -> step Y, else step X
-			if (_stepError >= _stepDeltaX) {
-				// Step Y axis
-				if (_targetPosition.y != pos.y)
-					pixelsMoved++;
-				if (_targetPosition.y < pos.y)
-					pos.y--;
-				else if (_targetPosition.y > pos.y)
-					pos.y++;
-				_stepError -= _stepDeltaX;
-			} else {
-				// Step X axis
-				if (_targetPosition.x != pos.x)
-					pixelsMoved++;
-				if (_targetPosition.x < pos.x)
-					pos.x--;
-				else if (_targetPosition.x > pos.x)
-					pos.x++;
-				_stepError += _stepDeltaY;
-			}
-			// Vertical offset interpolation
-			if (shouldStepVerticalMotion()) {
-				_motionProgress += _motionVerticalOffsetDelta;
-				while (_motionProgress >= _motionDistanceUnits && _motionDistanceUnits > 0) {
-					_motionProgress -= _motionDistanceUnits;
-					if (_motionTargetVerticalOffset < _gameObject->_verticalOffsetScale)
-						_gameObject->_verticalOffsetScale--;
-					else if (_motionTargetVerticalOffset > _gameObject->_verticalOffsetScale)
-						_gameObject->_verticalOffsetScale++;
-				}
-			}
-			// Walkability check - binary uses getWalkabilityAt(posY, posX) >= 0xC8
-			if (!isWalkable(pos)) {
-				const uint16 tileArea = g_engine->_scriptExecutor->getAreaAtPoint(pos.x, pos.y);
-				if (tileArea >= 210 && tileArea <= 215) {
-					debugC(kDebugPath,
-						   "walk blocked on plate area %u at (%d,%d) walk=%u int16=%d target=(%d,%d)",
-						   tileArea, pos.x, pos.y, lookupWalkability(pos), (int16)lookupWalkability(pos),
-						   _targetPosition.x, _targetPosition.y);
-				}
-				// Revert position
-				pos = savedPos;
-				// Wall-sliding: build push vector from ±1 and ±2 samples
-				int pushX = 0, pushY = 0;
-				if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x + 1, pos.y))))
-					pushX--;
-				if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x - 1, pos.y))))
-					pushX++;
-				if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x, pos.y + 1))))
-					pushY--;
-				if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x, pos.y - 1))))
-					pushY++;
-				if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x + 2, pos.y))))
-					pushX--;
-				if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x - 2, pos.y))))
-					pushX++;
-				if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x, pos.y + 2))))
-					pushY--;
-				if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x, pos.y - 2))))
-					pushY++;
-				// Apply push vector
-				while (pushX != 0 || pushY != 0) {
-					if (pushX < 0) {
-						if (Macs2Engine::isWalkabilityWalkable(lookupWalkability(Common::Point(pos.x - 1, pos.y))))
-							pos.x--;
-						pushX++;
-					}
-					if (pushX > 0) {
-						if (Macs2Engine::isWalkabilityWalkable(lookupWalkability(Common::Point(pos.x + 1, pos.y))))
-							pos.x++;
-						pushX--;
-					}
-					if (pushY < 0) {
-						if (Macs2Engine::isWalkabilityWalkable(lookupWalkability(Common::Point(pos.x, pos.y - 1))))
-							pos.y--;
-						pushY++;
-					}
-					if (pushY > 0) {
-						if (Macs2Engine::isWalkabilityWalkable(lookupWalkability(Common::Point(pos.x, pos.y + 1))))
-							pos.y++;
-						pushY--;
-					}
-				}
-				// Binary: target = finalDest = pos (cancel path, but loop continues)
-				_targetPosition = pos;
-				_pathFinalDestination = pos;
-				_path.clear();
-			}
-			// Binary: loop continues unconditionally until stepCounter == walkSpeed
+	for (int stepCounter = 1; stepCounter <= walkSpeed; stepCounter++) {
+		savedPos = pos; // Binary: savedX/savedY at top of each iteration
+		// Bresenham: if error >= deltaX -> step Y, else step X
+		if (_stepError >= _stepDeltaX) {
+			// Step Y axis
+			if (_targetPosition.y != pos.y)
+				pixelsMoved++;
+			if (_targetPosition.y < pos.y)
+				pos.y--;
+			else if (_targetPosition.y > pos.y)
+				pos.y++;
+			_stepError -= _stepDeltaX;
+		} else {
+			// Step X axis
+			if (_targetPosition.x != pos.x)
+				pixelsMoved++;
+			if (_targetPosition.x < pos.x)
+				pos.x--;
+			else if (_targetPosition.x > pos.x)
+				pos.x++;
+			_stepError += _stepDeltaY;
 		}
+		// Vertical offset interpolation
+		if (shouldStepVerticalMotion()) {
+			_motionProgress += _motionVerticalOffsetDelta;
+			while (_motionProgress >= _motionDistanceUnits && _motionDistanceUnits > 0) {
+				_motionProgress -= _motionDistanceUnits;
+				if (_motionTargetVerticalOffset < _gameObject->_verticalOffsetScale)
+					_gameObject->_verticalOffsetScale--;
+				else if (_motionTargetVerticalOffset > _gameObject->_verticalOffsetScale)
+					_gameObject->_verticalOffsetScale++;
+			}
+		}
+		// Walkability check - binary uses getWalkabilityAt(posY, posX) >= 0xC8
+		if (!isWalkable(pos)) {
+			const uint16 tileArea = g_engine->_scriptExecutor->getAreaAtPoint(pos.x, pos.y);
+			if (tileArea >= 210 && tileArea <= 215) {
+				debugC(kDebugPath,
+						"walk blocked on plate area %u at (%d,%d) walk=%u int16=%d target=(%d,%d)",
+						tileArea, pos.x, pos.y, lookupWalkability(pos), (int16)lookupWalkability(pos),
+						_targetPosition.x, _targetPosition.y);
+			}
+			// Revert position
+			pos = savedPos;
+			// Wall-sliding: build push vector from +/-1 and +/-2 samples
+			int pushX = 0, pushY = 0;
+			if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x + 1, pos.y))))
+				pushX--;
+			if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x - 1, pos.y))))
+				pushX++;
+			if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x, pos.y + 1))))
+				pushY--;
+			if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x, pos.y - 1))))
+				pushY++;
+			if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x + 2, pos.y))))
+				pushX--;
+			if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x - 2, pos.y))))
+				pushX++;
+			if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x, pos.y + 2))))
+				pushY--;
+			if (Macs2Engine::isWalkabilityBlocking(lookupWalkability(Common::Point(pos.x, pos.y - 2))))
+				pushY++;
+			// Apply push vector
+			while (pushX != 0 || pushY != 0) {
+				if (pushX < 0) {
+					if (Macs2Engine::isWalkabilityWalkable(lookupWalkability(Common::Point(pos.x - 1, pos.y))))
+						pos.x--;
+					pushX++;
+				}
+				if (pushX > 0) {
+					if (Macs2Engine::isWalkabilityWalkable(lookupWalkability(Common::Point(pos.x + 1, pos.y))))
+						pos.x++;
+					pushX--;
+				}
+				if (pushY < 0) {
+					if (Macs2Engine::isWalkabilityWalkable(lookupWalkability(Common::Point(pos.x, pos.y - 1))))
+						pos.y--;
+					pushY++;
+				}
+				if (pushY > 0) {
+					if (Macs2Engine::isWalkabilityWalkable(lookupWalkability(Common::Point(pos.x, pos.y + 1))))
+						pos.y++;
+					pushY--;
+				}
+			}
+			// Binary: target = finalDest = pos (cancel path, but loop continues)
+			_targetPosition = pos;
+			_pathFinalDestination = pos;
+			_path.clear();
+		}
+		// Binary: loop continues unconditionally until stepCounter == walkSpeed
 	}
 
 	// Binary (2280): if pixelsMoved != walkSpeed -> revert and cancel
@@ -4047,19 +4062,6 @@ void Character::update() {
 		_targetPosition = pos;
 		_pathFinalDestination = pos;
 		_path.clear();
-	}
-
-	// Binary: walkSpeed==0 special case - still run vertical offset once
-	if (walkSpeed == 0 && shouldStepVerticalMotion()) {
-		_motionProgress += _motionVerticalOffsetDelta;
-		while (_motionProgress >= _motionDistanceUnits && _motionDistanceUnits > 0) {
-			_motionProgress -= _motionDistanceUnits;
-			if (_motionTargetVerticalOffset < _gameObject->_verticalOffsetScale) {
-				_gameObject->_verticalOffsetScale--;
-			} else if (_motionTargetVerticalOffset > _gameObject->_verticalOffsetScale) {
-				_gameObject->_verticalOffsetScale++;
-			}
-		}
 	}
 
 	setPosition(pos);
@@ -4091,17 +4093,13 @@ void View1::openOriginalSaveLoadPanel() {
 	// if (g_wMusicEnabled && sceneData[g_wActiveMusicSlot] != 0) adlibStopMusic()
 	if (g_engine->_scriptExecutor->_musicEnabled &&
 		g_engine->_scriptExecutor->_activeMusicSlot != 0) {
-		g_engine->getAdlib()->stopMusic();
+		g_engine->getMusic()->stopMusic();
 	}
-
-	// Button lookup table at data segment offset 0x26, 1-indexed
-	// Binary: local_4 = 1..7, each iteration reads *(local_4 * 2 + 0x26) as index into cursor array
-	static const uint16 kLookupTable[8] = {9, 15, 14, 27, 29, 16, 17, 9}; // index 0 unused
 
 	// First loop: calculate max icon width/height from the 7 button images
 	for (int i = 1; i <= 7; i++) {
 		int imgIdx = kLookupTable[i] - 1; // convert to 0-based
-		if (imgIdx < 0 || imgIdx >= (int)g_engine->_imageResources.size())
+		if (imgIdx >= (int)g_engine->_imageResources.size())
 			continue;
 		AnimFrame &frame = g_engine->_imageResources[imgIdx];
 		if (frame._data.empty() && frame._width == 0) {
@@ -4191,9 +4189,6 @@ void View1::drawOriginalSaveLoadPanel(Graphics::ManagedSurface &s) {
 	drawBorderSide(Common::Point(panelX, panelY), Common::Point(panelW, _saveLoadPanelRect.height()), s);
 	drawNinePatchBorder(Common::Point(panelX, panelY), Common::Point(panelW, _saveLoadPanelRect.height()), kBorderRaised, false, false, s);
 
-	// Button loop: local_4 = 1..7
-	// Lookup table at 0x26 (1-indexed): {_, 15, 14, 27, 29, 16, 17, 9}
-	static const uint16 kLookupTable[8] = {9, 15, 14, 27, 29, 16, 17, 9};
 	// Alternate music icon is at cursor array offset 0x1B0 = entry 27 (0-based)
 	static const int kAltMusicIconIdx = 27; // 0-based into _imageResources
 
@@ -4205,11 +4200,11 @@ void View1::drawOriginalSaveLoadPanel(Graphics::ManagedSurface &s) {
 
 		// Binary: if (local_4 < 0 || local_4 != g_wSaveLoadSubMode) -> normal border
 		// else -> pressed border
-		const bool pressed = (i >= 0 && (uint16)i == subMode);
+		const bool pressed = ((uint16)i == subMode);
 		drawNinePatchBorder(btnPos, Common::Point(btnW, btnH), pressed ? kBorderPressed : kBorderRaised, false, false, s);
 
 		// Check if image has valid data (binary: check size fields > 0)
-		if (imgIdx < 0 || imgIdx >= (int)g_engine->_imageResources.size()) {
+		if (imgIdx >= (int)g_engine->_imageResources.size()) {
 			continue;
 		}
 		AnimFrame &frame = g_engine->_imageResources[imgIdx];
@@ -4340,8 +4335,6 @@ void View1::handleOriginalSaveLoadClick(const Common::Point &pos) {
 		}
 	}
 
-	// Button loop: local_4 = 1..7
-	static const uint16 kLookupTable[8] = {9, 15, 14, 27, 29, 16, 17, 9};
 	for (int i = 1; i <= 7; i++) {
 		int imgIdx = kLookupTable[i] - 1; // 0-based
 		Common::Point btnPos(_saveLoadButtonRects[i - 1].left, _saveLoadButtonRects[i - 1].top);
@@ -4351,7 +4344,7 @@ void View1::handleOriginalSaveLoadClick(const Common::Point &pos) {
 		// AND has valid image data
 		// AND (mapDisabledFlag == 0 || i > 2)
 		bool hasData = false;
-		if (imgIdx >= 0 && imgIdx < (int)g_engine->_imageResources.size()) {
+		if (imgIdx < (int)g_engine->_imageResources.size()) {
 			AnimFrame &frame = g_engine->_imageResources[imgIdx];
 			hasData = (!frame._data.empty() && frame._width > 0);
 		}
@@ -4399,13 +4392,13 @@ void View1::handleOriginalSaveLoadClick(const Common::Point &pos) {
 				if (g_engine->_scriptExecutor->_musicEnabled &&
 					g_engine->_scriptExecutor->_soundSystemActive) {
 					uint16 slot = g_engine->_scriptExecutor->_activeMusicSlot;
-					if (slot != 0 && !g_engine->_scriptExecutor->_musicSlots[slot - 1].empty()) {
-						g_engine->getAdlib()->playSongData(g_engine->_scriptExecutor->_musicSlots[slot - 1]);
+					if (slot != 0 && !g_engine->_scriptExecutor->_musicSlots[slot - 1].empty() &&
+						g_engine->getMusic()->playSongData(g_engine->_scriptExecutor->_musicSlots[slot - 1])) {
 						// Original's adlibTickHandler resets g_bAdlibMasterVolume=0 (full volume).
 						// ScummVM layers user volume on top via scaledMusicVolume, so re-apply it.
 						g_engine->_scriptExecutor->_musicControlMode = 0;
 						g_engine->_scriptExecutor->_musicControlVolume = 0;
-						g_engine->getAdlib()->setVolume(g_engine->scaledMusicVolume(0));
+						g_engine->getMusic()->setVolume(g_engine->scaledMusicVolume(0));
 					}
 				}
 			}

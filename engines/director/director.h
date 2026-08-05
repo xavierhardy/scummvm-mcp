@@ -169,6 +169,7 @@ public:
 	Common::Platform getPlatform() const;
 	Common::Language getLanguage() const;
 	uint32 getGameFlags() const;
+	bool isDemo() const;
 	Common::String getTargetName() { return _targetName; }
 	const char *getExtra();
 	Common::String getRawEXEName() const;
@@ -298,6 +299,7 @@ public:
 	uint16 _wmWidth;
 	uint16 _wmHeight;
 	CastMemberID _lastPalette;
+	CastMemberID _lastPuppetPalette;
 
 	// used for quirks
 	byte _fpsLimit;
@@ -306,6 +308,10 @@ public:
 	uint32 _loadSlowdownCooldownTime;
 	int _fileIOType;
 	bool _vfwPaletteHack;
+
+	uint16 _key;
+	int _keyCode;
+	byte _keyFlags;
 
 private:
 	byte _currentPalette[768];

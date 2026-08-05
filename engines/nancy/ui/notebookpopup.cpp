@@ -74,7 +74,7 @@ void NotebookPopup::init() {
 	moveTo(popupRect);
 	Common::Rect bounds = _screenPosition;
 	bounds.moveTo(0, 0);
-	_drawSurface.create(bounds.width(), bounds.height(), g_nancy->_graphics->getInputPixelFormat());
+	_drawSurface.create(bounds.width(), bounds.height(), g_nancy->_graphics->getScreenPixelFormat());
 
 	// Transparent-keyed scratch surfaces so text blits over the paper
 	// painted by drawBackground() — paper stays stationary while text
@@ -118,13 +118,21 @@ void NotebookPopup::updateGraphics() {
 	}
 }
 
+int16 NotebookPopup::getPrepSceneID() const {
+	return _uinbData ? (int16)_uinbData->header.linkbackScene : (int16)kNoScene;
+}
+
 void NotebookPopup::open() {
 	if (_isVisible)
 		return;
 
 	setVisible(true);
 
-	NancySceneState.getTaskbar()->clearAllNotifications(kTaskButtonNotebook);
+	g_nancy->_cursor->warpCursor(Common::Point(_screenPosition.left + _screenPosition.width() / 2,
+												_screenPosition.top + _screenPosition.height() / 2));
+
+	// Only the tab being shown is acknowledged; the other keeps its badge.
+	clearActiveTabNotification();
 
 	// JournalData entries may have changed since the last open (added by
 	// ModifyListEntry, marked complete, etc.) — re-render content.
@@ -141,11 +149,6 @@ void NotebookPopup::close() {
 		return;
 
 	setVisible(false);
-
-	if (!_uinbData->header.sounds[1].name.empty()) {
-		g_nancy->_sound->loadSound(_uinbData->header.sounds[1]);
-		g_nancy->_sound->playSound(_uinbData->header.sounds[1]);
-	}
 }
 
 void NotebookPopup::drawBackground() {
@@ -293,8 +296,15 @@ void NotebookPopup::handleInput(NancyInput &input) {
 
 			const int newThumbTop = localMouse.y - _scrollbarGrabOffset;
 			const int clamped = CLIP<int>(newThumbTop, trackLocal.top, trackLocal.top + travel);
-			_scrollPos = travel > 0 ? (float)(clamped - trackLocal.top) / (float)travel : 0.0f;
-			refreshContent();
+			const float newScrollPos = travel > 0 ? (float)(clamped - trackLocal.top) / (float)travel : 0.0f;
+
+			// Re-composite only when the thumb actually moves, and via redrawScroll()
+			// (a cheap slice re-blit) rather than a full text re-layout. This keeps
+			// dragging smooth instead of re-rendering the whole journal each frame.
+			if (newScrollPos != _scrollPos) {
+				_scrollPos = newScrollPos;
+				redrawScroll();
+			}
 
 			if (input.input & NancyInput::kLeftMouseButtonUp) {
 				_scrollbarDragging = false;
@@ -355,8 +365,11 @@ void NotebookPopup::handleInput(NancyInput &input) {
 		g_nancy->_cursor->setCursorType(CursorManager::kHotspotArrow);
 		if (input.input & NancyInput::kLeftMouseButtonUp) {
 			toggleCheckbox(_checkboxEntryIndices[k]);
-			input.eatMouseInput();
 		}
+		// Swallow the input (as the popup does for its other widgets) so the
+		// viewport / action manager behind the popup don't override the hotspot
+		// cursor we just set.
+		input.eatMouseInput();
 		return;
 	}
 
@@ -405,13 +418,12 @@ void NotebookPopup::handleInput(NancyInput &input) {
 				_scrollbarDragging = false;
 
 				playButtonClickSound(tab.button);
-
+				clearActiveTabNotification();
 				refreshContent();
 			}
 			input.eatMouseInput();
 			return;
 		}
-		break;
 	}
 
 	// Swallow clicks on the popup itself so they don't fall through.
@@ -432,6 +444,23 @@ void NotebookPopup::refreshContent() {
 	drawForeground();
 }
 
+uint16 NotebookPopup::notebookJournalTabId() const {
+	return g_nancy->getGameType() >= kGameTypeNancy13 ? 0 : 1;
+}
+
+void NotebookPopup::clearActiveTabNotification() {
+	if (!_uinbData || (uint)_activeTab >= kNumTabs) {
+		return;
+	}
+	UI::Taskbar *taskbar = NancySceneState.getTaskbar();
+	if (!taskbar) {
+		return;
+	}
+	// Journal = sub 0, Tasks = sub 1 (see ModifyListEntry).
+	const bool journalActive = (_uinbData->tabs[_activeTab].id == notebookJournalTabId());
+	taskbar->clearNotification(kTaskButtonNotebook, journalActive ? 0 : 1);
+}
+
 void NotebookPopup::buildTextLines() {
 	if (!_uinbData)
 		return;
@@ -440,8 +469,10 @@ void NotebookPopup::buildTextLines() {
 	if (!tab.enabled)
 		return;
 
-	// tab.id 1 (top/book) → Journal; tab.id 2 (bottom/clipboard) → Tasks.
-	const uint16 surfaceID = (tab.id == 1) ? kNotebookTabJournal : kNotebookTabTasks;
+	// The lower tab id (top/book) is the Journal; the higher (bottom/clipboard)
+	// is the Tasks list. Nancy 13 renumbered the tab ids from {1,2} to {0,1}.
+	const uint16 journalTabId = notebookJournalTabId();
+	const uint16 surfaceID = (tab.id == journalTabId) ? kNotebookTabJournal : kNotebookTabTasks;
 
 	JournalData *journalData = (JournalData *)NancySceneState.getPuzzleData(JournalData::getTag());
 	if (!journalData)
@@ -469,7 +500,7 @@ void NotebookPopup::buildTextLines() {
 	Common::String combined;
 	for (int i = (int)entries.size() - 1; i >= 0; --i) {
 		Common::String stringID = entries[i].stringID;
-		Common::String body = getTextFromCaseInsensitiveKey(autotext->texts, stringID);
+		Common::String body = autotext->texts.getValOrDefault(stringID, "");
 
 		if (surfaceID == kNotebookTabTasks && entries[i].mark != 0) {
 			uint16 markValue = entries[i].mark;
@@ -498,6 +529,40 @@ void NotebookPopup::buildTextLines() {
 }
 
 void NotebookPopup::drawContent() {
+	layoutText();
+	paintVisibleText();
+}
+
+void NotebookPopup::layoutText() {
+	if (!_uinbData) {
+		return;
+	}
+
+	HypertextParser::clear();
+	_checkboxRects.clear();
+	_checkboxEntryIndices.clear();
+	_markEntryIndices.clear();
+
+	// Only the Tasklist has clickable checkboxes; record their glyph rects.
+	const UIButtonSlot &activeTab = _uinbData->tabs[_activeTab];
+	const bool tasksTab = activeTab.enabled && activeTab.id != notebookJournalTabId();
+	_recordMarkHotspots = tasksTab;
+
+	buildTextLines();
+
+	// Chunk's textRect already provides top padding from the chrome.
+	// A small left inset gives breathing room. The original draws text
+	// across the full text-rect height (source blit height == dest rect
+	// height), so no bottom strip is reserved.
+	const uint16 fontID = _uinbData->primaryFontID;
+	const Font *font = g_nancy->_graphics->getFont(fontID);
+	const int leftInset = font ? font->getCharWidth('o') : 0;
+
+	Common::Rect hypertextBounds(leftInset, 0, _fullSurface.w, _fullSurface.h);
+	drawAllText(hypertextBounds, 0, fontID, fontID);
+}
+
+void NotebookPopup::paintVisibleText() {
 	if (!_uinbData) {
 		return;
 	}
@@ -507,31 +572,7 @@ void NotebookPopup::drawContent() {
 	// with them when the popup overlays the game frame.
 	const Common::Rect localTextRect = toPopupLocal(_uinbData->textRect, false);
 
-	HypertextParser::clear();
-	_checkboxRects.clear();
-	_checkboxEntryIndices.clear();
-	_markEntryIndices.clear();
-
-	// Only the Tasklist has clickable checkboxes; record their glyph rects.
-	const UIButtonSlot &activeTab = _uinbData->tabs[_activeTab];
-	const bool tasksTab = activeTab.enabled && activeTab.id != 1;
-	_recordMarkHotspots = tasksTab;
-
-	buildTextLines();
-
-	// Chunk's textRect already provides top padding from the chrome.
-	// A small left inset gives breathing room; the bottom strip is
-	// reserved so the last line clears the inner bevel.
-	const uint16 fontID = _uinbData->primaryFontID;
-	const Font *font = g_nancy->_graphics->getFont(fontID);
-	const int oW = font ? font->getCharWidth('o') : 0;
-	const int leftInset   = oW;
-	const int bottomInset = oW;
-
-	Common::Rect hypertextBounds(leftInset, 0, _fullSurface.w, _fullSurface.h);
-	drawAllText(hypertextBounds, 0, fontID, fontID);
-
-	const int visibleH = MAX<int>(0, localTextRect.height() - bottomInset);
+	const int visibleH = localTextRect.height();
 	const int maxScroll = MAX<int>(0, (int)_drawnTextHeight - visibleH);
 	const int safeMax = MAX<int>(0, (int)_fullSurface.h - visibleH);
 	int scrollY = (int)(_scrollPos * maxScroll);
@@ -539,16 +580,32 @@ void NotebookPopup::drawContent() {
 		scrollY = safeMax;
 	}
 
+	// The text is already laid out in _fullSurface; scrolling just re-blits a
+	// different vertical slice of it.
 	Common::Rect srcSlice(0, scrollY,
 							_fullSurface.w, scrollY + visibleH);
 	_drawSurface.blitFrom(_fullSurface, srcSlice,
 							Common::Point(localTextRect.left, localTextRect.top));
 
+	const UIButtonSlot &activeTab = _uinbData->tabs[_activeTab];
+	const bool tasksTab = activeTab.enabled && activeTab.id != notebookJournalTabId();
 	if (tasksTab) {
 		buildCheckboxRects(localTextRect, scrollY, visibleH);
 	}
 
 	_needsRedraw = true;
+}
+
+void NotebookPopup::redrawScroll() {
+	// The text layout in _fullSurface is unchanged; re-composite the popup at the
+	// new scroll offset. drawBackground() wipes the previous (transparent-keyed)
+	// text, so the chrome must be repainted, but the expensive text re-layout in
+	// layoutText() is skipped.
+	drawBackground();
+	drawTabs();
+	drawCaption();
+	paintVisibleText();
+	drawForeground();
 }
 
 void NotebookPopup::buildCheckboxRects(const Common::Rect &localTextRect, int scrollY, int visibleH) {
@@ -614,13 +671,9 @@ void NotebookPopup::toggleCheckbox(uint entryIndex) {
 
 void NotebookPopup::playButtonClickSound(const UIButtonRecord &button) {
 	SoundDescription sound = button.clickSound;
-	if (sound.name.empty() || sound.name.equalsIgnoreCase("NO SOUND")) {
-		// Fall back to the header's shared button-click slot (2; 0/1 = open/close).
-		sound = _uinbData->header.sounds[2];
-	}
-	if (sound.name.empty() || sound.name.equalsIgnoreCase("NO SOUND")) {
+	if (sound.name.empty() || sound.name.equalsIgnoreCase("NO SOUND"))
 		return;
-	}
+
 	g_nancy->_sound->loadSound(sound);
 	g_nancy->_sound->playSound(sound);
 }

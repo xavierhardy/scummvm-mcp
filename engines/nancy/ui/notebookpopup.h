@@ -49,6 +49,11 @@ public:
 	void close();
 	void toggle() { if (_isVisible) close(); else open(); }
 
+	// Nancy 11+ lazily populates the notebook via a hidden "prep scene" run when
+	// it opens. Returns that scene ID (UINB header.linkbackScene), or kNoScene
+	// (9999) for games without one (e.g. Nancy 10), which populate inline.
+	int16 getPrepSceneID() const;
+
 	// Re-render the active tab's text content into the text rect.
 	// Called automatically on open() and on tab switch; Scene also
 	// invokes it after a ModifyListEntry AR runs while the popup is open.
@@ -70,7 +75,18 @@ private:
 	// Blit the active tab's title image ("CASE JOURNAL" / "TASKS") into the
 	// header strip above the text area.
 	void drawCaption();
+	// Full content rebuild: lay the active tab's text out into the scratch
+	// surface, then paint the visible slice. Expensive; only call when the text
+	// itself changes (open, tab switch, checkbox toggle, ModifyListEntry).
 	void drawContent();
+	// Lay the active tab's text out into _fullSurface (the expensive step).
+	void layoutText();
+	// Blit the currently-visible vertical slice of _fullSurface into the popup
+	// and rebuild the checkbox hit rects. Cheap; safe to call every scroll step.
+	void paintVisibleText();
+	// Re-composite the whole popup at the current scroll position without
+	// re-laying out the text. Used while dragging the scrollbar.
+	void redrawScroll();
 	// Paint foreground widgets (close button, scrollbar) on top of the
 	// already-drawn background + content layers.
 	void drawForeground();
@@ -88,6 +104,13 @@ private:
 	// Convert a chunk-space destRect into popup-local coordinates.
 	Common::Rect toPopupLocal(const Common::Rect &chunkRect, bool useGameFrame) const;
 	Common::Point popupLocalMouse(const Common::Point &screenMouse) const;
+
+	// The UINB tab id of the Journal (book) tab. Nancy 13 renumbered the tab
+	// ids from {1,2} to {0,1}, so the Journal id dropped from 1 to 0.
+	uint16 notebookJournalTabId() const;
+
+	// Clear the taskbar badge for the active tab (Journal = sub 0, Tasks = sub 1).
+	void clearActiveTabNotification();
 
 	// Populate HypertextParser's text-line list with the active tab's
 	// entries.

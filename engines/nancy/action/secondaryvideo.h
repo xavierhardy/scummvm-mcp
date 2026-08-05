@@ -82,10 +82,15 @@ public:
 
 	bool canHaveHotspot() const override { return true; }
 	bool isViewportRelative() const override { return true; }
+	// Ambient character animations stay on screen across a NO_ART_SCENE change
+	// (e.g. while a phone-call conversation is overlaid in front of them).
+	bool survivesSceneChange(bool nextSceneIsNoArt) const override { return nextSceneIsNoArt; }
 
 	CursorManager::CursorType getHoverCursor() const override {
 		return g_nancy->getGameType() >= kGameTypeNancy10 ? CursorManager::kHotspotTalk : CursorManager::kHotspot;
 	}
+
+	Common::String getRecordExtraInfo() const override { return Common::String::format("Scene %d", _sceneChange.sceneID); }
 
 protected:
 	Common::String getRecordTypeName() const override { return "PlaySecondaryVideo"; }

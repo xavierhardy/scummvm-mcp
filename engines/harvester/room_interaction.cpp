@@ -30,6 +30,7 @@
 #include "harvester/fst_player.h"
 #include "harvester/harvester.h"
 #include "harvester/resources.h"
+#include "harvester/runtime_entity.h"
 
 namespace Harvester {
 
@@ -57,6 +58,13 @@ Common::Error RoomInteractionProcessor::handleInteractionResult(const Interactio
 	_playerState.turnActive = false;
 	_playerState.turnTargetFacing = -1;
 	_pendingRegionName.clear();
+	if (interaction.requestDemoEnding) {
+		Common::Error endingError = _flow.runDemoEnding();
+		if (endingError.getCode() != Common::kNoError)
+			return endingError;
+		didTransition = true;
+		return Common::kNoError;
+	}
 
 	if (interaction.requestMainMenu) {
 		_engine.stopMusic();
@@ -236,6 +244,21 @@ Common::Error RoomInteractionProcessor::handleInteractionResult(const Interactio
 
 	if (interaction.requestPlayerGotoXZ)
 		_callbacks.applyPlayerGotoXZ(interaction.playerGotoX, interaction.playerGotoZ);
+	else if (interaction.requestPlayerGotoZ)
+		_callbacks.applyPlayerGotoXZ(_playerState.centerX, interaction.playerGotoZ);
+
+	if (!interaction.moveEntityToPlayerZName.empty()) {
+		EntityManager *entityManager = _engine.getRuntimeEntities();
+		Entity *entity = entityManager
+			? entityManager->findSceneEntityByName(interaction.moveEntityToPlayerZName)
+			: nullptr;
+		if (entity && _playerState.entity) {
+			entity->setPosition(entity->getX(), entity->getY(), _playerState.entity->getZ());
+			entityManager->reinsertSceneEntity(entity);
+			debugC(1, kDebugPlayer, "Harvester: MOVE_BM2PCZ entity='%s' z=%.2f",
+				interaction.moveEntityToPlayerZName.c_str(), entity->getZ());
+		}
+	}
 
 	if (interaction.lightingCommand != kStartupLightingCommandNone) {
 		Common::Error lightingError = _callbacks.applyLightingCommand(interaction.lightingCommand);
@@ -339,10 +362,13 @@ bool hasRoomEntryInteraction(const InteractionResult &interaction) {
 		!interaction.cutscenePath.empty() ||
 		!interaction.deathFlicPath.empty() ||
 		interaction.requestMainMenu ||
+		interaction.requestDemoEnding ||
 		interaction.requestCloseupExit ||
 		interaction.requestRoomRestart ||
 		interaction.requestPlayerDeath ||
+		!interaction.moveEntityToPlayerZName.empty() ||
 		interaction.requestPlayerGotoXZ ||
+		interaction.requestPlayerGotoZ ||
 		interaction.lightingCommand != kStartupLightingCommandNone ||
 		!interaction.modalText.value.empty() ||
 		!interaction.dialogueNpcName.empty() ||

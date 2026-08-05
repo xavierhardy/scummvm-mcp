@@ -35,6 +35,7 @@
  * TKKG 6 (disabled in start.dir), 7(hashed), 8(hashed), 9 (hashed)
  * Tiger Team 2 (detectionTable TBD)
  * Kommissar Kugelblitz - Vermisst am Missisippi (hashed)
+ * Janosch Panama - Oh wie schön ist Panama
  *
  **************************************************/
 
@@ -166,6 +167,10 @@ void GLU32Xtra::m_GLUCall(int nargs) {
 			g_lingo->push(Datum((int)16988788)); // TODO: Check with the game
 			return;
 		}
+		if (gameId == "maus2") {
+			g_lingo->push(Datum((int)16455855));
+			return;
+		}
 		if (gameId == "komissar1") {
 			g_lingo->push(Datum(Common::String("37211457"))); // TODO: Check with the game
 			return;
@@ -188,6 +193,10 @@ void GLU32Xtra::m_GLUCall(int nargs) {
 		}
 		if (gameId == "loewecalendar") {
 			g_lingo->push(Datum(Common::String("92263924"))); // TODO: Check with the game
+			return;
+		}
+		if (gameId == "physicus" && g_director->getLanguage() == Common::EN_ANY) {
+			g_lingo->push(Datum((int)43289555)); //tested
 			return;
 		}
 		// TODO: Tiger Team 2: 32546872

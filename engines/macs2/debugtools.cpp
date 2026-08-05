@@ -87,166 +87,9 @@ static const char *getSpecialName(uint16 val) {
 }
 
 static const char *getOpcodeName(uint8 opcode) {
-	switch (opcode) {
-	case 0x01:
-		return "setVar";
-	case 0x02:
-		return "setVarOr";
-	case 0x03:
-		return "ifFalse";
-	case 0x04:
-		return "ifTrue";
-	case 0x05:
-		return "compare";
-	case 0x06:
-		return "ifInteraction";
-	case 0x07:
-		return "endIf";
-	case 0x08:
-		return "else";
-	case 0x09:
-		return "nop09";
-	case 0x0A:
-		return "printStringLeft";
-	case 0x0B:
-		return "moveObject";
-	case 0x0C:
-		return "changeScene";
-	case 0x0D:
-		return "showDialogue";
-	case 0x0E:
-		return "changeAnimation";
-	case 0x0F:
-		return "frameWait";
-	case 0x10:
-		return "walkToPosition";
-	case 0x11:
-		return "waitForWalk";
-	case 0x12:
-		return "setPathfinding";
-	case 0x13:
-		return "skipUntil14";
-	case 0x14:
-		return "skipWord";
-	case 0x15:
-		return "clearDialogueChoices";
-	case 0x16:
-		return "addDialogueChoice";
-	case 0x17:
-		return "showDialogueChoice";
-	case 0x18:
-		return "dismissPanel";
-	case 0x19:
-		return "walkToAndPickup";
-	case 0x1A:
-		return "setPickupFrames";
-	case 0x1B:
-		return "setupObject";
-	case 0x1C:
-		return "setSkippable";
-	case 0x1D:
-		return "clearSkippable";
-	case 0x1E:
-		return "playAnimation";
-	case 0x1F:
-		return "pathWalkable = testPathfinding";
-	case 0x20:
-		return "setYOffset";
-	case 0x21:
-		return "setMotion";
-	case 0x22:
-		return "setOrientation";
-	case 0x23:
-		return "moveToPosition";
-	case 0x24:
-		return "addValues";
-	case 0x25:
-		return "subValues";
-	case 0x26:
-		return "loadSpecialAnim";
-	case 0x27:
-		return "setDirection";
-	case 0x28:
-		return "stopAnimation";
-	case 0x29:
-		return "openInventory";
-	case 0x2A:
-		return "loadObjectAnim";
-	case 0x2B:
-		return "checkObjectData";
-	case 0x2C:
-		return "invCheck = checkInventory";
-	case 0x2D:
-		return "setSnapToTarget";
-	case 0x2E:
-		return "animRangeTest = testSceneAnimFrame";
-	case 0x2F:
-		return "animRangeTest = testObjectAnimFrame";
-	case 0x30:
-		return "printStringRight";
-	case 0x31:
-		return "setPaletteDarkness";
-	case 0x32:
-		return "setObjectShading";
-	case 0x33:
-		return "setObjectScaling";
-	case 0x34:
-		return "setHotspotOverride";
-	case 0x35:
-		return "setObjectBounds";
-	case 0x36:
-		return "dismissAllPanels";
-	case 0x37:
-		return "resetToSceneScript";
-	case 0x38:
-		return "loadOverlayFont";
-	case 0x39:
-		return "endOverlayText";
-	case 0x3A:
-		return "addOverlayTextEntry";
-	case 0x3B:
-		return "clearOverlayText";
-	case 0x3C:
-		return "fadeToBlack";
-	case 0x3D:
-		return "fadeFromBlack";
-	case 0x3E:
-		return "loadPcmSound";
-	case 0x3F:
-		return "freePcmSound";
-	case 0x40:
-		return "playPcmSound";
-	case 0x41:
-		return "waitForSound";
-	case 0x42:
-		return "stopPcmSound";
-	case 0x43:
-		return "loadMusicSlot";
-	case 0x44:
-		return "playMusicSlot";
-	case 0x45:
-		return "stopMusicSlot";
-	case 0x46:
-		return "freeMusicSlot";
-	case 0x47:
-		return "waitForMusic";
-	case 0x48:
-		return "getObjectX";
-	case 0x49:
-		return "getObjectY";
-	case 0x4A:
-		return "getObjectField8";
-	case 0x4B:
-		return "getObjectOrientation";
-	case 0x4C:
-		return "clearActorInventory";
-	case 0x4D:
-		return "setPathfindingRemap";
-	case 0x4E:
-		return "waitForAdlib";
-	default:
-		return "???";
-	}
+	if (g_engine && g_engine->_scriptExecutor)
+		return g_engine->_scriptExecutor->opcodeName(opcode);
+	return "?";
 }
 
 static const char *getCompareOpName(uint8 sub) {
@@ -371,12 +214,15 @@ static Common::String decodeParams(Common::MemoryReadStream *script, uint8 opcod
 		result = Common::String::format(" %s", v.c_str());
 		break;
 	}
-	case 0x10: {
+	case 0x10:
+	case 0x1F: {
 		Common::String o = decodeScriptValue(script), x = decodeScriptValue(script), y = decodeScriptValue(script);
 		result = Common::String::format(" obj=%s pos=(%s,%s)", o.c_str(), x.c_str(), y.c_str());
 		break;
 	}
 	case 0x11:
+	case 0x29:
+	case 0x2B:
 	case 0x47: {
 		Common::String o = decodeScriptValue(script);
 		result = Common::String::format(" obj=%s", o.c_str());
@@ -447,11 +293,6 @@ static Common::String decodeParams(Common::MemoryReadStream *script, uint8 opcod
 		result = Common::String::format(" obj=%s slot=%s frame=%s", o.c_str(), s.c_str(), f.c_str());
 		break;
 	}
-	case 0x1F: {
-		Common::String o = decodeScriptValue(script), x = decodeScriptValue(script), y = decodeScriptValue(script);
-		result = Common::String::format(" obj=%s pos=(%s,%s)", o.c_str(), x.c_str(), y.c_str());
-		break;
-	}
 	case 0x20: {
 		Common::String o = decodeScriptValue(script), v = decodeScriptValue(script);
 		result = Common::String::format(" obj=%s offset=%s", o.c_str(), v.c_str());
@@ -492,20 +333,10 @@ static Common::String decodeParams(Common::MemoryReadStream *script, uint8 opcod
 		result = Common::String::format(" obj=%s maxFrame=%s", o.c_str(), v.c_str());
 		break;
 	}
-	case 0x29: {
-		Common::String o = decodeScriptValue(script);
-		result = Common::String::format(" obj=%s", o.c_str());
-		break;
-	}
 	case 0x2A: {
 		Common::String o = decodeScriptValue(script), s = decodeScriptValue(script), d = decodeScriptValue(script);
 		uint8 ai = script->readByte();
 		result = Common::String::format(" obj=%s slot=%s decode=%s idx=%u", o.c_str(), s.c_str(), d.c_str(), ai);
-		break;
-	}
-	case 0x2B: {
-		Common::String o = decodeScriptValue(script);
-		result = Common::String::format(" obj=%s", o.c_str());
 		break;
 	}
 	case 0x2C:
@@ -587,7 +418,7 @@ static Common::String decodeParams(Common::MemoryReadStream *script, uint8 opcod
 	case 0x4E:
 		break;
 	default:
-		if (length > 0 && length <= 30) {
+		if (length <= 30) {
 			result = " [";
 			for (uint8 i = 0; i < length && script->pos() < script->size(); i++) {
 				if (i)
@@ -963,7 +794,7 @@ static void showVariablesWindow() {
 				int firstLineY = view->_stringBoxPosition.y + 9;
 				int relY = mousePos.y - firstLineY;
 				int hoveredChoice = -1;
-				if (relY >= 0 && lineHeight > 0) {
+				if (relY >= 0) {
 					int hoveredLine = relY / lineHeight;
 					int cumulativeLines = 0;
 					for (uint i = 0; i < view->_dialogueChoiceLineCounts.size(); i++) {
@@ -2086,13 +1917,13 @@ static void showDebugToolbarWindow() {
 		}
 		if (ImGui::BeginMenu("Speed")) {
 			if (ImGui::MenuItem("Normal", NULL, g_engine->_gameSpeedMode == 0)) {
-				g_engine->_gameSpeedMode = 0;
+				g_engine->setGameSpeedMode(0);
 			}
 			if (ImGui::MenuItem("Fast", NULL, g_engine->_gameSpeedMode == 1)) {
-				g_engine->_gameSpeedMode = 1;
+				g_engine->setGameSpeedMode(1);
 			}
 			if (ImGui::MenuItem("Slow", NULL, g_engine->_gameSpeedMode == 2)) {
-				g_engine->_gameSpeedMode = 2;
+				g_engine->setGameSpeedMode(2);
 			}
 			ImGui::EndMenu();
 		}
@@ -2209,7 +2040,7 @@ static void showSoundWindow() {
 		return;
 	}
 
-	Music *adlib = g_engine->getAdlib();
+	Music *adlib = g_engine->getMusic();
 	const Music::DebugState &ds = adlib->_debug;
 
 	ImGui::Text("Master Volume: %u/63", ds.masterVolume);

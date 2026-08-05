@@ -217,6 +217,8 @@ void showBreakpointList() {
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
 
+				ImGui::PushID(i);
+
 				ImDrawList *dl = ImGui::GetWindowDrawList();
 				ImVec2 pos = ImGui::GetCursorScreenPos();
 				const ImVec2 mid(pos.x + 7, pos.y + 7);
@@ -245,7 +247,6 @@ void showBreakpointList() {
 				// enabled column
 				ImGui::TableNextColumn();
 				PushStyleCompact();
-				ImGui::PushID(i);
 				ImGui::Checkbox("", &bps[i].enabled);
 				PopStyleCompact();
 
@@ -321,13 +322,17 @@ void showArchive() {
 									_state->_archive.resId = id;
 
 									free(_state->_archive.data);
+									_state->_archive.data = nullptr;
+									_state->_archive.dataSize = 0;
 
 									Common::SeekableReadStreamEndian *res = archive->getResource(tag, id);
-									_state->_archive.data = (byte *)malloc(res->size());
-									res->read(_state->_archive.data, res->size());
-									_state->_archive.dataSize = res->size();
+									if (res) {
+										_state->_archive.data = (byte *)malloc(res->size());
+										res->read(_state->_archive.data, res->size());
+										_state->_archive.dataSize = res->size();
 
-									delete res;
+										delete res;
+									}
 								}
 							}
 
@@ -403,7 +408,10 @@ void showWindows() {
 			bool isStage = (window == g_director->getStage());
 			const char *title = isStage ? "(stage)" :
 				(window->getMacWindow() ? window->getMacWindow()->getTitle().c_str() : "");
-			ImGui::TextUnformatted(title);
+			if (*title)
+				ImGui::TextUnformatted(title);
+			else
+				ImGui::TextDisabled("(untitled)");
 
 			Movie *movie = window->getCurrentMovie();
 
@@ -428,11 +436,12 @@ void showWindows() {
 				if (score) {
 					const char *stateStr = "unknown";
 					switch (score->_playState) {
-					case kPlayNotStarted: stateStr = "not started"; break;
-					case kPlayStarted:    stateStr = "playing";     break;
-					case kPlayStopped:    stateStr = "stopped";     break;
-					case kPlayPaused:     stateStr = "paused";      break;
-					default:              stateStr = "other";       break;
+					case kPlayNotStarted:         stateStr = "not started"; break;
+					case kPlayLoaded:             stateStr = "loaded";      break;
+					case kPlayStarted:            stateStr = "playing";     break;
+					case kPlayStopped:            stateStr = "stopped";     break;
+					case kPlayPaused:             stateStr = "paused";      break;
+					case kPlayPausedAfterLoading: stateStr = "paused (after load)"; break;
 					}
 					ImGui::TextUnformatted(stateStr);
 				}
@@ -466,9 +475,14 @@ void showWindows() {
 
 	ImGui::SeparatorText("All Movies");
 
+	// .dir (D4+), .dxr (protected), .dcr (Shockwave), .mmm (D2/D3)
+	static const char *moviePatterns[] = {
+		"*.dir", "*.DIR", "*.dxr", "*.DXR",
+		"*.dcr", "*.DCR", "*.mmm", "*.MMM",
+	};
 	Common::ArchiveMemberList dirFiles;
-	SearchMan.listMatchingMembers(dirFiles, "*.dir");
-	SearchMan.listMatchingMembers(dirFiles, "*.DIR");
+	for (auto pattern : moviePatterns)
+		SearchMan.listMatchingMembers(dirFiles, pattern);
 
 	// deduplicate by name
 	Common::HashMap<Common::String, bool, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> seen;
@@ -497,7 +511,8 @@ void showWindows() {
 				Datum frame, movie;
 				movie.type = STRING;
 				movie.u.s = new Common::String(f->getName());
-				g_lingo->func_goto(frame, movie);
+				// commandgo resets go-registered handlers on the movie swap
+				g_lingo->func_goto(frame, movie, true);
 			}
 		}
 

@@ -91,7 +91,7 @@ void drawBitmapCMprops(BitmapCastMember *member) {
 		if (ImGui::CollapsingHeader("Media Properties")) {
 			if (ImGui::BeginTable("##BitmapMediaProperties", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders)) {
 
-				showProperty("paletteRef", (member->_clut.castLib > 0 ? "Custom Palette" : paletteType2str((PaletteType)member->_clut.member).c_str()));
+				showProperty("paletteRef", "%s", (member->_clut.castLib > 0 ? "Custom Palette" : paletteType2str((PaletteType)member->_clut.member).c_str()));
 
 				showPropertyBool("centerRegPoint", (member->_flags1 & BitmapCastMember::kFlagCenterRegPoint) || (member->_flags1 & BitmapCastMember::kFlagCenterRegPointD4));
 
@@ -763,10 +763,14 @@ void drawFilmLoopCMprops(FilmLoopCastMember *member) {
 		}
 
 		// Initialize current frame for this member if needed
+		CastMemberID memberID(member->getID(), member->getCast()->_castLibID);
 		auto &filmLoopFrames = _state->_castDetails._filmLoopCurrentFrame;
-		if (!filmLoopFrames.contains(member))
-			filmLoopFrames[member] = 0;
-		int &currentFrame = filmLoopFrames[member];
+		if (!filmLoopFrames.contains(memberID))
+			filmLoopFrames[memberID] = 0;
+		int &currentFrame = filmLoopFrames[memberID];
+		// The stored frame can be stale if the score cache changed size
+		if (currentFrame >= numFrames)
+			currentFrame = 0;
 
 		const float cellW = 30.0f;
 		const float cellH = 18.0f;
@@ -1074,6 +1078,8 @@ void drawCMTypeProps(CastMember *member) {
 }
 
 int columnSizeForThumbnail(const ImGuiImage& imgID, float imageDrawSize, float padding) {
+	if (imgID.width <= 0 || imgID.height <= 0)
+		return (int)(imageDrawSize + padding);
 	if (imgID.width > imgID.height) {
 		return imageDrawSize + padding;
 	} else {
@@ -1089,8 +1095,15 @@ void showCastDetails() {
 	ImGui::SetNextWindowSize(ImVec2(240, 480), ImGuiCond_FirstUseEver);
 
 	if (ImGui::Begin("Cast Details", &_state->_w.castDetails)) {
-		CastMember *member = _state->_castDetails._castMember;
-		assert(member != nullptr);
+		// resolve in the movie of the window the member was opened from
+		Window *sourceWindow = findWindowByName(_state->_castDetails._window);
+		Movie *movie = sourceWindow ? sourceWindow->getCurrentMovie() : g_director->getCurrentMovie();
+		CastMember *member = movie ? movie->getCastMember(_state->_castDetails._castMemberID) : nullptr;
+		if (!member) {
+			ImGui::TextDisabled("No cast member selected");
+			ImGui::End();
+			return;
+		}
 
 		CastType memberType = member->_type;
 
@@ -1112,9 +1125,9 @@ void showCastDetails() {
 			// Move to the right of the Bitmap
 			ImGui::TableSetColumnIndex(1);
 
-			// Show Name of member
-			ImGui::Text(getDisplayName(member).c_str());
-			ImGui::Text(castType2str(memberType));
+			// the name is game data and can contain '%'
+			ImGui::TextUnformatted(getDisplayName(member).c_str());
+			ImGui::TextUnformatted(castType2str(memberType));
 
 			ImGui::EndTable();
 		}
@@ -1131,9 +1144,9 @@ void showCastDetails() {
 
 			ImGui::EndTabBar();
 		}
-
-		ImGui::End();
 	}
+	// End() must be called regardless of what Begin() returned
+	ImGui::End();
 }
 
 } // namespace DT

@@ -32,6 +32,7 @@
 #include "director/movie.h"
 #include "director/score.h"
 #include "director/sprite.h"
+#include "director/castmember/movie.h"
 #include "director/types.h"
 #include "director/window.h"
 
@@ -134,7 +135,9 @@ void Movie::resolveScriptEvent(LingoEvent &event) {
 		else
 			spriteId = _score->getMouseSpriteIDFromPos(event.mousePos);
 
-		debugC(3, kDebugEvents, "Movie::resolveScriptEvent(%s): pos: [%d, %d], spriteId: %d", leventType2str(event.event), event.mousePos.x, event.mousePos.y, spriteId);
+		debugC(3, kDebugEvents, "Movie::resolveScriptEvent(%s): id: %d sourceType: %s, handlerType: %s, pos: [%d, %d], spriteId: %d",
+			leventType2str(event.event), event.eventId, scriptType2str(event.scriptType),
+			eventHandlerSourceType2str(event.eventHandlerSourceType), event.mousePos.x, event.mousePos.y, spriteId);
 
 		if (event.event == kEventMouseDown || event.event == kEventRightMouseDown) {
 			_lastClickedSpriteId = spriteId; // the clickOn
@@ -245,17 +248,23 @@ void Movie::resolveScriptEvent(LingoEvent &event) {
 	 * [D4 docs] */
 	case kSpriteHandler:
 		{
+			if (!event.channelId)
+				return;
+
 			CastMemberID scriptId;
 			bool immediate = false;
 			Common::String initializerParams;
-			// mouseUp events seem to check the frame script ID from the original mouseDown event
-			// In Director 5 and above, we always generate event for the actual sprite under the mouse
-			if (((event.event == kEventMouseUp) || (event.event == kEventRightMouseUp)) && _vm->getVersion() < 500) {
+			// Before D4, mouseUp goes to the mouseDown sprite; from D4 on it goes
+			// to the sprite under the mouse at release (see T_EVNT21 in D4-unit).
+			if (((event.event == kEventMouseUp) || (event.event == kEventRightMouseUp)) && _vm->getVersion() < 400) {
 				scriptId = _currentMouseDownSpriteScriptID;
 				immediate = _currentMouseDownSpriteImmediate;
 			} else {
-				if (!event.channelId)
-					return;
+				// clickOn must reflect the release sprite so drop-target scripts
+				// can identify the channel
+				if ((event.event == kEventMouseUp || event.event == kEventRightMouseUp) && event.channelId)
+					_lastClickedSpriteId = event.channelId;
+
 				Frame *currentFrame = _score->_currentFrame;
 				assert(currentFrame != nullptr);
 				Sprite *sprite = _score->getSpriteById(event.channelId);
@@ -441,12 +450,14 @@ void Movie::queueEvent(Common::Queue<LingoEvent> &queue, LEvent event, int targe
 	uint16 channelId = 0;
 	uint16 pointedSpriteId = 0;
 
-	// In D6+ there are multiple behavors per sprite, find the sprite
+	// In D6+ there are multiple behavors per sprite, find the sprite.
+	// prepareFrame is broadcast per channel, so for it targetId 0 means
+	// "no sprite" rather than "whatever is under the mouse".
 	if (g_director->getVersion() >= 600) {
-		if (targetId == 0) {
-			pointedSpriteId = _score->getMouseSpriteIDFromPos(pos);
-		} else {
+		if (targetId != 0) {
 			pointedSpriteId = targetId;
+		} else if (event != kEventPrepareFrame) {
+			pointedSpriteId = _score->getMouseSpriteIDFromPos(pos);
 		}
 	}
 
@@ -552,6 +563,7 @@ void Movie::queueEvent(Common::Queue<LingoEvent> &queue, LEvent event, int targe
 		case kEventKeyUp:
 		case kEventKeyDown:
 		case kEventTimeout:
+		case kEventMenuCallback:
 			break;
 
 		default:
@@ -607,7 +619,8 @@ void Movie::queueEvent(Common::Queue<LingoEvent> &queue, LEvent event, int targe
 						queue.push(LingoEvent(event, eventId, kSpriteHandler, passThrough, pos, pointedSpriteId, i));
 					}
 
-					if (event == kEventBeginSprite || event == kEventEndSprite || event == kEventMouseUpOutSide) {
+					if (event == kEventBeginSprite || event == kEventEndSprite || event == kEventMouseUpOutSide
+							|| event == kEventPrepareFrame) {
 						// These events do not go any further than the sprite behaviors
 						break;
 					}
@@ -660,16 +673,25 @@ void Movie::queueInputEvent(LEvent event, int targetId, Common::Point pos) {
 
 
 bool Movie::processInputEvent(LEvent event, int targetId, Common::Point pos) {
-	if (!_lingo->_state->callstack.empty()) {
+	// Route a mouse event on a movie cast member into its linked movie so that
+	// movie's own scripts (mouseUp, the clickOn) handle it.
+	if (event >= kEventMouseUp && event <= kEventMouseWithin) {
+		uint16 spriteId = _score->getMouseSpriteIDFromPos(pos);
+		if (spriteId) {
+			Channel *ch = _score->getChannelById(spriteId);
+			if (ch && ch->_sprite->_cast && ch->_sprite->_cast->_type == kCastMovie)
+				((MovieCastMember *)ch->_sprite->_cast)->routeInputEvent(event, pos, ch->getBbox());
+		}
+	}
+
+	queueInputEvent(event, targetId, pos);
+	if ((!_lingo->_state->callstack.empty()) || (_lingo->_currentInputEvent.type != VOIDSYM)) {
 		// We're in the middle of executing something else, queue input event for later
-		queueInputEvent(event, targetId, pos);
 		return true;
 	}
-	// Try and process event inline
-	Common::Queue<LingoEvent> queue;
-	queueEvent(queue, event, targetId, pos);
+	// Try and process input events now
 	_vm->setCurrentWindow(this->getWindow());
-	_lingo->processEvents(queue, true);
+	_lingo->processEvents(_inputEventQueue, true);
 	return _lingo->_passEvent;
 }
 
@@ -689,6 +711,11 @@ void Movie::broadcastEvent(LEvent event) {
 			queueEvent(queue, event, i);
 		}
 	}
+
+	// Each sprite is an independent recipient; the frame and movie scripts get
+	// the event exactly once, after every behavior.
+	queueEvent(queue, event, 0);
+
 	_vm->setCurrentWindow(this->getWindow());
 	_lingo->processEvents(queue, false);
 }
@@ -711,6 +738,12 @@ void Lingo::processEvents(Common::Queue<LingoEvent> &queue, bool isInputEvent) {
 
 		// fetch the sprite ID, script ID to call, etc if not present.
 		movie->resolveScriptEvent(el);
+
+		// if this is the first event in the handler chain,
+		// ignore _passEvent for the first time
+		if (el.eventHandlerSourceType == kPrimaryHandler) {
+			_passEvent = true;
+		}
 
 		if (el.scriptType == kNoneScript) {
 			debugC(9, kDebugEvents, "Lingo::processEvents: no matching script for event (%s, %s, %s, %d), continuing",

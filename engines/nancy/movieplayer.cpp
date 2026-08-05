@@ -24,18 +24,33 @@
 
 #include "video/bink_decoder.h"
 
+#include "engines/nancy/nancy.h"
 #include "engines/nancy/video.h"
+#include "engines/nancy/util.h"
 #include "engines/nancy/commontypes.h"
 
 #include "engines/nancy/movieplayer.h"
 
 namespace Nancy {
 
+// Fills the Bink frame cache forward in spare time (see MoviePlayer::_frameCache).
+class BinkCacheLoader : public DeferredLoader {
+public:
+	BinkCacheLoader(MoviePlayer &owner) : _owner(owner) {}
+
+private:
+	bool loadInner() override { return _owner.fillNextCacheFrame(); }
+
+	MoviePlayer &_owner;
+};
+
 MoviePlayer::MoviePlayer() {}
 
 MoviePlayer::~MoviePlayer() {}
 
 bool MoviePlayer::loadFile(const Common::Path &name, bool bidirectionalCache) {
+	freeFrameCache();
+
 	const Common::Path avfPath = name.append(".avf");
 	const Common::Path bikPath = name.append(".bik");
 
@@ -57,6 +72,16 @@ bool MoviePlayer::loadFile(const Common::Path &name, bool bidirectionalCache) {
 		_decoder.reset();
 		return false;
 	}
+
+	// The AVF decoder caches frames itself, so only the Bink path needs ours.
+	_useFrameCache = bidirectionalCache && _videoType == kVideoPlaytypeBink;
+	if (_useFrameCache) {
+		_frameCache.resize(_decoder->getFrameCount());
+		_cacheFillNext = 0;
+		_cacheLoader.reset(new BinkCacheLoader(*this));
+		g_nancy->addDeferredLoader(_cacheLoader);
+	}
+
 	return true;
 }
 
@@ -66,9 +91,44 @@ bool MoviePlayer::isVideoLoaded() const {
 
 void MoviePlayer::close() {
 	_currentSurface = nullptr;
+	freeFrameCache();
 	if (_decoder) {
 		_decoder->close();
 	}
+}
+
+void MoviePlayer::freeFrameCache() {
+	_cacheLoader.reset();
+	_cacheFillNext = 0;
+	for (Graphics::Surface &surf : _frameCache) {
+		surf.free();
+	}
+	_frameCache.clear();
+	_useFrameCache = false;
+}
+
+bool MoviePlayer::fillNextCacheFrame() {
+	// Skip frames already decoded by interactive scrubbing.
+	while (_cacheFillNext < _frameCache.size() && _frameCache[_cacheFillNext].getPixels()) {
+		++_cacheFillNext;
+	}
+
+	if (_cacheFillNext >= _frameCache.size()) {
+		return true;
+	}
+
+	// Decode forward; only seek to resync after interactive scrubbing moved us.
+	if (_decoder->getCurFrame() + 1 != (int)_cacheFillNext) {
+		_decoder->seekToFrame(_cacheFillNext);
+	}
+
+	const Graphics::Surface *frame = _decoder->decodeNextFrame();
+	if (frame) {
+		_frameCache[_cacheFillNext].copyFrom(*frame);
+	}
+	++_cacheFillNext;
+
+	return _cacheFillNext >= _frameCache.size();
 }
 
 void MoviePlayer::start()					{ if (_decoder) _decoder->start(); }
@@ -119,8 +179,26 @@ const Graphics::Surface *MoviePlayer::decodeNextFrame(int frameNr) {
 		return frame;
 	}
 
-	_decoder->seekToFrame(frameNr);
-	return _decoder->decodeNextFrame();
+	// Bink path.
+	if (_useFrameCache && (uint)frameNr < _frameCache.size() && _frameCache[frameNr].getPixels()) {
+		return &_frameCache[frameNr];
+	}
+
+	// seekToFrame() re-decodes from the previous keyframe, so only seek when the
+	// frame can't be reached by decoding forward one step.
+	if (_decoder->getCurFrame() + 1 != frameNr) {
+		_decoder->seekToFrame(frameNr);
+	}
+
+	const Graphics::Surface *frame = _decoder->decodeNextFrame();
+
+	// The decoder reuses one surface per frame, so cache a copy.
+	if (_useFrameCache && frame && (uint)frameNr < _frameCache.size()) {
+		_frameCache[frameNr].copyFrom(*frame);
+		return &_frameCache[frameNr];
+	}
+
+	return frame;
 }
 
 // --- Simple frame-range player ------------------------------------------

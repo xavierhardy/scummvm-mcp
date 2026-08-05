@@ -849,7 +849,7 @@ void Gui::drawInventories() {
 				SWAP(topLeft.y, bottomRight.y);
 			Common::Rect lassoRect(topLeft, bottomRight);
 
-			Graphics::MacPlotData plotData(srf, nullptr, &_wm.getBuiltinPatterns(), kPatternCheckers2, 0, 0, 1, kColorWhite, false);
+			Graphics::MacPlotData plotData(srf, nullptr, &_wm.getBuiltinPatterns(), kPatternCheckers2, 0, 0, {1, 1}, kColorWhite, false);
 			Graphics::Primitives &primitives = _wm.getDrawPrimitives();
 			primitives.drawRect(lassoRect, kColorBlack, &plotData);
 		}
@@ -1123,6 +1123,12 @@ void Gui::printText(const Common::String &text) {
 	_outConsoleWindow->setEditable(true);
 	_outConsoleWindow->appendText(text + '\n');
 	_outConsoleWindow->setEditable(false);
+	_outConsoleWindow->scrollToBottom();
+}
+
+void Gui::setWaitCursor(bool wait) {
+	_wm.replaceCursor(wait ? Graphics::kMacCursorWatch : Graphics::kMacCursorArrow);
+	g_system->updateScreen();
 }
 
 void Gui::showPrebuiltDialog(PrebuiltDialogs type, const Common::String &title) {

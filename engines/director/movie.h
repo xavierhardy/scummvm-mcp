@@ -105,7 +105,7 @@ public:
 	DirectorEngine *getVM() const { return _vm; }
 	Cast *getCast() const { return _casts.getValOrDefault(DEFAULT_CAST_LIB, nullptr); }
 	Cast *getCast(CastMemberID memberID);
-	Cast *getCastByLibResourceID(int libresourceID);
+	Cast *getCastByLibResourceID(uint32 libresourceID);
 	Cast *getSharedCast() const { return _sharedCast; }
 	const Common::HashMap<int, Cast *> *getCasts() const { return &_casts; }
 	Score *getScore() const { return _score; }
@@ -188,10 +188,6 @@ public:
 	int _nextEventId;
 	Common::Queue<LingoEvent> _inputEventQueue;
 
-	uint16 _key;
-	int _keyCode;
-	byte _keyFlags;
-
 	int _selStart;
 	int _selEnd;
 
@@ -216,6 +212,15 @@ public:
 	// This flag will be set when the user's interaction (mouse and key events like mouseUp, keyUp)
 	// shouldn't be recorded as movie event, which may cause undesirable change in the lingo script
 	bool _inGuiMessageBox = false;
+
+	// Set for a movie loaded inside a cast member. It shares the host's
+	// window but never owns the stage, so loadArchive() must not resize
+	// or recolour it.
+	bool _isEmbedded = false;
+
+	// For an embedded movie, the movie that hosts it. Its scripts share the
+	// host's handler scope, so getHandler() falls back to the parent.
+	Movie *_parentMovie = nullptr;
 
 private:
 	Window *_window;

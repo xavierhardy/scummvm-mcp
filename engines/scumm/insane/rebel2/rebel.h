@@ -137,6 +137,7 @@ public:
 	int16 _previewOffsetY;
 
 	void drawChapterInfoLine(byte *renderBitmap, int pitch, int width, int height);
+	void drawPilotInfoLines(byte *renderBitmap);
 	Common::String getRankString(int rating);
 	Common::String getChapterPassword(int level, int difficulty);
 
@@ -219,6 +220,13 @@ public:
 
 	void updatePilotProgress(int levelIndex, int32 score, int32 lives, int32 damage, int32 rating);
 
+	// Activates a pilot and derives its unlocked chapters, as the pilot menu does.
+	bool selectPilot(int index);
+
+	// Loading a pilot drops straight into the chapter selection.
+	Common::Error loadGameState(int slot, bool startupLoad = false);
+	bool _pilotLoadRequested;
+
 	enum LevelSelectResult {
 		kLevelSelectBack = 0,
 		kLevelSelectPlay = 1,
@@ -269,7 +277,9 @@ public:
 	Common::String getLevelPrefix(int levelId);
 
 	// Per-level handlers.
+	class Level1Handler;
 	int runLevel1();
+	class Level2Handler;
 	int runLevel2();
 	int runLevel3();
 	int runLevel4();
@@ -683,6 +693,9 @@ public:
 
 	int _rebelWaveState;
 	int _rebelPhaseState;
+	// Kills and misses banked across the phases of a level 2 style attempt.
+	int _totalKills;
+	int _totalMisses;
 
 	int _rebelAutopilot;
 	int _rebelDamageLevel;
@@ -809,6 +822,9 @@ public:
 
 	bool _shipFiring;
 	uint32 _prevMouseButtons;
+
+	// Rapid-fire cadence counter, re-anchored on each press.
+	int16 _rapidFireCounter;
 
 	int16 _shipDirectionIndex;
 	int16 _shipDirectionH;
