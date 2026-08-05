@@ -78,7 +78,7 @@ def _launch_args(
     save_path: str,
 ) -> list[str]:
     """Build the ScummVM command line for ``game_id``."""
-    if game_id in ("atlantis", "woodruff"):
+    if game_id in ("atlantis", "maniac", "woodruff"):
         # No save slot — these games start from scratch and handle their own intro.
         return [scummvm_binary, "-c", ini_path, game_id]
     return [
@@ -166,6 +166,7 @@ _GAME_PATH_ENV = {
     "monkey-ega-demo": "MONKEY_DEMO_PATH",
     "monkey-ega-demo-de": "MONKEY_DEMO_DE_PATH",
     "maniac-c64": "MANIAC_C64_PATH",
+    "maniac": "MANIAC_PATH",
     "zak": "ZAK_PATH",
     "pass": "PASS_DEMO_PATH",
     "monkey2": "MONKEY2_PATH",

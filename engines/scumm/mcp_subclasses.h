@@ -48,6 +48,9 @@ protected:
 	                                    Common::String &errorOut, bool &handled) override;
 	void augmentStateSchema(Common::JSONObject &outputProps) override;
 	void augmentState(Common::JSONObject &out) override;
+	void augmentChangesSchema(Common::JSONObject &props) override;
+	void augmentStateChanges(Common::JSONObject &changes) const override;
+	bool pumpStreamGameEarly() override;
 	void pumpStreamGame() override;
 	void resetGameStream() override;
 	bool gameStreamBusy() const override;
@@ -70,6 +73,68 @@ private:
 	Common::Array<int> _ssePendingDialObjs;
 	int _sseDialVerbId = 0;
 	uint32 _sseLastDialFedFrame = 0;
+
+	// --- Title screen: kid selection (choose_kids) -------------------------
+	// The title screen is a row of kid portraits plus a START button, all plain
+	// room objects with no names: the only thing that tells one portrait from
+	// another is the "<Name> - <blurb>" line the game prints when it is clicked.
+	// So choose_kids sweeps the row, reads each portrait's line, keeps the kids
+	// the caller asked for and clicks the rest away again — no per-release table
+	// of object ids or screen positions, and nothing that assumes a portrait
+	// order. A clicked portrait carries its own selected flag
+	// (kObjectStateIntrinsic), which is what tells a kept kid from a refused one.
+
+	// A clickable title-screen object and the room-pixel point to click it at.
+	struct KidPortrait {
+		int obj;
+		int x, y;
+	};
+
+	enum KidPhase {
+		kKidIdle = 0,      // no selection in progress
+		kKidClearSelected, // unselect whatever an earlier attempt left selected
+		kKidAwaitClear,    // wait out one such click
+		kKidClickPortrait, // click the next portrait in the sweep
+		kKidAwaitPortrait, // wait for its "<Name> - ..." line, then keep or drop it
+		kKidAwaitDeselect, // wait out the click that unselects an unwanted kid
+		kKidClickStart,    // press START
+		kKidAwaitStart,    // wait for the game to leave the title screen
+		kKidSkipIntro      // escape through the intro until the player has control
+	};
+
+	// Kids that can join the leader (Dave), i.e. the team minus its leader.
+	static const int kKidSideKicks = 2;
+
+	// True (and fills the outputs) when the title screen's kid selection is up:
+	// the largest row of identically sized objects is the portrait strip and the
+	// odd object out is START.
+	bool collectKidSelectScreen(Common::Array<KidPortrait> &portraits,
+	                            KidPortrait &startButton) const;
+	// Click a title-screen object the way a player would (V0-V2 recompute
+	// VAR_VIRT_MOUSE_* from _virtualMouse, so this only sets the mouse itself).
+	void clickKidScreenObject(const KidPortrait &target);
+	// Name at the head of the first "<Name> - <blurb>" line captured since
+	// *fromIndex*, normalized. False when no such line has arrived yet.
+	bool kidNameFromMessages(uint fromIndex, Common::String &nameOut) const;
+	// Abandon the sweep and fail the streaming call.
+	void failKidSelection(const Common::String &reason);
+	bool toolChooseKids(const Common::JSONValue &args, Common::String &errorOut);
+
+	KidPhase _kidPhase = kKidIdle;
+	Common::Array<KidPortrait> _kidPortraits;
+	KidPortrait _kidStartButton = {0, 0, 0};
+	Common::Array<Common::String> _kidWanted;  // asked for, not identified yet
+	Common::Array<Common::String> _kidNamesSeen;   // every portrait name read
+	Common::Array<Common::String> _kidChosen;      // the team, in click order
+	uint _kidProbeIndex = 0;    // portrait the sweep is at
+	uint _kidClearIndex = 0;    // portrait the pre-sweep clean-up is at
+	int _kidSelected = 0;       // portraits we have switched on
+	uint _kidMsgMark = 0;       // _sseMessages size when the click went out
+	uint32 _kidPhaseFrame = 0;  // frame the current phase started
+	int _kidSelectRoom = 0;     // the title screen's room
+	bool _kidSkipIntro = true;
+	int _kidEscapes = 0;             // escapes sent at the intro
+	uint32 _kidLastEscapeFrame = 0;  // frame the last one went out
 };
 
 // --- V3–V5: classic verb-bar SCUMM -----------------------------------------

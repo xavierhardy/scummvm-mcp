@@ -78,6 +78,7 @@ _FIXTURE_INDEX = {
     "zak": 24,
     "tentacle": 25,
     "monkey2": 26,
+    "maniac_full": 27,
 }
 
 
@@ -298,6 +299,16 @@ def atlantis_client() -> Iterator[McpClient]:
     for client in _client("atlantis", "atlantis"):
         client.set_talk_speed(255)
         yield client
+
+
+@pytest.fixture(scope="session")
+def maniac_full_client() -> Iterator[McpClient]:
+    """Maniac Mansion, the full game (V1/DOS).
+
+    Started fresh at the title screen, where the three heroes are still to be
+    picked, so there is nothing to load: the tests run as one ordered sequence
+    on a single instance (like the atlantis/ft demos)."""
+    yield from _client("maniac", "maniac_full")
 
 
 @pytest.fixture(scope="session")

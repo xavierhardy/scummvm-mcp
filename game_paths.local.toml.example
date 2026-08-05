@@ -22,6 +22,7 @@
 monkey-ega-demo = "~/games/monkey1-dos-ega-demo-en"       # MONKEY_DEMO_PATH
 monkey-ega-demo-de = "~/games/monkey1-dos-ega-demo-de"    # MONKEY_DEMO_DE_PATH
 maniac-c64 = "~/games/maniac-c64-demo-en"                 # MANIAC_C64_PATH
+maniac = "~/games/maniac-dos-en"                          # MANIAC_PATH (full game)
 zak = "~/games/zak"                                       # ZAK_PATH
 pass = "~/games/pass-dos-en"                              # PASS_DEMO_PATH
 monkey2 = "~/games/monkeyisland2"                         # MONKEY2_PATH

@@ -26,7 +26,7 @@ SSE on `127.0.0.1:23456` by default). It exposes the game as tools:
   the action plays out, then return a structured result (room/inventory/message
   changes).
 - Game-specific helpers: `play_note`, `shoot_cannon`, `ride_bike`,
-  `switch_character`, `dial`.
+  `choose_kids`, `switch_character`, `dial`.
 - **Debug tools** (only when `mcp_debug=true`): `debug` (read engine vars),
   `save_state`, `set_talk_speed`, `keystroke`, `mouse_move`, `mouse_click`,
   `screenshot`.
@@ -78,9 +78,10 @@ per game cycle, and pump-transport-only from any place the main loop stalls
   `mcp_bridge_text.o` are linked once for whichever is enabled.
 - **Python integration tests** — `test/mcp/`. Launch a real headless ScummVM
   per game and drive the MCP server over HTTP, asserting on game state. ~13
-  SCUMM games (V0–V8) — mostly demos, plus three full games covered by
+  SCUMM games (V0–V8) — mostly demos, plus four full games covered by
   compatibility smoke tests only (Zak McKracken `test_zak.py`, Monkey Island 2
-  `test_monkey2.py`, Day of the Tentacle `test_tentacle.py`) — plus
+  `test_monkey2.py`, Day of the Tentacle `test_tentacle.py`, and Maniac Mansion
+  `test_maniac_full.py`, which starts fresh at the title screen) — plus
   Broken Sword 1 (`test_sword1.py`, engine `sword1`),
   Beneath a Steel Sky (`test_sky.py`, engine `sky`), Flight of the Amazon
   Queen (`test_queen.py`, engine `queen`) and Woodruff

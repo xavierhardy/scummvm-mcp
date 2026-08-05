@@ -17,6 +17,7 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | Game | Engine | `game_id` | Test files | Path env var |
 |------|:------:|-----------|------------|--------------|
 | Maniac Mansion (C64 demo) | V0 | `maniac-c64` | `test_maniac_c64.py`, `test_maniac_phone.py` | `MANIAC_C64_PATH` |
+| Maniac Mansion (full game) | V1 | `maniac` | `test_maniac_full.py` | `MANIAC_PATH` |
 | Zak McKracken and the Alien Mindbenders | V2 | `zak` | `test_zak.py` | `ZAK_PATH` |
 | Indiana Jones 3 (Passport demo) | V3 | `pass` | `test_indy3.py`, `test_indy3_travel.py` | `PASS_DEMO_PATH` |
 | Loom (Passport demo) | V3 | `pass` | `test_loom.py`, `test_loom_leaf.py` | `PASS_DEMO_PATH` |

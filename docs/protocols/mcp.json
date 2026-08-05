@@ -17,7 +17,7 @@
       "description": "Connect to ScummVM's built-in MCP server. Enable by setting mcp=true in scummvm.ini. Use mcp_port to override the default port (23456)."
     }
   },
-  "notes": "The MCP server uses Streamable HTTP (MCP spec 2025-03-26). Sync tools (state) return immediately; streaming tools (act, answer, walk, skip, and the game-specific tools) open an SSE channel and emit notifications as dialog plays out, then return a structured result when the action completes. The exact tool set is engine- and game-dependent: query tools/list at runtime. Beyond the core tools, some games expose extra tools (see gameTools: play_note for Loom, shoot_cannon for COMI, ride_bike for Full Throttle, switch_character and dial for Maniac Mansion), and a set of diagnostic debugTools is registered only when mcp_debug=true.",
+  "notes": "The MCP server uses Streamable HTTP (MCP spec 2025-03-26). Sync tools (state) return immediately; streaming tools (act, answer, walk, skip, and the game-specific tools) open an SSE channel and emit notifications as dialog plays out, then return a structured result when the action completes. The exact tool set is engine- and game-dependent: query tools/list at runtime. Beyond the core tools, some games expose extra tools (see gameTools: play_note for Loom, shoot_cannon for COMI, ride_bike for Full Throttle, choose_kids, switch_character and dial for Maniac Mansion), and a set of diagnostic debugTools is registered only when mcp_debug=true.",
   "networkExamples": {
     "scummvm_ini": "[monkey1]\nmcp=true\n",
     "scummvm_ini_custom_port": "[monkey1]\nmcp=true\nmcp_port=23456\n",
@@ -658,6 +658,35 @@
         }
       },
       {
+        "name": "choose_kids",
+        "type": "streaming",
+        "games": "Maniac Mansion (title screen)",
+        "description": "Pick the three heroes on the title screen and start the game. Dave always leads the rescue, so name the two kids who join him (naming Dave as the third is accepted); the cast is dave, syd, michael, wendy, bernard, razor and jeff. Each portrait is clicked in turn and identified by the line the game prints for it, so the order the portraits are in does not matter, then START is pressed. Only valid while state reports kid_selection_pending. Blocks until the game has begun (by default escaping through the intro until the player has control) and returns state changes, with the team in 'kids'.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "kids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The three heroes, by name: the two kids joining Dave, or all three with Dave named as well."
+            },
+            "skip_intro": {
+              "type": "boolean",
+              "description": "Escape through the opening cutscene so the call returns with the player already in control (default true)."
+            }
+          },
+          "required": [
+            "kids"
+          ],
+          "additionalProperties": false
+        },
+        "outputSchema": {
+          "$ref": "#/definitions/stateChanges"
+        }
+      },
+      {
         "name": "switch_character",
         "type": "streaming",
         "games": "Maniac Mansion",
@@ -948,7 +977,7 @@
       "verbs": "Per-game verb bar (or a fixed fallback set for single-cursor games), reported in state.verbs. V3-V5 label their slots with text; V6+ moved to image verbs, except Day of the Tentacle, which kept the text bar (its 'Look at' label is rewritten from the game font's ligature glyph to plain text, and 'walk to' is exposed even though DOTT dropped its button).",
       "objects": "state.objects carries id, name, state/state_name, compatible_verbs, pathway.",
       "lookAt": "In V0-V2 (Maniac Mansion, Zak McKracken) the bar's 'What is' verb only names an object — the interpreter never runs a sentence for it — so read descriptions from state.objects rather than from act(verb='what is').",
-      "extraTools": "Game-specific: play_note, shoot_cannon, ride_bike, switch_character, dial. Debug adds set_talk_speed."
+      "extraTools": "Game-specific: play_note, shoot_cannon, ride_bike, choose_kids, switch_character, dial. Debug adds set_talk_speed."
     },
     "sword-family": {
       "scope": "Broken Sword 1 (sword1). The contract is written to extend to Broken Sword 2 (sword2) unchanged; only the engine adapter differs.",

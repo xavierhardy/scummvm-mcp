@@ -268,6 +268,30 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="Walk")
 
+    def choose_kids(self, kids: list[str], skip_intro: bool = True) -> dict[str, Any]:
+        """Pick the three heroes on the Maniac Mansion title screen (streaming).
+
+        Only valid while state()['kid_selection_pending'] is set. Name the two
+        kids joining Dave (naming Dave as the third is accepted); the call
+        presses START and, unless skip_intro is False, escapes through the intro
+        so it returns with the player in control. The team comes back in
+        result['kids'].
+        """
+        arguments: dict[str, Any] = {"kids": kids}
+        if not skip_intro:
+            arguments["skip_intro"] = False
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "choose_kids", "arguments": arguments},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
+            return self._decode_stream_response(resp=resp, tool="ChooseKids")
+
     def switch_character(self, name: str) -> dict[str, Any]:
         """Switch the controlled kid in Maniac Mansion (streaming call).
 
