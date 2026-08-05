@@ -440,8 +440,17 @@ void GobMcpBridge::pumpNameSweep() {
 		return;
 	}
 
-	// Give the hover scripts a few frames to draw the name.
-	if (_frameCounter - _sweepMoveFrame < 4)
+	// Give the hover scripts a few frames to draw the name. A hotspot that has
+	// painted nothing by then waits out a longer grace window first: what gets
+	// cached below is final ("this one has no name"), so a label that merely
+	// arrived late leaves a perfectly nameable hotspot stuck as hotspot_<id> for
+	// the rest of the room. Hotspots that do paint promptly are unaffected.
+	const uint32 kSweepDwellFrames = 4;
+	const uint32 kSweepGraceFrames = 16;
+	uint32 dwelledFrames = _frameCounter - _sweepMoveFrame;
+	if (dwelledFrames < kSweepDwellFrames)
+		return;
+	if (_sweepCaptured.empty() && dwelledFrames < kSweepGraceFrames)
 		return;
 
 	_nameCache[nameKeyFor(_sweepSpots[_sweepIndex])] = _sweepCaptured;
