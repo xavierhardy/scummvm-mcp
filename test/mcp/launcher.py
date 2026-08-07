@@ -27,6 +27,23 @@ def _logs_dir() -> str:
     return logs_dir
 
 
+def _log_tag(game_id: str, port: int) -> str:
+    """The stem shared by one launch's log files.
+
+    The port alone is not unique: it is allocated per (worker, fixture), so
+    every function-scoped test using a fixture reuses it and each launch used
+    to truncate the previous test's logs. By the time a failure was read, the
+    log named in its output belonged to whichever test ran last — which is
+    exactly the evidence a flaky failure needs. Appending the test name keeps
+    one file per launch and makes it self-identifying.
+    """
+    # "test/mcp/test_tentacle.py::test_open_clock (setup)" -> "test_open_clock"
+    current = os.environ.get("PYTEST_CURRENT_TEST", "")
+    name = current.split("::")[-1].split(" ")[0] if current else ""
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    return f"scummvm_{game_id}_{port}" + (f"_{safe}" if safe else "")
+
+
 def _write_ini(game_id: str, game_path: str, port: int, scummvm_log: str) -> str:
     """Render the per-game ini template into a fresh temp dir, return its path."""
     ini_template = os.path.join(
@@ -96,8 +113,9 @@ def _open_log_handles(game_id: str, port: int, args: list[str], ini_path: str):
     """Write a header to the stdout log and return ``(stdout_fh, stderr_fh,
     log_file, stderr_file)`` append handles for the launched process."""
     logs_dir = _logs_dir()
-    log_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.log")
-    stderr_file = os.path.join(logs_dir, f"scummvm_{game_id}_{port}.stderr")
+    tag = _log_tag(game_id, port)
+    log_file = os.path.join(logs_dir, f"{tag}.log")
+    stderr_file = os.path.join(logs_dir, f"{tag}.stderr")
     with open(log_file, "w") as logf:
         logf.write(f"Command: {' '.join(args)}\n")
         logf.write("Environment: SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy\n")
@@ -123,7 +141,7 @@ def launch_scummvm(
     polluting the committed save files. Pass ``isolate_saves=False`` (e.g. from
     ``launch_manual.py``) when you want ``save_state`` to write back into the
     repository's ``save_slots/<game_id>`` directory."""
-    scummvm_log = os.path.join(_logs_dir(), f"scummvm_{game_id}_{port}.scummvm.log")
+    scummvm_log = os.path.join(_logs_dir(), f"{_log_tag(game_id, port)}.scummvm.log")
     ini_path = _write_ini(game_id, game_path, port, scummvm_log)
     save_path = _resolve_save_path(game_id, ini_path, isolate_saves)
     args = _launch_args(game_id, scummvm_binary, ini_path, save_slot, save_path)
