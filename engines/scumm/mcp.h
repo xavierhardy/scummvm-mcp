@@ -471,6 +471,22 @@ protected:
 	// advertise it either.
 	bool verbHasAnyEntrypoint(int verbId) const;
 
+	// --- "What is" (V0-V2) --------------------------------------------------
+	// Maniac Mansion and Zak answer their look verb ("What is") in the sentence
+	// line rather than by running a script: ScummEngine_v0::verbExec() returns
+	// early on kVerbWhatIs, and in V1/V2 the sentence script has no case for it,
+	// so dispatching it walks ego over and prints the default refusal. The name
+	// *is* the answer, so act() reports it instead of running a sentence.
+	bool lookAtAnswersWithName() const;
+	// The verb bar's own label for *verbId* ("What is"), or empty.
+	Common::String verbBarLabel(int verbId) const;
+	// Answer act(look at, obj) the way the sentence line does, as a message.
+	bool beginNameAnswerStream(int verbId, int obj);
+	// Open a stream with no action attached: snapshot, reset the per-stream
+	// bookkeeping and mark the bridge streaming, leaving the caller to set the
+	// action going (or not) before it calls startStreaming().
+	void beginBareStream();
+
 	// --- Coordinate space --------------------------------------------------
 	// V0-V2 keep actor and object coordinates in a compressed grid (x in units
 	// of 8 pixels, y in units of 2 — see V12_X_MULTIPLIER / V12_Y_MULTIPLIER),

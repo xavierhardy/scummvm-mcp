@@ -14,7 +14,7 @@ is running with the chosen team on screen and the selection is gone.
 
 import pytest
 
-from utils import McpClient, object_names
+from utils import McpClient, joined_message_text, object_names
 
 pytestmark = [pytest.mark.xdist_group("maniac_full")]
 
@@ -95,3 +95,23 @@ def test_06_maniac_full_pathway_leads_to_the_porch(
     assert result.get("room_changed") == 1, f"did not reach the porch: {result}"
     names = object_names(maniac_full_client.state())
     assert "front_door" in names, f"not on the porch: {sorted(names)}"
+
+
+def test_07_maniac_full_what_is_names_the_object(
+    maniac_full_client: McpClient,
+) -> None:
+    """'What is' works here even though no object in the game scripts it.
+
+    V0-V2 answer the verb in the sentence line rather than by running a
+    sentence, so act() reports the name — and state advertises the verb because
+    it always has an answer to give.
+    """
+    state = maniac_full_client.state()
+    assert "what is" in state["verbs"], f"'what is' is not on the verb bar: {state}"
+    door = next(o for o in state["objects"] if o["name"] == "front_door")
+    assert "what is" in door["compatible_verbs"], f"not offered on the door: {door}"
+
+    result = maniac_full_client.act("what is", "front_door")
+    assert "front door" in joined_message_text(result).lower(), (
+        f"'what is' did not name the door: {result}"
+    )

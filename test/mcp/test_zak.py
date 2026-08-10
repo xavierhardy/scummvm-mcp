@@ -6,9 +6,9 @@ walkthrough: every test starts from the committed slot-1 save (Zak's bedroom,
 room 1, right after the intro) and checks that the shared V0-V2 bridge exposes
 the verb bar, the room objects and the classic verb dispatch correctly.
 
-Note: in V0-V2 SCUMM "What is" only names an object (the engine never runs a
-sentence for it), so object descriptions come from state.objects, not from
-act(verb="what is").
+Note: in V0-V2 SCUMM "What is" only names an object — the engine never runs a
+sentence for it, it just writes the name into the sentence line — so
+act(verb="what is") answers with that name rather than with a description.
 """
 
 from time import sleep
@@ -25,6 +25,7 @@ from utils import (
     McpClient,
     bind_verb,
     find_id,
+    joined_message_text,
     make_verbs,
     message_texts,
     object_by_id,
@@ -123,6 +124,24 @@ def test_zak_pick_up_plastic_card(zak_client: McpClient) -> None:
     result = pick_up("plastic_card")
     assert_message_contains(result, "desk")
     assert_has_position(result)
+
+
+def test_zak_what_is_names_the_object(zak_client: McpClient) -> None:
+    """'What is' answers with the object's name, the way the sentence line does.
+
+    The verb runs no script in V0-V2, so dispatching it as a sentence would walk
+    Zak across the room only to be told "That doesn't seem to work".
+    """
+    state = zak_client.state()
+    assert "what is" in state["verbs"], f"'what is' is not on the verb bar: {state}"
+    bed = object_by_id(state, find_id(state, "bed"))
+    assert "what is" in bed["compatible_verbs"], f"not offered on the bed: {bed}"
+
+    result = zak_client.act("what is", "bed")
+    assert_message_contains(result, "bed")
+    assert "doesn't seem to work" not in joined_message_text(result), (
+        f"'what is' was dispatched as a sentence: {result}"
+    )
 
 
 def test_zak_walk_moves_ego(zak_client: McpClient) -> None:

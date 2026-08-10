@@ -892,13 +892,14 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// Find the actual verb bar labels and check if verbs exist. look_at is
 			// only offered as a fallback when *something* in the scene scripts it:
 			// act() resolves a verb through the same entrypoint test, so a verb no
-			// object responds to (Maniac Mansion's "What is", which the engine
-			// answers in the sentence line without running a script) would be
-			// advertised and then refused.
+			// object responds to would be advertised and then refused. The
+			// exception is the V0-V2 "What is", which act() answers from the
+			// object's name (lookAtAnswersWithName) and so always works.
 			Common::String lookAtLabel, walkToLabel;
 			bool lookAtExists = false, walkToExists = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
-				if (activeVerbs[k].name == "look_at" && verbHasAnyEntrypoint(activeVerbs[k].verbId)) {
+				if (activeVerbs[k].name == "look_at" &&
+				    (lookAtAnswersWithName() || verbHasAnyEntrypoint(activeVerbs[k].verbId))) {
 					lookAtLabel = activeVerbs[k].label; lookAtExists = true;
 				}
 				if (activeVerbs[k].name == "walk_to") { walkToLabel = activeVerbs[k].label; walkToExists = true; }
@@ -1303,6 +1304,14 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 
 	debug(1, "mcp: act verb='%s' verbId=%d targetA=%d targetB=%d",
 	      verbStr.c_str(), verbId, targetA, targetB);
+
+	// "What is" (V0-V2): the engine answers it in the sentence line and runs no
+	// sentence at all, so return the name the game would print there. Running it
+	// as a sentence instead walks ego across the room to be told "That doesn't
+	// seem to work", which is not the game's answer to the question.
+	if (targetA != 0 && targetB == 0 && lookAtAnswersWithName() &&
+	    normalizeActionName(verbStr) == "look_at")
+		return beginNameAnswerStream(verbId, targetA);
 
 	// Full Throttle "interact" (generic single-action button): the verb-coin
 	// sentinel (-1) with a single target resolves to whichever verb-coin action
@@ -2074,10 +2083,7 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	return true;
 }
 
-bool ScummMcpBridge::beginWalkStream(int gx, int gy, int dir) {
-	Actor *ego = getEgoActor();
-	if (!ego)
-		return false;
+void ScummMcpBridge::beginBareStream() {
 	snapshotPreAction();
 	_streaming = true;
 	_sseStartFrame = _frameCounter;
@@ -2090,6 +2096,13 @@ bool ScummMcpBridge::beginWalkStream(int gx, int gy, int dir) {
 	_ssePendingNotes.clear();
 	_sseTargetObject = 0;
 	_sseButtonClearFrame = 0;
+}
+
+bool ScummMcpBridge::beginWalkStream(int gx, int gy, int dir) {
+	Actor *ego = getEgoActor();
+	if (!ego)
+		return false;
+	beginBareStream();
 	ego->startWalkActor(gx, gy, dir);
 	_server->startStreaming();
 	return true;
@@ -3952,6 +3965,53 @@ bool ScummMcpBridge::verbOnBar(const Common::String &normalized) const {
 	return false;
 }
 
+Common::String ScummMcpBridge::verbBarLabel(int verbId) const {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (vs.verbid != verbId || vs.saveid != 0) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256] = {};
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		Common::String label = safeUtf8(Common::String((const char *)textBuf));
+		if (!label.empty())
+			return label;
+	}
+	return "";
+}
+
+bool ScummMcpBridge::lookAtAnswersWithName() const {
+	// Maniac Mansion (V0/V1/V2) and Zak (V1/V2). From V3 on ("Look at") the verb
+	// runs a real script that describes the object.
+	return _vm->_game.version <= 2;
+}
+
+bool ScummMcpBridge::beginNameAnswerStream(int verbId, int obj) {
+	Common::String name = cleanGameText(safeUtf8(objName(obj)));
+	if (name.empty()) {
+		// Nameless scenery (an exit hotspot, say): answer with the name state
+		// gave it, which is the name the caller asked about.
+		Common::Array<NamedEntity> entities;
+		buildEntityMap(entities);
+		for (uint i = 0; i < entities.size(); ++i) {
+			if (entities[i].kind == NamedEntity::kObject && entities[i].numId == obj) {
+				name = entities[i].displayName;
+				break;
+			}
+		}
+	}
+	if (name.empty())
+		name = Common::String::format("object %d", obj);
+	Common::String label = verbBarLabel(verbId);
+	if (label.empty())
+		label = "What is";
+	beginBareStream();
+	// The sentence line is what the game shows for this verb; say the same.
+	pushMessage("system", -1, label + " " + name);
+	_server->startStreaming();
+	return true;
+}
+
 bool ScummMcpBridge::verbHasAnyEntrypoint(int verbId) const {
 	for (int oi = 1; _vm->_objs && oi < _vm->_numLocalObjects; ++oi) {
 		if (!_vm->_objs[oi].obj_nr) continue;
@@ -3989,8 +4049,11 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		// For talk_to, accept the verb bar match even without entrypoints; dialog
 		// may not use the verb entrypoint system. Same for walk_to: walking is
 		// what the engine does by default, so it needs no object script (in the
-		// early SCUMM games no object scripts it at all).
-		if (normalized == "talk_to" || normalized == "walk_to") {
+		// early SCUMM games no object scripts it at all). "What is" (V0-V2) is
+		// answered by the engine itself, in the sentence line, so it too has no
+		// object script to look for.
+		if (normalized == "talk_to" || normalized == "walk_to" ||
+		    (normalized == "look_at" && lookAtAnswersWithName())) {
 			verbId = vs.verbid;
 			debug(1, "mcp: resolveVerb found verbid=%d via label match (%s)",
 			      verbId, normalized.c_str());
