@@ -11,13 +11,39 @@ sentence for it), so object descriptions come from state.objects, not from
 act(verb="what is").
 """
 
+from time import sleep
+
+import pytest
+
 from assertions import (
     assert_has_position,
     assert_inventory_contains,
     assert_message_contains,
     assert_room,
 )
-from utils import McpClient, bind_verb, find_id, object_by_id
+from utils import (
+    McpClient,
+    bind_verb,
+    find_id,
+    make_verbs,
+    message_texts,
+    object_by_id,
+)
+
+# Rooms reached by the tests below: the phone's keypad close-up, and the living
+# room next door (slot 2, parked there with the TV playing).
+DIAL_PAD_ROOM = 52
+LIVING_ROOM = 2
+
+
+def _wait_for_room(client: McpClient, room_id: int, tries: int = 20) -> bool:
+    """Poll until the client is in *room_id*; return True if it got there."""
+    for _ in range(tries):
+        if client.state()["room"]["id"] == room_id:
+            return True
+        sleep(0.5)
+    return False
+
 
 # The bedroom's verb bar. "Open" is verb id 1 in early SCUMM (a real bar verb,
 # not the reserved sentence verb it is from V3 on), so it must be listed.
@@ -107,3 +133,47 @@ def test_zak_walk_moves_ego(zak_client: McpClient) -> None:
     assert_has_position(result)
     end = zak_client.state()["position"]
     assert end != start, f"walk did not move Zak (still at {end})"
+
+
+def test_zak_dial_requires_the_dial_pad(zak_client: McpClient) -> None:
+    """dial() is rejected until the phone's keypad close-up is on screen."""
+    with pytest.raises(RuntimeError, match="no dial pad"):
+        zak_client.dial("555")
+
+
+def test_zak_use_phone_then_dial(zak_client: McpClient) -> None:
+    """Using the bedroom phone opens the keypad, which dial() then presses.
+
+    Zak's pad is a 3x4 grid of unnamed buttons (only the '6' carries a name),
+    so the digits echoed back also check that the grid was mapped correctly.
+    """
+    use = bind_verb(zak_client, "use")
+    use("telephone")
+    assert _wait_for_room(zak_client, DIAL_PAD_ROOM), "the dial pad never appeared"
+
+    result = zak_client.dial("536")
+    assert message_texts(result) == ["5", "3", "6"], f"unexpected keypad echo: {result}"
+
+
+def test_zak_tv_chatter_does_not_stall_actions(zak_tv_client: McpClient) -> None:
+    """The living-room TV talks forever; actions must still finish.
+
+    Slot 2 is parked in the living room with the TV playing. Its lines used to
+    keep every action's settle window open until the stream failed as "action
+    timed out"; now they are captured in the background and the action ends.
+    """
+    assert_room(zak_tv_client.state(), LIVING_ROOM)
+    chatter: list = []
+    for _ in range(20):
+        chatter += message_texts(zak_tv_client.state())
+        if chatter:
+            break
+        sleep(1.0)
+    assert chatter, "the TV is not playing in this save — the test proves nothing"
+
+    open_, close = make_verbs(zak_tv_client, "open", "close")
+    # Each of these raises RuntimeError("action timed out") if the TV holds the
+    # stream open, so completing at all is the assertion.
+    assert_has_position(open_("refrigerator"))
+    close("refrigerator")
+    assert_has_position(zak_tv_client.act("walk to", "stove"))

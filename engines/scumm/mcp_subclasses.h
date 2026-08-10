@@ -35,6 +35,32 @@ protected:
 	// from the base class's id-1 skip; this extends the same treatment to the
 	// V1/V2 ports, where "Open" would otherwise be missing from state.verbs.)
 	bool includeBarVerbId1() const override { return true; }
+
+	// Both early-SCUMM games have a phone with a keypad close-up, so `dial`
+	// lives here rather than on the Maniac leaf.
+	void registerGameTools() override;
+	Common::JSONValue *dispatchGameTool(const Common::String &name,
+	                                    const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override;
+	void pumpStreamGame() override;
+	void resetGameStream() override;
+	bool gameStreamBusy() const override;
+
+	// True while the dial pad this bridge can drive is on screen.
+	bool dialPadOnScreen() const;
+	bool toolDial(const Common::JSONValue &args, Common::String &errorOut);
+	// Map each keypad key ("123456789*0#" order) to its button object for the
+	// pad currently on screen. False when no pad is recognisable.
+	bool collectDialPad(int objForKey[12]) const;
+	// The verb the keypad buttons script (the one the game raises when the
+	// player clicks a button); falls back to the bar's "push".
+	int dialPadPressVerb(const int objForKey[12]) const;
+
+	// Phone dial pad: queued button object ids to press one at a time, the verb
+	// id used to press them, and the frame of the last press.
+	Common::Array<int> _ssePendingDialObjs;
+	int _sseDialVerbId = 0;
+	uint32 _sseLastDialFedFrame = 0;
 };
 
 class McpBridgeManiac : public McpBridgeV0 {
@@ -51,7 +77,6 @@ protected:
 	void augmentChangesSchema(Common::JSONObject &props) override;
 	void augmentStateChanges(Common::JSONObject &changes) const override;
 	bool pumpStreamGameEarly() override;
-	void pumpStreamGame() override;
 	void resetGameStream() override;
 	bool gameStreamBusy() const override;
 
@@ -66,13 +91,6 @@ private:
 	};
 	void collectManiacKids(Common::Array<ManiacKid> &out) const;
 	bool toolSwitchCharacter(const Common::JSONValue &args, Common::String &errorOut);
-	bool toolDial(const Common::JSONValue &args, Common::String &errorOut);
-
-	// Phone dial pad: queued button object ids to press one at a time, the verb
-	// id used to press them, and the frame of the last press.
-	Common::Array<int> _ssePendingDialObjs;
-	int _sseDialVerbId = 0;
-	uint32 _sseLastDialFedFrame = 0;
 
 	// --- Title screen: kid selection (choose_kids) -------------------------
 	// The title screen is a row of kid portraits plus a START button, all plain

@@ -48,7 +48,9 @@ demos, so their coverage is deliberately shallow — compatibility smoke tests
 (verb bar, objects, a few verb dispatches, dialog for MI2) run from a committed
 slot-1 save captured right after each intro. MI2's floppy copy protection is
 bypassed by that save: the potion-mixer screen only needs to be cleared once,
-which is what capturing the slot did.
+which is what capturing the slot did. Zak also carries a slot-2 save parked in
+the living room with the TV playing — the scene whose endless background lines
+used to hold every action's stream open until it timed out.
 
 > **These tests share one Python project with `scummvm_bench`.** There is no
 > longer a `test/mcp/pyproject.toml` or venv — the single project lives at

@@ -79,6 +79,7 @@ _FIXTURE_INDEX = {
     "tentacle": 25,
     "monkey2": 26,
     "maniac_full": 27,
+    "zak_tv": 28,
 }
 
 
@@ -266,6 +267,16 @@ def queen_client() -> Iterator[McpClient]:
 def zak_client() -> Iterator[McpClient]:
     """Zak McKracken (V2, slot 1: Zak's bedroom, room 1, right after the intro)."""
     yield from _client("zak", "zak", save_slot=1, checkpoint=True)
+
+
+@pytest.fixture
+def zak_tv_client() -> Iterator[McpClient]:
+    """Zak McKracken (V2, slot 2: the living room with the TV playing).
+
+    The TV prints a line every few seconds with the player in full control —
+    the scene that used to hold every action's stream open until it timed out.
+    """
+    yield from _client("zak", "zak_tv", save_slot=2, checkpoint=True)
 
 
 @pytest.fixture

@@ -56,6 +56,7 @@ McpBridge::McpBridge(Engine *engine, const Common::String &serverName,
 	  _sseDoneAtFrame(0),
 	  _sseStuckAtFrame(0),
 	  _sseLastEventFrame(0),
+	  _sseWorkDoneFrame(0),
 	  _ssePreRoom(0),
 	  _ssePrePosX(0),
 	  _ssePrePosY(0),
@@ -688,7 +689,12 @@ Common::JSONValue *McpBridge::toolSaveState(const Common::JSONValue &args, Commo
 // Streaming
 // ---------------------------------------------------------------------------
 
+void McpBridge::noteStreamStart() {
+	_sseWorkDoneFrame = 0;
+}
+
 void McpBridge::beginStream() {
+	noteStreamStart();
 	snapshotPreAction();
 	_streaming = true;
 	_sseStartFrame = _frameCounter;
@@ -804,10 +810,17 @@ void McpBridge::pumpStream() {
 
 	// If a new message arrived after we first thought we were done, the action
 	// script was still running — reset the window to wait for it to finish.
+	// Not once the post-action speech allowance is spent, though: a room that
+	// talks to itself (Zak's living-room TV) would otherwise extend the window
+	// until the stream fails as timed out.
 	if (_sseLastEventFrame > _sseDoneAtFrame) {
-		debug(1, "mcp: new event at frame %d after done at %d, extending window",
-		      _sseLastEventFrame, _sseDoneAtFrame);
-		_sseDoneAtFrame = _sseLastEventFrame;
+		if (postActionSpeechExpired()) {
+			debug(1, "mcp: ignoring ambient chatter at frame %d", _sseLastEventFrame);
+		} else {
+			debug(1, "mcp: new event at frame %d after done at %d, extending window",
+			      _sseLastEventFrame, _sseDoneAtFrame);
+			_sseDoneAtFrame = _sseLastEventFrame;
+		}
 	}
 
 	if (shouldCloseStream()) {

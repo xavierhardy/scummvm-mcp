@@ -2564,6 +2564,15 @@ void ScummMcpBridge::injectMouseClick(int x, int y, const Common::String &button
 // MCP::McpBridge::pumpStream(); these overrides carry the SCUMM specifics.
 
 void ScummMcpBridge::pumpStreamTrack() {
+	// Anchor for the post-action speech allowance: the first frame on which the
+	// action's own work was over, speech aside (see actionWorkDone).
+	if (actionWorkDone()) {
+		if (_sseWorkDoneFrame == 0)
+			_sseWorkDoneFrame = _frameCounter;
+	} else {
+		_sseWorkDoneFrame = 0;
+	}
+
 	// Track whether ego moved at any point during this stream.
 	{
 		Actor *ego = getEgoActor();
@@ -2914,6 +2923,9 @@ bool ScummMcpBridge::shouldCloseStream() const {
 // ---------------------------------------------------------------------------
 
 void ScummMcpBridge::snapshotPreAction() {
+	// The SCUMM tools open-code the stream setup rather than going through
+	// beginStream(), so the shared per-stream bookkeeping hangs off here.
+	noteStreamStart();
 	_sseAllowLongCutscene = false;
 	_sseDigDeselectDone = false;
 	resetGameStream();
@@ -3160,7 +3172,11 @@ Actor *ScummMcpBridge::getEgoActor() const {
 	return _vm->derefActor(egoNum, "getEgoActor");
 }
 
-bool ScummMcpBridge::isActionDone() const {
+// Everything isActionDone() weighs *except* speech: the action's own work —
+// walking, the sentence script, the game-specific click machines — is over and
+// the engine has handed control back. Anchors the post-action speech allowance,
+// so a room that talks to itself cannot make an action look unfinished forever.
+bool ScummMcpBridge::actionWorkDone() const {
 	if (_frameCounter - _sseStartFrame < 3) return false;
 	if (_ssePendingSecondClick || !_ssePendingNotes.empty()) return false;
 	if (gameStreamBusy()) return false;
@@ -3171,7 +3187,6 @@ bool ScummMcpBridge::isActionDone() const {
 	// Ego movement check with timeout only for V0 (Maniac Mansion):
 	// V0 doesn't lock _userPut, so we need a timeout to prevent indefinite waits.
 	// V5+ games handle movement more predictably and don't need this timeout.
-	if (_vm->_talkDelay > 0) return false;
 	if (_vm->_userPut <= 0) return false;
 	if (_vm->_game.version == 0) {
 		// V0 (Maniac Mansion): actors use _moving==2 for "arrived", not 0. The
@@ -3196,6 +3211,27 @@ bool ScummMcpBridge::isActionDone() const {
 		}
 	}
 	return true;
+}
+
+bool ScummMcpBridge::isActionDone() const {
+	if (!actionWorkDone())
+		return false;
+	// Speech means the action is still playing out — unless the room simply
+	// talks to itself (Zak's living-room TV prints a line every few seconds
+	// forever, with the player in full control). Once the work has been done
+	// for longer than the speech allowance, stop waiting on speech: those lines
+	// keep being captured and reach the client through the next state call.
+	if (_vm->_talkDelay > 0 && !postActionSpeechExpired())
+		return false;
+	return true;
+}
+
+// Pre-V7 games are the ones that can leave a permanent talker running with the
+// player in control. V7/V8 anchor their timeout per event instead (see
+// streamTimeoutAnchor) and their conversations are the action, so they keep
+// waiting on speech for as long as it takes.
+uint32 ScummMcpBridge::postActionSpeechFrames() const {
+	return (_vm->_game.version < 7) ? 90 : 0;
 }
 
 bool ScummMcpBridge::hasPendingQuestion() const {

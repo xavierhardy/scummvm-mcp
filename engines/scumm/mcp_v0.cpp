@@ -26,7 +26,68 @@ using Networking::mcpObjectSchema;
 // McpBridgeManiac — Maniac Mansion (kid selection, kid switching, dial pad)
 // ---------------------------------------------------------------------------
 
+void McpBridgeV0::registerGameTools() {
+	// --- dial (phone keypad) ---
+	// Maniac Mansion and Zak McKracken both answer a phone by opening a keypad
+	// close-up, so the tool is registered for the whole early-SCUMM family.
+	Common::JSONObject props;
+	props.setVal("number", mcpProp("string",
+	    "The number to dial, as a string of keypad keys: digits 0-9 plus "
+	    "'*' and '#' (e.g. '1234')."));
+	const char *req[] = {"number"};
+	Networking::McpServer::ToolSpec spec;
+	spec.name = "dial";
+	spec.description =
+	    "Dial a number on the phone dial pad. Only valid while the dial pad is "
+	    "on screen (use the phone first via act(verb='use', target1='phone')). "
+	    "Presses the keypad buttons one at a time, blocks until the sequence "
+	    "(and any resulting call) settles, then returns state changes.";
+	spec.inputSchema  = mcpObjectSchema(props, req, 1);
+	spec.outputSchema = buildChangesSchema();
+	spec.streaming    = true;
+	_server->registerTool(spec);
+}
+
+Common::JSONValue *McpBridgeV0::dispatchGameTool(const Common::String &name,
+                                                 const Common::JSONValue &args,
+                                                 Common::String &errorOut, bool &handled) {
+	if (name == "dial") {
+		handled = true;
+		toolDial(args, errorOut);
+		return nullptr; // streaming
+	}
+	return ScummMcpBridge::dispatchGameTool(name, args, errorOut, handled);
+}
+
+void McpBridgeV0::pumpStreamGame() {
+	// Phone dial pad: press the queued keypad buttons one at a time. Wait for the
+	// previous press's sentence to dispatch (the keypad scripts run without
+	// walking) and leave a few frames between presses so each button script
+	// finishes before the next begins.
+	const uint32 kDialSpacingFrames = 12;
+	if (!_ssePendingDialObjs.empty() && _vm->_sentenceNum == 0 &&
+	    (_sseLastDialFedFrame == 0
+	     || _frameCounter - _sseLastDialFedFrame >= kDialSpacingFrames)) {
+		int obj = _ssePendingDialObjs[0];
+		_ssePendingDialObjs.remove_at(0);
+		_sseLastDialFedFrame = _frameCounter;
+		_sseLastEventFrame = _frameCounter;
+		vmDoSentence(_sseDialVerbId, obj, 0);
+	}
+}
+
+void McpBridgeV0::resetGameStream() {
+	_ssePendingDialObjs.clear();
+	_sseLastDialFedFrame = 0;
+}
+
+bool McpBridgeV0::gameStreamBusy() const {
+	return !_ssePendingDialObjs.empty();
+}
+
 void McpBridgeManiac::registerGameTools() {
+	McpBridgeV0::registerGameTools();
+
 	// --- switch_character ---
 	// V0 (C64/Apple II) maps F1-F3 to switchActor(slot)/VAR(97+slot); the V1/V2
 	// ports use the in-game "New Kid" verb but share the same ego/kid vars, so
@@ -45,27 +106,6 @@ void McpBridgeManiac::registerGameTools() {
 		    "in a cutscene and not while kid switching is disabled). Blocks until "
 		    "the switch settles, then returns state changes — room_changed/position "
 		    "reflect the newly controlled kid.";
-		spec.inputSchema  = mcpObjectSchema(props, req, 1);
-		spec.outputSchema = buildChangesSchema();
-		spec.streaming    = true;
-		_server->registerTool(spec);
-	}
-
-	// --- dial (phone keypad) ---
-	{
-		Common::JSONObject props;
-		props.setVal("number", mcpProp("string",
-		    "The number to dial, as a string of keypad keys: digits 0-9 plus "
-		    "'*' and '#' (e.g. '1234')."));
-		const char *req[] = {"number"};
-		Networking::McpServer::ToolSpec spec;
-		spec.name = "dial";
-		spec.description =
-		    "Dial a number on the phone dial pad in Maniac Mansion. Only valid "
-		    "while the dial pad is on screen (use the phone first via "
-		    "act(verb='use', target1='phone')). Presses the keypad buttons one "
-		    "at a time, blocks until the sequence (and any resulting call) "
-		    "settles, then returns state changes.";
 		spec.inputSchema  = mcpObjectSchema(props, req, 1);
 		spec.outputSchema = buildChangesSchema();
 		spec.streaming    = true;
@@ -119,11 +159,6 @@ Common::JSONValue *McpBridgeManiac::dispatchGameTool(const Common::String &name,
 		toolSwitchCharacter(args, errorOut);
 		return nullptr; // streaming
 	}
-	if (name == "dial") {
-		handled = true;
-		toolDial(args, errorOut);
-		return nullptr; // streaming
-	}
 	return McpBridgeV0::dispatchGameTool(name, args, errorOut, handled);
 }
 
@@ -175,23 +210,6 @@ void McpBridgeManiac::augmentState(Common::JSONObject &out) {
 	out.setVal("available_characters", new Common::JSONValue(charArr));
 }
 
-void McpBridgeManiac::pumpStreamGame() {
-	// Phone dial pad: press the queued keypad buttons one at a time. Wait for the
-	// previous press's sentence to dispatch (the keypad scripts run without
-	// walking) and leave a few frames between presses so each button script
-	// finishes before the next begins.
-	const uint32 kDialSpacingFrames = 12;
-	if (!_ssePendingDialObjs.empty() && _vm->_sentenceNum == 0 &&
-	    (_sseLastDialFedFrame == 0
-	     || _frameCounter - _sseLastDialFedFrame >= kDialSpacingFrames)) {
-		int obj = _ssePendingDialObjs[0];
-		_ssePendingDialObjs.remove_at(0);
-		_sseLastDialFedFrame = _frameCounter;
-		_sseLastEventFrame = _frameCounter;
-		vmDoSentence(_sseDialVerbId, obj, 0);
-	}
-}
-
 void McpBridgeManiac::augmentStateChanges(Common::JSONObject &changes) const {
 	if (_kidChosen.empty())
 		return;
@@ -202,8 +220,7 @@ void McpBridgeManiac::augmentStateChanges(Common::JSONObject &changes) const {
 }
 
 void McpBridgeManiac::resetGameStream() {
-	_ssePendingDialObjs.clear();
-	_sseLastDialFedFrame = 0;
+	McpBridgeV0::resetGameStream();
 	_kidPhase = kKidIdle;
 	_kidPortraits.clear();
 	_kidWanted.clear();
@@ -218,7 +235,7 @@ void McpBridgeManiac::resetGameStream() {
 }
 
 bool McpBridgeManiac::gameStreamBusy() const {
-	return !_ssePendingDialObjs.empty() || _kidPhase != kKidIdle;
+	return McpBridgeV0::gameStreamBusy() || _kidPhase != kKidIdle;
 }
 
 // ---------------------------------------------------------------------------
@@ -696,7 +713,131 @@ bool McpBridgeManiac::toolSwitchCharacter(const Common::JSONValue &args, Common:
 	return true;
 }
 
-bool McpBridgeManiac::toolDial(const Common::JSONValue &args, Common::String &errorOut) {
+// ---------------------------------------------------------------------------
+// dial — the phone keypad close-up (Maniac Mansion, Zak McKracken)
+// ---------------------------------------------------------------------------
+// Using a phone opens a close-up room whose content is 12 identically sized
+// button objects on a regular grid. The buttons are unnamed (both games ship
+// exactly one object literally called "6"), so the key -> object map comes
+// from the geometry: 3 columns x 4 rows is the classic phone layout, 4 columns
+// x 3 rows the wide one Zak's pad uses. Any button that *is* named has to
+// agree with the layout, which is what tells the live pad from the spare set
+// of buttons a room may also carry.
+
+// Keys in row-major order for each recognised pad shape.
+static const char kDialPad3x4[] = "123456789*0#";
+static const char kDialPad4x3[] = "1234567890*#";
+
+static int dialKeyIndex(const char *layout, char c) {
+	for (int k = 0; k < 12; ++k)
+		if (layout[k] == c) return k;
+	return -1;
+}
+
+bool McpBridgeV0::collectDialPad(int objForKey[12]) const {
+	for (int k = 0; k < 12; ++k)
+		objForKey[k] = 0;
+	if (!_vm->_objs)
+		return false;
+
+	struct Button { int obj; int x; int y; int w; int h; };
+	Common::Array<Button> buttons;
+	for (int i = 1; i < vmNumLocalObjects(); ++i) {
+		const ObjectData &od = _vm->_objs[i];
+		if (!od.obj_nr || od.width <= 0 || od.height <= 0) continue;
+		int x = vmGetObjX(od.obj_nr);
+		int y = vmGetObjY(od.obj_nr);
+		// Objects the room has not placed sit at the origin: a room can carry a
+		// second, unplaced set of buttons (Zak's pad ships both a 3x4 and a 4x3
+		// variant), and only the placed one is on screen.
+		if (x == 0 && y == 0) continue;
+		// Buttons drawn in two states (idle/pressed) occupy the same cell; keep
+		// one object per position.
+		bool duplicate = false;
+		for (uint b = 0; b < buttons.size(); ++b)
+			if (buttons[b].x == x && buttons[b].y == y) { duplicate = true; break; }
+		if (duplicate) continue;
+		Button btn;
+		btn.obj = od.obj_nr;
+		btn.x = x; btn.y = y;
+		btn.w = od.width; btn.h = od.height;
+		buttons.push_back(btn);
+	}
+
+	// Try each distinct button size in turn: the pad is the group of exactly 12.
+	for (uint i = 0; i < buttons.size(); ++i) {
+		Common::Array<Button> group;
+		for (uint j = 0; j < buttons.size(); ++j)
+			if (buttons[j].w == buttons[i].w && buttons[j].h == buttons[i].h)
+				group.push_back(buttons[j]);
+		if (group.size() != 12)
+			continue;
+
+		// Row-major sort (top-to-bottom, left-to-right).
+		for (uint a = 0; a + 1 < group.size(); ++a)
+			for (uint b = 0; b + 1 < group.size() - a; ++b)
+				if (group[b].y > group[b + 1].y ||
+				    (group[b].y == group[b + 1].y && group[b].x > group[b + 1].x)) {
+					Button t = group[b]; group[b] = group[b + 1]; group[b + 1] = t;
+				}
+
+		// Columns per row decide which layout this is.
+		int columns = 0;
+		for (uint b = 0; b < group.size(); ++b)
+			if (group[b].y == group[0].y) columns++;
+		const char *layout = (columns == 3) ? kDialPad3x4
+		                   : (columns == 4) ? kDialPad4x3
+		                                    : nullptr;
+		if (!layout)
+			continue;
+
+		// A named button must land on its own key, or this is not the pad.
+		bool consistent = true;
+		for (uint b = 0; b < group.size() && consistent; ++b) {
+			Common::String nm = objName(group[b].obj);
+			nm.trim();
+			if (nm.size() != 1) continue;
+			consistent = (layout[b] == nm[0]);
+		}
+		if (!consistent)
+			continue;
+
+		for (int k = 0; k < 12; ++k)
+			objForKey[dialKeyIndex(kDialPad3x4, layout[k])] = group[(uint)k].obj;
+		return true;
+	}
+	return false;
+}
+
+int McpBridgeV0::dialPadPressVerb(const int objForKey[12]) const {
+	// The button scripts hang off whichever verb the game raises for a keypad
+	// click: Maniac forces "push", Zak wires them to a verb the bar labels
+	// differently. Take the verb every button scripts, and only fall back to
+	// the bar's "push" when that is ambiguous.
+	int candidate = 0;
+	for (int verbId = 1; verbId <= 15; ++verbId) {
+		bool all = true;
+		for (int k = 0; k < 12 && all; ++k)
+			all = objForKey[k] && vmGetVerbEntrypoint(objForKey[k], verbId) != 0;
+		if (!all)
+			continue;
+		if (candidate)
+			return 0;   // more than one: let the caller resolve "push" instead
+		candidate = verbId;
+	}
+	return candidate;
+}
+
+bool McpBridgeV0::dialPadOnScreen() const {
+	// V0 tracks the dial pad (and other selection screens) through _currentMode.
+	// V1/V2 have no mode byte; there, recognising the pad is the gate.
+	if (_vm->_game.version == 0)
+		return v0InKeypadMode();
+	int objForKey[12];
+	return collectDialPad(objForKey);
+}
+
+bool McpBridgeV0::toolDial(const Common::JSONValue &args, Common::String &errorOut) {
 	if (_streaming) {
 		errorOut = "dial: another action is already in progress";
 		return false;
@@ -723,93 +864,35 @@ bool McpBridgeManiac::toolDial(const Common::JSONValue &args, Common::String &er
 			return false;
 		}
 	}
-	// V0 tracks the dial pad (and other selection screens) via _currentMode.
-	// V1/V2 have no mode byte; for them the button-map scan below is the gate.
-	if (_vm->_game.version == 0 && !v0InKeypadMode()) {
+	if (!dialPadOnScreen()) {
 		errorOut = "dial: no dial pad on screen — use the phone first (act verb='use' target1='phone')";
 		return false;
 	}
 
-	// Build the key -> button-object map for the current room.
-	// Strategy 1: buttons named after their key ("1".."9", "0", "*", "#").
-	// Strategy 2: the C64 demo's buttons are unnamed — but the pad is exactly
-	// 12 equal-sized button objects in the standard 3x4 phone grid, so sort
-	// them row-major and assign the layout by position. (Object 427 carries
-	// the name "6" in the demo and lands on '6' this way, confirming the
-	// mapping.)
-	static const char kDialPadLayout[] = "123456789*0#";
-	struct DialButton { int obj; int x; int y; };
-	Common::Array<DialButton> grid;
-	int gridObjForKey[12] = {};
-	int nameObjForKey[12] = {};
-	auto layoutIndex = [](char c) -> int {
-		for (int k = 0; k < 12; ++k)
-			if (kDialPadLayout[k] == c) return k;
-		return -1;
-	};
-	{
-		// Dominant button size among the room objects.
-		int bestW = 0, bestH = 0, bestCount = 0;
-		for (int i = 1; _vm->_objs && i < vmNumLocalObjects(); ++i) {
-			const ObjectData &od = _vm->_objs[i];
-			if (!od.obj_nr || od.width <= 0 || od.height <= 0) continue;
-			int cnt = 0;
-			for (int j = 1; j < vmNumLocalObjects(); ++j) {
-				const ObjectData &o2 = _vm->_objs[j];
-				if (o2.obj_nr && o2.width == od.width && o2.height == od.height) ++cnt;
-			}
-			if (cnt > bestCount) { bestCount = cnt; bestW = od.width; bestH = od.height; }
-		}
-		for (int i = 1; _vm->_objs && i < vmNumLocalObjects(); ++i) {
-			const ObjectData &od = _vm->_objs[i];
-			if (!od.obj_nr) continue;
-			// Named buttons map directly regardless of geometry.
-			Common::String nm = objName(od.obj_nr);
-			nm.trim();
-			if (nm.size() == 1) {
-				int k = layoutIndex(nm[0]);
-				if (k >= 0 && !nameObjForKey[k]) nameObjForKey[k] = od.obj_nr;
-			}
-			if (od.width == bestW && od.height == bestH) {
-				DialButton b;
-				b.obj = od.obj_nr;
-				b.x = od.x_pos;
-				b.y = od.y_pos;
-				grid.push_back(b);
-			}
-		}
-		if (grid.size() == 12) {
-			// Row-major sort (top-to-bottom, left-to-right).
-			for (uint i = 0; i + 1 < grid.size(); ++i)
-				for (uint j = 0; j + 1 < grid.size() - i; ++j)
-					if (grid[j].y > grid[j + 1].y ||
-					    (grid[j].y == grid[j + 1].y && grid[j].x > grid[j + 1].x)) {
-						DialButton t = grid[j]; grid[j] = grid[j + 1]; grid[j + 1] = t;
-					}
-			for (int k = 0; k < 12; ++k)
-				gridObjForKey[k] = grid[(uint)k].obj;
-		}
+	int objForKey[12];
+	if (!collectDialPad(objForKey)) {
+		errorOut = "dial: could not find the keypad buttons on screen";
+		return false;
 	}
 
 	Common::Array<int> presses;
 	for (uint i = 0; i < number.size(); ++i) {
-		int k = layoutIndex(number[i]);
-		int obj = nameObjForKey[k] ? nameObjForKey[k] : gridObjForKey[k];
+		int obj = objForKey[dialKeyIndex(kDialPad3x4, number[i])];
 		if (!obj) {
 			errorOut = Common::String::format(
-			    "dial: could not locate the '%c' button — is the dial pad on screen?", number[i]);
+			    "dial: this keypad has no '%c' button", number[i]);
 			return false;
 		}
 		presses.push_back(obj);
 	}
 
-	// The keypad buttons respond to the push verb: V0's input handler forces
-	// _activeVerb = kVerbPush while in keypad mode; for V1/V2 resolve the verb
-	// from the verb bar like act() does.
-	int pushVerb = kVerbPush;
-	if (_vm->_game.version != 0 && !resolveVerb("push", pushVerb)) {
-		errorOut = "dial: could not resolve the 'push' verb";
-		return false;
+	int pressVerb = dialPadPressVerb(objForKey);
+	if (!pressVerb) {
+		pressVerb = kVerbPush;
+		if (_vm->_game.version != 0 && !resolveVerb("push", pressVerb)) {
+			errorOut = "dial: could not work out which verb presses a keypad button";
+			return false;
+		}
 	}
 
 	snapshotPreAction();
@@ -828,7 +911,7 @@ bool McpBridgeManiac::toolDial(const Common::JSONValue &args, Common::String &er
 	// Queue after snapshotPreAction (which clears the dial queue); pumpStream
 	// feeds one press per spacing window starting next frame.
 	_ssePendingDialObjs = presses;
-	_sseDialVerbId = pushVerb;
+	_sseDialVerbId = pressVerb;
 	_sseLastDialFedFrame = 0;
 	_server->startStreaming();
 	return true;

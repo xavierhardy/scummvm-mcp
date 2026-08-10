@@ -195,9 +195,26 @@ protected:
 	// The frame the timeout is measured from. By default the stream start, so
 	// background chatter cannot hold a stream open forever.
 	virtual uint32 streamTimeoutAnchor() const { return _sseStartFrame; }
+	// How long speech may go on holding a stream open once the action itself has
+	// finished (see _sseWorkDoneFrame). A room can talk to itself forever —
+	// Zak's living-room TV prints a line every few seconds with the player in
+	// full control — and without a bound every action there runs until it times
+	// out. Lines that arrive after the allowance are not lost: they are captured
+	// like any other and surface in the next state call. 0 disables the bound.
+	virtual uint32 postActionSpeechFrames() const { return 0; }
 	// Final say on closing a settled stream. The default closes on a pending
 	// question or once settleFrames() have elapsed since the engine went idle.
 	virtual bool shouldCloseStream() const;
+
+	// True once the action has been finished for longer than the post-action
+	// speech allowance. From then on speech neither counts as the action still
+	// running nor extends the settle window, so a room that talks to itself
+	// cannot hold every action open until it times out.
+	bool postActionSpeechExpired() const {
+		uint32 limit = postActionSpeechFrames();
+		return limit != 0 && _sseWorkDoneFrame != 0 &&
+		       (_frameCounter - _sseWorkDoneFrame) > limit;
+	}
 
 	// --- Input injection (per engine) ---------------------------------------
 	// The debug tools own their schema and argument parsing here; the effect on
@@ -226,6 +243,10 @@ protected:
 	// Arm a stream: snapshot, reset the per-stream counters, open the SSE
 	// channel. Call after the action has been dispatched to the engine.
 	void beginStream();
+	// Per-stream bookkeeping that must happen before the action runs: call it
+	// from beginStream() or, for bridges that open-code the stream setup, from
+	// their snapshotPreAction().
+	void noteStreamStart();
 	// Close the active stream with the diff built by buildStateChanges().
 	void closeStreamSuccess();
 	// Close the active stream as a failure (JSON-RPC -32000).
@@ -259,6 +280,11 @@ protected:
 	uint32 _sseDoneAtFrame;
 	uint32 _sseStuckAtFrame;
 	uint32 _sseLastEventFrame;  // frame of the most recent event seen during the stream
+	// First frame on which everything the action itself had to do was finished
+	// (ego idle, sentence dispatched, input restored) — speech aside. Maintained
+	// by the engine bridge's pumpStreamTrack(); 0 while the action is still
+	// running. Anchors the post-action speech allowance.
+	uint32 _sseWorkDoneFrame;
 	Common::Array<MessageEntry> _sseMessages;
 	int _ssePreRoom;
 	int _ssePrePosX, _ssePrePosY;

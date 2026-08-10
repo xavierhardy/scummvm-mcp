@@ -433,6 +433,9 @@ protected:
 	Actor *getEgoActor() const;
 	bool hasPendingQuestion() const override;
 	bool isActionDone() const override;
+	// isActionDone() minus the speech test: the action's own work is finished.
+	bool actionWorkDone() const;
+	uint32 postActionSpeechFrames() const override;
 
 	void buildEntityMap(Common::Array<NamedEntity> &entities) const;
 	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
