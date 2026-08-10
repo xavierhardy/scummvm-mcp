@@ -151,6 +151,7 @@ protected:
 	void applyLoomVerbs(Common::JSONArray &verbsArr, Common::Array<VerbInfo> &activeVerbs,
 	                    bool questionPending);
 	void addIndy3FightHud(Common::JSONObject &out) const;
+	static void addIndy3FightSchema(Common::JSONObject &outputProps);
 	void registerPlayNoteTool();
 	Common::JSONValue *dispatchPlayNote(const Common::String &name, const Common::JSONValue &args,
 	                                    Common::String &errorOut, bool &handled);
@@ -186,6 +187,10 @@ public:
 protected:
 	bool isInIndy3Fight() const override { return indy3FightActive(); }
 	void augmentState(Common::JSONObject &out) override { addIndy3FightHud(out); }
+	void augmentStateSchema(Common::JSONObject &outputProps) override {
+		McpBridgeClassic::augmentStateSchema(outputProps);
+		addIndy3FightSchema(outputProps);
+	}
 };
 
 class McpBridgeIndy4 : public McpBridgeClassic {
@@ -253,6 +258,10 @@ protected:
 		applyLoomVerbs(verbsArr, activeVerbs, questionPending);
 	}
 	void augmentState(Common::JSONObject &out) override { addIndy3FightHud(out); }
+	void augmentStateSchema(Common::JSONObject &outputProps) override {
+		McpBridgeClassic::augmentStateSchema(outputProps);
+		addIndy3FightSchema(outputProps);
+	}
 };
 
 // --- V6: image-verb SCUMM (Sam & Max) --------------------------------------
@@ -367,6 +376,7 @@ protected:
 	void augmentStateObjects(Common::JSONArray &objects) override;
 	void augmentDebug(Common::JSONObject &out) override;
 	void augmentStateChanges(Common::JSONObject &changes) const override;
+	void augmentChangesSchema(Common::JSONObject &props) override;
 	bool dispatchGameAct(int verbId, int targetA, int targetB) override;
 	bool dispatchGameAnswer(const Common::Rect &slotRect, int verbid) override;
 	bool resolveGameVerb(const Common::String &normalized, int &verbId) const override;

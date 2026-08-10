@@ -156,6 +156,13 @@ void McpBridgeComi::augmentStateChanges(Common::JSONObject &changes) const {
 	changes.setVal("boats_remaining", mcpJsonInt((int)boatCenters.size()));
 }
 
+void McpBridgeComi::augmentChangesSchema(Common::JSONObject &props) {
+	McpBridgeV8::augmentChangesSchema(props);
+	props.setVal("boats_remaining", mcpProp("integer",
+	    "Cannon minigame: war-canoes still afloat after the action resolved "
+	    "(only while the minigame is running)."));
+}
+
 bool McpBridgeComi::dispatchGameAct(int verbId, int targetA, int targetB) {
 	if (verbId == 7 && targetA != 0 && targetB != 0) {
 		// CMI "use A on B": the engine's sentence dispatcher uses verb id 5

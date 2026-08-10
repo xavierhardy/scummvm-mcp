@@ -772,8 +772,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 	Actor *ego = getEgoActor();
 	if (ego) {
 		Common::JSONObject pos;
-		pos.setVal("x", mcpJsonInt(ego->getRealPos().x));
-		pos.setVal("y", mcpJsonInt(ego->getRealPos().y));
+		pos.setVal("x", mcpJsonInt(toRoomPixelX(ego->getRealPos().x)));
+		pos.setVal("y", mcpJsonInt(toRoomPixelY(ego->getRealPos().y)));
 		out.setVal("position", new Common::JSONValue(pos));
 	}
 
@@ -879,11 +879,18 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// `act` by name or id (toolAct uses a wider V0 ceiling).
 			if (_vm->_numGlobalObjects > 0 && ne.numId >= _vm->_numGlobalObjects) break;
 
-			// Find the actual verb bar labels and check if verbs exist
+			// Find the actual verb bar labels and check if verbs exist. look_at is
+			// only offered as a fallback when *something* in the scene scripts it:
+			// act() resolves a verb through the same entrypoint test, so a verb no
+			// object responds to (Maniac Mansion's "What is", which the engine
+			// answers in the sentence line without running a script) would be
+			// advertised and then refused.
 			Common::String lookAtLabel, walkToLabel;
 			bool lookAtExists = false, walkToExists = false;
 			for (uint k = 0; k < activeVerbs.size(); ++k) {
-				if (activeVerbs[k].name == "look_at") { lookAtLabel = activeVerbs[k].label; lookAtExists = true; }
+				if (activeVerbs[k].name == "look_at" && verbHasAnyEntrypoint(activeVerbs[k].verbId)) {
+					lookAtLabel = activeVerbs[k].label; lookAtExists = true;
+				}
 				if (activeVerbs[k].name == "walk_to") { walkToLabel = activeVerbs[k].label; walkToExists = true; }
 			}
 
@@ -962,8 +969,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			obj.setVal("id",               mcpJsonInt(ne.numId));
 			obj.setVal("name",             mcpJsonString(safe));
 			obj.setVal("state",            mcpJsonInt(_vm->getState(ne.numId)));
-			obj.setVal("x",                mcpJsonInt(_vm->getObjX(ne.numId)));
-			obj.setVal("y",                mcpJsonInt(_vm->getObjY(ne.numId)));
+			obj.setVal("x",                mcpJsonInt(toRoomPixelX(_vm->getObjX(ne.numId))));
+			obj.setVal("y",                mcpJsonInt(toRoomPixelY(_vm->getObjY(ne.numId))));
 			obj.setVal("pathway",          mcpJsonBool(isPathway));
 			Common::String stateName = objectStateName(ne.numId, _vm->getState(ne.numId), isPathway);
 			if (!stateName.empty())
@@ -1004,8 +1011,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			actorObj.setVal("id",               mcpJsonInt(actorObjId));
 			actorObj.setVal("name",             mcpJsonString(safe));
 			actorObj.setVal("state",            mcpJsonInt(_vm->getState(actorObjId)));
-			actorObj.setVal("x",                mcpJsonInt(_vm->getObjX(actorObjId)));
-			actorObj.setVal("y",                mcpJsonInt(_vm->getObjY(actorObjId)));
+			actorObj.setVal("x",                mcpJsonInt(toRoomPixelX(_vm->getObjX(actorObjId))));
+			actorObj.setVal("y",                mcpJsonInt(toRoomPixelY(_vm->getObjY(actorObjId))));
 			actorObj.setVal("pathway",          mcpJsonBool(false));
 			actorObj.setVal("compatible_verbs", new Common::JSONValue(compatVerbs));
 			objects.push_back(new Common::JSONValue(actorObj));
@@ -1210,7 +1217,14 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 
 	int verbId = -1;
 	if (!resolveVerb(verbStr, verbId)) {
-		errorOut = "act: unknown verb '" + verbStr + "'";
+		// Distinguish "no such verb" from "the verb is on the bar, but nothing
+		// in this room scripts it" — an agent echoing back state.verbs deserves
+		// to be told which of the two it hit.
+		if (verbOnBar(normalizeActionName(verbStr)))
+			errorOut = "act: verb '" + verbStr +
+			           "' is on the verb bar but nothing in this room responds to it";
+		else
+			errorOut = "act: unknown verb '" + verbStr + "'";
 		return false;
 	}
 
@@ -1352,9 +1366,29 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 	// when the default sentence handling code accesses object 386. Skip execution if no handler.
 	if (_vm->_game.id == GID_MANIAC && targetA != 0) {
 		int ep = _vm->getVerbEntrypoint(targetA, verbId);
+		// "Walk to" is the one verb the engine — not a script — implements: a
+		// click on it just walks ego to the object's walk point, which is why
+		// state advertises it for every object. Do exactly that when the object
+		// has no walk-to script, instead of refusing the sentence.
+		if (ep == 0 && targetB == 0 && normalizeActionName(verbStr) == "walk_to") {
+			int ox = 0, oy = 0, odir = 0;
+			_vm->getObjectXYPos(targetA, ox, oy, odir);
+			debug(1, "mcp: act walk_to obj %d without handler -> walking to (%d,%d)",
+			      targetA, ox, oy);
+			if (beginWalkStream(ox, oy, odir))
+				return true;
+			errorOut = "act: no ego actor available";
+			return false;
+		}
 		if (ep == 0) {
 			debug(1, "mcp: skipping verb with no entrypoint on object %d", targetA);
 			errorOut = "verb has no handler for this object";
+			// "unlock key with front door" is the usual mix-up: target1 is what
+			// the verb acts on, target2 the item it is used with. Say so when the
+			// swapped order is the one the game scripts.
+			if (targetB != 0 && _vm->getVerbEntrypoint(targetB, verbId) != 0)
+				errorOut += " — target1 is what the verb acts on, target2 the item "
+				            "used with it; try them the other way round";
 			return false;
 		}
 		// In V0, certain transitive verbs require a second object (direct object).
@@ -1980,6 +2014,9 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	if (maxY < 0) maxY = 0;
 	wx = CLIP<int>(wx, 0, maxX);
 	wy = CLIP<int>(wy, 0, maxY);
+	// The tool takes room pixels; V0-V2 walk on the compressed actor grid.
+	wx = fromRoomPixelX(wx);
+	wy = fromRoomPixelY(wy);
 
 	snapshotPreAction();
 	_streaming = true;
@@ -2013,6 +2050,27 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	} else {
 		ego->startWalkActor(wx, wy, -1);
 	}
+	_server->startStreaming();
+	return true;
+}
+
+bool ScummMcpBridge::beginWalkStream(int gx, int gy, int dir) {
+	Actor *ego = getEgoActor();
+	if (!ego)
+		return false;
+	snapshotPreAction();
+	_streaming = true;
+	_sseStartFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
+	_sseEgoMoved = false;
+	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
+	_sseTargetObject = 0;
+	_sseButtonClearFrame = 0;
+	ego->startWalkActor(gx, gy, dir);
 	_server->startStreaming();
 	return true;
 }
@@ -2952,8 +3010,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		int cy = ego2->getRealPos().y;
 		if (cx != _ssePrePosX || cy != _ssePrePosY) {
 			Common::JSONObject pos;
-			pos.setVal("x", mcpJsonInt(cx));
-			pos.setVal("y", mcpJsonInt(cy));
+			pos.setVal("x", mcpJsonInt(toRoomPixelX(cx)));
+			pos.setVal("y", mcpJsonInt(toRoomPixelY(cy)));
 			changes.setVal("position", new Common::JSONValue(pos));
 		}
 	}
@@ -3535,6 +3593,13 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		}
 		// Game-specific entity classification (e.g. CMI exit-hotspot pathways).
 		classifyGameEntity(e.numId, e.isPathway);
+		// An unnamed exit is all early SCUMM offers for room-to-room navigation
+		// (Maniac Mansion's front yard leads to the porch through a nameless
+		// hotspot), and "obj_258" tells an agent nothing about what it is. Name
+		// those the way the Loom segment above already does, so the way out of a
+		// room is recognisable in state.objects.
+		if (name.empty() && forcedName.empty() && !isLoomPassPathway && e.isPathway)
+			e.baseName = Common::String::format("pathway_%d", od.obj_nr);
 		if (!name.empty()) {
 			bool hasCtrl = false;
 			for (uint ci = 0; ci < e.baseName.size(); ++ci)
@@ -3702,6 +3767,60 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 	return false;
 }
 
+// ---------------------------------------------------------------------------
+// Coordinate space: engine grid <-> room pixels
+// ---------------------------------------------------------------------------
+// V0-V2 store actor and object coordinates on a compressed grid (x/8, y/2);
+// V3 and later store room pixels. Everything the MCP surface publishes or
+// accepts is in room pixels, so convert at the boundary.
+
+int ScummMcpBridge::toRoomPixelX(int x) const {
+	return (_vm->_game.version <= 2) ? x * V12_X_MULTIPLIER : x;
+}
+
+int ScummMcpBridge::toRoomPixelY(int y) const {
+	return (_vm->_game.version <= 2) ? y * V12_Y_MULTIPLIER : y;
+}
+
+int ScummMcpBridge::fromRoomPixelX(int x) const {
+	return (_vm->_game.version <= 2) ? x / V12_X_MULTIPLIER : x;
+}
+
+int ScummMcpBridge::fromRoomPixelY(int y) const {
+	return (_vm->_game.version <= 2) ? y / V12_Y_MULTIPLIER : y;
+}
+
+bool ScummMcpBridge::verbOnBar(const Common::String &normalized) const {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid || vs.saveid != 0) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256] = {};
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		Common::String rawLabel = safeUtf8(Common::String((const char *)textBuf));
+		if (rawLabel.empty()) continue;
+		if (verbLabelMatches(rawLabel, normalized))
+			return true;
+	}
+	return false;
+}
+
+bool ScummMcpBridge::verbHasAnyEntrypoint(int verbId) const {
+	for (int oi = 1; _vm->_objs && oi < _vm->_numLocalObjects; ++oi) {
+		if (!_vm->_objs[oi].obj_nr) continue;
+		if (_vm->getVerbEntrypoint(_vm->_objs[oi].obj_nr, verbId) != 0)
+			return true;
+	}
+	for (int ii = 0; _vm->_inventory && ii < _vm->_numInventory; ++ii) {
+		int obj = _vm->_inventory[ii];
+		if (!obj) continue;
+		if (_vm->getVerbEntrypoint(obj, verbId) != 0)
+			return true;
+	}
+	return false;
+}
+
 bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) const {
 	Common::String normalized = normalizeActionName(action);
 	debug(1, "mcp: resolveVerb '%s' (normalized='%s')", action.c_str(), normalized.c_str());
@@ -3722,33 +3841,18 @@ bool ScummMcpBridge::resolveVerb(const Common::String &action, int &verbId) cons
 		if (!verbLabelMatches(rawLabel, normalized)) continue;
 
 		// For talk_to, accept the verb bar match even without entrypoints; dialog
-		// may not use the verb entrypoint system.
-		if (normalized == "talk_to") {
+		// may not use the verb entrypoint system. Same for walk_to: walking is
+		// what the engine does by default, so it needs no object script (in the
+		// early SCUMM games no object scripts it at all).
+		if (normalized == "talk_to" || normalized == "walk_to") {
 			verbId = vs.verbid;
-			debug(1, "mcp: resolveVerb found verbid=%d via label match (talk_to)", verbId);
+			debug(1, "mcp: resolveVerb found verbid=%d via label match (%s)",
+			      verbId, normalized.c_str());
 			return true;
 		}
 		// For other verbs, verify the verb has an actual entrypoint; skip if not
 		// (the verb bar text might be reused or mislabeled).
-		bool hasEntrypoint = false;
-		for (int oi = 1; _vm->_objs && oi < _vm->_numLocalObjects; ++oi) {
-			if (!_vm->_objs[oi].obj_nr) continue;
-			if (_vm->getVerbEntrypoint(_vm->_objs[oi].obj_nr, vs.verbid) != 0) {
-				hasEntrypoint = true;
-				break;
-			}
-		}
-		if (!hasEntrypoint) {
-			for (int ii = 0; _vm->_inventory && ii < _vm->_numInventory; ++ii) {
-				int obj = _vm->_inventory[ii];
-				if (!obj) continue;
-				if (_vm->getVerbEntrypoint(obj, vs.verbid) != 0) {
-					hasEntrypoint = true;
-					break;
-				}
-			}
-		}
-		if (hasEntrypoint) {
+		if (verbHasAnyEntrypoint(vs.verbid)) {
 			verbId = vs.verbid;
 			debug(1, "mcp: resolveVerb found verbid=%d via label match", verbId);
 			return true;

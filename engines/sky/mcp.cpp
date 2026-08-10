@@ -289,6 +289,19 @@ void SkyMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 	outputProps.setVal("can_act", mcpProp("boolean",
 	    "False while the game is not accepting input (cutscene, scripted sequence). "
 	    "act/walk/answer are rejected until it turns true again."));
+	// Beneath a Steel Sky carries the compact id alongside each inventory name
+	// (the icon bar is driven by id), so the base schema's array-of-strings does
+	// not describe what state actually returns. Redeclare it.
+	Common::JSONObject itemProps;
+	itemProps.setVal("name", mcpProp("string",  "Item name, as the game names it"));
+	itemProps.setVal("id",   mcpProp("integer", "Compact id of the item"));
+	Common::JSONObject item;
+	item.setVal("type",       mcpJsonString("object"));
+	item.setVal("properties", new Common::JSONValue(itemProps));
+	Common::JSONObject inventory;
+	inventory.setVal("type",  mcpJsonString("array"));
+	inventory.setVal("items", new Common::JSONValue(item));
+	outputProps.setVal("inventory", new Common::JSONValue(inventory));
 }
 
 Common::JSONValue *SkyMcpBridge::toolState(const Common::JSONValue &, Common::String &) {

@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 import httpx
+import jsonschema
 
 MCP_HOST = "127.0.0.1"
 MCP_PORT = 23456
@@ -27,6 +28,17 @@ MCP_TOOLS = ("state", "act", "answer", "walk", "skip")
 
 # Base for per-(worker, fixture) MCP ports (see get_mcp_port).
 MCP_PORT_BASE = 23400
+
+
+def _wire_tool_name(display: str) -> str:
+    """ "ChooseKids" -> "choose_kids": the streaming helpers name tools for their
+    error messages, but schemas are keyed by the name on the wire."""
+    out = ""
+    for i, ch in enumerate(display):
+        if ch.isupper() and i:
+            out += "_"
+        out += ch.lower()
+    return out
 
 
 def get_mcp_port(fixture_index: int) -> int:
@@ -62,6 +74,7 @@ class McpClient:
         self._url = f"http://{host}:{port}/mcp"
         self._session_id: str | None = None
         self._req_id = 0
+        self._schemas: dict[str, Any] | None = None
         self._client = httpx.Client(timeout=httpx.Timeout(timeout))
 
     def _next_id(self) -> int:
@@ -84,6 +97,43 @@ class McpClient:
             return json.loads(content[0]["text"])
         return result
 
+    def _output_schemas(self) -> dict[str, Any]:
+        """tool name -> advertised outputSchema, fetched once per session."""
+        if self._schemas is None:
+            payload = {
+                "jsonrpc": "2.0",
+                "id": self._next_id(),
+                "method": "tools/list",
+                "params": {},
+            }
+            resp = self._client.post(self._url, json=payload, headers=self._headers())
+            tools = resp.json().get("result", {}).get("tools", [])
+            self._schemas = {
+                t["name"]: t["outputSchema"] for t in tools if t.get("outputSchema")
+            }
+        return self._schemas
+
+    def _check_schema(self, tool: str, result: Any) -> None:
+        """Fail the test when a tool result breaks its own advertised schema.
+
+        The schemas are closed (``additionalProperties: false``), so a strict
+        MCP client rejects the whole call over one undeclared field — which is
+        exactly the failure mode this guards against. Tools that advertise no
+        output schema (the debug tools) are left alone.
+        """
+        if not isinstance(result, dict):
+            return
+        schema = self._output_schemas().get(tool)
+        if schema is None:
+            return
+        errors = sorted(
+            jsonschema.Draft202012Validator(schema).iter_errors(result),
+            key=lambda e: list(e.path),
+        )
+        if errors:
+            details = "; ".join(f"at {list(e.path)}: {e.message}" for e in errors)
+            raise AssertionError(f"{tool} result violates its outputSchema — {details}")
+
     def _decode_stream_response(self, resp: httpx.Response, tool: str):
         if resp.status_code >= 400:
             raise RuntimeError(f"Act error: HTTP {resp.status_code}")
@@ -104,7 +154,11 @@ class McpClient:
                 ) from exc
 
             if "result" in msg:
-                return self._extract_result(msg)
+                result = self._extract_result(msg)
+                # Callers pass a display name for error messages ("ChooseKids");
+                # the schema is registered under the wire name.
+                self._check_schema(_wire_tool_name(tool), result)
+                return result
             elif "error" in msg:
                 if "message" in msg["error"]:
                     if "code" in msg["error"]:
@@ -157,7 +211,9 @@ class McpClient:
 
         if "error" in data:
             raise RuntimeError(f"{name} error: {data['error']}")
-        return self._extract_result(data)
+        result = self._extract_result(data)
+        self._check_schema(name, result)
+        return result
 
     def state(self) -> dict[str, Any]:
         """Get current game state (sync call)."""

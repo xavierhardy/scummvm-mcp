@@ -973,9 +973,9 @@
   "engineNotes": {
     "scumm": {
       "scope": "All SCUMM versions V0-V8.",
-      "coordinates": "Room/screen pixel coordinates.",
+      "coordinates": "Room/screen pixel coordinates, in every SCUMM version. V0-V2 (Maniac Mansion, Zak McKracken) keep actors and objects on a compressed grid internally (x/8, y/2); the bridge converts, so state.position, object x/y and walk(x, y) are all plain room pixels there too.",
       "verbs": "Per-game verb bar (or a fixed fallback set for single-cursor games), reported in state.verbs. V3-V5 label their slots with text; V6+ moved to image verbs, except Day of the Tentacle, which kept the text bar (its 'Look at' label is rewritten from the game font's ligature glyph to plain text, and 'walk to' is exposed even though DOTT dropped its button).",
-      "objects": "state.objects carries id, name, state/state_name, compatible_verbs, pathway.",
+      "objects": "state.objects carries id, name, state/state_name, compatible_verbs, pathway. Room-to-room exits are often nameless hotspots in the game data (all of Maniac Mansion's are); those are listed as 'pathway_<id>' with pathway=true, and act(verb='walk to', target1=<that name or id>) goes through them.",
       "lookAt": "In V0-V2 (Maniac Mansion, Zak McKracken) the bar's 'What is' verb only names an object — the interpreter never runs a sentence for it — so read descriptions from state.objects rather than from act(verb='what is').",
       "extraTools": "Game-specific: play_note, shoot_cannon, ride_bike, choose_kids, switch_character, dial. Debug adds set_talk_speed."
     },

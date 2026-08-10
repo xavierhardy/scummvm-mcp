@@ -100,6 +100,28 @@ void McpBridgeClassic::applyLoomVerbs(Common::JSONArray &verbsArr,
 	}
 }
 
+void McpBridgeClassic::addIndy3FightSchema(Common::JSONObject &outputProps) {
+	// The fight HUD is only present while a fist fight is on, but the state
+	// schema is closed (additionalProperties: false), so it has to be declared
+	// by every game that can emit it.
+	Common::JSONObject fighter;
+	fighter.setVal("health",      mcpProp("integer", "Health gauge (0 = knocked out)"));
+	fighter.setVal("punch_power", mcpProp("integer", "Punch-power gauge"));
+	Common::JSONObject fighterSchema;
+	fighterSchema.setVal("type",       mcpJsonString("object"));
+	fighterSchema.setVal("properties", new Common::JSONValue(fighter));
+	Common::JSONObject fightProps;
+	fightProps.setVal("indy",     new Common::JSONValue(fighterSchema));
+	Common::JSONObject opponentSchema;
+	opponentSchema.setVal("type",       mcpJsonString("object"));
+	opponentSchema.setVal("properties", new Common::JSONValue(fighter));
+	fightProps.setVal("opponent", new Common::JSONValue(opponentSchema));
+	Common::JSONObject fightSchema;
+	fightSchema.setVal("type",       mcpJsonString("object"));
+	fightSchema.setVal("properties", new Common::JSONValue(fightProps));
+	outputProps.setVal("fight", new Common::JSONValue(fightSchema));
+}
+
 void McpBridgeClassic::addIndy3FightHud(Common::JSONObject &out) const {
 	// Indy3 fist-fight HUD — surface each fighter's health and punch-power gauge
 	// so the MCP client can mirror what the in-game HUD shows. Driven by Indy3's

@@ -357,6 +357,9 @@ protected:
 	bool toolAct(const Common::JSONValue &args, Common::String &errorOut) override;
 	bool toolAnswer(const Common::JSONValue &args, Common::String &errorOut) override;
 	bool toolWalk(const Common::JSONValue &args, Common::String &errorOut) override;
+	// Start a streaming walk to (gx, gy) in the engine's own coordinate space
+	// (see toRoomPixelX/Y). Shared by the walk tool and act(verb='walk to').
+	bool beginWalkStream(int gx, int gy, int dir);
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut) override;
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut) override;
 	// SCUMM defers to its own requestSave(), which the same scummLoop() iteration
@@ -434,6 +437,25 @@ protected:
 	void buildEntityMap(Common::Array<NamedEntity> &entities) const;
 	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
 	bool resolveVerb(const Common::String &action, int &verbId) const;
+	// True when the verb bar carries a slot whose label matches *normalized*.
+	bool verbOnBar(const Common::String &normalized) const;
+	// True when any object in the room, or any inventory item, scripts *verbId*.
+	// A verb the whole scene ignores is not offered by act(), so state must not
+	// advertise it either.
+	bool verbHasAnyEntrypoint(int verbId) const;
+
+	// --- Coordinate space --------------------------------------------------
+	// V0-V2 keep actor and object coordinates in a compressed grid (x in units
+	// of 8 pixels, y in units of 2 — see V12_X_MULTIPLIER / V12_Y_MULTIPLIER),
+	// while every later version stores plain room pixels. The MCP surface is
+	// documented in pixels for every game, so the raw engine values are
+	// converted on their way out (toRoomPixelX/Y) and the tool arguments are
+	// converted back on their way in (fromRoomPixelX/Y). Both are identities
+	// from V3 up.
+	int toRoomPixelX(int x) const;
+	int toRoomPixelY(int y) const;
+	int fromRoomPixelX(int x) const;
+	int fromRoomPixelY(int y) const;
 
 	// Sam & Max: is this target the sidekick Max — addressed either as his actor
 	// (id 3) or as the inventory tool "max_the_object"? Used to route a two-target

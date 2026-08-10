@@ -128,6 +128,10 @@ Common::JSONValue *McpBridgeManiac::dispatchGameTool(const Common::String &name,
 }
 
 void McpBridgeManiac::augmentStateSchema(Common::JSONObject &outputProps) {
+	// Keep the SCUMM-wide fields (can_act) declared: state emits them for every
+	// game, and the schema is closed (additionalProperties: false), so dropping
+	// the base call makes every state result fail validation on a strict client.
+	McpBridgeV0::augmentStateSchema(outputProps);
 	outputProps.setVal("controlling", mcpProp("string", "Name of the currently controlled kid"));
 	Common::JSONObject arr;
 	arr.setVal("type",  mcpJsonString("array"));
@@ -605,11 +609,14 @@ bool McpBridgeManiac::toolChooseKids(const Common::JSONValue &args, Common::Stri
 void McpBridgeManiac::collectManiacKids(Common::Array<ManiacKid> &out) const {
 	out.clear();
 	// V0's F1-F3 handler maps slot N to the actor stored in VAR(97+N) (see
-	// ScummEngine_v0::switchActor); the V1/V2 ports keep the same kid vars.
-	// Slots holding no valid actor are skipped, so on a variant where these
-	// vars are unused the list simply comes out empty.
+	// ScummEngine_v0::switchActor). The V1/V2 ports (the full DOS game) keep the
+	// team in VAR(47..49) instead — slot 0 is the leader picked on the title
+	// screen (Dave), slots 1 and 2 the two kids chosen to join him. Slots
+	// holding no valid actor are skipped, so on a variant where these vars are
+	// unused the list simply comes out empty.
+	const int kidVarBase = (_vm->_game.version == 0) ? 97 : 47;
 	for (int slot = 0; slot < 3; ++slot) {
-		int actorId = (int)_vm->VAR(97 + slot);
+		int actorId = (int)_vm->VAR(kidVarBase + slot);
 		if (actorId <= 0 || !_vm->isValidActor(actorId)) continue;
 		ManiacKid kid;
 		kid.slot = slot;
