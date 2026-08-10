@@ -583,6 +583,8 @@ void McpBridge::registerTools() {
 			outProps.setVal("saved",  mcpProp("boolean", "Whether the game was saved."));
 			outProps.setVal("reason", mcpProp("string",
 			    "Why the save was refused, when it was."));
+			outProps.setVal("description", mcpProp("string",
+			    "The label stored in the save header."));
 			spec.outputSchema = mcpObjectSchema(outProps);
 			spec.streaming    = false;
 			_server->registerTool(spec);

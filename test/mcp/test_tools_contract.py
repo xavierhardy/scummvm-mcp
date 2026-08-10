@@ -13,6 +13,8 @@ to three rules, whatever the game:
      built. It says what the tool does and what comes back.
 """
 
+import base64
+import os
 import re
 
 import pytest
@@ -107,6 +109,30 @@ def test_tool_table_keeps_its_promises(fixture_name: str, request) -> None:
     """Every game's tool table is complete, consistent and game-agnostic."""
     client: McpClient = request.getfixturevalue(fixture_name)
     _check_tools(client.list_tools())
+
+
+def test_screenshot_returns_the_frame_and_files_it(monkey_client: McpClient) -> None:
+    """The frame comes back as an image, and by default is written out too."""
+    shots = monkey_client.screenshot_path
+    assert shots is not None, "the fixture did not record a screenshot folder"
+    before = set(os.listdir(shots))
+
+    result = monkey_client.call_tool_raw("screenshot")
+    images = [b for b in result["content"] if b.get("type") == "image"]
+    assert len(images) == 1, f"no image in the result: {result['content']}"
+    assert base64.b64decode(images[0]["data"])[:4] == b"\x89PNG"
+    structured = result["structuredContent"]
+    assert structured["saved"] is True, f"not written out: {structured}"
+    assert structured["width"] > 0 and structured["height"] > 0, structured
+
+    written = set(os.listdir(shots)) - before
+    assert written, f"nothing appeared in {shots}"
+
+    # Asking for the picture alone leaves the folder untouched.
+    result = monkey_client.call_tool_raw("screenshot", {"save_to_disk": False})
+    assert [b for b in result["content"] if b.get("type") == "image"], result
+    assert "saved" not in result["structuredContent"]
+    assert set(os.listdir(shots)) - before == written, "a file was written anyway"
 
 
 def test_optional_tools_are_absent_when_turned_off(

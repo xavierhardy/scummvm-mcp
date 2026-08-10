@@ -81,8 +81,10 @@ _FIXTURE_INDEX = {
     "maniac_full": 27,
     "zak_tv": 28,
     "monkey2_swamp": 29,
-    "gob1": 30,
-    "plain_tools": 31,
+    # 30 is taken by test_session.py, which allocates its own port outside
+    # these fixtures — do not reuse it here.
+    "gob1": 31,
+    "plain_tools": 32,
 }
 
 
