@@ -843,13 +843,24 @@ Common::JSONObject Sword1McpBridge::buildStateChanges() const {
 // Tool: debug
 // ---------------------------------------------------------------------------
 
+Common::String Sword1McpBridge::stateToolDescription() const {
+	return "Returns the current game state: the screen, where the player character "
+	       "stands, everything on screen that can be clicked, what is carried, the "
+	       "verbs, the lines said since the last read (cleared by reading them) and "
+	       "any conversation choice waiting to be picked. The player character "
+	       "itself is reported as position, not as an object. Each object carries a "
+	       "'kind' and the point a click lands on; objects and inventory items are "
+	       "targeted in act() by name or by id. This is a two-verb game at heart: "
+	       "'look_at' examines and 'interact' does whatever the thing invites, with "
+	       "'use X on Y' for combining. Nothing is accepted while can_act is false.";
+}
+
 Common::String Sword1McpBridge::debugToolDescription() const {
 	return "Return raw engine state for diagnostics. Sections are selected by "
-	       "flag: 'vars' (a slice of Logic::_scriptVars, with 'from'/'to'), "
-	       "'compacts' (every live compact on the current screen with its id, "
-	       "type, status, mouse box and script ids — this is how the object-name "
-	       "tables are authored), 'pockets' (all 52 inventory slots) and "
-	       "'system' (the engine's own debug read-out). Defaults to 'system'.";
+	       "flag: 'vars' (a slice of the script variables, with 'from'/'to'), "
+	       "'compacts' (every live thing on the current screen with its id, type, "
+	       "status, click box and script ids), 'pockets' (every inventory slot) "
+	       "and 'system' (the game's own read-out). Defaults to 'system'.";
 }
 
 Common::JSONValue *Sword1McpBridge::buildDebugSchema() const {

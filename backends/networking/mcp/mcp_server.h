@@ -197,6 +197,11 @@ private:
 	void drainToolQueue();
 };
 
+// A tool result key reserved for a picture the client should look at, holding
+// base64-encoded PNG data. It never reaches the client as data: the transport
+// moves it out of the result and into an MCP image content block.
+extern const char *const kMcpImageKey;
+
 // -------- JSON schema helpers exposed for tool registration --------
 
 Common::JSONValue *mcpJsonString(const Common::String &s);

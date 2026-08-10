@@ -894,9 +894,10 @@ Common::JSONObject QueenMcpBridge::buildStateChanges() const {
 
 Common::String QueenMcpBridge::debugToolDescription() const {
 	return "Return raw engine state for diagnostics. Sections are selected by "
-	       "flag: 'gamestate' (a slice of the GAMESTATE array, with 'from'/'to'), "
-	       "'objects' (the current room's object records), 'items' (all item "
-	       "records) and 'system' (the engine's own read-out). Defaults to 'system'.";
+	       "flag: 'gamestate' (a slice of the game's own state variables, with "
+	       "'from'/'to'), 'objects' (the current room's object records), 'items' "
+	       "(every item record) and 'system' (the game's own read-out). Defaults "
+	       "to 'system'.";
 }
 
 Common::JSONValue *QueenMcpBridge::buildDebugSchema() const {

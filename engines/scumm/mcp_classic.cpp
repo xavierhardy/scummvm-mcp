@@ -151,9 +151,10 @@ void McpBridgeClassic::registerPlayNoteTool() {
 	Networking::McpServer::ToolSpec spec;
 	spec.name = "play_note";
 	spec.description =
-	    "Play Loom distaff notes. Accepts either {note:'c'} for one note, or "
-	    "{notes:['e','c','e','d']} to play a full sequence in one call. "
-	    "Only valid in the Loom segment of Passport to Adventure (and full Loom).";
+	    "Play notes on the player character's staff, which is how spells are "
+	    "cast here. Accepts either {note:'c'} for a single note or "
+	    "{notes:['e','c','e','d']} to play a whole draft in one call. Only valid "
+	    "while the staff is in hand.";
 	spec.inputSchema  = mcpObjectSchema(props);
 	spec.outputSchema = buildChangesSchema();
 	spec.streaming    = true;

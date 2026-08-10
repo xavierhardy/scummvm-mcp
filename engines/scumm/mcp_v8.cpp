@@ -44,14 +44,11 @@ void McpBridgeComi::registerGameTools() {
 	Networking::McpServer::ToolSpec spec;
 	spec.name = "shoot_cannon";
 	spec.description =
-	    "Aim the cannon at screen position (x, y) and fire a cannonball. "
-	    "Only available in the Curse of Monkey Island cannon minigame. The "
-	    "skeleton war-canoes to sink are listed in state as boat_N objects "
-	    "with their (x, y); aim at one of those points. Moves the mouse "
-	    "cursor to (x, y) and left-clicks to fire. Blocks until the shot "
-	    "resolves — cannonball flight, explosion, and any resulting speech "
-	    "(e.g. the skeleton crew jeering on a miss) — then returns state "
-	    "changes; a sunk boat disappears from state.objects.";
+	    "Aim the cannon at (x, y) and fire. Only available while the cannon is "
+	    "in use. The boats to sink are listed in state as boat_N objects with "
+	    "their (x, y) — aim at one of those points. Blocks until the shot "
+	    "resolves: the shell's flight, the explosion and anything said about it. "
+	    "A boat that sinks is gone from state.objects afterwards.";
 	spec.inputSchema  = mcpObjectSchema(props, req, 2);
 	spec.outputSchema = buildChangesSchema();
 	spec.streaming    = true;

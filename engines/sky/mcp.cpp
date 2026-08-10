@@ -1033,12 +1033,25 @@ Common::JSONObject SkyMcpBridge::buildStateChanges() const {
 // Tool: debug
 // ---------------------------------------------------------------------------
 
+Common::String SkyMcpBridge::stateToolDescription() const {
+	return "Returns the current game state: the screen, where the player character "
+	       "stands, everything on screen that can be clicked, what is carried, the "
+	       "verbs, the lines said since the last read (cleared by reading them) and "
+	       "any conversation choice waiting to be picked. The player character "
+	       "itself is reported as position, not as an object. Objects and inventory "
+	       "items are targeted in act() by name or by id. This is a two-button "
+	       "game: 'look_at' examines, 'interact' does whatever the thing invites, "
+	       "and an inventory item is used on something with 'use X on Y'. Nothing "
+	       "is accepted while can_act is false.";
+}
+
 Common::String SkyMcpBridge::debugToolDescription() const {
 	return "Return raw engine state for diagnostics. Sections are selected by "
-	       "flag: 'vars' (a slice of Logic::_scriptVariables, with 'from'/'to'), "
-	       "'compacts' (every compact in the current screen's mouse list with "
-	       "its id, name, hit box and script ids), and 'system' (the engine's "
-	       "own read-out: screen, mouse, Foster, chooser). Defaults to 'system'.";
+	       "flag: 'vars' (a slice of the script variables, with 'from'/'to'), "
+	       "'compacts' (everything clickable on the current screen with its id, "
+	       "name, hit box and script ids), and 'system' (the game's own read-out: "
+	       "screen, cursor, player character, dialog chooser). Defaults to "
+	       "'system'.";
 }
 
 Common::JSONValue *SkyMcpBridge::buildDebugSchema() const {

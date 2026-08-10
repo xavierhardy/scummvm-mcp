@@ -134,7 +134,7 @@ def test_zak_what_is_names_the_object(zak_client: McpClient) -> None:
     """
     state = zak_client.state()
     assert "what is" in state["verbs"], f"'what is' is not on the verb bar: {state}"
-    bed = object_by_id(state, find_id(state, "bed"))
+    bed = next(o for o in state["objects"] if o["name"] == "bed")
     assert "what is" in bed["compatible_verbs"], f"not offered on the bed: {bed}"
 
     result = zak_client.act("what is", "bed")

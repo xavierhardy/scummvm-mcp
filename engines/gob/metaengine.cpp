@@ -34,6 +34,7 @@
 
 #include "gob/gameidtotype.h"
 #include "gob/gob.h"
+#include "gob/mcp.h"
 
 // For struct GOBGameDescription.
 #include "gob/detection/detection.h"
@@ -164,6 +165,11 @@ void GobEngine::initGame(const GOBGameDescription *gd) {
 
 	_enableAdibou2FreeBananasWorkaround = gd->desc.flags & GF_ENABLE_ADIBOU2_FREE_BANANAS_WORKAROUND;
 	_enableAdibou2FlowersInfiniteLoopWorkaround = gd->desc.flags & GF_ENABLE_ADIBOU2_FLOWERS_INFINITE_LOOP_WORKAROUND;
+
+	// The MCP bridge was built by the constructor, before any of this was
+	// known; now that it is, let it build the tool table for this game.
+	if (_mcpBridge)
+		_mcpBridge->onGameIdentified();
 }
 
 } // End of namespace Gob

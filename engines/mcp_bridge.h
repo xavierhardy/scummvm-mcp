@@ -122,6 +122,10 @@ protected:
 	virtual void augmentStateSchema(Common::JSONObject &outputProps) { (void)outputProps; }
 	// Add engine-specific fields to the shared streaming-result schema.
 	virtual void augmentChangesSchema(Common::JSONObject &props) { (void)props; }
+	// Add engine-specific arguments to the `act` tool's input schema (a game
+	// whose targets are points on screen rather than named things needs
+	// coordinates there).
+	virtual void augmentActSchema(Common::JSONObject &props) { (void)props; }
 	// Register tools specific to this game (shoot_cannon, play_note, …).
 	virtual void registerGameTools() {}
 	// Register debug tools beyond the shared set. Only called when mcp_debug is on.
@@ -132,14 +136,35 @@ protected:
 	                                            Common::String &errorOut, bool &handled) {
 		(void)name; (void)args; (void)errorOut; handled = false; return nullptr;
 	}
-	// Description shown for the `state` tool. The default describes the SCUMM
-	// snapshot; engines whose state carries different fields override it so the
-	// text an agent reads matches what it actually gets back.
+	// --- Tool descriptions --------------------------------------------------
+	// What an agent reads about each tool. The defaults describe what every
+	// game here has in common; a game whose tool behaves differently — or whose
+	// snapshot carries different fields — overrides the one that differs, so
+	// the text always matches what the tool actually does. Descriptions never
+	// name a game or an engine, and never describe how the bridge is built:
+	// what an agent needs is what it can ask for and what comes back.
 	virtual Common::String stateToolDescription() const;
+	virtual Common::String actToolDescription() const;
+	virtual Common::String answerToolDescription() const;
+	virtual Common::String walkToolDescription() const;
+	virtual Common::String skipToolDescription() const;
 	// Description shown for the `debug` tool (engines expose different state).
 	virtual Common::String debugToolDescription() const;
 	// Input schema for the `debug` tool. Ownership passes to the server.
 	virtual Common::JSONValue *buildDebugSchema() const;
+	// Output schema for the `debug` tool. The default leaves the sections open
+	// (they are diagnostics, and differ per game); ownership passes to the
+	// server.
+	virtual Common::JSONValue *buildDebugOutputSchema() const;
+
+	// Does this game ever put a question to the player? When it does not, the
+	// `answer` tool is not registered and nothing refers to it.
+	virtual bool usesDialogQuestions() const { return true; }
+
+	// The sentence every streaming tool ends with. Kept in one place so all of
+	// them say the same thing, and so a tool that is not registered is never
+	// named.
+	Common::String streamingToolNote() const;
 
 	// --- Streaming hooks ----------------------------------------------------
 

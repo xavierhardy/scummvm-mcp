@@ -379,6 +379,7 @@ protected:
 	bool stripTalkieMetadata() const override;
 
 	// Tool registration
+	Common::String stateToolDescription() const override;
 	Common::String debugToolDescription() const override;
 	Common::JSONValue *buildDebugSchema() const override;
 	void augmentChangesSchema(Common::JSONObject &props) override;

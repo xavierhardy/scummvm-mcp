@@ -21,11 +21,19 @@
 
 #include "engines/mcp_bridge.h"
 
+#include "common/base64.h"
 #include "common/config-manager.h"
 #include "common/debug.h"
+#include "common/memstream.h"
 #include "common/system.h"
 
 #include "engines/engine.h"
+
+#include "graphics/palette.h"
+#include "graphics/paletteman.h"
+#include "graphics/surface.h"
+
+#include "image/png.h"
 
 namespace MCP {
 
@@ -226,13 +234,50 @@ Common::JSONValue *McpBridge::buildChangesSchema() const {
 }
 
 Common::String McpBridge::stateToolDescription() const {
-	return "Returns the current game state: room, position, inventory, scene objects "
-	       "(including NPCs with their compatible_verbs — always includes talk_to), "
-	       "active verbs, latest messages (cleared after reading), "
-	       "and pending dialog question if any. The player character is never listed. "
-	       "Objects with a meaningful state expose a human-readable 'state_name' "
-	       "(e.g. a door reads 'opened'/'closed'); doors advertise the 'open'/'close' verbs. "
-	       "Use act(verb='talk_to', target1=<npc_name>) to speak to an NPC.";
+	return "Returns the current game state: the room, where the player character "
+	       "stands, what is in the room, what is carried, the verbs that can be "
+	       "used, the lines said since the last read (cleared by reading them) "
+	       "and any question waiting to be answered. The player character itself "
+	       "is not listed among the room's objects. Everything act() accepts as a "
+	       "target appears here first, under the name given here.";
+}
+
+Common::String McpBridge::streamingToolNote() const {
+	return "Blocks until the action and anything it sets off have played out, "
+	       "streaming the lines said meanwhile, then returns what changed. Only "
+	       "one action runs at a time: wait for the previous one to return before "
+	       "sending the next.";
+}
+
+Common::String McpBridge::actToolDescription() const {
+	Common::String desc =
+	    "Perform a verb on one or two targets, named as state shows them. Use "
+	    "'walk' for a plain point on the floor. ";
+	desc += streamingToolNote();
+	if (usesDialogQuestions())
+		desc += " Refused while a question is waiting — answer it first.";
+	return desc;
+}
+
+Common::String McpBridge::answerToolDescription() const {
+	return "Answer the question the game is asking, by the 1-based index of the "
+	       "choice in state.question.choices. " + streamingToolNote() +
+	       " Refused when no question is waiting.";
+}
+
+Common::String McpBridge::walkToolDescription() const {
+	return "Send the player character to explicit (x, y) coordinates in the "
+	       "current room, in the coordinate space state reports positions in. "
+	       "Out-of-bounds values are clamped to the room. To go to something "
+	       "named, use act with a walk verb and that name instead. " +
+	       streamingToolNote();
+}
+
+Common::String McpBridge::skipToolDescription() const {
+	return "Cut short whatever is playing — an intro, a cutscene, a long "
+	       "animation — the way pressing Escape does. Returns what changed. "
+	       "Rejected when there is nothing to skip, which is how to tell that "
+	       "the game is waiting for input again.";
 }
 
 Common::String McpBridge::debugToolDescription() const {
@@ -244,6 +289,18 @@ Common::JSONValue *McpBridge::buildDebugSchema() const {
 	props.setVal("from", mcpProp("integer", "First script variable index to return."));
 	props.setVal("to",   mcpProp("integer", "Last script variable index to return (inclusive)."));
 	return mcpObjectSchema(props);
+}
+
+Common::JSONValue *McpBridge::buildDebugOutputSchema() const {
+	// Deliberately open: this is a read-out of whatever the game keeps, and
+	// which fields it keeps differs per game. What it does promise is that the
+	// answer is an object of named sections.
+	Common::JSONObject schema;
+	schema.setVal("type", mcpJsonString("object"));
+	schema.setVal("description", mcpJsonString(
+	    "Named sections of raw game state; which ones are present depends on "
+	    "the flags passed in."));
+	return new Common::JSONValue(schema);
 }
 
 void McpBridge::registerTools() {
@@ -344,35 +401,27 @@ void McpBridge::registerTools() {
 		props.setVal("target2", mcpPropOneOf("string", "integer",
 		    "Secondary target for 'use X on Y' (Y): name or numeric id, "
 		    "must currently exist in state."));
+		// Game-specific arguments (e.g. coordinates, for a game whose targets
+		// are points on screen rather than named things).
+		augmentActSchema(props);
 		const char *req[] = {"verb"};
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "act";
-		spec.description =
-		    "Perform a verb action on one or two named targets. Blocks until the "
-		    "action/cutscene sequence completes, streaming dialog and events via SSE, "
-		    "then returns state changes. For walking to specific coordinates, use 'walk'. "
-		    "IMPORTANT: Actions are sequential - only one can be in progress at a time. "
-		    "Wait for the previous act/answer/walk call to complete before sending the next one. "
-		    "Fails if a question is pending (use 'answer' first) or another action is running.";
+		spec.description = actToolDescription();
 		spec.inputSchema  = mcpObjectSchema(props, req, 1);
 		spec.outputSchema = buildChangesSchema();
 		spec.streaming    = true;
 		_server->registerTool(spec);
 	}
 
-	// --- answer ---
-	{
+	// --- answer (only for games that ask questions) ---
+	if (usesDialogQuestions()) {
 		Common::JSONObject props;
 		props.setVal("id", mcpProp("integer", "1-indexed dialog choice (1 = first option shown in state.question.choices)."));
 		const char *req[] = {"id"};
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "answer";
-		spec.description =
-		    "Select a dialog choice by 1-based index. Blocks until the conversation "
-		    "sequence completes, streaming events via SSE, then returns state changes. "
-		    "IMPORTANT: Actions are sequential - only one can be in progress at a time. "
-		    "Wait for the previous act/answer/walk call to complete before sending the next one. "
-		    "Fails if no question is currently pending or another action is running.";
+		spec.description = answerToolDescription();
 		spec.inputSchema  = mcpObjectSchema(props, req, 1);
 		spec.outputSchema = buildChangesSchema();
 		spec.streaming    = true;
@@ -387,11 +436,7 @@ void McpBridge::registerTools() {
 		const char *req[] = {"x", "y"};
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "walk";
-		spec.description =
-		    "Walk ego to explicit (x, y) pixel coordinates in the current room. "
-		    "Out-of-bounds values are automatically clamped to the room bounds. "
-		    "Use 'act' with verb='walk_to' and target1=<name> to walk to a named object. "
-		    "Blocks until the walk completes and returns state changes.";
+		spec.description = walkToolDescription();
 		spec.inputSchema  = mcpObjectSchema(props, req, 2);
 		spec.outputSchema = buildChangesSchema();
 		spec.streaming    = true;
@@ -402,9 +447,7 @@ void McpBridge::registerTools() {
 	if (_skipToolEnabled) {
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "skip";
-		spec.description =
-		    "Skip/cancel current action or cutscene by simulating an Escape key press. "
-		    "Useful for skipping long intros or animations. Returns state changes.";
+		spec.description = skipToolDescription();
 		spec.inputSchema  = nullptr;  // No input required
 		spec.outputSchema = buildChangesSchema();
 		spec.streaming    = true;
@@ -422,7 +465,7 @@ void McpBridge::registerTools() {
 			spec.name = "debug";
 			spec.description = debugToolDescription();
 			spec.inputSchema  = buildDebugSchema();
-			spec.outputSchema = nullptr;
+			spec.outputSchema = buildDebugOutputSchema();
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
@@ -431,9 +474,9 @@ void McpBridge::registerTools() {
 			Networking::McpServer::ToolSpec spec;
 			spec.name = "keystroke";
 			spec.description =
-			    "Inject a keyboard keystroke into the engine, so the next engine "
-			    "frame processes it. Useful for skipping cutscenes (Escape), "
-			    "opening menus, or sending game-specific shortcuts.";
+			    "Press a key, as if on the keyboard: the next frame reads it. For "
+			    "anything the tools above do not cover — menus, shortcuts, a "
+			    "prompt waiting for a keypress.";
 			Common::JSONObject props;
 			props.setVal("key", mcpProp("string",
 			    "Key to press: a single ASCII character ('a', 'C', '1'), or a name "
@@ -444,7 +487,9 @@ void McpBridge::registerTools() {
 			props.setVal("alt",   mcpProp("boolean", "Hold Alt modifier (default false)."));
 			const char *req[] = {"key"};
 			spec.inputSchema  = mcpObjectSchema(props, req, 1);
-			spec.outputSchema = nullptr;
+			Common::JSONObject outProps;
+			outProps.setVal("key", mcpProp("string", "The key that was pressed."));
+			spec.outputSchema = mcpObjectSchema(outProps);
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
@@ -453,14 +498,18 @@ void McpBridge::registerTools() {
 			Networking::McpServer::ToolSpec spec;
 			spec.name = "mouse_move";
 			spec.description =
-			    "Move the virtual mouse cursor to (x, y) in room/screen coordinates, "
-			    "so the engine and its scripts read the new position. Does not click.";
+			    "Move the cursor to (x, y), in the coordinate space state reports "
+			    "positions in, without clicking. Some games react to what the "
+			    "cursor is merely pointing at.";
 			Common::JSONObject props;
 			props.setVal("x", mcpProp("integer", "X coordinate."));
 			props.setVal("y", mcpProp("integer", "Y coordinate."));
 			const char *req[] = {"x", "y"};
 			spec.inputSchema  = mcpObjectSchema(props, req, 2);
-			spec.outputSchema = nullptr;
+			Common::JSONObject outProps;
+			outProps.setVal("x", mcpProp("integer", "Where the cursor was put."));
+			outProps.setVal("y", mcpProp("integer", "Where the cursor was put."));
+			spec.outputSchema = mcpObjectSchema(outProps);
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
@@ -469,9 +518,10 @@ void McpBridge::registerTools() {
 			Networking::McpServer::ToolSpec spec;
 			spec.name = "mouse_click";
 			spec.description =
-			    "Simulate a mouse click at (x, y). The engine processes the click "
-			    "the same way as a real player click (walks ego, runs verb script, "
-			    "etc.). Set 'double' for a double click. Button defaults to left.";
+			    "Click at (x, y) exactly as a player would, which reaches anything "
+			    "the named tools cannot: a control the game draws itself, a spot "
+			    "no object covers. Returns as soon as the click is sent — read "
+			    "state (or take a screenshot) to see what came of it.";
 			Common::JSONObject props;
 			props.setVal("x", mcpProp("integer", "X coordinate."));
 			props.setVal("y", mcpProp("integer", "Y coordinate."));
@@ -481,20 +531,34 @@ void McpBridge::registerTools() {
 			    "True for a double click (two clicks within ~250ms). Default false."));
 			const char *req[] = {"x", "y"};
 			spec.inputSchema  = mcpObjectSchema(props, req, 2);
-			spec.outputSchema = nullptr;
+			Common::JSONObject outProps;
+			outProps.setVal("x",      mcpProp("integer", "Where the click was sent."));
+			outProps.setVal("y",      mcpProp("integer", "Where the click was sent."));
+			outProps.setVal("button", mcpProp("string",  "Which button was used."));
+			outProps.setVal("double", mcpProp("boolean", "Whether it was a double click."));
+			spec.outputSchema = mcpObjectSchema(outProps);
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
-		// screenshot — capture the current frame to the screenshot path
+		// screenshot — return the current frame (and file it on disk)
 		{
 			Networking::McpServer::ToolSpec spec;
 			spec.name = "screenshot";
 			spec.description =
-			    "Save a PNG screenshot of the current frame to the configured "
-			    "screenshot path (auto-numbered, like the in-app screenshot key). "
-			    "Useful for visually inspecting the game state. Engine-agnostic.";
-			spec.inputSchema  = nullptr;  // No input required
-			spec.outputSchema = nullptr;
+			    "Return the current frame as a PNG image to look at, and by "
+			    "default also write it to the configured screenshot folder. Shows "
+			    "exactly what a player would see, which is the way to check "
+			    "anything the state snapshot does not describe.";
+			Common::JSONObject props;
+			props.setVal("save_to_disk", mcpProp("boolean",
+			    "Also write the frame to the screenshot folder (default true)."));
+			spec.inputSchema  = mcpObjectSchema(props);
+			Common::JSONObject outProps;
+			outProps.setVal("width",  mcpProp("integer", "Frame width in pixels."));
+			outProps.setVal("height", mcpProp("integer", "Frame height in pixels."));
+			outProps.setVal("saved",  mcpProp("boolean",
+			    "Whether the frame was written to the screenshot folder."));
+			spec.outputSchema = mcpObjectSchema(outProps);
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
@@ -503,10 +567,9 @@ void McpBridge::registerTools() {
 			Networking::McpServer::ToolSpec spec;
 			spec.name = "save_state";
 			spec.description =
-			    "Save the current game to a save slot, the same way the in-game "
-			    "save menu does. Writes the engine's save file for that slot in the "
-			    "active save path, so it can be used to capture reusable save states "
-			    "for tests. Returns the slot and whether the save was accepted.";
+			    "Save the game to a slot, the same way its own save menu does, so "
+			    "the state can be returned to later. Says whether the save was "
+			    "accepted: a game refuses to save in the middle of some scenes.";
 			Common::JSONObject props;
 			props.setVal("slot", mcpProp("integer",
 			    "Save slot index to write."));
@@ -515,7 +578,12 @@ void McpBridge::registerTools() {
 			    "(default \"mcp save\")."));
 			const char *req[] = {"slot"};
 			spec.inputSchema  = mcpObjectSchema(props, req, 1);
-			spec.outputSchema = nullptr;
+			Common::JSONObject outProps;
+			outProps.setVal("slot",   mcpProp("integer", "The slot that was written."));
+			outProps.setVal("saved",  mcpProp("boolean", "Whether the game was saved."));
+			outProps.setVal("reason", mcpProp("string",
+			    "Why the save was refused, when it was."));
+			spec.outputSchema = mcpObjectSchema(outProps);
 			spec.streaming    = false;
 			_server->registerTool(spec);
 		}
@@ -555,17 +623,34 @@ Common::JSONValue *McpBridge::callTool(const Common::String &name,
 		return nullptr;
 	}
 	if (name == "debug")        return toolDebug(args, errorOut);
+	// The three input-injection tools answer with what they injected: there is
+	// nothing else to report, and echoing it is what makes their result match
+	// the schema they advertise.
 	if (name == "keystroke")    {
 		if (!toolKeystroke(args, errorOut)) return nullptr;
-		return new Common::JSONValue(Common::JSONObject());
+		Common::JSONObject out;
+		out.setVal("key", mcpJsonString(args.asObject()["key"]->asString()));
+		return new Common::JSONValue(out);
 	}
 	if (name == "mouse_move")   {
 		if (!toolMouseMove(args, errorOut)) return nullptr;
-		return new Common::JSONValue(Common::JSONObject());
+		const Common::JSONObject &a = args.asObject();
+		Common::JSONObject out;
+		out.setVal("x", mcpJsonInt((int)a["x"]->asIntegerNumber()));
+		out.setVal("y", mcpJsonInt((int)a["y"]->asIntegerNumber()));
+		return new Common::JSONValue(out);
 	}
 	if (name == "mouse_click")  {
 		if (!toolMouseClick(args, errorOut)) return nullptr;
-		return new Common::JSONValue(Common::JSONObject());
+		const Common::JSONObject &a = args.asObject();
+		Common::JSONObject out;
+		out.setVal("x", mcpJsonInt((int)a["x"]->asIntegerNumber()));
+		out.setVal("y", mcpJsonInt((int)a["y"]->asIntegerNumber()));
+		out.setVal("button", mcpJsonString(
+		    a.contains("button") && a["button"]->isString() ? a["button"]->asString() : "left"));
+		out.setVal("double", mcpJsonBool(
+		    a.contains("double") && a["double"]->isBool() && a["double"]->asBool()));
+		return new Common::JSONValue(out);
 	}
 	if (name == "screenshot")   return toolScreenshot(args, errorOut);
 	if (name == "save_state")   return toolSaveState(args, errorOut);
@@ -634,16 +719,56 @@ bool McpBridge::toolMouseClick(const Common::JSONValue &args, Common::String &er
 }
 
 Common::JSONValue *McpBridge::toolScreenshot(const Common::JSONValue &args, Common::String &errorOut) {
-	(void)args;
 	if (!g_system) {
 		errorOut = "screenshot: no system available";
 		return nullptr;
 	}
+	const bool wantFile = !args.isObject() || !args.asObject().contains("save_to_disk") ||
+	                      !args.asObject()["save_to_disk"]->isBool() ||
+	                      args.asObject()["save_to_disk"]->asBool();
+
+	Common::JSONObject out;
+
 	// Save to the configured screenshot path, auto-numbered, exactly like the
 	// in-app "save screenshot" action. Engine-agnostic.
-	g_system->saveScreenshot();
-	Common::JSONObject out;
-	out.setVal("saved", mcpJsonBool(true));
+	if (wantFile) {
+		g_system->saveScreenshot();
+		out.setVal("saved", mcpJsonBool(true));
+	}
+
+	// The picture itself, so the caller can simply look at the game.
+	Graphics::Surface *screen = g_system->lockScreen();
+	if (!screen) {
+		errorOut = "screenshot: the screen is not readable right now";
+		return nullptr;
+	}
+	out.setVal("width",  mcpJsonInt(screen->w));
+	out.setVal("height", mcpJsonInt(screen->h));
+
+	byte palette[256 * 3] = {};
+	if (screen->format.isCLUT8() && g_system->getPaletteManager())
+		g_system->getPaletteManager()->grabPalette(palette, 0, 256);
+	// Flatten to plain RGB first: a paletted frame carries its colours out of
+	// band, and every client can read RGB.
+	Graphics::Surface *rgb =
+	    screen->convertTo(Graphics::PixelFormat::createFormatRGB24(), palette, 256);
+	g_system->unlockScreen();
+	if (!rgb) {
+		errorOut = "screenshot: could not read the frame";
+		return nullptr;
+	}
+
+	Common::MemoryWriteStreamDynamic png(DisposeAfterUse::YES);
+	const bool encoded = Image::writePNG(png, *rgb);
+	rgb->free();
+	delete rgb;
+	if (!encoded) {
+		errorOut = "screenshot: could not encode the frame";
+		return nullptr;
+	}
+	out.setVal(Networking::kMcpImageKey,
+	           mcpJsonString(Common::b64EncodeData(png.getData(), png.size())));
+
 	return new Common::JSONValue(out);
 }
 

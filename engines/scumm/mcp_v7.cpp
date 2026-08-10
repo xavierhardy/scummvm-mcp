@@ -218,15 +218,13 @@ void McpBridgeFullThrottle::registerGameTools() {
 	Networking::McpServer::ToolSpec spec;
 	spec.name = "ride_bike";
 	spec.description =
-	    "Play the Full Throttle motorcycle minigame. Only available in Full "
-	    "Throttle once Ben has the bike keys (from the bartender) and is at his "
-	    "bike at the bar front. Mounts the bike and rides onto the highway, "
-	    "where a rival Rottwheeler biker attacks; the fight runs as a real-time "
-	    "action sequence steered by the mouse with left-click punches, so this "
-	    "tool auto-plays it — steering Ben alongside the enemy and punching in "
-	    "their direction until the fight resolves. Blocks until the section "
-	    "ends (Ben wipes out and wakes at the mechanic's shack), then returns "
-	    "state changes. Takes no arguments.";
+	    "Ride the motorcycle. Only available once the player character has the "
+	    "keys and is standing at the bike. The ride turns into a real-time fight "
+	    "with a rival biker, steered by the mouse with left-click punches — too "
+	    "fast to play a call at a time, so this tool plays it out: it keeps the "
+	    "character alongside the enemy and punches in their direction until the "
+	    "fight resolves. Blocks until the whole sequence ends, then returns what "
+	    "changed. Takes no arguments.";
 	spec.inputSchema  = nullptr;  // No input required
 	spec.outputSchema = buildChangesSchema();
 	spec.streaming    = true;

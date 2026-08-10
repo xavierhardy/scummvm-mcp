@@ -14,6 +14,7 @@ pointed at a folder that does not exist, skips its tests.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -44,16 +45,54 @@ def _log_tag(game_id: str, port: int) -> str:
     return f"scummvm_{game_id}_{port}" + (f"_{safe}" if safe else "")
 
 
-def _write_ini(game_id: str, game_path: str, port: int, scummvm_log: str) -> str:
+def screenshot_dir(ini_path: str) -> str:
+    """The folder the ``screenshot`` debug tool writes into for this instance.
+
+    It sits next to the rendered ini, so it is private to one launch and needs
+    no per-machine path (see ``_write_ini``).
+    """
+    return os.path.join(os.path.dirname(ini_path), "screenshots")
+
+
+def _apply_ini_overrides(content: str, overrides: dict[str, str]) -> str:
+    """Return *content* with each ``key=value`` replaced (or added).
+
+    Used to launch a game with a different MCP configuration than its committed
+    ini asks for — e.g. with the optional tools turned off, to check that the
+    server then neither offers nor mentions them.
+    """
+    for key, value in overrides.items():
+        line = f"{key}={value}"
+        pattern = re.compile(rf"^{re.escape(key)}=.*$", re.MULTILINE)
+        content, replaced = pattern.subn(line, content)
+        if not replaced:
+            content = content.rstrip("\n") + f"\n{line}\n"
+    return content
+
+
+def _write_ini(
+    game_id: str,
+    game_path: str,
+    port: int,
+    scummvm_log: str,
+    ini_overrides: dict[str, str] | None = None,
+) -> str:
     """Render the per-game ini template into a fresh temp dir, return its path."""
     ini_template = os.path.join(
         os.path.dirname(__file__), "ini_files", f"scummvm_{game_id}.ini"
     )
+    tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
+    ini_path = os.path.join(tmpdir, "scummvm.ini")
+    shots = screenshot_dir(ini_path)
+    os.makedirs(shots, exist_ok=True)
     with open(ini_template) as ini_file:
         content = ini_file.read() % {
             "game_path": game_path,
             "mcp_port": port,
             "logfile": scummvm_log,
+            # Where the screenshot debug tool drops its PNGs: private to this
+            # instance, so parallel runs never share a folder.
+            "screenshot_path": shots,
             # The repo's engine-data dir, for engines that need a data file
             # from the ScummVM distribution (queen.tbl for FOTAQ).
             "extra_path": os.path.normpath(
@@ -62,8 +101,8 @@ def _write_ini(game_id: str, game_path: str, port: int, scummvm_log: str) -> str
                 )
             ),
         }
-    tmpdir = tempfile.mkdtemp(prefix=f"scummvm_{game_id}_")
-    ini_path = os.path.join(tmpdir, "scummvm.ini")
+    if ini_overrides:
+        content = _apply_ini_overrides(content, ini_overrides)
     with open(ini_path, "w") as f:
         f.write(content)
     return ini_path
@@ -95,7 +134,7 @@ def _launch_args(
     save_path: str,
 ) -> list[str]:
     """Build the ScummVM command line for ``game_id``."""
-    if game_id in ("atlantis", "maniac", "woodruff"):
+    if game_id in ("atlantis", "maniac", "woodruff", "gob1-demo"):
         # No save slot — these games start from scratch and handle their own intro.
         return [scummvm_binary, "-c", ini_path, game_id]
     return [
@@ -131,6 +170,7 @@ def launch_scummvm(
     scummvm_binary: str = "./scummvm",
     save_slot: int = 1,
     isolate_saves: bool = True,
+    ini_overrides: dict[str, str] | None = None,
 ) -> subprocess.Popen:
     """Launch ScummVM headlessly with MCP enabled for the given game.
 
@@ -142,7 +182,7 @@ def launch_scummvm(
     ``launch_manual.py``) when you want ``save_state`` to write back into the
     repository's ``save_slots/<game_id>`` directory."""
     scummvm_log = os.path.join(_logs_dir(), f"{_log_tag(game_id, port)}.scummvm.log")
-    ini_path = _write_ini(game_id, game_path, port, scummvm_log)
+    ini_path = _write_ini(game_id, game_path, port, scummvm_log, ini_overrides)
     save_path = _resolve_save_path(game_id, ini_path, isolate_saves)
     args = _launch_args(game_id, scummvm_binary, ini_path, save_slot, save_path)
 
@@ -176,6 +216,8 @@ def launch_scummvm(
     # garbage-collected; the fixture teardown closes them (see conftest.py).
     # setattr (not attribute assignment) because Popen has no typed slot for it.
     setattr(proc, "_log_handles", (stdout_file, stderr_fh))  # noqa: B010
+    # Where this instance's screenshot tool writes, for tests that check it.
+    setattr(proc, "screenshot_path", screenshot_dir(ini_path))  # noqa: B010
 
     print(f"[MCP] {game_id} stdout: {log_file}", flush=True)
     print(f"[MCP] {game_id} stderr: {stderr_file}", flush=True)
@@ -205,6 +247,7 @@ _GAME_PATH_ENV = {
     "sky": "SKY_PATH",
     "queen": "QUEEN_PATH",
     "woodruff": "WOODRUFF_PATH",
+    "gob1-demo": "GOB1_DEMO_PATH",
 }
 
 LOCAL_PATHS_FILE = os.path.normpath(

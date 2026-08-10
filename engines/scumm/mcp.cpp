@@ -686,12 +686,25 @@ void ScummMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
 	(void)props;
 }
 
+Common::String ScummMcpBridge::stateToolDescription() const {
+	return "Returns the current game state: the room, where the player character "
+	       "stands, what is in the room, what is carried, the verbs on the verb "
+	       "bar, the lines said since the last read (cleared by reading them) and "
+	       "any dialog question waiting to be answered. The player character "
+	       "itself is not listed among the room's objects. Each object lists the "
+	       "verbs it responds to in compatible_verbs — start there rather than "
+	       "guessing — and one with a meaningful state also carries a readable "
+	       "state_name ('opened'/'closed' for a door, say). Characters are listed "
+	       "like objects and are spoken to with act(verb='talk_to', "
+	       "target1=<name>). Exits carry pathway=true.";
+}
+
 Common::String ScummMcpBridge::debugToolDescription() const {
-	return "Return raw engine state for diagnostics: room id, ego position, "
-	       "_userPut, _mouse, _virtualMouse, _leftBtnPressed, _rightBtnPressed, "
-	       "_mouseAndKeyboardStat, _keyPressed, _currentRoom, plus a slice of "
-	       "SCUMM script vars (0..127 by default; pass 'from' and 'to' to widen). "
-	       "Engine-version-agnostic.";
+	return "Return the raw state the game itself keeps, for diagnostics: the "
+	       "current room, where the player character is, what the mouse and "
+	       "keyboard look like to the game, whether it is taking input, and a "
+	       "slice of its script variables (0..127 by default; pass 'from' and "
+	       "'to' to widen).";
 }
 
 Common::JSONValue *ScummMcpBridge::buildDebugSchema() const {
@@ -715,20 +728,21 @@ void ScummMcpBridge::registerDebugTools() {
 	Networking::McpServer::ToolSpec spec;
 	spec.name = "set_talk_speed";
 	spec.description =
-	    "Force the game's text/talk speed at runtime, the same way the "
-	    "in-game speech-speed control does. Takes 'speed' on the 0..255 "
-	    "scale used by the --talkspeed option (0 = slowest, 255 = fastest, "
-	    "instant text). Needed for titles that run a boot script which "
-	    "overrides the configured talkspeed (e.g. the Fate of Atlantis "
-	    "demo), where the startup setting never takes. Updates ConfMan and "
-	    "the live VAR_CHARINC so it sticks for the rest of the session. "
-	    "Engine-version-agnostic.";
+	    "Set how fast text is shown, the same way the game's own speech-speed "
+	    "control does, on a 0..255 scale (0 = slowest, 255 = instant). Some "
+	    "games overwrite the configured speed when they start, leaving text "
+	    "crawling; this sets it for the rest of the session.";
 	Common::JSONObject props;
 	props.setVal("speed", mcpProp("integer",
 	    "Talk speed on the 0..255 scale (0 = slowest, 255 = fastest)."));
 	const char *req[] = {"speed"};
 	spec.inputSchema  = mcpObjectSchema(props, req, 1);
-	spec.outputSchema = nullptr;
+	Common::JSONObject outProps;
+	outProps.setVal("talkspeed",  mcpProp("integer", "The speed that was set (0..255)."));
+	outProps.setVal("text_speed", mcpProp("integer", "The same speed on the game's own scale."));
+	outProps.setVal("charinc",    mcpProp("integer",
+	    "The per-character delay the game now uses, when it has one."));
+	spec.outputSchema = mcpObjectSchema(outProps);
 	spec.streaming    = false;
 	_server->registerTool(spec);
 }

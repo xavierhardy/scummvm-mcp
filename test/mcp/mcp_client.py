@@ -76,6 +76,8 @@ class McpClient:
         self._req_id = 0
         self._schemas: dict[str, Any] | None = None
         self._client = httpx.Client(timeout=httpx.Timeout(timeout))
+        # Filled by the fixtures with the launched instance's screenshot folder.
+        self.screenshot_path: str | None = None
 
     def _next_id(self) -> int:
         self._req_id += 1
@@ -122,6 +124,11 @@ class McpClient:
         output schema (the debug tools) are left alone.
         """
         if not isinstance(result, dict):
+            return
+        # A rejected call answers with an error envelope instead of the tool's
+        # own result; that is the protocol talking, not the tool, so it is not
+        # what the output schema describes.
+        if set(result) == {"error"}:
             return
         schema = self._output_schemas().get(tool)
         if schema is None:
@@ -190,6 +197,41 @@ class McpClient:
         data = resp.json()
         if "error" in data:
             raise RuntimeError(f"Initialize error: {data['error']}")
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        """Return the advertised tools: name, description and both schemas."""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/list",
+            "params": {},
+        }
+        resp = self._client.post(self._url, json=payload, headers=self._headers())
+        data = resp.json()
+        if "error" in data:
+            raise RuntimeError(f"tools/list error: {data['error']}")
+        return data.get("result", {}).get("tools", [])
+
+    def call_tool_raw(
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Call a tool and return the whole MCP result envelope.
+
+        ``call_tool`` unwraps the structured result, which is what a test
+        usually wants; this keeps ``content`` too, for the tools that answer
+        with something other than data (``screenshot``'s image block).
+        """
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments or {}},
+        }
+        resp = self._client.post(self._url, json=payload, headers=self._headers())
+        data = resp.json()
+        if "error" in data:
+            raise RuntimeError(f"{name} error: {data['error']}")
+        return data.get("result", {})
 
     def call_tool(
         self, name: str, arguments: dict[str, Any] | None = None
@@ -276,13 +318,19 @@ class McpClient:
         verb: str,
         target1: str | int | None = None,
         target2: str | int | None = None,
+        x: int | None = None,
+        y: int | None = None,
     ) -> dict[str, Any]:
-        """Execute a verb on a target (streaming call)."""
-        arguments = {"verb": verb}
+        """Execute a verb on a target, or on a point when the game takes one."""
+        arguments: dict[str, Any] = {"verb": verb}
         if target1 is not None:
             arguments["target1"] = target1
         if target2 is not None:
             arguments["target2"] = target2
+        if x is not None:
+            arguments["x"] = x
+        if y is not None:
+            arguments["y"] = y
 
         payload = {
             "jsonrpc": "2.0",

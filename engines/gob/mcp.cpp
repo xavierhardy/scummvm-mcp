@@ -54,6 +54,7 @@ using Networking::mcpObjectSchema;
 GobMcpBridge::GobMcpBridge(GobEngine *vm)
 	: MCP::McpBridge(vm),
 	  _vm(vm),
+	  _toolsRegistered(false),
 	  _inPump(false),
 	  _lastFrameMs(0),
 	  _lastInputPollFrame(0),
@@ -82,9 +83,17 @@ GobMcpBridge::~GobMcpBridge() {
 }
 
 GobMcpBridge *GobMcpBridge::create(GobEngine *vm) {
-	GobMcpBridge *bridge = new GobMcpBridge(vm);
-	bridge->init();
-	return bridge;
+	// Note: no init() here. The bridge is built from the engine constructor, so
+	// the game is not identified yet and the tool table would describe the
+	// wrong game — onGameIdentified() builds it as soon as it is known.
+	return new GobMcpBridge(vm);
+}
+
+void GobMcpBridge::onGameIdentified() {
+	if (_toolsRegistered)
+		return;
+	_toolsRegistered = true;
+	init();
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +109,9 @@ bool GobMcpBridge::engineReady() const {
 void GobMcpBridge::pumpFromInput() {
 	if (!isEnabled() || _inPump)
 		return;
+	// Safety net for any path that reaches the game loop without having
+	// announced the game: a bridge with no tools would answer nothing.
+	onGameIdentified();
 	_inPump = true;
 	uint32 now = g_system->getMillis();
 	if (now - _lastFrameMs >= kFrameMs) {
@@ -241,8 +253,14 @@ void GobMcpBridge::pumpGame() {
 	}
 
 	pumpSteps();
-	pumpInventoryRefresh();
-	pumpNameSweep();
+	// Both machines below exist to learn names the game paints for a player:
+	// the item overlay's labels and the status-bar text a hover draws. A game
+	// that never paints either (its state comes from the engine's own tables)
+	// would only have its cursor dragged around for nothing.
+	if (!usesCharacterTeam()) {
+		pumpInventoryRefresh();
+		pumpNameSweep();
+	}
 }
 
 // Play out the synthetic-input queue, one step per frame.
@@ -822,6 +840,14 @@ bool GobMcpBridge::actionVarsReadable() const {
 }
 
 bool GobMcpBridge::gameBusy() const {
+	if (usesCharacterTeam()) {
+		// The game's own flags for "still on its way": a path being followed,
+		// a target being approached, an action about to be played out. Position
+		// alone will not do — the characters fidget on the spot while idle.
+		const Goblin *goblin = _vm->_goblin;
+		return goblin && (goblin->_pathExistence != 0 || goblin->_goesAtTarget != 0 ||
+		                  goblin->_readyToAct != 0);
+	}
 	return actionVarsReadable() && VAR(kWoodruffActionTarget) != 0;
 }
 
@@ -921,20 +947,334 @@ int GobMcpBridge::currentRoomForMessages() const {
 }
 
 // ---------------------------------------------------------------------------
+// Games driven by a character team
+//
+// These have no status-bar names and no per-object hotspots — the picture is
+// one big click zone — but the engine keeps the tables the scripts work from:
+// three characters the player switches between and the scene objects they can
+// act on, each with its screen rectangle. The snapshot is built from those
+// tables, and the two mouse buttons are the whole verb set: one sends the
+// active character somewhere, the other makes them act there.
+// ---------------------------------------------------------------------------
+
+bool GobMcpBridge::usesCharacterTeam() const {
+	return _vm->getGameType() == kGameTypeGob1;
+}
+
+const char *GobMcpBridge::teamCharacterName(int index) {
+	// The engine's own roles for the three characters (see Goblin::_goblins).
+	static const char *const kNames[kTeamSize] = { "picker", "fighter", "mage" };
+	if (index < 0 || index >= kTeamSize)
+		return "";
+	return kNames[index];
+}
+
+int GobMcpBridge::teamCharacterIndex(const Common::String &name) const {
+	Common::String normalized = normalizeActionName(name);
+	for (int i = 0; i < kTeamSize; i++)
+		if (normalized == teamCharacterName(i))
+			return i;
+	return -1;
+}
+
+void GobMcpBridge::buildTeamObjectList(Common::Array<TeamObject> &out) const {
+	out.clear();
+	if (!engineReady() || !_vm->_goblin)
+		return;
+	const Goblin *goblin = _vm->_goblin;
+	for (int i = 0; i < goblin->_objCount && i < 20; i++) {
+		const Goblin::Gob_Object *obj = goblin->_objects[i];
+		if (!obj || !obj->visible)
+			continue;
+		// Objects the scripts have parked keep stale rectangles; only report
+		// the ones that describe a spot on screen.
+		if (obj->left >= obj->right || obj->top >= obj->bottom)
+			continue;
+		if (obj->left < 0 || obj->top < 0 ||
+		    obj->right >= _vm->_width || obj->bottom >= _vm->_height)
+			continue;
+		TeamObject entry;
+		entry.index    = i;
+		entry.x        = (obj->left + obj->right) / 2;
+		entry.y        = (obj->top + obj->bottom) / 2;
+		entry.pickable = obj->pickable != 0;
+		out.push_back(entry);
+	}
+}
+
+bool GobMcpBridge::resolveTeamTarget(const Common::String &name, int &x, int &y,
+                                     Common::String &errorOut) const {
+	Common::String normalized = normalizeActionName(name);
+
+	int character = teamCharacterIndex(normalized);
+	if (character >= 0 && _vm->_goblin && _vm->_goblin->_goblins[character]) {
+		const Goblin::Gob_Object *g = _vm->_goblin->_goblins[character];
+		x = (g->left + g->right) / 2;
+		y = (g->top + g->bottom) / 2;
+		return true;
+	}
+
+	Common::Array<TeamObject> objects;
+	buildTeamObjectList(objects);
+	Common::String available;
+	for (uint i = 0; i < objects.size(); i++) {
+		Common::String objName = Common::String::format("object_%d", objects[i].index);
+		if (normalized == objName) {
+			x = objects[i].x;
+			y = objects[i].y;
+			return true;
+		}
+		if (!available.empty())
+			available += ", ";
+		available += objName;
+	}
+
+	errorOut = "unknown target '" + name + "'; objects on this screen: " +
+	           (available.empty() ? Common::String("(none)") : available) +
+	           " — or give x and y instead";
+	return false;
+}
+
+void GobMcpBridge::addTeamState(Common::JSONObject &out) const {
+	Common::JSONArray characters;
+	if (_vm->_goblin) {
+		for (int i = 0; i < kTeamSize; i++) {
+			const Goblin::Gob_Object *g = _vm->_goblin->_goblins[i];
+			if (!g)
+				continue;
+			Common::JSONObject c;
+			c.setVal("name", mcpJsonString(teamCharacterName(i)));
+			c.setVal("x",    mcpJsonInt((g->left + g->right) / 2));
+			c.setVal("y",    mcpJsonInt((g->top + g->bottom) / 2));
+			c.setVal("available", mcpJsonBool(g->type == 0));
+			characters.push_back(new Common::JSONValue(c));
+		}
+		out.setVal("controlling",
+		           mcpJsonString(teamCharacterName(_vm->_goblin->_currentGoblin)));
+	}
+	out.setVal("characters", new Common::JSONValue(characters));
+
+	Common::JSONArray objects;
+	Common::Array<TeamObject> entries;
+	buildTeamObjectList(entries);
+	for (uint i = 0; i < entries.size(); i++) {
+		Common::JSONObject o;
+		o.setVal("id",   mcpJsonInt(entries[i].index));
+		o.setVal("name", mcpJsonString(Common::String::format("object_%d", entries[i].index)));
+		o.setVal("x",    mcpJsonInt(entries[i].x));
+		o.setVal("y",    mcpJsonInt(entries[i].y));
+		if (entries[i].pickable)
+			o.setVal("pickable", mcpJsonBool(true));
+		objects.push_back(new Common::JSONValue(o));
+	}
+	out.setVal("objects", new Common::JSONValue(objects));
+
+	// One item at a time is carried; the scripts identify it by its item id.
+	Common::JSONArray inventory;
+	if (_vm->_goblin && _vm->_goblin->_itemIndInPocket >= 0) {
+		Common::JSONObject item;
+		item.setVal("id",   mcpJsonInt(_vm->_goblin->_itemIdInPocket));
+		item.setVal("name", mcpJsonString(
+		    Common::String::format("item_%d", _vm->_goblin->_itemIdInPocket)));
+		inventory.push_back(new Common::JSONValue(item));
+	}
+	out.setVal("inventory", new Common::JSONValue(inventory));
+
+	Common::JSONArray verbs;
+	verbs.push_back(mcpJsonString("walk to"));
+	verbs.push_back(mcpJsonString("interact"));
+	out.setVal("verbs", new Common::JSONValue(verbs));
+}
+
+bool GobMcpBridge::teamAct(const Common::JSONObject &args, const Common::String &verb,
+                           Common::String &errorOut) {
+	// One click is the whole interface: the game decides for itself whether the
+	// spot is somewhere to walk to or something to act on (verified against the
+	// game's own action mode — a click on bare ground walks, a click on
+	// something puts the character to work). So 'walk to' and 'interact' send
+	// the same click and differ only in where it is aimed; the verb is kept
+	// because that is how an agent thinks about it.
+	(void)verb;
+
+	int x = 0, y = 0;
+	if (args.contains("x") && args.contains("y") &&
+	    args["x"]->isIntegerNumber() && args["y"]->isIntegerNumber()) {
+		x = (int)args["x"]->asIntegerNumber();
+		y = (int)args["y"]->asIntegerNumber();
+	} else {
+		Common::String name;
+		Common::JSONObject::const_iterator it = args.find("target1");
+		if (it != args.end()) {
+			if (it->_value->isString())
+				name = it->_value->asString();
+			else if (it->_value->isIntegerNumber())
+				name = Common::String::format("object_%d",
+				                              (int)it->_value->asIntegerNumber());
+		}
+		if (name.empty()) {
+			errorOut = "act: give 'target1', or 'x' and 'y'";
+			return false;
+		}
+		if (!resolveTeamTarget(name, x, y, errorOut)) {
+			errorOut = "act: " + errorOut;
+			return false;
+		}
+	}
+
+	if (x < 0 || y < 0 || x >= _vm->_width || y >= _vm->_height) {
+		errorOut = Common::String::format("act: (%d, %d) is off screen (%dx%d)",
+		                                  x, y, _vm->_width, _vm->_height);
+		return false;
+	}
+
+	_useCmdLabel.clear();
+	queueClickWhenReady(x, y, false);
+	beginStream();
+	_sseSkipFast = false;
+	return true;
+}
+
+// --- Game-specific tools ---------------------------------------------------
+
+void GobMcpBridge::registerGameTools() {
+	if (!usesCharacterTeam())
+		return;
+
+	Common::JSONObject props;
+	props.setVal("name", mcpProp("string",
+	    "Who to control next, as named in state.characters. Omit to take the "
+	    "next available one."));
+	Networking::McpServer::ToolSpec spec;
+	spec.name = "switch_character";
+	spec.description =
+	    "Hand control to another member of the team. Each one has an ability the "
+	    "others do not, so most obstacles need the right one. The one in control "
+	    "is state.controlling; act and walk always drive that one. Refused while "
+	    "the current one is busy or standing somewhere they cannot be left.";
+	spec.inputSchema  = mcpObjectSchema(props);
+	Common::JSONObject outProps;
+	outProps.setVal("controlling", mcpProp("string",
+	    "Who has control now, as state.controlling reports it."));
+	spec.outputSchema = mcpObjectSchema(outProps);
+	spec.streaming    = false;
+	_server->registerTool(spec);
+}
+
+Common::JSONValue *GobMcpBridge::dispatchGameTool(const Common::String &name,
+                                                  const Common::JSONValue &args,
+                                                  Common::String &errorOut, bool &handled) {
+	if (usesCharacterTeam() && name == "switch_character") {
+		handled = true;
+		return toolSwitchCharacter(args, errorOut);
+	}
+	handled = false;
+	return nullptr;
+}
+
+Common::JSONValue *GobMcpBridge::toolSwitchCharacter(const Common::JSONValue &args,
+                                                     Common::String &errorOut) {
+	if (!engineReady() || !_vm->_goblin) {
+		errorOut = "switch_character: game is not running yet";
+		return nullptr;
+	}
+	if (!waitingForInput()) {
+		errorOut = "switch_character: game is not accepting input right now";
+		return nullptr;
+	}
+
+	int wanted = -1; // -1: whoever comes next
+	if (args.isObject() && args.asObject().contains("name") &&
+	    args.asObject()["name"]->isString()) {
+		Common::String name = args.asObject()["name"]->asString();
+		wanted = teamCharacterIndex(name);
+		if (wanted < 0) {
+			errorOut = "switch_character: unknown character '" + name + "'";
+			return nullptr;
+		}
+	}
+
+	const int before = _vm->_goblin->_currentGoblin;
+	if (wanted == before) {
+		// Already in control. Saying so beats handing the request to the game,
+		// which would play the whole hand-over animation to the same character
+		// and swallow the next click while it runs.
+		Common::JSONObject out;
+		out.setVal("controlling", mcpJsonString(teamCharacterName(before)));
+		return new Common::JSONValue(out);
+	}
+
+	// The engine's own switch, with its own guards (it refuses while the
+	// current character is mid-animation or standing where they may not be
+	// left). 0 means "the next one", otherwise it is 1-based.
+	_vm->_goblin->switchGoblin(wanted < 0 ? 0 : wanted + 1);
+	const int now = _vm->_goblin->_currentGoblin;
+	if (now == before && (wanted < 0 || wanted != before)) {
+		errorOut = "switch_character: the game refused the switch right now — "
+		           "try again once the current character is standing still";
+		return nullptr;
+	}
+
+	Common::JSONObject out;
+	out.setVal("controlling", mcpJsonString(teamCharacterName(now)));
+	return new Common::JSONValue(out);
+}
+
+// ---------------------------------------------------------------------------
 // Tool: state
 // ---------------------------------------------------------------------------
 
 Common::String GobMcpBridge::stateToolDescription() const {
-	return "Returns the current game state: screen (id + TOT name), the screen's "
-	       "named hotspots, the inventory, the two verbs, and the lines the game "
-	       "has drawn since the last read (cleared after reading). This is a "
-	       "one-click game: every objects[] entry — scenery, characters and exits "
-	       "alike — is acted on with act(verb='interact', target1=<name>), which "
-	       "walks Woodruff over and runs the hotspot's own script. Exits carry "
-	       "pathway=true. Names are harvested from the status-bar text the game "
-	       "shows a player, so they are only final once naming_pending is false. "
-	       "Nothing is accepted while can_act is false. This game asks no dialog "
-	       "questions: conversations play out as messages, so answer is never used.";
+	if (usesCharacterTeam()) {
+		return "Returns the current game state: the screen, the team and which "
+		       "member is being controlled, the objects on screen, what is being "
+		       "carried, and the lines drawn since the last read (cleared by "
+		       "reading them). There is no verb bar and no look verb — pointing "
+		       "at a spot is the whole interface, and the game decides whether "
+		       "that means going there or acting on what is there. act takes "
+		       "either a target1 from objects[] or a plain x/y, and coordinates "
+		       "are the usual way to point: most of the picture is scenery that "
+		       "no object covers. Puzzles turn on who acts, so switch_character "
+		       "matters as much as where. Nothing is accepted while can_act is "
+		       "false.";
+	}
+	return "Returns the current game state: the screen, everything on it that can "
+	       "be pointed at, what is carried, the verbs, and the lines drawn since "
+	       "the last read (cleared by reading them). This is a one-click game: "
+	       "every objects[] entry — scenery, characters and exits alike — is "
+	       "acted on with act(verb='interact', target1=<name>), which walks the "
+	       "player character over and lets the game do whatever that thing "
+	       "invites. Exits carry pathway=true. Names are the ones the game shows "
+	       "a player, and are only final once naming_pending is false. Nothing is "
+	       "accepted while can_act is false; conversations play out on their own, "
+	       "as messages.";
+}
+
+Common::String GobMcpBridge::actToolDescription() const {
+	if (usesCharacterTeam()) {
+		return "Point the character in control at a place: they go there, and "
+		       "act on whatever is there if anything is — the game decides, so "
+		       "'walk to' and 'interact' differ only in what you aim at. Give "
+		       "either target1 (a name from state.objects) or a plain x/y; "
+		       "coordinates are the usual way to point, since most of the picture "
+		       "is scenery no object covers. What comes of it depends on who is "
+		       "in control and on what they carry. " + streamingToolNote();
+	}
+	return "Act on something on screen, by the name state gives it. One click is "
+	       "the whole interaction here: the player character walks over and does "
+	       "whatever the target invites — examining, talking, opening, picking "
+	       "up — so 'interact' covers nearly everything, and 'use <carried item> "
+	       "on <target>' is the exception. " + streamingToolNote();
+}
+
+Common::String GobMcpBridge::walkToolDescription() const {
+	if (usesCharacterTeam()) {
+		return "Send the character in control to (x, y) on screen. They walk as "
+		       "far as the ground allows, which may stop short of the point. " +
+		       streamingToolNote();
+	}
+	return "Send the player character to (x, y) on screen — the floor, where no "
+	       "object is. To go to something named, act on it instead. " +
+	       streamingToolNote();
 }
 
 // { "type": "array", "items": { "type": "object", "properties": props } }
@@ -958,7 +1298,63 @@ static void dropProp(Common::JSONObject &props, const char *key) {
 	props.erase(key);
 }
 
+void GobMcpBridge::augmentActSchema(Common::JSONObject &props) {
+	if (!usesCharacterTeam())
+		return;
+	props.setVal("x", mcpProp("integer",
+	    "X coordinate to act on, instead of target1. Most of the picture is not "
+	    "a listed object, so any spot can be targeted directly."));
+	props.setVal("y", mcpProp("integer",
+	    "Y coordinate to act on, instead of target1."));
+}
+
 void GobMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
+	if (usesCharacterTeam()) {
+		outputProps.setVal("can_act", mcpProp("boolean",
+		    "False while the game is not accepting input (video, scripted "
+		    "sequence). act/walk are rejected until it turns true again."));
+		{
+			Common::JSONObject props;
+			props.setVal("name", mcpProp("string",
+			    "Character name, as switch_character expects it."));
+			props.setVal("x", mcpProp("integer", "X coordinate on screen."));
+			props.setVal("y", mcpProp("integer", "Y coordinate on screen."));
+			props.setVal("available", mcpProp("boolean",
+			    "False while this one cannot be taken over (carried, trapped, "
+			    "or otherwise out of play)."));
+			outputProps.setVal("characters", objectArraySchema(props));
+		}
+		outputProps.setVal("controlling", mcpProp("string",
+		    "The character act and walk currently drive."));
+		{
+			Common::JSONObject props;
+			props.setVal("id",   mcpProp("integer", "Object id; usable as an act() target."));
+			props.setVal("name", mcpProp("string",  "Object name, as act() expects it."));
+			props.setVal("x",    mcpProp("integer", "X coordinate of its centre."));
+			props.setVal("y",    mcpProp("integer", "Y coordinate of its centre."));
+			props.setVal("pickable", mcpProp("boolean",
+			    "Present and true when the object can be carried away."));
+			outputProps.setVal("objects", objectArraySchema(props));
+		}
+		{
+			Common::JSONObject props;
+			props.setVal("name", mcpProp("string",  "Item name."));
+			props.setVal("id",   mcpProp("integer", "Item id."));
+			outputProps.setVal("inventory", objectArraySchema(props));
+		}
+		{
+			Common::JSONObject props;
+			props.setVal("text", mcpProp("string", "Line of game text."));
+			props.setVal("type", mcpProp("string", "Always 'text' — this game does not attribute lines."));
+			outputProps.setVal("messages", objectArraySchema(props));
+		}
+		// No single player character to report a position for, and the game
+		// asks no dialog questions.
+		dropProp(outputProps, "position");
+		dropProp(outputProps, "question");
+		return;
+	}
+
 	outputProps.setVal("can_act", mcpProp("boolean",
 	    "False while the game is not accepting input (video, scripted sequence). "
 	    "act/walk are rejected until it turns true again."));
@@ -1016,13 +1412,44 @@ void GobMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
 	// no object states, no inventory diff and no dialog questions to report.
 	dropProp(props, "inventory_added");
 	dropProp(props, "inventory_removed");
-	dropProp(props, "position");
 	dropProp(props, "objects_changed");
 	dropProp(props, "question");
+	if (usesCharacterTeam()) {
+		props.setVal("controlling", mcpProp("string",
+		    "The character the action left in control."));
+		return; // keeps 'position': where that character ended up
+	}
+	dropProp(props, "position");
 }
 
 Common::JSONValue *GobMcpBridge::toolState(const Common::JSONValue &, Common::String &) {
 	Common::JSONObject out;
+
+	// Games with an engine-side character team report what those tables hold,
+	// not the screen's hotspots (which are one big click zone there).
+	if (usesCharacterTeam()) {
+		Common::JSONObject roomObj;
+		const Common::String &teamTot = _vm->_game->_curTotFile;
+		roomObj.setVal("id",   mcpJsonInt(mcpGobScreenId(teamTot)));
+		roomObj.setVal("name", mcpJsonString(mcpGobScreenName(teamTot)));
+		out.setVal("room", new Common::JSONValue(roomObj));
+		out.setVal("can_act", mcpJsonBool(waitingForInput()));
+		addTeamState(out);
+
+		Common::JSONArray teamMessages;
+		for (uint i = 0; i < _messages.size(); i++) {
+			Common::JSONObject m;
+			Common::String text = MCP::mcpCleanGameText(safeUtf8(_messages[i].text));
+			if (text.empty())
+				continue;
+			m.setVal("text", mcpJsonString(text));
+			m.setVal("type", mcpJsonString(_messages[i].type));
+			teamMessages.push_back(new Common::JSONValue(m));
+		}
+		_messages.clear();
+		out.setVal("messages", new Common::JSONValue(teamMessages));
+		return new Common::JSONValue(out);
+	}
 
 	// While the bridge has the game's inventory overlay open, the live screen is
 	// MENU.tot and its hotspots are the item slots. That is bridge bookkeeping,
@@ -1122,6 +1549,21 @@ bool GobMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	}
 	const Common::JSONObject &a = args.asObject();
 	Common::String verb = normalizeActionName(a["verb"]->asString());
+
+	if (usesCharacterTeam()) {
+		if (verb != "walk_to" && verb != "interact" && verb != "use" &&
+		    verb != "pick_up" && verb != "open" && verb != "close" &&
+		    verb != "push" && verb != "pull" && verb != "talk_to") {
+			errorOut = "act: unknown verb '" + verb +
+			           "' (use 'walk to' or 'interact')";
+			return false;
+		}
+		if (!waitingForInput()) {
+			errorOut = "act: game is not accepting input right now";
+			return false;
+		}
+		return teamAct(a, verb, errorOut);
+	}
 
 	// Woodruff is a one-click game: every verb (including examining — the
 	// game has no separate look) is a left click on the target.
@@ -1427,6 +1869,20 @@ Common::JSONObject GobMcpBridge::buildStateChanges() const {
 			changes.setVal("messages", new Common::JSONValue(messages));
 	}
 
+	// Where the controlled character ended up: the only feedback a move gives
+	// in a game that says nothing while it plays.
+	if (usesCharacterTeam() && _vm->_goblin) {
+		const Goblin::Gob_Object *g = _vm->_goblin->_goblins[_vm->_goblin->_currentGoblin];
+		if (g) {
+			Common::JSONObject pos;
+			pos.setVal("x", mcpJsonInt((g->left + g->right) / 2));
+			pos.setVal("y", mcpJsonInt((g->top + g->bottom) / 2));
+			changes.setVal("position", new Common::JSONValue(pos));
+			changes.setVal("controlling",
+			               mcpJsonString(teamCharacterName(_vm->_goblin->_currentGoblin)));
+		}
+	}
+
 	return changes;
 }
 
@@ -1486,6 +1942,16 @@ Common::JSONValue *GobMcpBridge::toolDebug(const Common::JSONValue &args, Common
 		sys.setVal("screen_delta_y", mcpJsonInt(_vm->_video->_screenDeltaY));
 		sys.setVal("scroll_offset_x", mcpJsonInt(_vm->_video->_scrollOffsetX));
 		sys.setVal("scroll_offset_y", mcpJsonInt(_vm->_video->_scrollOffsetY));
+		if (usesCharacterTeam() && _vm->_goblin) {
+			// What the game itself thinks the team is doing: who is controlled,
+			// which of move/act/pick the next click means, and what is carried.
+			sys.setVal("current_character", mcpJsonInt(_vm->_goblin->_currentGoblin));
+			sys.setVal("action_mode",       mcpJsonInt(_vm->_goblin->_gobAction));
+			sys.setVal("ready_to_act",      mcpJsonInt(_vm->_goblin->_readyToAct));
+			sys.setVal("goes_at_target",    mcpJsonInt(_vm->_goblin->_goesAtTarget));
+			sys.setVal("pocket_index",      mcpJsonInt(_vm->_goblin->_itemIndInPocket));
+			sys.setVal("pocket_item",       mcpJsonInt(_vm->_goblin->_itemIdInPocket));
+		}
 		out.setVal("system", new Common::JSONValue(sys));
 	}
 

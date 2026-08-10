@@ -76,6 +76,7 @@ protected:
 	bool toolSkip(const Common::JSONValue &args, Common::String &errorOut) override;
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut) override;
 
+	Common::String stateToolDescription() const override;
 	Common::String debugToolDescription() const override;
 	Common::JSONValue *buildDebugSchema() const override;
 	void augmentStateSchema(Common::JSONObject &outputProps) override;

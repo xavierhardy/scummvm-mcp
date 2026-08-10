@@ -81,11 +81,17 @@ _FIXTURE_INDEX = {
     "maniac_full": 27,
     "zak_tv": 28,
     "monkey2_swamp": 29,
+    "gob1": 30,
+    "plain_tools": 31,
 }
 
 
 def _client(
-    game_id: str, fixture_key: str, save_slot: int = 1, checkpoint: bool = False
+    game_id: str,
+    fixture_key: str,
+    save_slot: int = 1,
+    checkpoint: bool = False,
+    ini_overrides: dict[str, str] | None = None,
 ) -> Iterator[McpClient]:
     """Launch ScummVM for *game_id*, yield a connected McpClient, then tear down.
 
@@ -105,8 +111,11 @@ def _client(
         port=port,
         scummvm_binary=scummvm_binary,
         save_slot=save_slot,
+        ini_overrides=ini_overrides,
     )
     client = wait_for_mcp(MCP_HOST, port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    # Where this instance's screenshot tool writes, for tests that look there.
+    client.screenshot_path = getattr(proc, "screenshot_path", None)
     try:
         yield client
     finally:
@@ -337,6 +346,28 @@ def maniac_full_client() -> Iterator[McpClient]:
 def ft_client() -> Iterator[McpClient]:
     """Full Throttle demo (no save support; ordered storyline walkthrough)."""
     yield from _client("ft-demo", "ft")
+
+
+@pytest.fixture
+def plain_tools_client() -> Iterator[McpClient]:
+    """A game with every optional MCP setting turned off.
+
+    The committed inis enable mcp_debug and mcp_skip_tool; this one does not,
+    which is how the tool table is checked for what it must *not* carry."""
+    yield from _client(
+        "monkey-ega-demo",
+        "plain_tools",
+        ini_overrides={"mcp_debug": "false", "mcp_skip_tool": "false"},
+    )
+
+
+@pytest.fixture(scope="session")
+def gob1_client() -> Iterator[McpClient]:
+    """Gobliiins interactive demo (Gob engine, three-character team).
+
+    No save support: one ordered sequence on a single instance, started fresh
+    and skipped past the intro (like woodruff and the atlantis/ft demos)."""
+    yield from _client("gob1-demo", "gob1")
 
 
 @pytest.fixture(scope="session")

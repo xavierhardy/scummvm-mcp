@@ -71,6 +71,12 @@ public:
 	explicit GobMcpBridge(GobEngine *vm);
 	~GobMcpBridge() override;
 
+	// Called once the engine knows which game it is running. The bridge is
+	// built before that (so the server binds its port before anything can
+	// block on startup), but which tools exist, and what they say, depends on
+	// the game — so the tool table is only built here.
+	void onGameIdentified();
+
 	// Called from Util::processInput(). Advances the frame counter at most
 	// once per kFrameMs; other calls only service the transport.
 	void pumpFromInput();
@@ -93,10 +99,16 @@ protected:
 	Common::JSONValue *toolDebug(const Common::JSONValue &args, Common::String &errorOut) override;
 
 	Common::String stateToolDescription() const override;
+	Common::String actToolDescription() const override;
+	Common::String walkToolDescription() const override;
 	Common::String debugToolDescription() const override;
+	// Neither game here ever puts a question to the player: conversations play
+	// out on their own. So the answer tool is not registered.
+	bool usesDialogQuestions() const override { return false; }
 	Common::JSONValue *buildDebugSchema() const override;
 	void augmentStateSchema(Common::JSONObject &outputProps) override;
 	void augmentChangesSchema(Common::JSONObject &props) override;
+	void augmentActSchema(Common::JSONObject &props) override;
 
 	// Reject every tool until GobEngine::run() has built the subsystems (the
 	// bridge is created in the GobEngine constructor so the port binds first).
@@ -271,7 +283,50 @@ private:
 	bool resolveTarget(const Common::String &name, Hotspots::McpDesc &out,
 	                   Common::String &errorOut) const;
 
+	// --- Games driven by a character team -----------------------------------
+	// Some games in this family have no status-bar names and no per-object
+	// hotspots: the whole picture is one click zone, and the engine keeps its
+	// own tables of the three characters the player switches between and of the
+	// scene objects they can act on. For those the snapshot is built from those
+	// tables, and the two mouse buttons are the whole verb set — one moves the
+	// active character, the other makes them act where they are sent.
+	bool usesCharacterTeam() const;
+	static const int kTeamSize = 3;
+	// Stable name for team member *index*, after the ability the game gives it.
+	static const char *teamCharacterName(int index);
+	// Index of a team member by name, or -1.
+	int teamCharacterIndex(const Common::String &name) const;
+
+	// One entry of the engine's scene-object table, as state reports it.
+	struct TeamObject {
+		int index;          // slot in the engine's table; the reported id
+		int x, y;           // centre of its screen rectangle
+		bool pickable;
+	};
+	void buildTeamObjectList(Common::Array<TeamObject> &out) const;
+	// Resolve an `act` target for those games ("object_3", a character name) to
+	// the point a click should land on.
+	bool resolveTeamTarget(const Common::String &name, int &x, int &y,
+	                       Common::String &errorOut) const;
+	// act() for those games: a move click or an act click, on a named target or
+	// on explicit coordinates.
+	bool teamAct(const Common::JSONObject &args, const Common::String &verb,
+	             Common::String &errorOut);
+	// Fill the team-specific parts of the snapshot.
+	void addTeamState(Common::JSONObject &out) const;
+
+	// --- Game-specific tools ------------------------------------------------
+	void registerGameTools() override;
+	Common::JSONValue *dispatchGameTool(const Common::String &name,
+	                                    const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override;
+	Common::JSONValue *toolSwitchCharacter(const Common::JSONValue &args,
+	                                       Common::String &errorOut);
+
 	GobEngine *_vm;
+
+	// Set once the tool table has been built (see onGameIdentified()).
+	bool _toolsRegistered;
 
 	// Re-entrancy guard: processInput() runs inside tool handlers too.
 	bool _inPump;

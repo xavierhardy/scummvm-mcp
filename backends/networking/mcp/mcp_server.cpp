@@ -120,6 +120,8 @@ static inline unsigned short htons(unsigned short x) {
 
 namespace Networking {
 
+const char *const kMcpImageKey = "_image_png_base64";
+
 // Cap on a single client's unparsed request buffer. Tool payloads are tiny
 // (state reads, short verb/coordinate calls), so anything past this is either a
 // malformed/oversized request or a slow-loris-style stall holding a connection
@@ -250,13 +252,37 @@ namespace {
 
 // Wrap a structured result into MCP content envelope: {content:[{type:text,text:...}], structuredContent:...}
 // Ownership of `result` transfers into the returned wrapper.
+//
+// A tool that produces a picture puts it in the result under kImageKey, as
+// base64 PNG. It is not part of the tool's data — it is there for the client to
+// look at — so it is moved out of structuredContent into an image content
+// block, which is how MCP carries images.
 Common::JSONValue *wrapStructured(Common::JSONValue *result) {
+	Common::String imageData;
+	if (result && result->isObject()) {
+		Common::JSONObject &obj = const_cast<Common::JSONObject &>(result->asObject());
+		Common::JSONObject::iterator it = obj.find(Networking::kMcpImageKey);
+		if (it != obj.end()) {
+			if (it->_value && it->_value->isString())
+				imageData = it->_value->asString();
+			delete it->_value;
+			obj.erase(it);
+		}
+	}
+
 	Common::String json = result ? result->stringify() : "{}";
 	Common::JSONObject text;
 	text.setVal("type", mcpJsonString("text"));
 	text.setVal("text", mcpJsonString(json));
 	Common::JSONArray arr;
 	arr.push_back(new Common::JSONValue(text));
+	if (!imageData.empty()) {
+		Common::JSONObject image;
+		image.setVal("type",     mcpJsonString("image"));
+		image.setVal("data",     mcpJsonString(imageData));
+		image.setVal("mimeType", mcpJsonString("image/png"));
+		arr.push_back(new Common::JSONValue(image));
+	}
 	Common::JSONObject out;
 	out.setVal("content",           new Common::JSONValue(arr));
 	out.setVal("structuredContent", result);

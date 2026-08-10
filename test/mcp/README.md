@@ -34,6 +34,7 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | Beneath a Steel Sky (CD) | sky | `sky` | `test_sky.py` | `SKY_PATH` |
 | Flight of the Amazon Queen (talkie) | queen | `queen` | `test_queen.py` | `QUEEN_PATH` |
 | Woodruff and the Schnibble | gob | `woodruff` | `test_woodruff.py` | `WOODRUFF_PATH` |
+| Gobliiins (interactive demo) | gob | `gob1-demo` | `test_gob1.py` | `GOB1_DEMO_PATH` |
 
 Game-data folders are per-machine and are **never** in tracked code: list them
 under `[games]` in the non-committed `game_paths.local.toml` at the repository
@@ -105,7 +106,9 @@ it down — so tests are independent and parallel-safe. Ports are assigned per
 
 Full Throttle and Atlantis demos cannot save/load arbitrary states, so their
 fixtures are **session-scoped** ordered walkthroughs pinned to a single worker
-via the `xdist_group` mark.
+via the `xdist_group` mark. Woodruff, Gobliiins and the full Maniac Mansion run
+the same way, each starting fresh and skipping past its intro (or, for Maniac,
+its kid selection).
 
 ## Code map
 

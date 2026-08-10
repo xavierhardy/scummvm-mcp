@@ -17,7 +17,7 @@
       "description": "Connect to ScummVM's built-in MCP server. Enable by setting mcp=true in scummvm.ini. Use mcp_port to override the default port (23456)."
     }
   },
-  "notes": "The MCP server uses Streamable HTTP (MCP spec 2025-03-26). Sync tools (state) return immediately; streaming tools (act, answer, walk, skip, and the game-specific tools) open an SSE channel and emit notifications as dialog plays out, then return a structured result when the action completes. The exact tool set is engine- and game-dependent: query tools/list at runtime. Beyond the core tools, some games expose extra tools (see gameTools: play_note for Loom, shoot_cannon for COMI, ride_bike for Full Throttle, choose_kids, switch_character and dial for Maniac Mansion), and a set of diagnostic debugTools is registered only when mcp_debug=true.",
+  "notes": "The MCP server uses Streamable HTTP (MCP spec 2025-03-26). Sync tools (state) return immediately; streaming tools (act, answer, walk, skip, and the game-specific tools) open an SSE channel and emit notifications as dialog plays out, then return a structured result when the action completes. The exact tool set and every tool's description are game-dependent — a game that never asks a dialog question has no answer tool, a game driven by a team of characters has a switch_character tool — and the optional settings add or remove tools too (mcp_skip_tool for skip, mcp_debug for the diagnostic set). Nothing that is not registered is ever referred to. Always query tools/list at runtime rather than assuming this document's list: it is a description of the shape, not of one game's surface. Beyond the core tools, some games expose extra tools (see gameTools).",
   "networkExamples": {
     "scummvm_ini": "[monkey1]\nmcp=true\n",
     "scummvm_ini_custom_port": "[monkey1]\nmcp=true\nmcp_port=23456\n",
@@ -480,7 +480,7 @@
     {
       "name": "answer",
       "type": "streaming",
-      "description": "Select a dialog choice by 1-based index. Only valid when state.question is present. Streams SSE notifications as the conversation plays out; returns a state-change summary when complete.",
+      "description": "Select a dialog choice by 1-based index. Only valid when state.question is present. Registered only for games that put questions to the player. Streams SSE notifications as the conversation plays out; returns a state-change summary when complete.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -733,7 +733,7 @@
     ]
   },
   "debugTools": {
-    "description": "Diagnostic tools registered only when mcp_debug=true in the game's scummvm.ini section. Engine-version-agnostic unless noted. Intended for debugging and test-fixture authoring, not normal play; their results are free-form (no fixed outputSchema). keystroke/mouse_move/mouse_click run on the next engine frame.",
+    "description": "Diagnostic tools, registered only when mcp_debug=true in the game's scummvm.ini section. Each declares an input and an output schema like every other tool; the debug read-out itself is deliberately open, since which sections a game keeps differs per game. keystroke/mouse_move/mouse_click are injected input and take effect on the next engine frame; they answer with what they injected, so read state (or take a screenshot) to see what came of it.",
     "tools": [
       {
         "name": "debug",
@@ -841,10 +841,15 @@
       {
         "name": "screenshot",
         "type": "sync",
-        "description": "Save a PNG screenshot of the current frame to the configured screenshot path (auto-numbered, like the in-app screenshot key).",
+        "description": "Return the current frame as a PNG image, and by default also write it to the configured screenshot folder (auto-numbered, like the in-app screenshot key). The image comes back as an MCP image content block (base64 PNG) alongside the structured result {width, height, saved}, so a client can simply look at the game.",
         "inputSchema": {
           "type": "object",
-          "properties": {},
+          "properties": {
+            "save_to_disk": {
+              "type": "boolean",
+              "description": "Also write the frame to the screenshot folder (default true)."
+            }
+          },
           "additionalProperties": false
         }
       },
@@ -1033,6 +1038,19 @@
       "question": "This game has no MCP dialog chooser: conversations play as scripted lines surfaced in messages, so answer is not used.",
       "skip": "The game has no save states; skip breaks the intro videos one at a time. Once the game is interactive skip is rejected with \"nothing to skip\", which is the done signal for an intro-skip loop.",
       "debug": "The debug tool (mcp_debug) has sections system / hotspots / text_items / vars, plus screenshot / mouse_move / mouse_click / keystroke."
+    },
+    "gobliiins": {
+      "scope": "Gobliiins (gob engine) — the games driven by a team of three characters.",
+      "interface": "No verb bar, no hover text and no per-object click zone: the whole picture is one zone, and a single click is the entire interface — the game decides for itself whether the spot clicked means 'go there' or 'act on what is there'. The bridge reports the game's own tables instead of the screen's click zones (the three characters and the scene objects) and replays real cursor input for every action: it moves the cursor onto the point, lets the game register it, then clicks.",
+      "verbs": "Two, and they send the same click: 'walk to' and 'interact'. They differ only in what you aim at, because the game — not the caller — decides whether a spot is somewhere to walk or something to act on. pick_up / open / close / talk_to / push / pull / use are accepted as aliases. There is no look verb: the game answers by doing.",
+      "targets": "act takes either target1 (a name from state.objects) or a plain x/y. Coordinates are the usual way to point at something: most of the picture is scenery that no object covers. Out-of-screen coordinates are refused rather than clamped.",
+      "characters": "state.characters lists the three team members with their position and whether they can be taken over; state.controlling names the one act and walk drive. switch_character hands control over by name (or to the next one when called with no name), and is refused while the current character is mid-action or standing somewhere they may not be left. Each has an ability the others lack, so the puzzle is usually choosing who acts.",
+      "objects": "state.objects carries id, name (object_<id>), the centre of its rectangle (x/y) and pickable when it can be carried away. The names are positional identifiers: the game paints no names for a player either.",
+      "inventory": "One item at a time: state.inventory holds the carried item (item_<id>) or nothing. Carrying it is what changes what interact does.",
+      "canAct": "state.can_act is false while a video or scripted sequence is playing; act, walk and switch_character are rejected until the game is waiting for input again. An action's stream stays open until the character has stopped moving, so the position it returns is where they ended up.",
+      "question": "This game asks no dialog questions, so answer is never used.",
+      "skip": "The demo has no save states; skip breaks the intro videos one at a time. Once the game is interactive skip is rejected with \"nothing to skip\", which is the done signal for an intro-skip loop.",
+      "screenshots": "Because names are positional here, the screenshot tool (mcp_debug) is the natural companion: it returns the frame as an image, which is how to tell what an object_<id> actually is."
     }
   }
 }

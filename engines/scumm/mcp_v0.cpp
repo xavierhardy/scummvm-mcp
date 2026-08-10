@@ -38,10 +38,10 @@ void McpBridgeV0::registerGameTools() {
 	Networking::McpServer::ToolSpec spec;
 	spec.name = "dial";
 	spec.description =
-	    "Dial a number on the phone dial pad. Only valid while the dial pad is "
-	    "on screen (use the phone first via act(verb='use', target1='phone')). "
-	    "Presses the keypad buttons one at a time, blocks until the sequence "
-	    "(and any resulting call) settles, then returns state changes.";
+	    "Dial a number on the phone's keypad. Only valid while the keypad is on "
+	    "screen — use the phone first, with act(verb='use', target1='phone'). "
+	    "Presses the keys one at a time, blocks until the number and any call it "
+	    "places have played out, then returns what changed.";
 	spec.inputSchema  = mcpObjectSchema(props, req, 1);
 	spec.outputSchema = buildChangesSchema();
 	spec.streaming    = true;
@@ -100,12 +100,12 @@ void McpBridgeManiac::registerGameTools() {
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "switch_character";
 		spec.description =
-		    "Switch the player-controlled kid (the F1-F3 keys in Maniac Mansion). "
-		    "state lists the available names in 'available_characters' and the "
-		    "current one in 'controlling'. Only allowed during normal gameplay (not "
-		    "in a cutscene and not while kid switching is disabled). Blocks until "
-		    "the switch settles, then returns state changes — room_changed/position "
-		    "reflect the newly controlled kid.";
+		    "Hand control to another member of the team, the way the game's own "
+		    "character keys do. state lists who is available in "
+		    "'available_characters' and who has control in 'controlling'. Only "
+		    "allowed during normal play — not in a cutscene, and not while the game "
+		    "has switching disabled. Blocks until the switch settles, then returns "
+		    "what changed: the room and position are the new character's.";
 		spec.inputSchema  = mcpObjectSchema(props, req, 1);
 		spec.outputSchema = buildChangesSchema();
 		spec.streaming    = true;
@@ -130,15 +130,13 @@ void McpBridgeManiac::registerGameTools() {
 		Networking::McpServer::ToolSpec spec;
 		spec.name = "choose_kids";
 		spec.description =
-		    "Pick the three heroes on the Maniac Mansion title screen and start "
-		    "the game. Dave always leads the rescue, so name the two kids who "
-		    "join him (naming Dave as the third is accepted). Each portrait is "
-		    "clicked in turn and identified by the line the game prints for it, "
-		    "so the kids end up selected whatever order the portraits are in; "
-		    "then START is pressed. Only valid while the title screen is up, "
-		    "before the game has started. Blocks until the game has begun (by "
-		    "default escaping through the intro until the player has control) "
-		    "and returns state changes, with the team in 'kids'.";
+		    "Pick the three heroes on the title screen and start the game. Dave "
+		    "always leads the rescue, so name the two who join him (naming Dave as "
+		    "the third is accepted too). Their portraits are picked out by the line "
+		    "the game prints for each, so the order they are shown in does not "
+		    "matter; the game is then started. Only valid while the title screen is "
+		    "up. Blocks until play has begun (skipping the opening sequence by "
+		    "default) and returns what changed, with the team in 'kids'.";
 		spec.inputSchema  = mcpObjectSchema(props, req, 1);
 		spec.outputSchema = buildChangesSchema();
 		spec.streaming    = true;

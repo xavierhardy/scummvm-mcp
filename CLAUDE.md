@@ -50,8 +50,8 @@ showed it. The wire protocol is documented in `docs/protocols/mcp.json`.
 | `engines/sky/mcp.{h,cpp}` | `SkyMcpBridge : MCP::McpBridge` — the Beneath a Steel Sky adapter (two-button game; game/compact coordinates). Every action replays real input: warp the virtual cursor + press a button, and `Mouse::mouseEngine()` does the rest; inventory acts drive the game's own top icon bar through a per-frame click machine. Names come from the game data (cursorText / compact names). |
 | `engines/sky/mcp_names.{h,cpp}` | BASS naming tables (talkable-character ids, screen names). Engine-free, so its unit test links without the engine. |
 | `engines/queen/mcp.{h,cpp}` | `QueenMcpBridge : MCP::McpBridge` — the Flight of the Amazon Queen adapter (verb-panel game). `act` builds the finished command in the panel's own encoding and hands it to `Command::mcpExecute()`; dialogues answer through the digit-shortcut path `Talk::selectSentence()` already polls. |
-| `engines/gob/mcp.{h,cpp}` | `GobMcpBridge : MCP::McpBridge` — the Woodruff (gob engine) adapter (script-driven one-click game; no verb bar, no object model — just rectangular `Hotspots`). Every action replays real cursor input through `Util::processInput`; a single left click is walk-to-then-default-action. Object/inventory names are harvested live from the status-bar text the game draws (`Draw_v2` DRAW_PRINTTEXT) by parking the cursor on each hotspot (name sweep) and by opening the game's own inventory overlay after each action. |
-| `engines/gob/mcp_names.{h,cpp}` | Woodruff naming helpers (hover-label → identifier, exit detection, TOT file → room name/id). Engine-free, so its unit test links without the engine. |
+| `engines/gob/mcp.{h,cpp}` | `GobMcpBridge : MCP::McpBridge` — the gob-engine adapter, covering two very different game shapes. **Woodruff**: script-driven one-click game; no verb bar, no object model — just rectangular `Hotspots`. Every action replays real cursor input through `Util::processInput`; a single left click is walk-to-then-default-action. Object/inventory names are harvested live from the status-bar text the game draws (`Draw_v2` DRAW_PRINTTEXT) by parking the cursor on each hotspot (name sweep) and by opening the game's own inventory overlay after each action. **Gobliiins** (`usesCharacterTeam()`, gated on `kGameTypeGob1`): no hover text and one screen-wide click zone, so the snapshot comes from the engine's own tables instead (`Goblin::_goblins[3]`, `_objects[]`, `_itemIndInPocket`); `act` sends one left click (the game itself decides whether a spot means walk-there or act-on-this; the right button does nothing there), aimed at a named object or at plain x/y, and `switch_character` calls `Goblin::switchGoblin()`. `gameBusy()` reads the goblin's own `_pathExistence`/`_goesAtTarget`/`_readyToAct` so a stream closes only once the character has stopped. The name sweep and the inventory overlay machine are off there. Tools are registered from `onGameIdentified()` (called by `GobEngine::initGame`), not from the constructor: the bridge is built before the game is known, and the tool table depends on it. |
+| `engines/gob/mcp_names.{h,cpp}` | gob naming helpers (hover-label → identifier, exit detection, TOT file → room name/id). Engine-free, so its unit test links without the engine. |
 
 Enable / configure via the game's `scummvm.ini` `[gameid]` section:
 `mcp=true`, `mcp_port=N`, `mcp_host=...`, `mcp_skip_tool=true`,
@@ -87,7 +87,8 @@ per game cycle, and pump-transport-only from any place the main loop stalls
   Beneath a Steel Sky (`test_sky.py`, engine `sky`), Flight of the Amazon
   Queen (`test_queen.py`, engine `queen`) and Woodruff
   (`test_woodruff.py`, engine `gob` — no save support, so it starts fresh and
-  skips the intro like the atlantis/ft demos),
+  skips the intro like the atlantis/ft demos) and Gobliiins
+  (`test_gob1.py`, engine `gob`, same fresh-start pattern),
   and pure-Python unit tests in `test/mcp/test_unit.py`. See
   `test/mcp/README.md` for the full game/fixture map. (`launcher._SAVE_NAME_FMT`
   maps a game to its engine's save-file naming — sword1 uses `sword1.NNN`,
@@ -249,6 +250,19 @@ When working on the MCP server, its tests, or the MCP bench:
   shared by every SCUMM game from V0 to V8 — gate game- or version-specific
   behaviour behind the appropriate version/game checks rather than changing
   common paths. When in doubt, prefer an additive, narrowly-scoped branch.
+- **The tool surface is per game, and says only what is true.** Which tools are
+  registered, and what each one says, depend on the game and on the optional
+  settings: a game that never asks a dialog question registers no `answer`, a
+  game with a switchable team registers `switch_character`, and the `skip` /
+  debug tools appear only with `mcp_skip_tool` / `mcp_debug`. Descriptions
+  inherit from the base ones in `MCP::McpBridge` (`stateToolDescription()`,
+  `actToolDescription()`, …) and are overridden only where a game actually
+  differs. Three rules hold for every description, and `test/mcp/
+  test_tools_contract.py` enforces them across games: **every tool declares an
+  input *and* an output schema**; **no description names a tool that is not
+  registered**; **no description names a game, an engine, or an implementation
+  detail** (no "SCUMM", no "hotspot", no member names) — an agent is told what
+  it can ask for and what comes back, nothing else.
 - **Never put a machine-specific path in tracked code.** Game-data folders (and
   anything else that differs per checkout) go **only** in the non-committed
   `game_paths.local.toml` at the repository root — no defaults in Python, in
