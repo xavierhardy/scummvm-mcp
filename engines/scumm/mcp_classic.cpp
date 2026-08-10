@@ -602,10 +602,6 @@ Common::String McpBridgeMonkey::objectStateName(int numId, int rawState, bool is
 // McpBridgeMonkey2 — the island maps and the swamp coffin (click-only screens)
 // ---------------------------------------------------------------------------
 
-// MI2's walk-to verb id: the slot exists but is never shown, since walking is
-// what a plain click does.
-static const int kMonkey2WalkToVerb = 11;
-
 Common::String McpBridgeMonkey2::clickVerbLabel() const {
 	// In the coffin the sentence line reads "Row to", which is the game's own
 	// name for a click; on the island map it reads nothing at all. The line also
@@ -639,18 +635,31 @@ void McpBridgeMonkey2::applyGameVerbs(Common::JSONArray &verbsArr,
 		return;
 
 	if (!activeVerbs.empty()) {
-		// "Walk to" has no button on MI2's bar (its slot stays hidden), but it is
-		// what every exit and every step is: expose it, as DOTT's leaf does, so
-		// pathway objects advertise it and act(verb='walk to') resolves.
+		// "Walk to" has no button on MI2's bar (its slot stays hidden, since
+		// walking is what a plain click does), but it is what every exit and every
+		// step is: expose it, as DOTT's leaf does, so pathway objects advertise it
+		// and act(verb='walk to') resolves. Read the id and the label off the
+		// hidden slot itself, so a localised release exposes its own wording.
 		for (uint i = 0; i < activeVerbs.size(); ++i)
 			if (activeVerbs[i].name == "walk_to")
 				return;
-		verbsArr.push_back(mcpJsonString("walk to"));
-		VerbInfo walk;
-		walk.verbId = kMonkey2WalkToVerb;
-		walk.name   = "walk_to";
-		walk.label  = "walk to";
-		activeVerbs.push_back(walk);
+		for (int slot = 1; _vm->_verbs && slot < vmNumVerbs(); ++slot) {
+			const VerbSlot &vs = _vm->_verbs[slot];
+			if (!vs.verbid || vs.saveid != 0 || vs.type != kTextVerbType) continue;
+			const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+			if (!ptr) continue;
+			byte textBuf[256] = {};
+			vmConvertMessageToString(ptr, textBuf, sizeof(textBuf));
+			Common::String label = Networking::mcpLowerTrimmed((const char *)textBuf);
+			if (label.empty() || normalizeActionName(label) != "walk_to") continue;
+			verbsArr.push_back(mcpJsonString(safeUtf8(label)));
+			VerbInfo walk;
+			walk.verbId = vs.verbid;
+			walk.name   = "walk_to";
+			walk.label  = safeUtf8(label);
+			activeVerbs.push_back(walk);
+			break;
+		}
 		return;
 	}
 
