@@ -113,3 +113,57 @@ def test_monkey2_walk_moves_ego(monkey2_client: McpClient) -> None:
     assert_has_position(result)
     end = monkey2_client.state()["position"]
     assert end != start, f"walk did not move Guybrush (still at {end})"
+
+
+# --- The click-only screens: the island map and the swamp coffin -------------
+# Slot 2 stands in the swamp next to the coffin. Leaving by the path puts
+# Guybrush on the Scabb Island map; climbing into the coffin turns the swamp
+# into a rowing screen. On both, MI2 saves its verb bar away and the only
+# interaction left is a click.
+
+SWAMP = 20
+ISLAND_MAP = 2
+SWAMP_PATH = 202  # the way out of the swamp, back onto the map
+
+
+def test_monkey2_map_travel_switches_room(monkey2_swamp_client: McpClient) -> None:
+    """On the island map, walking to a place travels there."""
+    monkey2_swamp_client.act("walk to", SWAMP_PATH)
+    state = monkey2_swamp_client.state()
+    assert_room(state, ISLAND_MAP)
+    assert state["verbs"] == ["walk to"], f"unexpected map verbs: {state['verbs']}"
+    assert state.get("question") is None, f"the map is not a dialog: {state}"
+
+    places = {obj["name"]: obj for obj in state["objects"]}
+    assert "woodtick" in places and "swamp" in places, f"map places: {sorted(places)}"
+    assert places["swamp"]["compatible_verbs"] == ["walk to"], (
+        f"map places must advertise the click: {places['swamp']}"
+    )
+
+    result = monkey2_swamp_client.act("walk to", "swamp")
+    assert result.get("room_changed") == SWAMP, f"did not sail to the swamp: {result}"
+
+
+def test_monkey2_coffin_rows_instead_of_walking(
+    monkey2_swamp_client: McpClient,
+) -> None:
+    """In the coffin the verb bar becomes the game's own 'row to', and walk rows."""
+    monkey2_swamp_client.act("use", "coffin")
+    state = monkey2_swamp_client.state()
+    assert_room(state, SWAMP)
+    assert state["verbs"] == ["row to"], (
+        f"the coffin should offer the game's rowing verb: {state['verbs']}"
+    )
+    # The bar being saved away used to read as a pending dialog, which locked
+    # act() and walk() out of the whole swamp.
+    assert state.get("question") is None, f"rowing is not a dialog: {state}"
+
+    start = state["position"]
+    result = monkey2_swamp_client.walk(start["x"] + 120, start["y"])
+    assert_has_position(result)
+    end = monkey2_swamp_client.state()["position"]
+    assert end["x"] > start["x"], f"the coffin did not row east: {start} -> {end}"
+
+    # Rowing to a named place works the same way.
+    monkey2_swamp_client.act("row to", "shack")
+    assert monkey2_swamp_client.state()["position"] != end, "rowing to the shack"

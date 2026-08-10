@@ -23,6 +23,7 @@ namespace Scumm {
 class ScummEngine;
 class Actor;
 struct ObjectData;
+struct VerbSlot;
 
 class ScummMcpBridge : public MCP::McpBridge {
 public:
@@ -442,6 +443,29 @@ protected:
 	bool resolveVerb(const Common::String &action, int &verbId) const;
 	// True when the verb bar carries a slot whose label matches *normalized*.
 	bool verbOnBar(const Common::String &normalized) const;
+
+	// --- The sentence line and click-only screens ---------------------------
+	// V3-V5 draw the sentence line ("Walk to door") into a verb slot of its own:
+	// centered, with no keyboard shortcut, unlike every bar verb. It is not a
+	// verb an agent can pick and not a dialog choice, so it is filtered out of
+	// both — but its text is the game's own name for what a click does, which
+	// is the only label a click-only screen has (see below).
+	bool isSentenceLineSlot(const VerbSlot &vs) const;
+	// The sentence line's current text, or empty when it is not on screen.
+	Common::String sentenceLineLabel() const;
+	// True while the game takes input but offers no verb to pick: Monkey Island
+	// 2's island maps and its swamp coffin, where the only thing to do is click
+	// where to go. Clicking is then the whole interface.
+	bool isClickOnlyScreen() const;
+	// Whether this game has such screens at all. Off by default: it changes what
+	// state advertises and how act/walk dispatch, so each game opts in.
+	virtual bool usesClickOnlyScreens() const { return false; }
+	// Click a point given in room coordinates the way a player would, and stream
+	// whatever the click sets off.
+	bool beginSceneClick(int roomX, int roomY);
+	// Verb id standing for "whatever a click does here" on a click-only screen.
+	// Negative like the other sentinels, so it can never collide with a real one.
+	static const int kClickOnlyVerb = -300;
 	// True when any object in the room, or any inventory item, scripts *verbId*.
 	// A verb the whole scene ignores is not offered by act(), so state must not
 	// advertise it either.

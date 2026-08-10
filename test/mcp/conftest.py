@@ -80,6 +80,7 @@ _FIXTURE_INDEX = {
     "monkey2": 26,
     "maniac_full": 27,
     "zak_tv": 28,
+    "monkey2_swamp": 29,
 }
 
 
@@ -267,6 +268,16 @@ def queen_client() -> Iterator[McpClient]:
 def zak_client() -> Iterator[McpClient]:
     """Zak McKracken (V2, slot 1: Zak's bedroom, room 1, right after the intro)."""
     yield from _client("zak", "zak", save_slot=1, checkpoint=True)
+
+
+@pytest.fixture
+def monkey2_swamp_client() -> Iterator[McpClient]:
+    """Monkey Island 2 (slot 2: the swamp, standing next to the coffin).
+
+    Both of MI2's click-only screens are one step away: the path leads back to
+    the Scabb Island map, the coffin turns the swamp into a rowing screen.
+    """
+    yield from _client("monkey2", "monkey2_swamp", save_slot=2, checkpoint=True)
 
 
 @pytest.fixture

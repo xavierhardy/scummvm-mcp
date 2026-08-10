@@ -259,6 +259,27 @@ private:
 	bool isGerman() const;
 };
 
+// Monkey Island 2 hides its verb bar on two kinds of screen: the island maps
+// (click a destination to travel) and the swamp, once Guybrush is in the coffin
+// (click where to row). Both leave the sentence line as the only label — "Row
+// to" — and a click as the only interaction.
+class McpBridgeMonkey2 : public McpBridgeClassic {
+public:
+	explicit McpBridgeMonkey2(ScummEngine *vm) : McpBridgeClassic(vm) {}
+
+protected:
+	bool usesClickOnlyScreens() const override { return true; }
+	void applyGameVerbs(Common::JSONArray &verbsArr, Common::Array<VerbInfo> &activeVerbs,
+	                    bool questionPending) override;
+	bool interceptGameAct(const Common::JSONObject &args, Common::String &errorOut,
+	                      bool &handled) override;
+
+private:
+	// The verb a click stands for on the current click-only screen, as the game
+	// names it in the sentence line ("row to"), or "walk to" when it names none.
+	Common::String clickVerbLabel() const;
+};
+
 class McpBridgePassport : public McpBridgeClassic {
 public:
 	explicit McpBridgePassport(ScummEngine *vm) : McpBridgeClassic(vm) {}

@@ -26,7 +26,8 @@ SSE on `127.0.0.1:23456` by default). It exposes the game as tools:
   the action plays out, then return a structured result (room/inventory/message
   changes).
 - Game-specific helpers: `play_note`, `shoot_cannon`, `ride_bike`,
-  `choose_kids`, `switch_character`, `dial`.
+  `choose_kids`, `switch_character`, `dial` (the phone keypad, in both Maniac
+  Mansion and Zak McKracken).
 - **Debug tools** (only when `mcp_debug=true`): `debug` (read engine vars),
   `save_state`, `set_talk_speed`, `keystroke`, `mouse_move`, `mouse_click`,
   `screenshot`.

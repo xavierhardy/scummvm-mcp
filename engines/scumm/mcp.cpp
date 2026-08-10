@@ -264,6 +264,7 @@ ScummMcpBridge *ScummMcpBridge::create(ScummEngine *vm) {
 		case GID_MONKEY_EGA:
 		case GID_MONKEY_VGA:
 		case GID_MONKEY:     bridge = new McpBridgeMonkey(vm);      break;
+		case GID_MONKEY2:    bridge = new McpBridgeMonkey2(vm);     break;
 		case GID_PASS:       bridge = new McpBridgePassport(vm);    break;
 		case GID_SAMNMAX:    bridge = new McpBridgeSamnMax(vm);     break;
 		case GID_TENTACLE:   bridge = new McpBridgeTentacle(vm);    break;
@@ -798,6 +799,9 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			// skip is gated behind a per-game hook.
 			if (!vs.verbid || vs.saveid != 0 ||
 			    (_vm->_game.version > 0 && vs.verbid == 1 && !includeBarVerbId1())) continue;
+			// The sentence line is the game echoing the pending command back at
+			// the player ("Walk to swamp"), not a verb to pick.
+			if (isSentenceLineSlot(vs)) continue;
 			if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 			if (vs.curmode != 0 && vs.curmode != 1) continue;
 			const byte *ptr2 = _vm->getResourceAddress(rtVerb, slot);
@@ -856,6 +860,12 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 
 	Common::Array<NamedEntity> entities;
 	buildEntityMap(entities);
+
+	// On a click-only screen (MI2's island maps, its swamp coffin) nothing
+	// scripts a verb: the one action is a click, which applyGameVerbs published
+	// under the game's own name. Offer it on every object, or state would show a
+	// screenful of things with nothing that can be done to them.
+	const bool clickOnly = usesClickOnlyScreens() && isClickOnlyScreen();
 
 	Common::JSONArray inventory, objects;
 	for (uint i = 0; i < entities.size(); ++i) {
@@ -920,7 +930,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 						if (v.verbId > 0) handlerCount++;
 					}
 				}
-			} else if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_CMI || isInLoomSection()) {
+			} else if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_CMI ||
+			           isInLoomSection() || clickOnly) {
 				for (uint k = 0; k < activeVerbs.size(); ++k) {
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 					handlerCount++;
@@ -995,7 +1006,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			bool hasTalkTo = false;
 			// For GID_DIG and GID_FT, all selectable actors support 'interact' (click-callback / pie-menu model).
 			// Same reasoning applies to Loom's single-cursor model and CMI's single-cursor model.
-			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || _vm->_game.id == GID_CMI || isInLoomSection()) {
+			if (_vm->_game.id == GID_DIG || _vm->_game.id == GID_FT || _vm->_game.id == GID_CMI ||
+			    isInLoomSection() || clickOnly) {
 				for (uint k = 0; k < activeVerbs.size(); ++k)
 					compatVerbs.push_back(mcpJsonString(activeVerbs[k].label));
 			} else {
@@ -1154,6 +1166,8 @@ Common::JSONValue *ScummMcpBridge::toolState(const Common::JSONValue &, Common::
 			for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 				const VerbSlot &vs = _vm->_verbs[slot];
 				if (!vs.verbid || vs.saveid != 0 || (_vm->_game.version > 0 && vs.verbid == 1)) continue;
+				// Never offer the sentence line as something to answer with.
+				if (isSentenceLineSlot(vs)) continue;
 				if (vs.curmode == 0 && (vs.key < '1' || vs.key > '9')) continue;
 				if (vs.curmode != 0 && vs.curmode != 1) continue;
 				const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
@@ -2017,6 +2031,12 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 	// The tool takes room pixels; V0-V2 walk on the compressed actor grid.
 	wx = fromRoomPixelX(wx);
 	wy = fromRoomPixelY(wy);
+
+	// Click-only screens (MI2's island maps and its swamp coffin) move ego from
+	// the input script, not from startWalkActor: rowing the coffin to a spot is
+	// a click on that spot. Replay the click instead.
+	if (usesClickOnlyScreens() && isClickOnlyScreen())
+		return beginSceneClick(wx, wy);
 
 	snapshotPreAction();
 	_streaming = true;
@@ -3333,6 +3353,7 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 	}
 
 	bool hasKeyed = false, hasUnkeyed = false, hasNumericKeyed = false;
+	bool hasSentenceLine = false;
 	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
 		const VerbSlot &vs = _vm->_verbs[slot];
 		if (!vs.verbid || vs.saveid != 0) continue;
@@ -3347,6 +3368,18 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 		// (curmode=0, keys '1'-'9', old labels) while you read Plato's Dialogue, and
 		// counting them used to make the book close-up report a phantom question.
 		if (vs.curmode != 1) continue;
+		// The sentence line is unkeyed like a dialog choice, but it means the
+		// opposite: the game is echoing the pending command back during normal
+		// play, and a conversation replaces it. MI2 leaves it up alone ("Row to")
+		// while the verb bar is saved away in the swamp coffin, which used to read
+		// as a dialog and lock act/walk out with "a dialog question is pending".
+		if (isSentenceLineSlot(vs)) {
+			const byte *sentence = _vm->getResourceAddress(rtVerb, slot);
+			byte sentenceBuf[256] = {};
+			if (sentence) _vm->convertMessageToString(sentence, sentenceBuf, sizeof(sentenceBuf));
+			if (sentenceBuf[0]) hasSentenceLine = true;
+			continue;
+		}
 		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
 		if (!ptr) continue;
 		byte textBuf[256];
@@ -3363,8 +3396,11 @@ bool ScummMcpBridge::hasPendingQuestion() const {
 	// MI1-style: dialog choices are unkeyed, normal verb bar is keyed (or absent).
 	// Skip this for Maniac Mansion, which has unkeyed verbs in normal gameplay.
 	if (hasUnkeyed && !hasKeyed && _vm->_game.id != GID_MANIAC) return true;
-	// Indy4-style: dialog choices have numeric keys; normal verb bar is saved (saveid!=0)
-	if (hasNumericKeyed && !hasUnkeyed) return true;
+	// Indy4-style: dialog choices have numeric keys; normal verb bar is saved
+	// (saveid!=0). A visible sentence line rules it out: the game only draws that
+	// while the player is picking a command, and the numeric slots of a finished
+	// conversation stay resident with their old labels (Monkey Island 1).
+	if (hasNumericKeyed && !hasUnkeyed && !hasSentenceLine) return true;
 	return false;
 }
 
@@ -3824,6 +3860,80 @@ int ScummMcpBridge::fromRoomPixelX(int x) const {
 
 int ScummMcpBridge::fromRoomPixelY(int y) const {
 	return (_vm->_game.version <= 2) ? y / V12_Y_MULTIPLIER : y;
+}
+
+// ---------------------------------------------------------------------------
+// The sentence line and click-only screens
+// ---------------------------------------------------------------------------
+
+bool ScummMcpBridge::isSentenceLineSlot(const VerbSlot &vs) const {
+	// Every verb on a V3-V5 bar carries a keyboard shortcut; the sentence line
+	// the game writes the pending command into carries none and is centered.
+	// (Dialog choices are unkeyed too, but left-aligned.)
+	return usesTextVerbBar() && vs.type == kTextVerbType && vs.key == 0 && vs.center;
+}
+
+Common::String ScummMcpBridge::sentenceLineLabel() const {
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		if (!isSentenceLineSlot(vs)) continue;
+		const byte *ptr = _vm->getResourceAddress(rtVerb, slot);
+		if (!ptr) continue;
+		byte textBuf[256] = {};
+		_vm->convertMessageToString(ptr, textBuf, sizeof(textBuf));
+		Common::String label = mcpLowerTrimmed((const char *)textBuf);
+		if (!label.empty())
+			return safeUtf8(label);
+	}
+	return Common::String();
+}
+
+bool ScummMcpBridge::isClickOnlyScreen() const {
+	if (!usesTextVerbBar() || _vm->_userPut <= 0)
+		return false;
+	for (int slot = 1; _vm->_verbs && slot < _vm->_numVerbs; ++slot) {
+		const VerbSlot &vs = _vm->_verbs[slot];
+		// A usable bar verb: shown, not saved away, and not the sentence line.
+		if (!vs.verbid || vs.saveid != 0 || vs.curmode != 1) continue;
+		if (vs.type != kTextVerbType || !vs.key) continue;
+		return false;
+	}
+	return true;
+}
+
+bool ScummMcpBridge::beginSceneClick(int roomX, int roomY) {
+	VirtScreen *vs = &_vm->_virtscr[kMainVirtScreen];
+	int mouseX = CLIP<int>(roomX - vs->xstart, 0, _vm->_screenWidth - 1);
+	int mouseY = CLIP<int>(roomY + vs->topline, 0, _vm->_screenHeight - 1);
+
+	snapshotPreAction();
+	_streaming = true;
+	_sseAnswerStream = false;
+	_sseStartFrame = _frameCounter;
+	_sseDoneAtFrame = 0;
+	_sseStuckAtFrame = 0;
+	_sseLastEventFrame = 0;
+	_sseEgoMoved = false;
+	_sseMessages.clear();
+	_ssePendingSecondClick = false;
+	_ssePendingNotes.clear();
+	_sseTargetObject = 0;
+	_sseButtonClearFrame = 0;
+
+	_vm->_mouse.x        = mouseX;
+	_vm->_mouse.y        = mouseY;
+	_vm->_virtualMouse.x = roomX;
+	_vm->_virtualMouse.y = roomY;
+	if (_vm->VAR_VIRT_MOUSE_X != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_X) = roomX;
+	if (_vm->VAR_VIRT_MOUSE_Y != 0xFF) _vm->VAR(_vm->VAR_VIRT_MOUSE_Y) = roomY;
+	if (_vm->VAR_MOUSE_X != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_X) = mouseX;
+	if (_vm->VAR_MOUSE_Y != 0xFF)      _vm->VAR(_vm->VAR_MOUSE_Y) = mouseY;
+	_vm->_leftBtnPressed |= 0x03; // msClicked | msDown
+	_debugButtonReleaseFrame = _frameCounter + 2;
+
+	_server->startStreaming();
+	return true;
 }
 
 bool ScummMcpBridge::verbOnBar(const Common::String &normalized) const {

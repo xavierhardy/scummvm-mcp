@@ -598,4 +598,105 @@ Common::String McpBridgeMonkey::objectStateName(int numId, int rawState, bool is
 	return ScummMcpBridge::objectStateName(numId, rawState, isPathway);
 }
 
+// ---------------------------------------------------------------------------
+// McpBridgeMonkey2 — the island maps and the swamp coffin (click-only screens)
+// ---------------------------------------------------------------------------
+
+// MI2's walk-to verb id: the slot exists but is never shown, since walking is
+// what a plain click does.
+static const int kMonkey2WalkToVerb = 11;
+
+Common::String McpBridgeMonkey2::clickVerbLabel() const {
+	// In the coffin the sentence line reads "Row to", which is the game's own
+	// name for a click; on the island map it reads nothing at all. The line also
+	// picks up whatever the cursor happens to hover ("Row to swamp"), so cut it
+	// back to the verb: the object part is the name of something in the room.
+	Common::String label = sentenceLineLabel();
+	if (!label.empty()) {
+		Common::Array<NamedEntity> entities;
+		buildEntityMap(entities);
+		uint cut = label.size();
+		for (uint i = 0; i < entities.size(); ++i) {
+			Common::String name = Networking::mcpLowerTrimmed(entities[i].displayName);
+			name.replace('_', ' ');
+			if (name.empty())
+				continue;
+			const char *hit = strstr(label.c_str(), name.c_str());
+			if (hit && (uint)(hit - label.c_str()) < cut)
+				cut = (uint)(hit - label.c_str());
+		}
+		while (cut > 0 && label[cut - 1] == ' ')
+			--cut;
+		if (cut > 0)
+			return Common::String(label.c_str(), cut);
+	}
+	return "walk to";
+}
+
+void McpBridgeMonkey2::applyGameVerbs(Common::JSONArray &verbsArr,
+                                      Common::Array<VerbInfo> &activeVerbs, bool questionPending) {
+	if (questionPending)
+		return;
+
+	if (!activeVerbs.empty()) {
+		// "Walk to" has no button on MI2's bar (its slot stays hidden), but it is
+		// what every exit and every step is: expose it, as DOTT's leaf does, so
+		// pathway objects advertise it and act(verb='walk to') resolves.
+		for (uint i = 0; i < activeVerbs.size(); ++i)
+			if (activeVerbs[i].name == "walk_to")
+				return;
+		verbsArr.push_back(mcpJsonString("walk to"));
+		VerbInfo walk;
+		walk.verbId = kMonkey2WalkToVerb;
+		walk.name   = "walk_to";
+		walk.label  = "walk to";
+		activeVerbs.push_back(walk);
+		return;
+	}
+
+	// The bar is saved away on the island maps and in the swamp coffin, so the
+	// generic pass found nothing. Publish the one thing that works — a click —
+	// under the game's own name, so state does not read as "nothing to do here".
+	if (!isClickOnlyScreen())
+		return;
+	Common::String label = clickVerbLabel();
+	verbsArr.push_back(mcpJsonString(label));
+	VerbInfo vi;
+	vi.verbId = kClickOnlyVerb;
+	vi.name   = normalizeActionName(label);
+	vi.label  = label;
+	activeVerbs.push_back(vi);
+}
+
+bool McpBridgeMonkey2::interceptGameAct(const Common::JSONObject &args, Common::String &errorOut,
+                                        bool &handled) {
+	if (!isClickOnlyScreen())
+		return false;
+	handled = true;
+	if (!args.contains("target1")) {
+		errorOut = "act: on this screen the only action is clicking somewhere — "
+		           "pass the place as target1, or use walk(x, y)";
+		return false;
+	}
+	// Any verb is accepted here: the screen has exactly one action, and refusing
+	// an agent's "walk to" because the game happens to call it "row to" would be
+	// pedantry. Resolve the target by name or id like act() does.
+	NamedEntity entity;
+	const Common::JSONValue *v = args["target1"];
+	int obj = 0;
+	if (v->isIntegerNumber()) {
+		obj = (int)v->asIntegerNumber();
+	} else if (v->isString() && resolveEntityByName(v->asString(), entity)) {
+		obj = entity.numId;
+	} else {
+		errorOut = "act: unknown target1 '" + (v->isString() ? v->asString() : Common::String("?")) + "'";
+		return false;
+	}
+	if (vmGetObjectIndex(obj) == -1) {
+		errorOut = "act: that target is not on this screen";
+		return false;
+	}
+	return beginSceneClick(vmGetObjX(obj), vmGetObjY(obj));
+}
+
 } // End of namespace Scumm

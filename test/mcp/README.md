@@ -50,7 +50,9 @@ slot-1 save captured right after each intro. MI2's floppy copy protection is
 bypassed by that save: the potion-mixer screen only needs to be cleared once,
 which is what capturing the slot did. Zak also carries a slot-2 save parked in
 the living room with the TV playing — the scene whose endless background lines
-used to hold every action's stream open until it timed out.
+used to hold every action's stream open until it timed out — and MI2 a slot-2
+save in the swamp, one step from both of its click-only screens (the island map
+and the coffin).
 
 > **These tests share one Python project with `scummvm_bench`.** There is no
 > longer a `test/mcp/pyproject.toml` or venv — the single project lives at
