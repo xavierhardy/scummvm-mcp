@@ -48,6 +48,54 @@ using Networking::mcpProp;
 using Networking::mcpObjectSchema;
 
 // ---------------------------------------------------------------------------
+// Cursor mode (team games)
+// ---------------------------------------------------------------------------
+//
+// In the team game a click does not mean anything by itself: what it does is
+// whatever the *cursor* currently means, and the right button cycles the
+// cursor through three settings, kept in one script variable:
+//
+//   0 — go there. The character walks to the spot and stops.
+//   3 — act there. The character walks over and uses their own ability on
+//       whatever is at the spot.
+//   4 — take/put down. The character walks over and picks the thing up, or
+//       puts down what they are carrying.
+//
+// The move opcode reads that variable as the action for the click (see
+// Goblin::doMove), so an action is two pieces of input, exactly as a player
+// gives them: right-click until the cursor means the right thing, then click
+// the target. Cycling only counts inside the picture — a right click on the
+// panel strip along the bottom belongs to the panel and changes nothing.
+enum {
+	kCursorModeVar   = 111,
+	kCursorModeWalk  = 0,
+	kCursorModeAct   = 3,
+	kCursorModeCarry = 4,
+	// Below this line the screen is the game's own panel.
+	kPictureBottom   = 166
+};
+
+bool GobMcpBridge::cursorModeReadable() const {
+	if (!engineReady() || !usesCharacterTeam())
+		return false;
+	if (_vm->_inter->_variables->getSize() / 4 <= kCursorModeVar)
+		return false;
+	// Only trust it while it holds one of the three settings: this is the
+	// game's own variable, and nothing else may be read into it.
+	const int32 mode = VAR(kCursorModeVar);
+	return mode == kCursorModeWalk || mode == kCursorModeAct || mode == kCursorModeCarry;
+}
+
+int GobMcpBridge::cursorModeForVerb(const Common::String &verb) {
+	if (verb == "walk_to")
+		return kCursorModeWalk;
+	// Taking something and putting down what is carried are the same cursor.
+	if (verb == "pick_up")
+		return kCursorModeCarry;
+	return kCursorModeAct;
+}
+
+// ---------------------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------------------
 
@@ -316,22 +364,7 @@ void GobMcpBridge::pumpSteps() {
 			int cy = (spots[i].top + spots[i].bottom) / 2;
 			// Replace this step with a plain click at the slot.
 			_steps.remove_at(0);
-			Step hover;
-			hover.kind = kStepHover;
-			hover.x = cx;
-			hover.y = cy;
-			hover.right = false;
-			hover.slotId = 0;
-			hover.notBeforeFrame = _frameCounter;
-			_steps.insert_at(0, hover);
-			Step press = hover;
-			press.kind = kStepPress;
-			press.notBeforeFrame = _frameCounter;
-			_steps.insert_at(1, press);
-			Step release = press;
-			release.kind = kStepRelease;
-			release.notBeforeFrame = _frameCounter + 3;
-			_steps.insert_at(2, release);
+			insertClick(0, cx, cy, false);
 			return;
 		}
 		// Slot not on screen (yet); give the overlay a moment, then give up.
@@ -356,6 +389,20 @@ void GobMcpBridge::pumpSteps() {
 		if (!readyForClick() && _frameCounter < s.notBeforeFrame)
 			return;
 		break;
+	case kStepCursorMode: {
+		// Cycle the cursor with right clicks until it means what the action
+		// asks for — the click queued behind this step then does that.
+		if (_frameCounter < s.notBeforeFrame)
+			return;
+		if (!cursorModeReadable() || VAR(kCursorModeVar) == (int32)s.slotId ||
+		    s.tries >= kCursorModeMaxTries)
+			break; // there already, or nothing to be done — click as it is
+		_steps[0].tries++;
+		// Read the mode back only once the scripts have had the click.
+		_steps[0].notBeforeFrame = _frameCounter + kCursorModeFrames;
+		insertClick(0, s.x, s.y, true);
+		return;
+	}
 	default:
 		break;
 	}
@@ -695,6 +742,11 @@ void GobMcpBridge::pushButton(bool down, bool right, int gameX, int gameY) {
 // since they run only when the game is already idle.
 void GobMcpBridge::queueClickWhenReady(int gameX, int gameY, bool right) {
 	cancelNameSweep();
+	queueWaitReady();
+	queueClick(gameX, gameY, right);
+}
+
+void GobMcpBridge::queueWaitReady() {
 	Step ready;
 	ready.kind = kStepWaitReady;
 	ready.x = ready.y = 0;
@@ -702,7 +754,25 @@ void GobMcpBridge::queueClickWhenReady(int gameX, int gameY, bool right) {
 	ready.slotId = 0;
 	ready.notBeforeFrame = _frameCounter + 150; // ~6s safety timeout
 	_steps.push_back(ready);
-	queueClick(gameX, gameY, right);
+}
+
+// The same, with the cursor set to what this click is meant to mean first —
+// which is what makes a click an action rather than a walk. See the
+// cursor-mode block above.
+void GobMcpBridge::queueClickWithCursorMode(int gameX, int gameY, int mode) {
+	cancelNameSweep();
+	queueWaitReady();
+	Step cursor;
+	cursor.kind = kStepCursorMode;
+	cursor.x = gameX;
+	// Cycle where the click itself will land, but never on the panel strip:
+	// a right click there is the panel's and leaves the cursor as it was.
+	cursor.y = CLIP<int>(gameY, 0, kPictureBottom);
+	cursor.right = true;
+	cursor.slotId = (uint16)mode;
+	cursor.notBeforeFrame = 0;
+	_steps.push_back(cursor);
+	queueClick(gameX, gameY, false);
 }
 
 
@@ -714,6 +784,10 @@ void GobMcpBridge::queueOverlayClick(int gameX, int gameY, bool right) {
 		queueClick(gameX, gameY, right);
 		return;
 	}
+	insertClick(0, gameX, gameY, right);
+}
+
+void GobMcpBridge::insertClick(uint index, int gameX, int gameY, bool right) {
 	Step hover;
 	hover.kind = kStepHover;
 	hover.x = gameX;
@@ -721,15 +795,15 @@ void GobMcpBridge::queueOverlayClick(int gameX, int gameY, bool right) {
 	hover.right = right;
 	hover.slotId = 0;
 	hover.notBeforeFrame = _frameCounter;
-	_steps.insert_at(0, hover);
+	_steps.insert_at(index, hover);
 	Step press = hover;
 	press.kind = kStepPress;
 	press.notBeforeFrame = _frameCounter;
-	_steps.insert_at(1, press);
+	_steps.insert_at(index + 1, press);
 	Step release = press;
 	release.kind = kStepRelease;
 	release.notBeforeFrame = _frameCounter + 3;
-	_steps.insert_at(2, release);
+	_steps.insert_at(index + 2, release);
 }
 
 // Has the engine taken notice of the cursor sitting at these coordinates?
@@ -1083,19 +1157,12 @@ void GobMcpBridge::addTeamState(Common::JSONObject &out) const {
 	Common::JSONArray verbs;
 	verbs.push_back(mcpJsonString("walk to"));
 	verbs.push_back(mcpJsonString("interact"));
+	verbs.push_back(mcpJsonString("pick up"));
 	out.setVal("verbs", new Common::JSONValue(verbs));
 }
 
 bool GobMcpBridge::teamAct(const Common::JSONObject &args, const Common::String &verb,
                            Common::String &errorOut) {
-	// One click is the whole interface: the game decides for itself whether the
-	// spot is somewhere to walk to or something to act on (verified against the
-	// game's own action mode — a click on bare ground walks, a click on
-	// something puts the character to work). So 'walk to' and 'interact' send
-	// the same click and differ only in where it is aimed; the verb is kept
-	// because that is how an agent thinks about it.
-	(void)verb;
-
 	int x = 0, y = 0;
 	if (args.contains("x") && args.contains("y") &&
 	    args["x"]->isIntegerNumber() && args["y"]->isIntegerNumber()) {
@@ -1128,7 +1195,8 @@ bool GobMcpBridge::teamAct(const Common::JSONObject &args, const Common::String 
 	}
 
 	_useCmdLabel.clear();
-	queueClickWhenReady(x, y, false);
+	// The verb is the cursor: pointing is only half of an action here.
+	queueClickWithCursorMode(x, y, cursorModeForVerb(verb));
 	beginStream();
 	_sseSkipFast = false;
 	return true;
@@ -1228,14 +1296,14 @@ Common::String GobMcpBridge::stateToolDescription() const {
 		return "Returns the current game state: the screen, the team and which "
 		       "member is being controlled, the objects on screen, what is being "
 		       "carried, and the lines drawn since the last read (cleared by "
-		       "reading them). There is no verb bar and no look verb — pointing "
-		       "at a spot is the whole interface, and the game decides whether "
-		       "that means going there or acting on what is there. act takes "
-		       "either a target1 from objects[] or a plain x/y, and coordinates "
-		       "are the usual way to point: most of the picture is scenery that "
-		       "no object covers. Puzzles turn on who acts, so switch_character "
-		       "matters as much as where. Nothing is accepted while can_act is "
-		       "false.";
+		       "reading them). There is no verb bar and no look verb: the verbs "
+		       "in verbs[] are the three things pointing at a spot can mean — go "
+		       "there, use the controlled character's own ability there, or take "
+		       "what is there. act takes either a target1 from objects[] or a "
+		       "plain x/y, and coordinates are the usual way to point: most of "
+		       "the picture is scenery that no object covers. Puzzles turn on who "
+		       "acts, so switch_character matters as much as where. Nothing is "
+		       "accepted while can_act is false.";
 	}
 	return "Returns the current game state: the screen, everything on it that can "
 	       "be pointed at, what is carried, the verbs, and the lines drawn since "
@@ -1251,13 +1319,15 @@ Common::String GobMcpBridge::stateToolDescription() const {
 
 Common::String GobMcpBridge::actToolDescription() const {
 	if (usesCharacterTeam()) {
-		return "Point the character in control at a place: they go there, and "
-		       "act on whatever is there if anything is — the game decides, so "
-		       "'walk to' and 'interact' differ only in what you aim at. Give "
-		       "either target1 (a name from state.objects) or a plain x/y; "
-		       "coordinates are the usual way to point, since most of the picture "
-		       "is scenery no object covers. What comes of it depends on who is "
-		       "in control and on what they carry. " + streamingToolNote();
+		return "Send the character in control to a place and have them do "
+		       "something there. The verb says which: 'walk to' only goes there, "
+		       "'interact' uses the ability that character alone has on whatever "
+		       "is at the spot, and 'pick up' takes what is there — or puts down "
+		       "what is being carried. Give either target1 (a name from "
+		       "state.objects) or a plain x/y; coordinates are the usual way to "
+		       "point, since most of the picture is scenery no object covers. "
+		       "What comes of it depends on who is in control and on what they "
+		       "carry. " + streamingToolNote();
 	}
 	return "Act on something on screen, by the name state gives it. One click is "
 	       "the whole interaction here: the player character walks over and does "
@@ -1731,7 +1801,12 @@ bool GobMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &error
 	int y = (int)args.asObject()["y"]->asIntegerNumber();
 
 	_useCmdLabel.clear();
-	queueClickWhenReady(x, y, false);
+	// Where the cursor is a mode, walking is one of its settings: without
+	// putting it back, a walk queued after an action would act again.
+	if (usesCharacterTeam())
+		queueClickWithCursorMode(x, y, kCursorModeWalk);
+	else
+		queueClickWhenReady(x, y, false);
 	_inventoryDirty = true;
 	beginStream();
 	_sseSkipFast = false;

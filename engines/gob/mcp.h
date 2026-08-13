@@ -172,22 +172,33 @@ private:
 		kStepClickItem,   // click the inventory slot `slotId` (resolved live)
 		kStepWaitOverlay, // wait (up to notBeforeFrame) for the menu overlay
 		kStepWaitWorld,   // wait (up to notBeforeFrame) for the overlay to close
-		kStepWaitReady    // wait (up to notBeforeFrame) until a click would land
+		kStepWaitReady,   // wait (up to notBeforeFrame) until a click would land
+		kStepCursorMode   // right-click until the cursor means `slotId`
 	};
 
 	// Frames to wait for the hover to register before pressing anyway.
 	static const uint32 kHoverMaxFrames = 15;
+	// Frames to give the scripts to take a cursor-mode click in before the
+	// mode is read back (a click is only seen from the next poll onwards).
+	static const uint32 kCursorModeFrames = 12;
+	// The mode cycles through three settings, so two clicks always suffice;
+	// a third means the game is not taking them and the action goes ahead
+	// with whatever the cursor means.
+	static const uint8 kCursorModeMaxTries = 3;
 	struct Step {
 		StepKind kind;
 		int x, y;        // game coordinates
 		bool right;      // right instead of left button
 		uint16 slotId;   // kStepClickItem: the inventory slot hotspot id
+		                 // kStepCursorMode: the wanted cursor mode
 		uint32 notBeforeFrame;
 		// kStepHover: set once the move has been pushed. The move cannot be
 		// tied to notBeforeFrame — a step sitting behind a wait does not run on
 		// the frame it was queued on — so the hover tracks its own start.
 		bool hoverSent = false;
 		uint32 hoverFrame = 0;
+		// kStepCursorMode: how many cycling clicks have been sent so far.
+		uint8 tries = 0;
 	};
 
 	// Is a script sitting in an input wait loop right now?
@@ -241,6 +252,13 @@ private:
 	// by everything an agent asks for.
 	void queueClickWhenReady(int gameX, int gameY, bool right);
 
+	// Insert a full click (hover, press, release) at position *index* of the
+	// queue, ahead of whatever is waiting there.
+	void insertClick(uint index, int gameX, int gameY, bool right);
+
+	// Hold everything queued after this back until a click would land.
+	void queueWaitReady();
+
 	// A click driving the inventory overlay; runs ahead of a tool click that is
 	// still waiting for that overlay to close.
 	void queueOverlayClick(int gameX, int gameY, bool right);
@@ -288,8 +306,9 @@ private:
 	// hotspots: the whole picture is one click zone, and the engine keeps its
 	// own tables of the three characters the player switches between and of the
 	// scene objects they can act on. For those the snapshot is built from those
-	// tables, and the two mouse buttons are the whole verb set — one moves the
-	// active character, the other makes them act where they are sent.
+	// tables, and what a click means is not the button but the *cursor*: the
+	// right button cycles it, the left one carries it out where it is pointed
+	// (see the cursor-mode block in the cpp).
 	bool usesCharacterTeam() const;
 	static const int kTeamSize = 3;
 	// Stable name for team member *index*, after the ability the game gives it.
@@ -308,12 +327,20 @@ private:
 	// the point a click should land on.
 	bool resolveTeamTarget(const Common::String &name, int &x, int &y,
 	                       Common::String &errorOut) const;
-	// act() for those games: a move click or an act click, on a named target or
-	// on explicit coordinates.
+	// act() for those games: set the cursor to what the verb means, then click
+	// the named target or the explicit coordinates.
 	bool teamAct(const Common::JSONObject &args, const Common::String &verb,
 	             Common::String &errorOut);
 	// Fill the team-specific parts of the snapshot.
 	void addTeamState(Common::JSONObject &out) const;
+
+	// Is the game's cursor-mode variable readable, and does it hold one of the
+	// three settings? Everything below is a no-op when it does not.
+	bool cursorModeReadable() const;
+	// The cursor mode a verb asks for (kCursorModeWalk / …).
+	static int cursorModeForVerb(const Common::String &verb);
+	// Queue: wait until a click would land, cycle the cursor to *mode*, click.
+	void queueClickWithCursorMode(int gameX, int gameY, int mode);
 
 	// --- Game-specific tools ------------------------------------------------
 	void registerGameTools() override;
