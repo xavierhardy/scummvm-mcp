@@ -125,7 +125,7 @@ Common::String getObjName(const ScummMcpBridge *bridge, int obj) {
 	if (!bridge) return "";
 	const byte *name = bridge->callGetObjOrActorName(obj);
 	if (!name || !*name) return "";
-	return Common::String((const char *)name);
+	return bridge->decodeObjectName(name);
 }
 
 // Clean up game text: remove control characters, trim whitespace, remove trailing @, remove unicode chars
@@ -326,7 +326,11 @@ Common::String ScummMcpBridge::objName(int obj) const {
 	const byte *name = _vm->getObjOrActorName(obj);
 	if (!name || !*name)
 		return "";
-	return Common::String((const char *)name);
+	return decodeObjectName(name);
+}
+
+Common::String ScummMcpBridge::decodeObjectName(const byte *raw) const {
+	return Common::String((const char *)raw);
 }
 Common::Point &ScummMcpBridge::vmMouse() const             { return _vm->_mouse; }
 Common::Point &ScummMcpBridge::vmVirtualMouse() const      { return _vm->_virtualMouse; }
@@ -3033,7 +3037,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (!wasPresent) {
 			Common::String name = getObjName(this, obj);
 			if (name.empty()) name = Common::String::format("obj-%d", obj);
-			Common::String cleanName = cleanGameText(safeUtf8(normalizeActionName(name)));
+			Common::String cleanName =
+			    changeEntityName(obj, cleanGameText(safeUtf8(normalizeActionName(name))));
 			if (!cleanName.empty()) {
 				added.push_back(mcpJsonString(cleanName));
 			}
@@ -3052,7 +3057,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		if (name.empty() && j < _ssePreInventoryNames.size())
 			name = _ssePreInventoryNames[j];
 		if (name.empty()) name = Common::String::format("obj-%d", obj);
-		Common::String cleanName = cleanGameText(safeUtf8(normalizeActionName(name)));
+		Common::String cleanName =
+		    changeEntityName(obj, cleanGameText(safeUtf8(normalizeActionName(name))));
 		if (!cleanName.empty()) {
 			removed.push_back(mcpJsonString(cleanName));
 		}
@@ -3094,7 +3100,8 @@ Common::JSONObject ScummMcpBridge::buildStateChanges() const {
 		Common::String name = getObjName(this, od.obj_nr);
 		if (name.empty()) name = Common::String::format("obj-%d", od.obj_nr);
 		Common::JSONObject entry;
-		entry.setVal("name",      mcpJsonString(safeUtf8(mcpLowerTrimmed(name))));
+		entry.setVal("name",      mcpJsonString(changeEntityName(od.obj_nr,
+		                                                         safeUtf8(mcpLowerTrimmed(name)))));
 		entry.setVal("old_state", mcpJsonInt(preState));
 		entry.setVal("new_state", mcpJsonInt(newState));
 		objChanges.push_back(new Common::JSONValue(entry));
@@ -3769,6 +3776,10 @@ void ScummMcpBridge::buildEntityMap(Common::Array<NamedEntity> &entities) const 
 		ne.isPathway   = raw[i].isPathway;
 		entities.push_back(ne);
 	}
+
+	// Give a game the last word on names that came out the same for several
+	// entities (Fate of Atlantis calls all seven of its cave mouths "cave").
+	disambiguateEntityNames(entities);
 }
 
 bool ScummMcpBridge::snmIsMaxEntity(int obj) const {
@@ -3861,6 +3872,13 @@ bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity
 			}
 		}
 		out = entities[best]; return true;
+	}
+	// Nothing matched exactly: give the game its own last chance (a name the
+	// entity map had to number to keep apart is still asked for unnumbered).
+	if (resolveGameEntityName(normalized, entities, out)) {
+		debug(1, "mcp: resolveEntityByName '%s' resolved by the game to %d",
+		      normalized.c_str(), out.numId);
+		return true;
 	}
 	debug(1, "mcp: resolveEntityByName '%s' not found", name.c_str());
 	return false;

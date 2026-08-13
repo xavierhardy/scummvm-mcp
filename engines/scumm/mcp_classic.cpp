@@ -344,6 +344,102 @@ void McpBridgeClassic::pumpStreamGame() {
 }
 
 // ---------------------------------------------------------------------------
+// McpBridgeIndy4 — Fate of Atlantis object names
+// ---------------------------------------------------------------------------
+
+Common::String McpBridgeIndy4::decodeObjectName(const byte *raw) const {
+	// A name is not always text. Fate of Atlantis renames the orichalcum beads
+	// every time one is spent, to a message that reads the count out of a script
+	// variable — so the stored bytes are an escape sequence ("<var 229> beads"),
+	// which taken literally decodes to a single stray character and leaves the
+	// item impossible to name. Resolve the message the way the game does before
+	// it draws one; a name that is plain text comes back through unchanged.
+	// The conversion can put four bytes down before it checks its bound, so the
+	// buffer is the declared size plus that much slack.
+	byte buf[512 + 8] = {};
+	vmConvertMessageToString(raw, buf, 512);
+	return Common::String((const char *)buf);
+}
+
+void McpBridgeIndy4::disambiguateEntityNames(Common::Array<NamedEntity> &entities) const {
+	// The Lost Kingdom's seven cave mouths are every one of them called "cave"
+	// (so are the two halves of Crete and of Santorini on the map). One name for
+	// seven doorways means six of them cannot be asked for at all — and the demo
+	// turns on entering the right one — so number them. The order is by object
+	// id, which is the same on every visit to the room.
+	Common::Array<Common::String> asBuilt;
+	for (uint i = 0; i < entities.size(); ++i)
+		asBuilt.push_back(entities[i].displayName);
+
+	for (uint i = 0; i < entities.size(); ++i) {
+		if (asBuilt[i].empty())
+			continue;
+		Common::Array<uint> group;
+		for (uint j = 0; j < entities.size(); ++j)
+			if (asBuilt[j] == asBuilt[i])
+				group.push_back(j);
+		if (group.size() < 2 || group[0] != i)
+			continue;   // not a duplicate, or a group already numbered
+		for (uint a = 0; a + 1 < group.size(); ++a)
+			for (uint b = a + 1; b < group.size(); ++b)
+				if (entities[group[b]].numId < entities[group[a]].numId)
+					SWAP(group[a], group[b]);
+		for (uint k = 0; k < group.size(); ++k)
+			entities[group[k]].displayName =
+			    Common::String::format("%s_%u", asBuilt[i].c_str(), k + 1);
+	}
+}
+
+bool McpBridgeIndy4::resolveGameEntityName(const Common::String &normalized,
+                                           const Common::Array<NamedEntity> &entities,
+                                           NamedEntity &out) const {
+	// A numbered name (cave_1 … cave_7) still answers to the bare name it was
+	// built from, with the first of the group — which is what asking for "cave"
+	// got before they were told apart.
+	int best = -1;
+	for (uint i = 0; i < entities.size(); ++i) {
+		const Common::String &name = entities[i].displayName;
+		if (name.size() < normalized.size() + 2)
+			continue;
+		if (strncmp(name.c_str(), normalized.c_str(), normalized.size()) != 0)
+			continue;
+		if (name[normalized.size()] != '_')
+			continue;
+		bool numbered = true;
+		for (uint k = normalized.size() + 1; k < name.size(); ++k)
+			if (!Common::isDigit(name[k])) { numbered = false; break; }
+		if (!numbered)
+			continue;
+		if (best < 0 || entities[i].numId < entities[(uint)best].numId)
+			best = (int)i;
+	}
+	if (best < 0)
+		return false;
+	out = entities[(uint)best];
+	return true;
+}
+
+Common::String McpBridgeIndy4::changeEntityName(int numId, const Common::String &fallback) const {
+	// What an action reports having changed has to be sayable back to it. The
+	// change lists were built from the raw name (spaces left in, an unnamed
+	// object as "obj-1109"), which is neither what `state` publishes nor what
+	// `act` accepts, so publish the entity map's name instead.
+	if (_changeNamesFrame != _frameCounter) {
+		buildEntityMap(_changeNames);
+		_changeNamesFrame = _frameCounter;
+	}
+	for (uint i = 0; i < _changeNames.size(); ++i) {
+		if (_changeNames[i].kind == NamedEntity::kActor)
+			continue;
+		if (_changeNames[i].numId == numId)
+			return _changeNames[i].displayName;
+	}
+	// Not in the map any more (it left the room, or was just given away): the
+	// raw name is all there is, so at least normalize it the same way.
+	return normalizeActionName(fallback);
+}
+
+// ---------------------------------------------------------------------------
 // McpBridgeIndy4 — Fate of Atlantis "Lost Dialogue" book
 // ---------------------------------------------------------------------------
 

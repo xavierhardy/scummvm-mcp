@@ -36,7 +36,7 @@ import pytest
 
 from assertions import assert_text_contains
 from atlantis_helpers import (
-    BEAD,
+    BEAD_NAME_RE,
     BOOK_PAGES,
     DIR_FROM_CITY,
     LADDER,
@@ -51,6 +51,9 @@ from atlantis_helpers import (
     STONE_BOX,
     _act,
     _added,
+    _assert_change_names,
+    _bead_name,
+    _caves_nearest_first,
     _close_book,
     _debug,
     _find_jeep_behind_mountain,
@@ -115,6 +118,12 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     # --- Skip the intro until the opening dock dialog is pending -----------
     question = _skip_intro(client)
     assert question is not None, "[intro] opening dialog never appeared"
+
+    # The orichalcum beads keep the count left in their own name, written as a
+    # message rather than as text; state must read it out ("3_beads"), or the
+    # item cannot be named at all.
+    beads = _bead_name(client)
+    assert BEAD_NAME_RE.match(beads), f"[beads] unreadable bead name {beads!r}"
 
     # --- Answer the opening dialog (goal: answer_opening) ------------------
     result = _pick(client, "look around", {"question": question})
@@ -218,6 +227,9 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
         client, "tire_repair_kit"
     )
     assert used_kit, "[patch suit] tire kit should be consumed"
+    # The suit and the kit are what this action changed; both are reported the
+    # way state names them, so they can be acted on straight away.
+    _assert_change_names(result)
     _wait_object(client, 491, 20)  # repaired_suit
     _act(client, "use", "air_hose", "repaired_suit")
     sleep(1.0)
@@ -235,6 +247,12 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     assert sank, f"[hoist] the correct heading should sink Indy (room {ROOM_GATEWAY})"
 
     # --- Find the Atlantis cave before the air runs out (goal: reach_atlantis) -
+    # The game names all seven doorways "cave"; each is numbered apart, so the
+    # search below can walk into them by name.
+    if _room(client) == ROOM_GATEWAY:  # a cutscene may already have moved on
+        caves = _caves_nearest_first(client)
+        assert len(caves) == 7, f"[caves] expected seven doorways, got {caves}"
+        assert len({n for n, _ in caves}) == 7, f"[caves] names not distinct: {caves}"
     _search_caves_for_atlantis(client)
     room = _room(client)
     assert room == ROOM_ATLANTIS, f"[caves] never reached the airlock ({ROOM_ATLANTIS})"
@@ -252,14 +270,16 @@ def test_atlantis_walkthrough(atlantis_client: McpClient) -> None:
     sleep(1.5)
     opened = _says(result, "it opens") or _wait_object(client, ROD, 15)
     assert opened, "[airlock] the stone box should open and reveal the rod"
+    _assert_change_names(result)
 
     # Take the rod, light it with a bead, then use a bead on the statue's mouth
-    # to swing the bronze door open.
+    # to swing the bronze door open. The beads keep their count in their own
+    # name ("3_beads"), so it is read back off state before each use.
     _act(client, "pick_up", ROD)
     sleep(1.0)
-    _act(client, "use", BEAD, ROD)
+    _act(client, "use", _bead_name(client), ROD)
     sleep(2.0)  # light the airlock
-    _act(client, "use", BEAD, STATUE)
+    _act(client, "use", _bead_name(client), STATUE)
     sleep(3.0)  # open the bronze door
 
     # --- Step through the open door (goal: enter_atlantis = demo end) ------

@@ -46,6 +46,12 @@ public:
 	// Accessor for protected getObjOrActorName used by helpers.
 	const byte *callGetObjOrActorName(int obj) const;
 
+	// Turn the raw name bytes the engine stores for an object into readable text.
+	// The base takes them as they stand; a game whose scripts write a message —
+	// rather than plain text — into a name (a live count, say) overrides this to
+	// resolve it the way the game itself does before drawing it.
+	virtual Common::String decodeObjectName(const byte *raw) const;
+
 	// set_talk_speed is SCUMM-only; everything else is dispatched by the base.
 	Common::JSONValue *callTool(const Common::String &name,
 	                            const Common::JSONValue &args,
@@ -181,6 +187,27 @@ protected:
 	// verb) as "opened"/"closed"; leaves may override to add game-specific states
 	// (and can chain to ScummMcpBridge::objectStateName for the door default).
 	virtual Common::String objectStateName(int numId, int rawState, bool isPathway) const;
+	// Last pass over the entity map, once every name is in: a game whose scene
+	// names several things alike can make them tellable apart here. The base
+	// leaves the map as built.
+	virtual void disambiguateEntityNames(Common::Array<NamedEntity> &entities) const {
+		(void)entities;
+	}
+	// Last-chance name resolution, tried by resolveEntityByName once exact
+	// matching has failed. `normalized` is the normalized name asked for. The
+	// base resolves nothing further.
+	virtual bool resolveGameEntityName(const Common::String &normalized,
+	                                   const Common::Array<NamedEntity> &entities,
+	                                   NamedEntity &out) const {
+		(void)normalized; (void)entities; (void)out; return false;
+	}
+	// The name a state-change entry publishes for the object/inventory item
+	// numId. The base keeps each surface's own wording (`fallback`); a leaf may
+	// override to publish the name `state` shows, so an agent can feed a name it
+	// was just told about straight back into `act`.
+	virtual Common::String changeEntityName(int numId, const Common::String &fallback) const {
+		(void)numId; return fallback;
+	}
 
 	// Locate the engine verb ids for the "open" and "close" bar verbs (0 if the
 	// game has none). Used for the generic door-state naming above.

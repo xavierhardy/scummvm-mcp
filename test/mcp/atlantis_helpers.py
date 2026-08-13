@@ -6,6 +6,7 @@ connection and is gently retried, never hammered. See the module docstring
 of ``test_atlantis.py`` for the full walkthrough and robustness rationale.
 """
 
+import re
 from time import sleep, time
 
 import httpx
@@ -19,7 +20,10 @@ ROOM_BOAT = 42
 ROOM_GATEWAY = 82
 ROOM_ATLANTIS = 48
 CAVE_IDS = range(1096, 1103)  # the seven underwater cave doorways in room 82
-BEAD = 933  # orichalcum bead inventory item (its name does not round-trip cleanly)
+BEAD = 933  # the orichalcum beads inventory item
+# ...whose name carries the count left ("3 beads"), so it is read off state
+# rather than hardcoded; see _bead_name.
+BEAD_NAME_RE = re.compile(r"^\d+_beads$")
 # Airlock object ids (room 48) — fixed game-data numbers.
 LADDER, RUBBLE, STONE_BOX, ROD, STATUE, BRONZE_DOOR = 583, 584, 585, 586, 587, 582
 
@@ -285,6 +289,9 @@ def _read_page(client: McpClient, page: int, needle: str = "") -> str:
     page_text = ""
     for _ in range(8):
         result = _act(client, "look_at", f"page_{page}")
+        # Turning a page moves the clips, which are unnamed objects: they are
+        # reported under the same placeholder name state gives them.
+        _assert_change_names(result)
         page_text = _msgs(result)
         if needle.lower() in page_text.lower() and page_text:
             break
@@ -320,35 +327,76 @@ def _open_storage_locker(client: McpClient) -> None:
         sleep(1.5)
 
 
-def _cave_ids_nearest_first(client: McpClient) -> list:
-    """Return the room-82 cave doorway ids ordered by distance from Indy."""
+def _assert_change_names(result: dict) -> None:
+    """Every name a result reports must be one `act` would take back.
+
+    The change lists are built from the game's raw names ("punctured diving
+    suit", an unnamed object as "obj-1109"); they are published the way `state`
+    publishes them, so an agent can act on what it was just told changed.
+    """
+    for change in result.get("objects_changed") or []:
+        assert re.fullmatch(r"[a-z0-9_]+", change["name"]), (
+            f"[changes] {change['name']!r} is not a name act would take"
+        )
+    for item in (result.get("inventory_added") or []) + (
+        result.get("inventory_removed") or []
+    ):
+        assert re.fullmatch(r"[a-z0-9_]+", item), (
+            f"[changes] {item!r} is not a name act would take"
+        )
+
+
+def _bead_name(client: McpClient) -> str:
+    """The orichalcum beads' current inventory name ("3_beads")."""
+    for item in _state(client).get("inventory") or []:
+        if BEAD_NAME_RE.match(item):
+            return item
+    raise AssertionError(f"no beads in inventory: {_state(client).get('inventory')}")
+
+
+def _caves_nearest_first(client: McpClient) -> list[tuple[str, int]]:
+    """The room-82 cave doorways as (name, id), ordered by distance from Indy.
+
+    The game calls all seven of them "cave"; the server numbers them, so each is
+    reachable by name.
+    """
     s = _state(client)
     ego_x = (s.get("position") or {}).get("x", 160)
     caves = [
-        (o["id"], o.get("x", 0))
+        (o["name"], o["id"], o.get("x", 0))
         for o in s.get("objects", [])
-        if o["name"] == "cave" and o.get("id") in CAVE_IDS
+        if o["name"].startswith("cave") and o.get("id") in CAVE_IDS
     ]
-    caves.sort(key=lambda t: abs((t[1] or 0) - ego_x))
-    return [cid for cid, _ in caves]
+    caves.sort(key=lambda t: abs((t[2] or 0) - ego_x))
+    return [(name, cid) for name, cid, _ in caves]
 
 
 def _search_caves_for_atlantis(client: McpClient, timeout: float = 240) -> None:
-    """Try caves nearest-first (before the air runs out) until room 48 is reached."""
+    """Try caves nearest-first (before the air runs out) until room 48 is reached.
+
+    Each cave is walked into *by name*, which is what an agent reading state can
+    do only because the seven same-named doorways are numbered apart.
+    """
     deadline = time() + timeout
     tried: set[int] = set()
     while time() < deadline and _room(client) != ROOM_ATLANTIS:
         if _room(client) != ROOM_GATEWAY:
             sleep(2.5)  # betrayal cutscene (air-free); wait it out
             continue
-        remaining = [c for c in _cave_ids_nearest_first(client) if c not in tried]
+        remaining = [c for c in _caves_nearest_first(client) if c[1] not in tried]
         if not remaining:
             tried.clear()
             sleep(2.0)
             continue
-        cave_id = remaining[0]
+        cave_name, cave_id = remaining[0]
         tried.add(cave_id)
-        result = _act(client, "walk_to", cave_id)
+        try:
+            result = _act(client, "walk_to", cave_name)
+        except RuntimeError:
+            # The air ran out mid-call and the dive restarted: the doorways this
+            # name was read from are not on screen any more. Read them again.
+            sleep(1.0)
+            continue
         if (
             result.get("room_changed") == ROOM_ATLANTIS
             or _room(client) == ROOM_ATLANTIS

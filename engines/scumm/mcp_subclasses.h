@@ -215,8 +215,22 @@ class McpBridgeIndy4 : public McpBridgeClassic {
 public:
 	explicit McpBridgeIndy4(ScummEngine *vm) : McpBridgeClassic(vm) {}
 
+	// The orichalcum beads carry their count in their own name, as a message the
+	// game resolves when it draws it. Resolve it here too, or the name is a
+	// handful of escape bytes rather than "3 beads".
+	Common::String decodeObjectName(const byte *raw) const override;
+
 protected:
 	bool isInAtlantisBook() const override;
+	// Number the cave mouths (and the map's twinned cities), which the game
+	// names alike, so each one can be asked for.
+	void disambiguateEntityNames(Common::Array<NamedEntity> &entities) const override;
+	// ...and still answer the bare name with the first of them.
+	bool resolveGameEntityName(const Common::String &normalized,
+	                           const Common::Array<NamedEntity> &entities,
+	                           NamedEntity &out) const override;
+	// Report a change under the very name state gave the thing.
+	Common::String changeEntityName(int numId, const Common::String &fallback) const override;
 	void augmentStateObjects(Common::JSONArray &objects) override;
 	bool interceptGameAct(const Common::JSONObject &args, Common::String &errorOut,
 	                      bool &handled) override;
@@ -237,6 +251,11 @@ private:
 	bool turnAtlantisBookPage(int page, Common::String &errorOut);
 	// Shut the book, returning to the room it was opened from.
 	bool closeAtlantisBook(Common::String &errorOut);
+
+	// The entity map behind changeEntityName, rebuilt at most once per frame:
+	// one streaming action asks for a name per changed object.
+	mutable Common::Array<NamedEntity> _changeNames;
+	mutable uint32 _changeNamesFrame = 0xFFFFFFFF;
 };
 
 class McpBridgeMonkey : public McpBridgeClassic {
