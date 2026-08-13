@@ -29,6 +29,7 @@
 
 namespace Common {
 class MacResManager;
+class SeekableReadStream;
 }
 
 namespace Graphics {
@@ -65,11 +66,13 @@ public:
 	~MacResourceProvider() override;
 
 	bool load();
+	Common::SeekableReadStream *openResource(Container container, uint32 type,
+		uint16 id) const;
 	Common::SeekableReadStream *open(const char *filename) override;
 	bool exists(const char *filename) override;
 	bool allowsFallback(const char *filename) const override;
 	Common::SeekableReadStream *openText(int32 id, uint16 &unpackedSize) override;
-	Common::SeekableReadStream *openSound(int section, int command);
+	Common::SeekableReadStream *openSound(int section, int commandId);
 	int getCursorCount() const override { return 6; }
 	bool setCursor(int id) override;
 	void updateCursor() override;
@@ -90,7 +93,7 @@ private:
 	Graphics::MacFontManager *_fontManager = nullptr;
 	Graphics::ManagedSurface _nativeInterface;
 	Graphics::ManagedSurface _logicalInterface;
-	byte _nativeInterfacePalette[16 * 3] = {};
+	byte _nativeInterfacePalette[10 * 3] = {};
 	int _cursorID = 0;
 	int _waitCursorFrame = 0;
 	uint32 _nextCursorTime = 0;

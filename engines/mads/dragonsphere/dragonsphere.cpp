@@ -20,6 +20,7 @@
  */
 
 #include "engines/util.h"
+#include "common/config-manager.h"
 #include "mads/console.h"
 #include "mads/core/attr.h"
 #include "mads/core/conv.h"
@@ -50,7 +51,6 @@
 #include "mads/dragonsphere/mads/inventory.h"
 #include "mads/dragonsphere/mads/sounds.h"
 #include "mads/dragonsphere/mads/words.h"
-#include "mads/core/mps_installer.h"
 
 namespace MADS {
 namespace Dragonsphere {
@@ -71,7 +71,8 @@ Common::Error DragonsphereEngine::run() {
 	}
 
 	// Set up sound manager
-	_soundManager = new Sound::DragonSoundManager(_mixer, _soundFlag, isDemo());
+	_soundManager = new Sound::DragonSoundManager(_mixer, _soundFlag,
+			ConfMan.getBool("use_pas"), isDemo());
 	_soundManager->validate();
 
 	// Run the game
@@ -86,8 +87,6 @@ void DragonsphereEngine::global_init_code() {
 	for (count = 0; count < GLOBAL_LIST_SIZE; count++) {
 		global[count] = 0;
 	}
-
-	/* initialize_grid (); */
 
 	global[grid_position] = 5;
 	global[grid_position + 1] = 4;

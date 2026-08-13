@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/system.h"
 #include "mads/core/magic.h"
 #include "mads/core/buffer.h"
 #include "mads/core/error.h"
@@ -179,7 +180,7 @@ void magic_map_to_grey_ramp(Palette *pal,
 	}
 }
 
-void magic_grey_ramp_palette(Palette pal, int num_greys) {
+void magic_grey_ramp_palette(Palette &pal, int num_greys) {
 	int base_grey;
 	int base_color, num_colors;
 	int count;
@@ -196,7 +197,7 @@ void magic_grey_ramp_palette(Palette pal, int num_greys) {
 	}
 }
 
-void magic_fade_to_grey(Palette pal, byte *map_pointer,
+void magic_fade_to_grey(Palette &pal, byte *map_pointer,
 	int base_color, int num_colors,
 	int base_grey, int num_greys,
 	int tick_delay, int steps) {
@@ -271,6 +272,8 @@ void magic_fade_to_grey(Palette pal, byte *map_pointer,
 		}
 
 		mcga_setpal((Palette *)pal);
+		if (g_engine->hasMacintoshInterface())
+			g_system->updateScreen();
 
 		do {
 			now_timing = timer_read_600();
@@ -369,6 +372,8 @@ void magic_fade_from_grey(RGBcolor *pal, Palette target,
 		}
 
 		mcga_setpal((Palette *)pal);
+		if (g_engine->hasMacintoshInterface())
+			g_system->updateScreen();
 
 		do {
 			now_timing = timer_read_600();
@@ -382,7 +387,7 @@ done:
 	}
 }
 
-void magic_screen_change_corner(Buffer *new_screen, Palette pal,
+void magic_screen_change_corner(Buffer *new_screen, Palette &pal,
 	int corner_id,
 	int buffer_base_x, int buffer_base_y,
 	int screen_base_x, int screen_base_y,
@@ -434,11 +439,6 @@ void magic_screen_change_corner(Buffer *new_screen, Palette pal,
 
 	delta_x = (start_x ? -1 : 1);
 	delta_y = (start_y ? -1 : 1);
-
-	if (video_mode != mcga_mode) {
-		thru_black = false;
-		set_palette = false;
-	}
 
 	loop_start = (thru_black == MAGIC_THRU_BLACK) ? 0 : 1;
 
@@ -525,7 +525,7 @@ void magic_screen_change_corner(Buffer *new_screen, Palette pal,
 	mouse_show();
 }
 
-void magic_screen_change_edge(Buffer *new_screen, Palette pal,
+void magic_screen_change_edge(Buffer *new_screen, Palette &pal,
 	int edge_id,
 	int buffer_base_x, int buffer_base_y,
 	int screen_base_x, int screen_base_y,
@@ -553,11 +553,6 @@ void magic_screen_change_edge(Buffer *new_screen, Palette pal,
 	}
 
 	delta_x = (start_x ? -1 : 1);
-
-	if (video_mode != mcga_mode) {
-		thru_black = false;
-		set_palette = false;
-	}
 
 	loop_start = (thru_black == MAGIC_THRU_BLACK) ? 0 : 1;
 
@@ -622,7 +617,7 @@ void magic_screen_change_edge(Buffer *new_screen, Palette pal,
 	mouse_show();
 }
 
-void magic_screen_change_circle(Buffer *new_screen, Palette pal,
+void magic_screen_change_circle(Buffer *new_screen, Palette &pal,
 	int inward_flag,
 	int buffer_base_x, int buffer_base_y,
 	int screen_base_x, int screen_base_y,
@@ -671,11 +666,6 @@ void magic_screen_change_circle(Buffer *new_screen, Palette pal,
 	} else {
 		start_radius = 0;
 		delta_radius = pixel_rate;
-	}
-
-	if (video_mode != mcga_mode) {
-		thru_black = false;
-		set_palette = false;
 	}
 
 	loop_start = (thru_black == MAGIC_THRU_BLACK) ? 0 : 1;

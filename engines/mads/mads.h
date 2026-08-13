@@ -86,10 +86,13 @@ protected:
 	Audio::SoundHandle _speechHandle;
 	TimerFunction _timerFunction = nullptr;
 	uint32 _nextTimerTime = 0;
+	Graphics::Surface _savegameThumbnail;
 
 	virtual Common::Point screenToGame(const Common::Point &point) const;
 	virtual Common::Point gameToScreen(const Common::Point &point) const;
 	virtual void presentScreen(int shakeOffset);
+
+	virtual bool handleMacEvent(Common::Event &event) { return false; }
 
 	bool hasFeature(EngineFeature f) const override;
 
@@ -115,7 +118,6 @@ public:
 	uint32 getGameFeatures() const;
 	bool isDemo() const;
 	bool isCDROM() const;
-	virtual bool usesScummVMMenu() const { return false; }
 
 	void readConfigFile();
 	int getRandomNumber(int maxNumber);
@@ -132,6 +134,12 @@ public:
 	int getMouseState(int &x, int &y);
 	void warpMouse(int x, int y);
 	void updateDisplay();
+
+	const Graphics::Surface &getSavegameThumbnail() const {
+		return _savegameThumbnail;
+	}
+	void setSavegameThumbnail();
+	void clearSavegameThumbnail();
 
 	/**
 	 * Get the elapsed time in milliseconds
@@ -169,6 +177,23 @@ public:
 	virtual void global_sound_driver() = 0;
 	virtual void global_game_main_loop() {}
 	virtual void global_verb_filter() {}
+
+	// Optional Macintosh presentation hooks. Defaults preserve the shared
+	// MADS rendering path used by DOS releases.
+	virtual bool hasInterfaceAnimations() const { return true; }
+	virtual bool drawPopup() { return false; }
+	virtual void onPopupDestroyed() {}
+	virtual bool getInterfaceSentenceColors(byte &, byte &) const {
+		return false;
+	}
+	virtual bool hasMacintoshInterface() const { return false; }
+	virtual bool setMacintoshPalette(const RGBcolor *, int, int) {
+		return false;
+	}
+	virtual bool getMacintoshPalette(RGBcolor *, int, int) const {
+		return false;
+	}
+
 	virtual void player_keep_walking();
 
 	void playSpeech(Audio::AudioStream *stream);

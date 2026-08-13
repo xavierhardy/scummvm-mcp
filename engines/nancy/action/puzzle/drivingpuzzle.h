@@ -106,20 +106,31 @@ protected:
 	// Index into _chaseParams (167). The five values are the chase's outcome scenes and
 	// the event flags that gate its state machine.
 	enum ChaseParam {
-		kChaseGate01Flag = 0,		// state 0 -> 1 once this flag is clear
+		kChaseGate01Flag = 0,		// clears to advance from kPursuit to kShortcut
 		kChaseOffViewScene = 1,		// scene entered when the chaser leaves the viewport
 		kChaseOffViewFlag = 2,		// flag set (to 1) on the off-viewport outcome
-		kChaseGate12Flag = 3,		// state 1 -> 2 (switch to the second path) once this flag is set
+		kChaseGate12Flag = 3,		// sets to advance from kShortcut to kCaught (second path)
 		kChasePathEndScene = 4		// scene entered when the chaser finishes its route
 	};
 
-	// A checkpoint (type 0x0b): driving over it sets an event flag once.
+	// The chase runs through three phases, driven by checkpoint flags:
+	enum ChaseState {
+		kPursuit = 0,	// Nancy must keep Jane in sight; losing her off-screen is a loss
+		kShortcut = 1,	// Nancy lets Jane go and races her to the state line by another road
+		kCaught = 2		// Jane is caught and plays her crash sequence on the second path
+	};
+
+	// A checkpoint (type 0x0b): driving into it sets an event flag, but only while its own
+	// base condition holds. The chase sequences its phases this way - one checkpoint clears
+	// the pursuit gate (starting the shortcut), a later one (gated on that) sets the caught
+	// flag - so the condition must be honored, not just the rect.
 	struct Checkpoint {
 		Common::Rect rect;
-		int16 flagId = -1;
-		byte flagValue = 0;
-		bool triggered = false;
-		bool carInside = false;		// the car was inside this zone last frame
+		int16 flagId = -1;			// tail: the flag driven over sets
+		byte flagValue = 0;			// tail: the value it sets
+		int16 condFlag = -1;		// base zone val49: flag gating whether it can fire
+		byte condValue = 0;			// base zone val4b: the value that arms it
+		bool wasActive = false;		// (condition held AND car inside) last frame
 	};
 
 	// A mud puddle (type 0x03): slows the car (adds to its velocity decay) while inside.
@@ -137,6 +148,15 @@ protected:
 		bool carInside = false;		// the car was inside this zone last frame
 	};
 
+	// A removable road obstacle (type 0x14): a cow (or similar) that blocks the car while
+	// its event-flag condition holds. Each has a matching 0x0d cow overlay gated on the same
+	// flag, so the sprite and the collision appear and vanish together with the story state.
+	struct Obstacle {
+		Common::Rect rect;
+		int16 condFlag = -1;			// base zone val49: event flag gating the block
+		byte condValue = 0;				// base zone val4b: the flag value that activates it
+	};
+
 	// A cosmetic map decoration (type 0x0d): a sprite drawn onto the map at destRect.
 	// A single source rect is static; several are animation frames cycled over time.
 	// It is only visible while its event-flag condition holds (condFlag == -1 = always).
@@ -146,6 +166,7 @@ protected:
 		Common::Rect destRect;			// map space
 		int16 condFlag = -1;			// base zone val49: event flag gating visibility
 		byte condValue = 0;				// base zone val4b: the flag value that shows it
+		bool aboveCar = false;			// layer 1 draws over the car (tall props), 0 under
 	};
 
 	// A recorded chaser-path waypoint (kChase): the pursuer plays these back in real
@@ -191,6 +212,12 @@ protected:
 	// (and saving). Only does anything when the header's retainState flag is set.
 	void saveState() const;
 
+	// Refills the gas tank to the full amount from the UIRC boot chunk (the infinite-fuel cheat).
+	void refillFuel();
+
+	// Clears the accumulated pothole wear and restores the spare tire to good (the fix-tire cheat).
+	void repairTire();
+
 	// Whether a map-space point is off the road: off the map, or a non-white (dark)
 	// pixel in the collision mask (its white marks the drivable streets).
 	bool isWall(int px, int py) const;
@@ -211,7 +238,7 @@ protected:
 
 	// Draws the map's cosmetic decorations (animated frames cycled over time), offset by
 	// the camera and clipped to the visible window.
-	void drawOverlays(const Common::Point &cam);
+	void drawOverlays(const Common::Point &cam, bool aboveCar);
 
 	// Redraws the scrolling map (car-centered camera) and the car sprite(s) on top.
 	void drawScene();
@@ -229,7 +256,8 @@ protected:
 	int32 _startAngle = 0;		// blob+0x6b: start heading, degrees
 	int32 _forwardSpeed = 0;	// blob+0x6f: forward speed cap
 	int32 _reverseSpeed = 0;	// blob+0x73
-	int16 _frictionIndex = 0;	// blob+0x77: index into the shared friction table
+	int16 _frictionIndex = 0;	// blob+0x77: UIRC resource index for the fuel gauge
+	static const uint kTireResourceIndex = 2;	// UIRC resource index for the tire gauge (1 = good)
 	int32 _distanceDivisor = 0;	// blob+0x7b
 	bool _retainState = false;	// blob+0x7f: resume from the saved position
 	uint16 _finishScene = kNoScene;	// blob+0x80: the scene entered when a tire goes flat
@@ -256,6 +284,7 @@ protected:
 	Common::Array<MudZone> _mudZones;				// type 0x03
 	Common::Array<Pothole> _potholes;				// type 0x17
 	Common::Array<Overlay> _overlays;				// type 0x0d (map decorations)
+	Common::Array<Obstacle> _obstacles;				// type 0x14 (flag-gated road obstacles)
 	Common::Array<Graphics::ManagedSurface> _overlayImages;
 	Common::Array<Common::String> _overlayImageNames;
 
@@ -281,7 +310,7 @@ protected:
 
 	// Chase (167) state machine: 0 = following the first path, 1 = waiting to switch,
 	// 2 = following the second path.
-	int _chaseState = 0;
+	ChaseState _chaseState = kPursuit;
 	bool _chaserOnPathB = false;
 
 	// Fuel + tire hazards. Fuel is the gas-gauge UI resource (index _frictionIndex),
@@ -291,6 +320,7 @@ protected:
 	double _fuelBurnAccum = 0.0;
 	int _tireDamage = 0;
 	bool _flatTirePending = false;
+	bool _infiniteFuel = false;	// cheat: Ctrl+Shift+G tops the tank and stops it draining
 
 	// Chaser (kChase) runtime state.
 	bool _chaseStarted = false;

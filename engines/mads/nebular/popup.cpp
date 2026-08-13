@@ -94,10 +94,8 @@ static int popup_draw_content(int x, int y, int xs, int ys, int unknown, byte co
 }
 
 void popup_draw() {
-	if (g_engine->getPlatform() == Common::kPlatformMacintosh) {
-		static_cast<RexNebularEngine *>(g_engine)->showMacPopup();
+	if (g_engine->drawPopup())
 		return;
-	}
 
 	int askY;
 
@@ -134,14 +132,14 @@ void popup_draw() {
 					box->xs - 4, 1, DIALOG_BLACK_COLOR);
 			} else {
 				int tab = box->tab[lineCtr];
-				int xp = (tab & 0x7f) + box->x + 5;
+				int xp = (tab & ~(POPUP_UNDERLINE | POPUP_DOWNPIXEL)) + box->x + 5;
 				int yp = askY;
-				if (tab & 0x40)
+				if (tab & POPUP_DOWNPIXEL)
 					yp++;
 
 				font_write(box_param.font, &scr_main, box->text[lineCtr], xp, yp, 1);
 
-				if (tab & 0x80) {
+				if (tab & POPUP_UNDERLINE) {
 					buffer_rect_fill(scr_main, xp, yp + box_param.font->max_y_size,
 						font_string_width(box_param.font, box->text[lineCtr], 1), 1, DIALOG_BLACK_COLOR);
 				}
@@ -154,11 +152,6 @@ void popup_draw() {
 	mouse_hide();
 	video_update(&scr_main, box->x, box->y, box->x, box->y, box->xs, box->ys);
 	mouse_show();
-}
-
-void popup_close() {
-	if (g_engine->getPlatform() == Common::kPlatformMacintosh)
-		static_cast<RexNebularEngine *>(g_engine)->hideMacPopup();
 }
 
 void popup_setup_cycle() {

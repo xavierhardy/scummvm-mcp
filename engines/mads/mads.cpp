@@ -23,6 +23,7 @@
 #include "common/config-manager.h"
 #include "common/memstream.h"
 #include "engines/util.h"
+#include "graphics/scaler.h"
 #include "mads/mads.h"
 #include "mads/mads.h"
 #include "mads/core/anim.h"
@@ -53,8 +54,6 @@
 #include "mads/core/sprite.h"
 #include "mads/core/timer.h"
 #include "mads/core/vocab.h"
-#include "mads/phantom/main.h"
-#include "mads/forest/extra.h"
 #include "mads/forest/global.h"
 #include "mads/core/sound_manager.h"
 
@@ -123,7 +122,6 @@ void MADSEngine::initGlobals() {
 	init_sprite();
 	init_timer();
 	init_vocab();
-	Forest::init_extra();
 }
 
 void MADSEngine::readConfigFile() {
@@ -257,6 +255,9 @@ void MADSEngine::pollEvents() {
 	// Poll for events
 	Common::Event e;
 	while (g_system->getEventManager()->pollEvent(e)) {
+		if (handleMacEvent(e))
+			continue;
+
 		bool isMouse = false;
 		switch (e.type) {
 		case Common::EVENT_LBUTTONDOWN:
@@ -546,6 +547,14 @@ int MADSEngine::getRandomNumber(int minNumber, int maxNumber) {
 	int range = maxNumber - minNumber;
 
 	return minNumber + _randomSource.getRandomNumber(range);
+}
+
+void MADSEngine::setSavegameThumbnail() {
+	::createThumbnailFromScreen(&_savegameThumbnail);
+}
+
+void MADSEngine::clearSavegameThumbnail() {
+	_savegameThumbnail.free();
 }
 
 } // namespace MADS

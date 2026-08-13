@@ -133,7 +133,10 @@ int popup_create(int horiz_pieces, int x, int y) {
 		box->text_xs = middle_width;
 		box->text_width = horiz_pieces * 2;
 
-		RexNebular::popup_setup_cycle();
+		// Macintosh Rex draws popups in a separate native-style surface. Its
+		// colors must not replace the grayscale ramp used by the game scene.
+		if (g_engine->getPlatform() != Common::kPlatformMacintosh)
+			RexNebular::popup_setup_cycle();
 
 	} else {
 		middle_width = pop_xs(POPUP_UPPER_CENTER) + ((pop_xs(POPUP_TOP) << 1) * horiz_pieces);
@@ -780,9 +783,7 @@ void popup_destroy() {
 	int x, y;
 	int xs, ys;
 
-	if (g_engine->getGameID() == GType_RexNebular &&
-			g_engine->getPlatform() == Common::kPlatformMacintosh)
-		RexNebular::popup_close();
+	g_engine->onPopupDestroyed();
 
 	if (box->active && box->screen_saved) {
 		// Always restore the screen from scr_main — it spans both the game

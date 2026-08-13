@@ -570,7 +570,6 @@ static void room_110_init() {
 		if (global[player_persona] == PLAYER_IS_PID) {
 
 			if (global[guard_pid_status] == GUARD_NEVER_HEALED) {
-				/* global[no_talk_to_guard] = true; */
 				player.commands_allowed = false;
 				conv_run(CONV_GUARD_PID);
 				conv_export_value(player_has(shifter_ring));
@@ -581,7 +580,6 @@ static void room_110_init() {
 				}
 
 			} else if (global[guard_pid_status] == GUARD_IS_HEALED) {
-				/* global[no_talk_to_guard] = true; */
 				player.commands_allowed = false;
 				conv_run(CONV_GUARD_HEAL);
 			}
@@ -797,7 +795,6 @@ static void handle_animation_guard_pid() {
 
 		case 45:  /* end of running Pid through */
 			global[reset_conv] = 10;
-			/* conv_reset (CONV_GUARD_PID); */
 			if (game.difficulty == EASY_MODE) {
 				text_show(11045);
 			} else {
@@ -2394,7 +2391,7 @@ static void room_110_parser() {
 	}
 
 	if (g_engine->isDemo() && player_said_2(walk_down, road_to_east)) {
-		popup_alert(24, DEMO_MSG, nullptr);
+		text_show(999);
 		goto handled;
 	}
 

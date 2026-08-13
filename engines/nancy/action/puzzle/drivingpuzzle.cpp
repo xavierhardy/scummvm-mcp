@@ -23,6 +23,7 @@
 #include "common/random.h"
 
 #include "engines/nancy/nancy.h"
+#include "engines/nancy/enginedata.h"
 #include "engines/nancy/graphics.h"
 #include "engines/nancy/resource.h"
 #include "engines/nancy/sound.h"
@@ -146,12 +147,15 @@ void DrivingPuzzle::classifyZones(const Common::Array<ActionZone> &zones) {
 			_destinations.push_back(dest);
 			break;
 		}
-		case kZoneEventFlag: {	// checkpoint: sets an event flag once driven over
+		case kZoneEventFlag: {	// checkpoint: sets an event flag when driven into while armed
 			Checkpoint cp;
 			cp.rect = z.rect;
 			cp.flagId = z.tailId;
 			cp.flagValue = z.tailFlag;
-			cp.carInside = cp.rect.contains(spawn);
+			cp.condFlag = z.val49;
+			cp.condValue = z.val4b;
+			bool cond = cp.condFlag == -1 || NancySceneState.getEventFlag(cp.condFlag, cp.condValue);
+			cp.wasActive = cond && cp.rect.contains(spawn);
 			_checkpoints.push_back(cp);
 			break;
 		}
@@ -181,9 +185,18 @@ void DrivingPuzzle::classifyZones(const Common::Array<ActionZone> &zones) {
 			ov.destRect = z.overlayDestRect;
 			ov.condFlag = z.val49;
 			ov.condValue = z.val4b;
+			ov.aboveCar = z.overlayLayer != 0;
 			if (ov.imageIndex >= 0) {
 				_overlays.push_back(ov);
 			}
+			break;
+		}
+		case kZoneBoundary: {	// flag-gated road obstacle (a cow blocking the road, etc.)
+			Obstacle obs;
+			obs.rect = z.rect;
+			obs.condFlag = z.val49;
+			obs.condValue = z.val4b;
+			_obstacles.push_back(obs);
 			break;
 		}
 		default:
@@ -275,6 +288,8 @@ void DrivingPuzzle::init() {
 			_carY = data->carY;
 			_carHeading = data->heading;
 			_tireDamage = data->tireDamage;
+			_fuelBurnAccum = data->fuelBurnAccum;
+			_infiniteFuel = data->infiniteFuel;
 		}
 	}
 
@@ -324,12 +339,12 @@ int DrivingPuzzle::overlayImageIndex(const Common::String &name) {
 	}
 	surf.setTransparentColor(_drawSurface.getTransparentColor());
 
-	_overlayImages.push_back(surf);
+	_overlayImages.push_back(Common::move(surf));
 	_overlayImageNames.push_back(name);
 	return (int)_overlayImages.size() - 1;
 }
 
-void DrivingPuzzle::drawOverlays(const Common::Point &cam) {
+void DrivingPuzzle::drawOverlays(const Common::Point &cam, bool aboveCar) {
 	if (_overlays.empty()) {
 		return;
 	}
@@ -340,6 +355,9 @@ void DrivingPuzzle::drawOverlays(const Common::Point &cam) {
 
 	for (uint i = 0; i < _overlays.size(); ++i) {
 		const Overlay &ov = _overlays[i];
+		if (ov.aboveCar != aboveCar) {
+			continue;
+		}
 		if (ov.imageIndex < 0 || !view.intersects(ov.destRect)) {
 			continue;
 		}
@@ -368,6 +386,24 @@ void DrivingPuzzle::saveState() const {
 		data->carY = (int32)(_carY + 0.5);
 		data->heading = _carHeading;
 		data->tireDamage = _tireDamage;
+		data->fuelBurnAccum = _fuelBurnAccum;
+		data->infiniteFuel = _infiniteFuel;
+	}
+}
+
+void DrivingPuzzle::refillFuel() {
+	const UIRC *uirc = GetEngineData(UIRC)
+	if (uirc && _frictionIndex >= 0 && (uint)_frictionIndex < uirc->items.size()) {
+		NancySceneState.setUIResource(_frictionIndex, uirc->items[_frictionIndex].id);
+		_fuelBurnAccum = 0.0;
+	}
+}
+
+void DrivingPuzzle::repairTire() {
+	_tireDamage = 0;
+	const UIRC *uirc = GetEngineData(UIRC)
+	if (uirc && kTireResourceIndex < uirc->items.size()) {
+		NancySceneState.setUIResource(kTireResourceIndex, uirc->items[kTireResourceIndex].id);
 	}
 }
 
@@ -383,7 +419,20 @@ bool DrivingPuzzle::isWall(int px, int py) const {
 }
 
 bool DrivingPuzzle::isBlocked(const Common::Point &p) const {
-	return isWall(p.x, p.y);
+	if (isWall(p.x, p.y)) {
+		return true;
+	}
+
+	// A cow (or similar) is blocking the road while its story flag is set.
+	for (uint i = 0; i < _obstacles.size(); ++i) {
+		const Obstacle &obs = _obstacles[i];
+		if (obs.rect.contains(p) &&
+			(obs.condFlag == -1 || NancySceneState.getEventFlag(obs.condFlag, obs.condValue))) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void DrivingPuzzle::drawScene() {
@@ -393,9 +442,9 @@ void DrivingPuzzle::drawScene() {
 
 	_drawSurface.blitFrom(_image, Common::Rect(camX, camY, camX + _drawSurface.w, camY + _drawSurface.h), Common::Point(0, 0));
 
-	// Map decorations (buildings, cars, potholes, animated cows/flags) sit on the map,
+	// Ground-level decorations (potholes, parked cars, cows, fountain) lie on the road,
 	// under the cars.
-	drawOverlays(cam);
+	drawOverlays(cam, false);
 
 	// The chaser car (kChase), drawn under the player car.
 	if (_variant == kChase && !_frameRects2.empty() && _chaseCarImage.w > 0) {
@@ -412,6 +461,10 @@ void DrivingPuzzle::drawScene() {
 		int sy = (int)(_carY + 0.5) - camY - src.height() / 2;
 		_drawSurface.blitFrom(_carImage, src, Common::Point(sx, sy));
 	}
+
+	// Tall decorations (buildings, trees, power-line poles, flags) draw over the cars,
+	// so the car passes behind them.
+	drawOverlays(cam, true);
 
 	_needsRedraw = true;
 }
@@ -449,12 +502,11 @@ void DrivingPuzzle::updateChaser() {
 	const double slowSlope = 5.0;
 	_speedCap = dist >= slowRadius ? (double)_forwardSpeed : (double)_forwardSpeed - (slowRadius - dist) * slowSlope;
 
-	// While Nancy is still pursuing Jane (states 0 and 1, before Jane is caught and the
-	// crash sequence on the second path begins), letting the chaser leave the visible map
-	// means the player has lost her. The original only tests this in state 0 because its
-	// state stays there through the whole pursuit; here state advances to 1 as soon as its
-	// gate flag is clear, so the check has to cover both.
-	if (_chaseState < 2) {
+	// Losing Jane off the edge of the map is only a loss during the main pursuit, when the
+	// player must stay right behind her. Once a checkpoint clears the pursuit gate, the chase
+	// enters the shortcut phase: Nancy deliberately lets Jane go and races her to the state
+	// line by another road, so the chaser leaving the view is expected.
+	if (_chaseState == kPursuit) {
 		Common::Point cam = cameraOffset();
 		Common::Rect viewport(0, 0, _drawSurface.w, _drawSurface.h);
 		Common::Rect chaserRect(1, 1);
@@ -472,23 +524,23 @@ void DrivingPuzzle::updateChaser() {
 	// Chase state machine (mirrors the original): flags gating it are set by the chase's
 	// own checkpoints (zones2 type 0x0b) and by the scene scripts.
 	switch (_chaseState) {
-	case 0:
+	case kPursuit:
 		if (_chaseParams[kChaseGate01Flag] != -1 &&
 				NancySceneState.getEventFlag(_chaseParams[kChaseGate01Flag], g_nancy->_false)) {
-			_chaseState = 1;
+			_chaseState = kShortcut;
 		}
 		break;
-	case 1:
+	case kShortcut:
 		// Switch onto the second path once Jane is caught.
 		if (_chaseParams[kChaseGate12Flag] != -1 &&
 				NancySceneState.getEventFlag(_chaseParams[kChaseGate12Flag], g_nancy->_true)) {
 			_chaserOnPathB = true;
 			_chaserWaypoint = 0;
 			_chaseStarted = false;
-			_chaseState = 2;
+			_chaseState = kCaught;
 		}
 		break;
-	case 2:
+	case kCaught:
 		// The chaser has completed its route (Jane crashes) - the win.
 		if (_chaserWaypoint + 1 >= path.size()) {
 			armExitScene(_chaseParams[kChasePathEndScene], -1, 0);
@@ -580,7 +632,7 @@ void DrivingPuzzle::updatePhysics(int throttle, double cursorDist) {
 	// The gas tank empties by the distance the car actually travels this frame divided by
 	// the header's distance divisor. The DT_RESOURCE scene dependency reads the same
 	// resource to warn Nancy when it runs low.
-	if (_distanceDivisor > 0) {
+	if (_distanceDivisor > 0 && !_infiniteFuel) {
 		double moved = sqrt((_carX - preX) * (_carX - preX) + (_carY - preY) * (_carY - preY));
 		_fuelBurnAccum += moved / (double)_distanceDivisor;
 		if (_fuelBurnAccum >= 1.0) {
@@ -612,15 +664,17 @@ void DrivingPuzzle::updatePhysics(int throttle, double cursorDist) {
 		hole.carInside = nowInside;
 	}
 
-	// Driving over a checkpoint (on entry) sets its event flag once.
+	// Driving into a checkpoint sets its event flag, but only while the checkpoint's own
+	// condition holds (so the chase phases fire in order). Edge-triggered on entering the
+	// armed state.
 	for (uint i = 0; i < _checkpoints.size(); ++i) {
 		Checkpoint &cp = _checkpoints[i];
-		bool nowInside = cp.rect.contains(next);
-		if (nowInside && !cp.carInside && !cp.triggered && cp.flagId != -1) {
-			cp.triggered = true;
+		bool cond = cp.condFlag == -1 || NancySceneState.getEventFlag(cp.condFlag, cp.condValue);
+		bool active = cond && cp.rect.contains(next);
+		if (active && !cp.wasActive && cp.flagId != -1) {
 			NancySceneState.setEventFlag(cp.flagId, cp.flagValue ? g_nancy->_true : g_nancy->_false);
 		}
-		cp.carInside = nowInside;
+		cp.wasActive = active;
 	}
 
 	// A drive-in destination (the chase finish line) fires on entry; a parking
@@ -648,6 +702,12 @@ void DrivingPuzzle::execute() {
 	case kBegin:
 		init();
 		registerGraphics();
+		if (_variant == kChase && _chaseParams[kChaseGate01Flag] != -1) {
+			// Arm the main pursuit: with the gate flag set the chase begins in state 0 (Nancy
+			// must keep Jane in sight). A checkpoint later clears it to start the shortcut. The
+			// original relies on the scene to set this; do it here so the phase is never skipped.
+			NancySceneState.setEventFlag(_chaseParams[kChaseGate01Flag], g_nancy->_true);
+		}
 		classifyZones(_zones);
 		if (_variant == kChase) {
 			classifyZones(_zones2);
@@ -660,15 +720,10 @@ void DrivingPuzzle::execute() {
 		break;
 	case kActionTrigger:
 		g_nancy->_sound->stopSound(_soundBlocks[2].channel);	// stop the engine ambience
-		if (_exitFlag != -1) {
-			NancySceneState.setEventFlag(_exitFlag, _exitFlagValue ? g_nancy->_true : g_nancy->_false);
-		}
-		if (_exitHasFade) {
+		NancySceneState.setEventFlag(_exitFlag, _exitFlagValue ? g_nancy->_true : g_nancy->_false);
+		if (_exitHasFade)
 			NancySceneState.specialEffect(_exitFadeType, _exitFadeTotalTime, _exitFadeToBlackTime, _exitFadeRect);
-		}
-		if (_exitScene.sceneID != kNoScene) {
-			NancySceneState.changeScene(_exitScene);
-		}
+		NancySceneState.changeScene(_exitScene);
 		finishExecution();
 		break;
 	}
@@ -679,16 +734,35 @@ void DrivingPuzzle::handleInput(NancyInput &input) {
 		return;
 	}
 
+	// Cheats: Ctrl+Shift+G toggles infinite fuel (tops the tank off and stops the drain);
+	// Ctrl+Shift+T repairs the spare tire (clears pothole wear and restores it to good).
+	for (uint i = 0; i < input.otherKbdInput.size(); ++i) {
+		const Common::KeyState &key = input.otherKbdInput[i];
+		if ((key.flags & Common::KBD_CTRL) == 0 || (key.flags & Common::KBD_SHIFT) == 0) {
+			continue;
+		}
+		if (key.keycode == Common::KEYCODE_g) {
+			_infiniteFuel = !_infiniteFuel;
+			if (_infiniteFuel) {
+				refillFuel();
+			}
+			saveState();
+			debug("Gas cheat: infinite fuel %s", _infiniteFuel ? "ON" : "OFF");
+		} else if (key.keycode == Common::KEYCODE_t) {
+			repairTire();
+			saveState();
+			debug("Tire cheat: spare tire repaired");
+		}
+	}
+
 	// A tire has blown: hold the car still until the blowout sound finishes, then leave
 	// for the flat-tire scene (where Nancy fits the spare).
 	if (_flatTirePending) {
 		if (!g_nancy->_sound->isSoundPlaying(_soundBlocks[0].channel)) {
 			saveState();
-			if (_finishScene != kNoScene) {
-				SceneChangeDescription scene;
-				scene.sceneID = _finishScene;
-				NancySceneState.changeScene(scene);
-			}
+			SceneChangeDescription scene;
+			scene.sceneID = _finishScene;
+			NancySceneState.changeScene(scene);
 			finishExecution();
 		}
 		return;

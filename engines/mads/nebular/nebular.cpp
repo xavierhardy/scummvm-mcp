@@ -20,7 +20,7 @@
  */
 
 #include "engines/util.h"
-#include "mads/core/mps_installer.h"
+#include "common/config-manager.h"
 #include "mads/core/attr.h"
 #include "mads/core/config.h"
 #include "mads/core/conv.h"
@@ -40,6 +40,8 @@
 #include "mads/nebular/copy.h"
 #include "mads/nebular/global.h"
 #include "mads/nebular/main.h"
+#include "mads/nebular/mac_nebular.h"
+#include "mads/nebular/mps_installer.h"
 #include "mads/nebular/popup.h"
 #include "mads/nebular/mads/inventory.h"
 #include "mads/nebular/mads/words.h"
@@ -58,18 +60,20 @@ namespace RexNebular {
 
 RexNebularEngine::RexNebularEngine(OSystem *syst, const MADSGameDescription *gameDesc) :
 		MADSEngine(syst, gameDesc) {
+	if (getPlatform() == Common::kPlatformMacintosh)
+		_macNebular = new MacNebular(*this);
+
 	// Initialize globals
 	RexNebular::popup_init();
 }
 
 RexNebularEngine::~RexNebularEngine() {
-	shutdownMacintoshResources();
+	delete _macNebular;
 }
 
 Common::Error RexNebularEngine::run() {
-	const bool isMacintosh = getPlatform() == Common::kPlatformMacintosh;
-	if (isMacintosh)
-		initMacintoshGraphics();
+	if (_macNebular)
+		_macNebular->initGraphics();
 	else
 		initGraphics(320, 200);
 	applyGameSettings();
@@ -91,12 +95,14 @@ Common::Error RexNebularEngine::run() {
 	}
 
 	// Set up the platform resource and sound providers
-	if (isMacintosh) {
-		if (!initMacintoshResources())
+	if (_macNebular) {
+		if (!_macNebular->initResources())
 			return Common::Error(Common::kNoGameDataFoundError,
 				"Could not open the Macintosh Rex resource files");
 	} else {
-		_soundManager = new Sound::RexSoundManager(_mixer, _soundFlag, isDemo());
+		const bool usePas = ConfMan.getBool("use_pas");
+		_soundManager = new Sound::RexSoundManager(_mixer, _soundFlag,
+			usePas, isDemo());
 	}
 	_soundManager->validate();
 

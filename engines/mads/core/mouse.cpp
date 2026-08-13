@@ -96,7 +96,6 @@ void mouse_begin_cycle(int double_flag) {
 
 	mouse_status = mouse_get_status(&mouse_x, &mouse_y);
 	mouse_clock = timer_read();
-	// mouse_video_mode = mouse_get_video_mode();
 	mouse_stop_stroke = (mouse_latched && (!mouse_status));
 	mouse_start_stroke = (mouse_status && !mouse_stroke_going);
 	mouse_stroke_going = mouse_status;
@@ -250,10 +249,9 @@ void mouse_refresh_done() {
 void mouse_disable_scale() {
 }
 
-void mouse_hard_cursor_mode(int mode, Palette *mypal) {
-}
-
-void mouse_hard_cursor_mode(int mode, Palette mypal) {
+void mouse_hard_cursor_mode(int mode, Palette &mypal) {
+	static const byte RGB[6] = { 0x2d, 0x2d, 0x2d, 0x3f, 0x3f, 0x3f };
+	Common::copy(RGB, RGB + 6, &mypal[253].r);
 }
 
 } // namespace MADS
