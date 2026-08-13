@@ -1221,6 +1221,11 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 		errorOut = "act: another action is already in progress";
 		return false;
 	}
+	Common::String blocked = gameplayBlockedReason();
+	if (!blocked.empty()) {
+		errorOut = "act: " + blocked;
+		return false;
+	}
 	if (_vm->_userPut <= 0) {
 		errorOut = "act: game is not accepting input right now";
 		return false;
@@ -1824,6 +1829,11 @@ bool ScummMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &e
 		errorOut = "answer: another action is already in progress";
 		return false;
 	}
+	Common::String blocked = gameplayBlockedReason();
+	if (!blocked.empty()) {
+		errorOut = "answer: " + blocked;
+		return false;
+	}
 	if (!hasPendingQuestion()) {
 		errorOut = "answer: no dialog question is currently pending";
 		return false;
@@ -2022,6 +2032,11 @@ bool ScummMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &err
 		errorOut = "walk: another action is already in progress";
 		return false;
 	}
+	Common::String blocked = gameplayBlockedReason();
+	if (!blocked.empty()) {
+		errorOut = "walk: " + blocked;
+		return false;
+	}
 	if (_vm->_userPut <= 0) {
 		errorOut = "walk: game is not accepting input right now";
 		return false;
@@ -2131,6 +2146,11 @@ bool ScummMcpBridge::beginWalkStream(int gx, int gy, int dir) {
 // ---------------------------------------------------------------------------
 
 bool ScummMcpBridge::toolSkip(const Common::JSONValue &args, Common::String &errorOut) {
+	Common::String blocked = gameplayBlockedReason();
+	if (!blocked.empty()) {
+		errorOut = "skip: " + blocked;
+		return false;
+	}
 	// Allow skip even if streaming to interrupt current action
 	if (!_streaming) {
 		snapshotPreAction();

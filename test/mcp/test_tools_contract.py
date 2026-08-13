@@ -11,12 +11,18 @@ to three rules, whatever the game:
      be pointed at something it cannot call.
   3. No description names a game or an engine, or describes how the server is
      built. It says what the tool does and what comes back.
+
+Plus the promise behind the schemas themselves: each one is a valid JSON
+Schema, and what the game actually answers with matches the schema it
+advertises for that tool (the client checks every result it decodes against it,
+so this only has to make the check happen for each game).
 """
 
 import base64
 import os
 import re
 
+import jsonschema
 import pytest
 
 from mcp_client import McpClient
@@ -58,6 +64,9 @@ OPTIONAL_TOOLS = [
     "save_state",
     "set_talk_speed",
     "answer",
+    # Game-specific tools a description may only point at where the game
+    # registers them (the fist-fight games do; nothing else does).
+    "fight",
 ]
 
 
@@ -69,6 +78,15 @@ def _check_tools(tools: list[dict]) -> None:
     for tool in tools:
         assert tool.get("inputSchema"), f"{tool['name']} declares no input schema"
         assert tool.get("outputSchema"), f"{tool['name']} declares no output schema"
+
+        # A schema a client cannot compile is no better than none at all.
+        for kind in ("inputSchema", "outputSchema"):
+            try:
+                jsonschema.Draft202012Validator.check_schema(tool[kind])
+            except jsonschema.SchemaError as exc:
+                raise AssertionError(
+                    f"{tool['name']} {kind} is not a valid schema: {exc.message}"
+                ) from exc
 
         description = tool.get("description", "")
         assert description, f"{tool['name']} has no description"
@@ -100,6 +118,7 @@ def _check_tools(tools: list[dict]) -> None:
         "loom_client",
         "comi_client",
         "gob1_client",
+        "indy3_client",
         "sky_client",
         "queen_client",
         "sword1_client",
@@ -109,6 +128,20 @@ def test_tool_table_keeps_its_promises(fixture_name: str, request) -> None:
     """Every game's tool table is complete, consistent and game-agnostic."""
     client: McpClient = request.getfixturevalue(fixture_name)
     _check_tools(client.list_tools())
+
+    # And what the game answers with matches the schema it just advertised:
+    # state is the snapshot every other tool is read against, and the one whose
+    # fields games add to (the fist-fight gauges, the team, ...).
+    schema = next(
+        tool["outputSchema"] for tool in client.list_tools() if tool["name"] == "state"
+    )
+    errors = sorted(
+        jsonschema.Draft202012Validator(schema).iter_errors(client.state()),
+        key=lambda e: list(e.path),
+    )
+    assert not errors, "state breaks its own schema — " + "; ".join(
+        f"at {list(e.path)}: {e.message}" for e in errors
+    )
 
 
 def test_screenshot_returns_the_frame_and_files_it(monkey_client: McpClient) -> None:

@@ -25,9 +25,12 @@ SSE on `127.0.0.1:23456` by default). It exposes the game as tools:
   channel, drive the engine, emit notifications (dialog lines, Loom notes) as
   the action plays out, then return a structured result (room/inventory/message
   changes).
-- Game-specific helpers: `play_note`, `shoot_cannon`, `ride_bike`,
-  `choose_kids`, `switch_character`, `dial` (the phone keypad, in both Maniac
-  Mansion and Zak McKracken).
+- Game-specific helpers: `play_note`, `fight` (Indy3's fist fights — the moves,
+  mapped onto the game's directional keypad from whichever side the player
+  stands; while a fight is on it is the only tool that acts, and act/answer/
+  walk/skip/play_note are refused), `shoot_cannon`, `ride_bike`, `choose_kids`,
+  `switch_character`, `dial` (the phone keypad, in both Maniac Mansion and Zak
+  McKracken).
 - **Debug tools** (only when `mcp_debug=true`): `debug` (read engine vars),
   `save_state`, `set_talk_speed`, `keystroke`, `mouse_move`, `mouse_click`,
   `screenshot`.

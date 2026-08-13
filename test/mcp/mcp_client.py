@@ -477,6 +477,29 @@ class McpClient:
         ) as resp:
             return self._decode_stream_response(resp=resp, tool="PlayNote")
 
+    def fight(self, move) -> dict[str, Any]:
+        """Make one or more fist-fight moves (streaming call).
+
+        Pass a single move name ('punch_high', 'block_low', 'step_back', ...)
+        or a list/tuple of them to queue a sequence in one call. The engine
+        paces them so each move plays out before the next key goes in.
+        """
+        if isinstance(move, (list, tuple)):
+            arguments = {"moves": list(move)}
+        else:
+            arguments = {"move": move}
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": "fight", "arguments": arguments},
+        }
+        headers = self._headers({"Accept": "text/event-stream"})
+        with self._client.stream(
+            "POST", self._url, json=payload, headers=headers
+        ) as resp:
+            return self._decode_stream_response(resp=resp, tool="Fight")
+
     def call_capturing(
         self, name: str, arguments: dict
     ) -> tuple[list[str], list[dict], dict | None]:

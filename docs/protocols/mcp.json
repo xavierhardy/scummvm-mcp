@@ -105,7 +105,7 @@
     {
       "name": "state",
       "type": "sync",
-      "description": "Read the current game state: room, position, available verbs, inventory, visible objects, actors, buffered dialog lines, and any pending dialog question.",
+      "description": "Read the current game state: room, position, available verbs, inventory, visible objects, actors, buffered dialog lines, and any pending dialog question. Games add their own fields (e.g. a fist fight's gauges under 'fight'); read the outputSchema the server advertises for the running game.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -229,6 +229,38 @@
               }
             },
             "description": "Present only when a dialog choice is pending. Use the answer tool to respond."
+          },
+          "fight": {
+            "type": "object",
+            "properties": {
+              "indy": {
+                "type": "object",
+                "properties": {
+                  "health": {
+                    "type": "integer",
+                    "description": "Health gauge (0 = knocked out)"
+                  },
+                  "punch_power": {
+                    "type": "integer",
+                    "description": "Punch-power gauge"
+                  }
+                }
+              },
+              "opponent": {
+                "type": "object",
+                "properties": {
+                  "health": {
+                    "type": "integer",
+                    "description": "Health gauge (0 = knocked out)"
+                  },
+                  "punch_power": {
+                    "type": "integer",
+                    "description": "Punch-power gauge"
+                  }
+                }
+              }
+            },
+            "description": "Present only while a fist fight is on (games that have them). The verb bar is empty then and only the fight tool acts; the ordinary gameplay tools are refused until the fight ends."
           }
         }
       },
@@ -617,6 +649,41 @@
         }
       },
       {
+        "name": "fight",
+        "type": "streaming",
+        "games": "Indiana Jones and the Last Crusade; the Indy3 segment of Passport to Adventure",
+        "description": "Make a move in a fist fight. Accepts either {move:'punch_high'} for one move, or {moves:['block_high','punch_low']} to make several in a row. Punches and blocks come at three heights (a block only stops a punch at the same height) and step_back moves out of range; the bridge maps each move to the key that means it from the side the player is fighting from, so an agent never deals with the game's directional keypad. Valid only while a fight is on — state reports one under 'fight' — and refused outside one. While a fight is on the verb bar is empty and the ordinary gameplay tools (act, answer, walk, skip, play_note) are refused in turn, so fight is the only way to act; state stays available throughout. The result carries the fight gauges as they stand when the exchange resolves, or fight_over:true once the fight has ended.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "move": {
+              "type": "string",
+              "enum": [
+                "punch_high",
+                "punch_middle",
+                "punch_low",
+                "block_high",
+                "block_middle",
+                "block_low",
+                "step_back"
+              ],
+              "description": "The move to make."
+            },
+            "moves": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional sequence of move names to make in order, e.g. ['block_high','punch_low']."
+            }
+          },
+          "additionalProperties": false
+        },
+        "outputSchema": {
+          "$ref": "#/definitions/stateChanges"
+        }
+      },
+      {
         "name": "shoot_cannon",
         "type": "streaming",
         "games": "The Curse of Monkey Island (cannon minigame)",
@@ -971,6 +1038,14 @@
             }
           },
           "description": "Present if a dialog choice is pending after the action"
+        },
+        "fight": {
+          "type": "object",
+          "description": "Fist-fight gauges as they stand once the exchange resolved (games with fights only): {indy:{health,punch_power}, opponent:{health,punch_power}}"
+        },
+        "fight_over": {
+          "type": "boolean",
+          "description": "True when the fight that was on has ended (games with fights only)"
         }
       }
     }
@@ -984,8 +1059,9 @@
       "names": "A name is whatever the game itself would print for the thing, normalized (lower case, spaces as underscores). Two details show up in Fate of Atlantis: a name the game writes as a message rather than as text is resolved first, so the orichalcum beads read as their live count ('3_beads'); and a scene that names several things alike (the Lost Kingdom's seven cave mouths are all 'cave') has them numbered in id order ('cave_1'..'cave_7'), with the bare name still answering with the first of them. An action's inventory_added/inventory_removed/objects_changed report the same names state does, so a name just reported can be passed straight back to act.",
       "clickOnlyScreens": "Monkey Island 2 hides its verb bar on the island maps and once Guybrush is in the swamp coffin: the sentence line names the only action (\"row to\"), and a click is the whole interface. state reports that verb and offers it on every object; act(verb, target1) and walk(x, y) replay the click, so travelling on the map switches room and rowing moves the coffin.",
       "lookAt": "In V0-V2 (Maniac Mansion, Zak McKracken) the bar's 'What is' verb only names an object: the interpreter never runs a sentence for it, it writes the name into the sentence line. act(verb='what is', target1=…) answers with that name as a message and changes nothing else — there are no descriptions to read in these games.",
-      "extraTools": "Game-specific: play_note, shoot_cannon, ride_bike, choose_kids, switch_character, dial (the phone keypad close-up, in both Maniac Mansion and Zak McKracken). Debug adds set_talk_speed.",
-      "backgroundSpeech": "A room can talk to itself with the player in full control (Zak's living-room TV prints a line every few seconds). Pre-V7 games stop waiting on speech once the action itself has been finished for a short while, so such a room does not make every action time out; the lines are still captured and arrive with the next state call."
+      "extraTools": "Game-specific: play_note, fight, shoot_cannon, ride_bike, choose_kids, switch_character, dial (the phone keypad close-up, in both Maniac Mansion and Zak McKracken). Debug adds set_talk_speed.",
+      "backgroundSpeech": "A room can talk to itself with the player in full control (Zak's living-room TV prints a line every few seconds). Pre-V7 games stop waiting on speech once the action itself has been finished for a short while, so such a room does not make every action time out; the lines are still captured and arrive with the next state call.",
+      "fights": "Indiana Jones and the Last Crusade (and its segment in Passport to Adventure) puts the player in fist fights, which suspend the whole interface: the verb bar empties, nothing is selectable and the game reads only its own fighting keys. state reports the fight under 'fight' (each fighter's health and punch-power gauge), the fight tool makes the moves, and act/answer/walk/skip/play_note are refused with an error naming the fight until it ends — so an agent is never left sending actions the game silently drops."
     },
     "sword-family": {
       "scope": "Broken Sword 1 (sword1). The contract is written to extend to Broken Sword 2 (sword2) unchanged; only the engine adapter differs.",

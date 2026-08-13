@@ -437,6 +437,14 @@ protected:
 	// the Indy3 / Passport leaves.
 	virtual bool isInIndy3Fight() const { return false; }
 
+	// Why the ordinary gameplay tools (act/answer/walk/skip) are refused right
+	// now, as the sentence appended to their error. A game can put the player in
+	// an interlude that suspends the usual interface and reads its own input —
+	// there, letting act() through would silently do nothing. Empty (the base)
+	// means nothing is refused, so this changes nothing for a game that has no
+	// such interlude.
+	virtual Common::String gameplayBlockedReason() const { return Common::String(); }
+
 	// Fate of Atlantis "Lost Dialogue" close-up (Indy4): a full-screen, tabbed
 	// reference book. When it is open toolState exposes its pages as synthetic
 	// "page_N" objects plus the "book" itself, and toolAct turns to a page or

@@ -3,8 +3,8 @@ Integration tests for the Indiana Jones 3 segment of Passport to Adventure.
 
 Save slot 3 (pass.s03) drops Indy at the boxing gym. Walking to the locker
 room triggers a dialog; choice 1 starts a fist-fight against the boxing coach.
-The fight HUD vars are surfaced through state.fight, and numpad-style
-keystrokes (1-9) drive Indy's punches/blocks/step-backs.
+The fight HUD vars are surfaced through state.fight, and the `fight` tool makes
+the moves (the ordinary gameplay tools are refused while a fight is on).
 """
 
 from __future__ import annotations
@@ -162,3 +162,116 @@ def test_06_indy3_block_then_step_back(indy3_client: McpClient) -> None:
     # The fight may end if Indy or the coach is KO'd, but otherwise the HUD
     # should still be visible and the values valid.
     _assert_fight_hud_valid(_state_or_skip(indy3_client))
+
+
+# ---------------------------------------------------------------------------
+# The fight tool
+# ---------------------------------------------------------------------------
+
+
+def _tool(client: McpClient, name: str) -> dict | None:
+    """The advertised entry for one tool, or None when it is not registered."""
+    for tool in client.list_tools():
+        if tool["name"] == name:
+            return tool
+    return None
+
+
+def _refusal(client: McpClient, name: str, arguments: dict) -> str:
+    """Call a tool expecting it to be refused, and return the message."""
+    try:
+        result = client.call_tool(name, arguments)
+    except RuntimeError as exc:
+        return str(exc)
+    raise AssertionError(f"{name} was not refused: {result}")
+
+
+def test_07_indy3_fight_tool_is_advertised(indy3_client: McpClient) -> None:
+    """A game with fights registers 'fight', with both schemas and the moves."""
+    fight = _tool(indy3_client, "fight")
+    assert fight is not None, "the fight tool is not registered"
+    assert fight.get("inputSchema"), "fight declares no input schema"
+    assert fight.get("outputSchema"), "fight declares no output schema"
+    moves = fight["inputSchema"]["properties"]["move"].get("enum")
+    assert set(moves) == {
+        "punch_high",
+        "punch_middle",
+        "punch_low",
+        "block_high",
+        "block_middle",
+        "block_low",
+        "step_back",
+    }, f"unexpected move set: {moves}"
+
+    # The ordinary tools say what happens to them when a fight starts, so an
+    # agent reading the table knows where to go.
+    for name in ("act", "walk", "state"):
+        described = _tool(indy3_client, name)
+        assert described is not None, f"{name} is not registered"
+        assert "fight" in described["description"].lower(), (
+            f"{name} says nothing about fights: {described['description']}"
+        )
+
+
+def test_08_indy3_fight_is_refused_outside_a_fight(indy3_client: McpClient) -> None:
+    """In the gym, before the coach is taken up on it, fight is an error."""
+    skip_unless(
+        _state_or_skip(indy3_client).get("fight") is None, "a fight is already on"
+    )
+    message = _refusal(indy3_client, "fight", {"move": "punch_high"})
+    assert "no fist fight" in message, message
+
+
+def test_09_indy3_ordinary_tools_are_refused_in_a_fight(
+    indy3_client: McpClient,
+) -> None:
+    """A fight suspends the interface, so everything but state says so."""
+    _start_fight(indy3_client)
+
+    # state keeps answering — it is how an agent sees the fight at all.
+    state = _state_or_skip(indy3_client)
+    assert state.get("fight") is not None, f"no fight in state: {state}"
+
+    for name, arguments in (
+        ("act", {"verb": "look", "target1": "bell"}),
+        ("walk", {"x": 120, "y": 100}),
+        ("answer", {"id": 1}),
+        ("play_note", {"note": "c"}),
+    ):
+        message = _refusal(indy3_client, name, arguments)
+        assert "fist fight" in message, f"{name} refused for another reason: {message}"
+        assert "fight" in message, f"{name} does not point at fight: {message}"
+
+
+def test_10_indy3_fight_lands_a_punch(indy3_client: McpClient) -> None:
+    """A punch through the fight tool moves the gauges, and reports them back."""
+    before = _start_fight(indy3_client)
+    result = indy3_client.fight("punch_low")
+
+    fight = result.get("fight")
+    if fight is None:
+        # The exchange ended the fight; that is a result too.
+        assert result.get("fight_over") is True, f"no fight in the result: {result}"
+        return
+    _assert_fight_side(fight["indy"], "indy")
+    _assert_fight_side(fight["opponent"], "opponent")
+    assert _side_changed(before["opponent"], fight["opponent"]) or _side_changed(
+        before["indy"], fight["indy"]
+    ), f"the punch had no effect: {before} -> {fight}"
+
+
+def test_11_indy3_fight_takes_a_sequence(indy3_client: McpClient) -> None:
+    """A queued sequence of moves is played in order, in one call."""
+    _start_fight(indy3_client)
+    result = indy3_client.fight(["block_high", "punch_low", "punch_low"])
+    if result.get("fight_over") is True:
+        return
+    assert result.get("fight") is not None, f"no fight in the result: {result}"
+    _assert_fight_hud_valid(_state_or_skip(indy3_client))
+
+
+def test_12_indy3_fight_rejects_an_unknown_move(indy3_client: McpClient) -> None:
+    """An unknown move is refused by name rather than silently dropped."""
+    _start_fight(indy3_client)
+    message = _refusal(indy3_client, "fight", {"move": "headbutt"})
+    assert "unknown move" in message, message

@@ -8,6 +8,7 @@
 
 #include "common/util.h"
 
+#include "scumm/actor.h"
 #include "scumm/mcp_subclasses.h"
 #include "scumm/object.h"
 #include "scumm/resource.h"
@@ -140,6 +141,355 @@ void McpBridgeClassic::addIndy3FightHud(Common::JSONObject &out) const {
 	out.setVal("fight", new Common::JSONValue(fight));
 }
 
+// ---------------------------------------------------------------------------
+// McpBridgeClassic — fist fights (Indy3, full game or the Passport mini-game)
+// ---------------------------------------------------------------------------
+//
+// A fight suspends the whole verb-bar interface: the bar empties, no object is
+// selectable, and the only input the game reads is the nine fighting keys laid
+// out like a numeric keypad. The keys are *directional*, not semantic — the
+// column towards the opponent punches and the column away from them steps back
+// — so which key a named move maps to depends on the side the player fights
+// from. That is what the tool below hides: an agent asks for "punch_high" and
+// the bridge presses the key that means it from where the player stands.
+
+// The moves the `fight` tool accepts, in the order they are advertised, with
+// the key each one means when the player stands to the *left* of the opponent.
+// The mirrored key is the one for the same row on the other side of the pad
+// (7<->9, 4<->6, 1<->3), which is exactly what the game asks a player to do
+// when the fighters swap sides.
+struct Indy3FightMove {
+	const char *name;
+	byte keyFromLeft;
+	byte keyFromRight;
+};
+
+static const Indy3FightMove kIndy3FightMoves[] = {
+	{"punch_high",   '9', '7'},
+	{"punch_middle", '6', '4'},
+	{"punch_low",    '3', '1'},
+	{"block_high",   '8', '8'},
+	{"block_middle", '5', '5'},
+	{"block_low",    '2', '2'},
+	{"step_back",    '4', '6'},
+	{nullptr,        0,   0}
+};
+
+// Frames between two queued moves: long enough that each one plays out as its
+// own swing, short enough that a queued exchange is not a series of pauses.
+static const uint32 kFightMoveSpacingFrames = 15;
+// Frames the stream stays open after the last move, so the result carries the
+// gauges as they stand once the exchange has resolved.
+static const uint32 kFightSettleFrames = 15;
+// Frames the gauges must stay gone before the fight counts as over: a fighter
+// going down blanks them for a moment without ending anything.
+static const uint32 kFightOverConfirmFrames = 45;
+
+int McpBridgeClassic::indy3FightOpponentActor() const {
+	// The fight scripts keep the actor being fought in var(342) — the reliable
+	// answer, and the one that survives a room holding other actors.
+	int32 hinted = vmVar(342);
+	if (hinted > 0 && hinted < vmNumActors()) {
+		Actor *a = vmActorOrNull((int)hinted);
+		if (a && a->isInCurrentRoom())
+			return (int)hinted;
+	}
+	// Failing that, take the visible actor standing closest to the player: in a
+	// fight the two fighters are face to face, so it is the one being fought.
+	Actor *ego = getEgoActor();
+	if (!ego)
+		return 0;
+	int egoId = ego->_number;
+	int best = 0;
+	int bestDist = 0;
+	for (int i = 1; i < vmNumActors(); ++i) {
+		if (i == egoId)
+			continue;
+		Actor *a = vmActorOrNull(i);
+		if (!a || !a->isInCurrentRoom())
+			continue;
+		int dist = ABS(a->getPos().x - ego->getPos().x) + ABS(a->getPos().y - ego->getPos().y);
+		if (!best || dist < bestDist) {
+			best = i;
+			bestDist = dist;
+		}
+	}
+	return best;
+}
+
+bool McpBridgeClassic::indy3FightEgoOnLeft() const {
+	Actor *ego = getEgoActor();
+	int oppId = indy3FightOpponentActor();
+	Actor *opponent = oppId ? vmActorOrNull(oppId) : nullptr;
+	if (!ego || !opponent)
+		return true;  // the layout the game itself documents as the default
+	return ego->getPos().x <= opponent->getPos().x;
+}
+
+int McpBridgeClassic::indy3FightMoveIndex(const Common::String &move) {
+	for (int i = 0; kIndy3FightMoves[i].name; ++i) {
+		if (move == kIndy3FightMoves[i].name)
+			return i;
+	}
+	return -1;
+}
+
+byte McpBridgeClassic::indy3FightKeyForMove(int moveIndex) const {
+	if (moveIndex < 0)
+		return 0;
+	const Indy3FightMove &m = kIndy3FightMoves[moveIndex];
+	// Read the side at the moment the key goes in, not when the call came in: a
+	// queued sequence can outlive the fighters swapping sides.
+	return indy3FightEgoOnLeft() ? m.keyFromLeft : m.keyFromRight;
+}
+
+void McpBridgeClassic::pumpGame() {
+	ScummMcpBridge::pumpGame();
+	if (usesFistFights() && isInIndy3Fight())
+		_lastFightSeenFrame = _frameCounter;
+}
+
+bool McpBridgeClassic::inFightWindow() const {
+	if (!usesFistFights())
+		return false;
+	if (isInIndy3Fight())
+		return true;
+	// A fighter going down blanks the gauges for a moment without the fight
+	// being over, so a gap only counts once it has held.
+	return _lastFightSeenFrame != 0 &&
+	       (_frameCounter - _lastFightSeenFrame) < kFightOverConfirmFrames;
+}
+
+Common::String McpBridgeClassic::gameplayBlockedReason() const {
+	if (inFightWindow())
+		return "a fist fight is in progress — until it ends, 'fight' is the only "
+		       "way to act";
+	return Common::String();
+}
+
+Common::String McpBridgeClassic::fightNote() const {
+	if (!usesFistFights())
+		return Common::String();
+	return " Refused while a fist fight is on: fights suspend the ordinary "
+	       "interface, and 'fight' is then the only way to act.";
+}
+
+void McpBridgeClassic::registerFightTool() {
+	Common::JSONObject moveProp;
+	moveProp.setVal("type", mcpJsonString("string"));
+	Common::JSONArray moveEnum;
+	Common::String moveList;
+	for (int i = 0; kIndy3FightMoves[i].name; ++i) {
+		moveEnum.push_back(mcpJsonString(kIndy3FightMoves[i].name));
+		if (!moveList.empty())
+			moveList += ", ";
+		moveList += kIndy3FightMoves[i].name;
+	}
+	moveProp.setVal("enum", new Common::JSONValue(moveEnum));
+	moveProp.setVal("description", mcpJsonString(
+	    "The move to make: one of " + moveList + "."));
+
+	Common::JSONObject props;
+	props.setVal("move", new Common::JSONValue(moveProp));
+	props.setVal("moves", mcpProp("array",
+	    "Optional sequence of move names to make in order, e.g. "
+	    "['block_high','punch_low']. Use it to answer faster than one call per "
+	    "swing; give either this or 'move'."));
+
+	Networking::McpServer::ToolSpec spec;
+	spec.name = "fight";
+	spec.description =
+	    "Throw a punch, block, or step back in a fist fight. Take either "
+	    "{move:'punch_high'} or {moves:['block_high','punch_low']} to make "
+	    "several moves in a row. Punches and blocks each come at three heights: "
+	    "a block only stops a punch thrown at the same height, and stepping back "
+	    "moves out of range. Valid only while a fist fight is in progress — "
+	    "'state' reports one under 'fight', with each fighter's health and the "
+	    "punch-power gauge that says how hard the next punch lands; outside a "
+	    "fight this call is refused. " + streamingToolNote();
+	spec.inputSchema  = mcpObjectSchema(props);
+	spec.outputSchema = buildChangesSchema();
+	spec.streaming    = true;
+	_server->registerTool(spec);
+}
+
+Common::JSONValue *McpBridgeClassic::dispatchFight(const Common::String &name,
+                                                   const Common::JSONValue &args,
+                                                   Common::String &errorOut, bool &handled) {
+	if (name == "fight") {
+		handled = true;
+		toolFight(args, errorOut);
+		return nullptr; // streaming
+	}
+	handled = false;
+	return nullptr;
+}
+
+bool McpBridgeClassic::toolFight(const Common::JSONValue &args, Common::String &errorOut) {
+	if (_streaming) {
+		errorOut = "fight: another action is already in progress";
+		return false;
+	}
+	if (!inFightWindow()) {
+		errorOut = "fight: no fist fight is in progress — use the ordinary "
+		           "actions until one starts";
+		return false;
+	}
+	if (!args.isObject()) {
+		errorOut = "fight: arguments must be an object with 'move' or 'moves'";
+		return false;
+	}
+	const Common::JSONObject &a = args.asObject();
+
+	Common::Array<int> moves;
+	if (a.contains("moves") && a["moves"]->isArray()) {
+		const Common::JSONArray &arr = a["moves"]->asArray();
+		for (uint i = 0; i < arr.size(); ++i) {
+			if (!arr[i] || !arr[i]->isString()) {
+				errorOut = "fight: 'moves' must be an array of strings";
+				return false;
+			}
+			int move = indy3FightMoveIndex(normalizeActionName(arr[i]->asString()));
+			if (move < 0) {
+				errorOut = "fight: unknown move '" + arr[i]->asString() + "'";
+				return false;
+			}
+			moves.push_back(move);
+		}
+		if (moves.empty()) {
+			errorOut = "fight: 'moves' must not be empty";
+			return false;
+		}
+	} else if (a.contains("move") && a["move"]->isString()) {
+		int move = indy3FightMoveIndex(normalizeActionName(a["move"]->asString()));
+		if (move < 0) {
+			errorOut = "fight: unknown move '" + a["move"]->asString() + "'";
+			return false;
+		}
+		moves.push_back(move);
+	} else {
+		errorOut = "fight: provide 'move' (string) or 'moves' (array of strings)";
+		return false;
+	}
+
+	// beginStream() snapshots, which resets the per-stream game state — so the
+	// queue is handed over after it, not before.
+	beginStream();
+	_sseFightMoves = moves;
+	_sseFightActive = true;
+	_sseLastFightFedFrame = 0;
+	return true;
+}
+
+bool McpBridgeClassic::pumpStreamFightEarly() {
+	if (!_sseFightActive)
+		return false;
+
+	// The gauges going away means the fight is over — but they also blank for a
+	// moment when a fighter goes down and gets back up, so wait for it to hold
+	// before believing it. Queued moves wait with it: there is nothing to hit
+	// while nobody is standing.
+	if (!isInIndy3Fight()) {
+		if (_sseFightGoneFrame == 0)
+			_sseFightGoneFrame = _frameCounter;
+		if (_frameCounter - _sseFightGoneFrame < kFightOverConfirmFrames)
+			return true;
+		_sseFightMoves.clear();
+		_sseFightActive = false;
+		closeStreamSuccess();
+		return true;
+	}
+	_sseFightGoneFrame = 0;
+
+	if (!_sseFightMoves.empty()) {
+		if (_sseLastFightFedFrame == 0 ||
+		    _frameCounter - _sseLastFightFedFrame >= kFightMoveSpacingFrames) {
+			byte key = indy3FightKeyForMove(_sseFightMoves[0]);
+			_sseFightMoves.remove_at(0);
+			_sseLastFightFedFrame = _frameCounter;
+			// The fight scripts read the key the player pressed, so press it: the
+			// fighting keys carry their own ASCII value as their key code.
+			injectKey(Common::KeyState((Common::KeyCode)key, key));
+		}
+		return true;
+	}
+
+	if (_frameCounter - _sseLastFightFedFrame < kFightSettleFrames)
+		return true;
+
+	_sseFightActive = false;
+	closeStreamSuccess();
+	return true;
+}
+
+void McpBridgeClassic::addIndy3FightChangesSchema(Common::JSONObject &props) {
+	addIndy3FightSchema(props);
+	props.setVal("fight_over", mcpProp("boolean",
+	    "True when the fight that was on has ended"));
+}
+
+void McpBridgeClassic::addIndy3FightChanges(Common::JSONObject &changes) const {
+	if (!usesFistFights())
+		return;
+	if (isInIndy3Fight())
+		addIndy3FightHud(changes);
+	else if (_sseWasFighting)
+		changes.setVal("fight_over", mcpJsonBool(true));
+
+	// The only objects a fight flips are the gauge bars the game draws for the
+	// HUD — unnamed, and already reported as `fight`. Reporting them as object
+	// state changes would bury the two numbers that matter.
+	if ((_sseWasFighting || isInIndy3Fight()) && changes.contains("objects_changed")) {
+		delete changes["objects_changed"];
+		changes.erase("objects_changed");
+	}
+}
+
+void McpBridgeClassic::augmentChangesSchema(Common::JSONObject &props) {
+	ScummMcpBridge::augmentChangesSchema(props);
+	if (usesFistFights())
+		addIndy3FightChangesSchema(props);
+}
+
+void McpBridgeClassic::augmentStateChanges(Common::JSONObject &changes) const {
+	ScummMcpBridge::augmentStateChanges(changes);
+	addIndy3FightChanges(changes);
+}
+
+void McpBridgeClassic::resetGameStream() {
+	ScummMcpBridge::resetGameStream();
+	_sseFightMoves.clear();
+	_sseFightActive = false;
+	_sseLastFightFedFrame = 0;
+	_sseFightGoneFrame = 0;
+	_sseWasFighting = isInIndy3Fight();
+}
+
+Common::String McpBridgeClassic::stateToolDescription() const {
+	Common::String desc = ScummMcpBridge::stateToolDescription();
+	if (usesFistFights())
+		desc += " While a fist fight is on, the verb bar empties and the snapshot "
+		        "carries a 'fight' object instead, with each fighter's health and "
+		        "punch-power gauge; the 'fight' tool is what acts then.";
+	return desc;
+}
+
+Common::String McpBridgeClassic::actToolDescription() const {
+	return ScummMcpBridge::actToolDescription() + fightNote();
+}
+
+Common::String McpBridgeClassic::answerToolDescription() const {
+	return ScummMcpBridge::answerToolDescription() + fightNote();
+}
+
+Common::String McpBridgeClassic::walkToolDescription() const {
+	return ScummMcpBridge::walkToolDescription() + fightNote();
+}
+
+Common::String McpBridgeClassic::skipToolDescription() const {
+	return ScummMcpBridge::skipToolDescription() + fightNote();
+}
+
 void McpBridgeClassic::registerPlayNoteTool() {
 	// --- play_note (Loom distaff) ---
 	Common::JSONObject props;
@@ -177,8 +527,13 @@ bool McpBridgeClassic::toolPlayNote(const Common::JSONValue &args, Common::Strin
 		errorOut = "play_note: another action is already in progress";
 		return false;
 	}
+	Common::String blocked = gameplayBlockedReason();
+	if (!blocked.empty()) {
+		errorOut = "play_note: " + blocked;
+		return false;
+	}
 	if (!isInLoomSection()) {
-		errorOut = "play_note: only available in the Loom segment";
+		errorOut = "play_note: the staff is not in hand right now";
 		return false;
 	}
 	if (vmUserPut() <= 0) {

@@ -179,6 +179,71 @@ protected:
 	// section (full Loom, or the Loom mini-game in Passport). Surfaces var(259)
 	// note transitions as MCP notifications and paces play_note's queued keys.
 	void pumpStreamGame() override;
+
+	// --- Fist fights (Indy3, full game or the mini-game in Passport) --------
+	// A fight suspends the whole verb-bar interface: the bar empties and the
+	// only input the game reads is the fighting keys. The leaves that can put
+	// the player in one turn this on; everything below is inert for the other
+	// classic games, which never see a fight.
+	virtual bool usesFistFights() const { return false; }
+
+	// The `fight` tool: registration, dispatch, and the move -> key mapping.
+	void registerFightTool();
+	Common::JSONValue *dispatchFight(const Common::String &name, const Common::JSONValue &args,
+	                                 Common::String &errorOut, bool &handled);
+	bool toolFight(const Common::JSONValue &args, Common::String &errorOut);
+	// Index of a named move in the move table, -1 when the name is not a move.
+	static int indy3FightMoveIndex(const Common::String &move);
+	// The key that move stands for from the side the player is fighting on.
+	byte indy3FightKeyForMove(int moveIndex) const;
+	// The actor being fought, 0 when none can be identified.
+	int indy3FightOpponentActor() const;
+	// True when the player character stands to the left of the opponent (the
+	// fighting keys are laid out by direction, so this decides which column
+	// punches and which one steps back).
+	bool indy3FightEgoOnLeft() const;
+	// Why an ordinary gameplay tool is refused right now ("" when it is not).
+	Common::String gameplayBlockedReason() const override;
+	// True while a fight is on, including the moments a knockdown blanks the
+	// gauges: the tools have to read the same fight the player is in, not the
+	// gap between two rounds of it.
+	bool inFightWindow() const;
+	// Keeps the frame the gauges were last seen on, for inFightWindow().
+	void pumpGame() override;
+	// Feed queued moves and close the stream once they have played out. Only
+	// active while `fight` is streaming.
+	bool pumpStreamFightEarly();
+	void addIndy3FightChanges(Common::JSONObject &changes) const;
+	static void addIndy3FightChangesSchema(Common::JSONObject &props);
+	// The sentence appended to every ordinary tool's description in a game with
+	// fights, so an agent knows what to reach for when one starts. Empty for
+	// the classic games that have none.
+	Common::String fightNote() const;
+
+	Common::String stateToolDescription() const override;
+	Common::String actToolDescription() const override;
+	Common::String answerToolDescription() const override;
+	Common::String walkToolDescription() const override;
+	Common::String skipToolDescription() const override;
+
+	void augmentChangesSchema(Common::JSONObject &props) override;
+	void augmentStateChanges(Common::JSONObject &changes) const override;
+	void resetGameStream() override;
+
+	// Queued fight moves (indices into the move table, mapped to a key as each
+	// one goes in), and the frame the last one was fed on.
+	Common::Array<int> _sseFightMoves;
+	bool _sseFightActive = false;
+	uint32 _sseLastFightFedFrame = 0;
+	// First frame the fight gauges read as gone. A knockdown blanks them for a
+	// moment mid-fight, so the fight only counts as over once they have stayed
+	// away (see kFightOverConfirmFrames).
+	uint32 _sseFightGoneFrame = 0;
+	// Frame the fight gauges were last up on (0 = never seen).
+	uint32 _lastFightSeenFrame = 0;
+	// Whether a fight was on when this action started, so the action that ends
+	// one can say so.
+	bool _sseWasFighting = false;
 };
 
 class McpBridgeLoom : public McpBridgeClassic {
@@ -204,6 +269,13 @@ public:
 
 protected:
 	bool isInIndy3Fight() const override { return indy3FightActive(); }
+	bool usesFistFights() const override { return true; }
+	void registerGameTools() override { registerFightTool(); }
+	Common::JSONValue *dispatchGameTool(const Common::String &name, const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override {
+		return dispatchFight(name, args, errorOut, handled);
+	}
+	bool pumpStreamGameEarly() override { return pumpStreamFightEarly(); }
 	void augmentState(Common::JSONObject &out) override { addIndy3FightHud(out); }
 	void augmentStateSchema(Common::JSONObject &outputProps) override {
 		McpBridgeClassic::augmentStateSchema(outputProps);
@@ -306,11 +378,16 @@ public:
 protected:
 	bool isInLoomSection() const override { return loomSectionByVerbLabels(); }
 	bool isInIndy3Fight() const override { return indy3FightActive(); }
-	void registerGameTools() override { registerPlayNoteTool(); }
+	bool usesFistFights() const override { return true; }
+	void registerGameTools() override { registerPlayNoteTool(); registerFightTool(); }
 	Common::JSONValue *dispatchGameTool(const Common::String &name, const Common::JSONValue &args,
 	                                    Common::String &errorOut, bool &handled) override {
+		Common::JSONValue *result = dispatchFight(name, args, errorOut, handled);
+		if (handled)
+			return result;
 		return dispatchPlayNote(name, args, errorOut, handled);
 	}
+	bool pumpStreamGameEarly() override { return pumpStreamFightEarly(); }
 	void applyGameVerbs(Common::JSONArray &verbsArr, Common::Array<VerbInfo> &activeVerbs,
 	                    bool questionPending) override {
 		applyLoomVerbs(verbsArr, activeVerbs, questionPending);
