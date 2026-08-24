@@ -76,6 +76,7 @@ protected:
 	void augmentState(Common::JSONObject &out) override;
 	void augmentChangesSchema(Common::JSONObject &props) override;
 	void augmentStateChanges(Common::JSONObject &changes) const override;
+	Common::String objectStateName(int numId, int rawState, bool isPathway) const override;
 	bool pumpStreamGameEarly() override;
 	void resetGameStream() override;
 	bool gameStreamBusy() const override;

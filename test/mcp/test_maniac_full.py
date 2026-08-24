@@ -115,3 +115,29 @@ def test_07_maniac_full_what_is_names_the_object(
     assert "front door" in joined_message_text(result).lower(), (
         f"'what is' did not name the door: {result}"
     )
+
+
+def test_08_maniac_full_door_state_names_the_open_flag(
+    maniac_full_client: McpClient,
+) -> None:
+    """Only the open/closed flag of the early-SCUMM state bit field names a door.
+
+    The front door starts shut but carries the 'locked' flag, so reading the
+    whole state byte would announce a closed door as opened.
+    """
+    state = maniac_full_client.state()
+    door = next(o for o in state["objects"] if o["name"] == "front_door")
+    assert door.get("state_name") == "closed", f"the door starts shut: {door}"
+
+    # The other side of the same test: an openable that really is opened says so.
+    mailboxes = [o for o in state["objects"] if o["name"] == "mailbox"]
+    assert mailboxes and all(o.get("state_name") == "closed" for o in mailboxes), (
+        f"the mailbox starts shut: {mailboxes}"
+    )
+    maniac_full_client.act("open", "mailbox")
+    opened = [
+        o
+        for o in maniac_full_client.state()["objects"]
+        if o["name"] == "mailbox" and o.get("state_name") == "opened"
+    ]
+    assert opened, f"the opened mailbox still reads as closed: {mailboxes}"

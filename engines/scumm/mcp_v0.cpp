@@ -217,6 +217,19 @@ void McpBridgeManiac::augmentStateChanges(Common::JSONObject &changes) const {
 	changes.setVal("kids", new Common::JSONValue(kids));
 }
 
+// Maniac Mansion keeps object state as the early-SCUMM bit field (pickupable /
+// untouchable / locked / an intrinsic on-off flag), not the image state V3+
+// stores, so the base class's "any non-zero state is opened" test misreads a
+// door that merely carries one of the other flags: the mansion's front door is
+// locked (kObjectStateLocked) from the start of the game and would read as
+// opened while it is shut. The open/closed flag is kObjectStateIntrinsic — the
+// one the door scripts set and test (o2_setState08 / o2_ifState08) — so mask the
+// state down to it and let the base class decide whether this object is an
+// openable at all.
+Common::String McpBridgeManiac::objectStateName(int numId, int rawState, bool isPathway) const {
+	return McpBridgeV0::objectStateName(numId, rawState & kObjectStateIntrinsic, isPathway);
+}
+
 void McpBridgeManiac::resetGameStream() {
 	McpBridgeV0::resetGameStream();
 	_kidPhase = kKidIdle;
