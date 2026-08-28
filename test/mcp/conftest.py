@@ -85,6 +85,8 @@ _FIXTURE_INDEX = {
     # these fixtures — do not reuse it here.
     "gob1": 31,
     "plain_tools": 32,
+    "dw1": 33,
+    "dw2": 34,
 }
 
 
@@ -370,6 +372,26 @@ def gob1_client() -> Iterator[McpClient]:
     No save support: one ordered sequence on a single instance, started fresh
     and skipped past the intro (like woodruff and the atlantis/ft demos)."""
     yield from _client("gob1-demo", "gob1")
+
+
+@pytest.fixture(scope="session")
+def dw1_client() -> Iterator[McpClient]:
+    """Discworld CD demo (Tinsel engine, V1).
+
+    No save slot to load: the demo starts on its intro sequence, so the whole
+    run is one ordered sequence on a single instance, skipped past the intro
+    into Rincewind's bedroom (like woodruff and the atlantis/ft demos)."""
+    yield from _client("dw1-demo", "dw1")
+
+
+@pytest.fixture(scope="session")
+def dw2_client() -> Iterator[McpClient]:
+    """Discworld II demo (Tinsel engine, V2).
+
+    Same shape as dw1_client: started fresh and skipped past the intro. Note
+    that only the Windows demo runs under ScummVM — the DOS one is flagged
+    unsupported by the engine, so pointing dw2-demo at it will not start."""
+    yield from _client("dw2-demo", "dw2")
 
 
 @pytest.fixture(scope="session")

@@ -1985,6 +1985,9 @@ static void Print(CORO_PARAM, int x, int y, SCNHANDLE text, int time, bool bSust
 	// Get the string
 	LoadStringRes(text, _vm->_font->TextBufferAddr(), TBUFSZ);
 
+	// MCP: report the line whether or not it ends up on screen.
+	_vm->mcpOnPrint(_vm->_font->TextBufferAddr());
+
 	// Calculate display time
 	bJapDoPrintText = false;
 	if (time == 0) {
@@ -2133,6 +2136,11 @@ static void PrintObj(CORO_PARAM, const SCNHANDLE hText, const InventoryObject *p
 		g_bNotPointedRunning = false;
 		return;
 	}
+
+	// MCP: while the bridge is reading an object's name, it takes the string
+	// and nothing is displayed — the script was run only to be asked.
+	if (_vm->mcpTakeObjectName(hText, pinvo->getId()))
+		return;
 
 	// Don't do it if it's not wanted
 	if ((TinselVersion >= 2) && (myEscape) && (myEscape != GetEscEvents()))
@@ -3412,6 +3420,16 @@ static void TalkOrSay(CORO_PARAM, SPEECH_TYPE speechType, SCNHANDLE hText, int x
 		 */
 		_ctx->bSample = _ctx->bSamples;
 		_ctx->pText = nullptr;
+
+		// MCP: report the line whether or not subtitles are on. The text
+		// buffer is re-loaded by the display path below.
+		if (_vm->mcpEnabled()) {
+			if (TinselVersion >= 2)
+				LoadSubString(hText, _ctx->sub, _vm->_font->TextBufferAddr(), TBUFSZ);
+			else
+				LoadStringRes(hText, _vm->_font->TextBufferAddr(), TBUFSZ);
+			_vm->mcpOnSpeech(_ctx->actor, _vm->_font->TextBufferAddr());
+		}
 
 		if (_vm->_config->isJapanMode()) {
 			_ctx->ticks = JAP_TEXT_TIME;

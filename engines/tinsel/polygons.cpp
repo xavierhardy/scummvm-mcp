@@ -2147,6 +2147,13 @@ int GetTagPolyId(HPOLYGON hp) {
 	return Polys[hp]->polyID;
 }
 
+void GetPolyOffset(HPOLYGON hp, int *pX, int *pY) {
+	CHECK_HP(hp, "Out of range polygon handle (GetPolyOffset()");
+
+	*pX = (TinselVersion >= 2) ? volatileStuff[hp].xoff : 0;
+	*pY = (TinselVersion >= 2) ? volatileStuff[hp].yoff : 0;
+}
+
 void GetPolyMidBottom(	HPOLYGON hp, int *pX, int *pY) {
 	CHECK_HP(hp, "Out of range polygon handle (GetPolyMidBottom()");
 

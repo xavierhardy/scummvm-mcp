@@ -47,6 +47,8 @@ FORBIDDEN_WORDS = [
     "amazon queen",
     "woodruff",
     "gobliiins",
+    "discworld",
+    "tinsel",
     "scummvm",
     "confman",
     "bridge",
@@ -122,6 +124,7 @@ def _check_tools(tools: list[dict]) -> None:
         "sky_client",
         "queen_client",
         "sword1_client",
+        "dw1_client",
     ],
 )
 def test_tool_table_keeps_its_promises(fixture_name: str, request) -> None:

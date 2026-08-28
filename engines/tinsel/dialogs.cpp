@@ -1298,6 +1298,31 @@ bool Dialogs::inventoryOrNotebookActive() {
 	return inventoryActive() || ((TinselVersion == 3) && _vm->_notebook->isOpen());
 }
 
+int Dialogs::mcpInventoryCount(int invno) const {
+	if (invno < 0 || invno >= MAX_NUM_INV)
+		return 0;
+	return _invD[invno].NoofItems;
+}
+
+int Dialogs::mcpInventoryItem(int invno, int index) const {
+	if (invno < 0 || invno >= MAX_NUM_INV)
+		return 0;
+	if (index < 0 || index >= _invD[invno].NoofItems)
+		return 0;
+	return _invD[invno].contents[index];
+}
+
+int Dialogs::mcpObjectCount() const {
+	return _invObjects ? _invObjects->numObjects() : 0;
+}
+
+int Dialogs::mcpObjectIdAt(int index) const {
+	if (!_invObjects || index < 0 || index >= _invObjects->numObjects())
+		return 0;
+	const InventoryObject *invObj = _invObjects->GetObjectByIndex(index);
+	return invObj ? invObj->getId() : 0;
+}
+
 int Dialogs::whichInventoryOpen() {
 	if (TinselVersion == 3 && _vm->_notebook->isOpen()) {
 		return INV_NOTEBOOK;
@@ -5866,6 +5891,43 @@ static void ObjectProcess(CORO_PARAM, const void *param) {
 	}
 
 	CORO_END_CODE;
+}
+
+/**
+ * MCP: run an inventory item's Glitter code once, for the POINTED event, so
+ * that the printobj() in it reports the item's name to the bridge.
+ *
+ * Deliberately not ObjectProcess(): that one waits afterwards for the cursor
+ * to leave the item's icon, which never happens here — the inventory window
+ * is not even open. Nothing is displayed either, because the bridge takes the
+ * string in printobj() and returns before any of that.
+ */
+static void McpObjectNameProcess(CORO_PARAM, const void *param) {
+	CORO_BEGIN_CONTEXT;
+	INT_CONTEXT *pic;
+	CORO_END_CONTEXT(_ctx);
+
+	const OP_INIT *to = (const OP_INIT *)param;
+
+	CORO_BEGIN_CODE(_ctx);
+
+	_ctx->pic = InitInterpretContext(GS_INVENTORY, to->pinvo->getScript(), POINTED, NOPOLY, 0,
+	                                 to->pinvo, 0);
+	CORO_INVOKE_1(Interpret, _ctx->pic);
+
+	CORO_END_CODE;
+}
+
+bool Dialogs::mcpRunObjectNameScript(int id) {
+	if (!_invObjects)
+		return false;
+	const InventoryObject *invObj = _invObjects->GetInvObject(id);
+	if (!invObj || !invObj->getScript())
+		return false;
+
+	OP_INIT to = {invObj, POINTED, PLR_NOEVENT, 0};
+	CoroScheduler.createProcess(PID_TCODE, McpObjectNameProcess, &to, sizeof(to));
+	return true;
 }
 
 /**

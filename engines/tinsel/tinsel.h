@@ -142,6 +142,8 @@ typedef bool (*KEYFPTR)(const Common::KeyState &, const Common::CustomEventType 
 #define FROM_32(v) (TinselV1Mac || TinselV1Saturn ? FROM_BE_32(v) : FROM_LE_32(v))
 #define TO_32(v)   (TinselV1Mac || TinselV1Saturn ? TO_BE_32(v) : TO_LE_32(v))
 
+class TinselMcpBridge;
+
 // Global reference to the TinselEngine object
 extern TinselEngine *_vm;
 
@@ -216,6 +218,8 @@ public:
 
 	KEYFPTR _keyHandler;
 
+	TinselMcpBridge *_mcpBridge;
+
 	/** Stack of pending mouse button events. */
 	Common::List<Common::EventType> _mouseButtons;
 
@@ -241,6 +245,19 @@ public:
 	Common::String getSavegameFilename(int16 saveNum) const;
 	Common::SaveFileManager *getSaveFileMan() { return _saveFileMan; }
 	Graphics::Surface &screen() { return _screenSurface; }
+
+	// MCP bridge hooks. All no-ops unless mcp=true. See Tinsel::TinselMcpBridge.
+	bool mcpEnabled() const;
+	// One bridge frame per game cycle; the transport-only form keeps the
+	// server answering between cycles and while a movie holds the loop.
+	void mcpPump();
+	void mcpPumpTransport();
+	// Every line an actor says, and every line the game narrates.
+	void mcpOnSpeech(int actor, const char *text);
+	void mcpOnPrint(const char *text);
+	// True when the bridge took an inventory object's name for itself instead
+	// of letting the game display it (it is reading names, not playing).
+	bool mcpTakeObjectName(SCNHANDLE hText, int objectId);
 
 	Common::Point getMousePosition() const { return _mousePos; }
 	void setMousePosition(Common::Point pt) {

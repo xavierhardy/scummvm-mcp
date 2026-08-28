@@ -65,6 +65,7 @@
 #include "tinsel/strres.h"
 #include "tinsel/sysvar.h"
 #include "tinsel/timers.h"
+#include "tinsel/mcp.h"
 #include "tinsel/tinsel.h"
 #include "tinsel/noir/notebook.h"
 #include "tinsel/noir/sysreel.h"
@@ -919,6 +920,7 @@ TinselEngine::TinselEngine(OSystem *syst, const TinselGameDescription *gameDesc)
 
 	_gameId = 0;
 	_driver = nullptr;
+	_mcpBridge = nullptr;
 
 	_config = new Config(this);
 
@@ -938,9 +940,45 @@ TinselEngine::TinselEngine(OSystem *syst, const TinselGameDescription *gameDesc)
 	_mousePos.y = 0;
 	_keyHandler = nullptr;
 	_dosPlayerDir = 0;
+
+	// Bind the MCP server here, before run() touches graphics or audio: a
+	// client can then connect while the game is still starting up (every tool
+	// says so until there is something to read).
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = TinselMcpBridge::create(this);
+}
+
+bool TinselEngine::mcpEnabled() const {
+	return _mcpBridge != nullptr && _mcpBridge->isEnabled();
+}
+
+void TinselEngine::mcpPump() {
+	if (_mcpBridge)
+		_mcpBridge->pump();
+}
+
+void TinselEngine::mcpPumpTransport() {
+	if (_mcpBridge)
+		_mcpBridge->pumpTransportOnly();
+}
+
+void TinselEngine::mcpOnSpeech(int actor, const char *text) {
+	if (_mcpBridge)
+		_mcpBridge->onSpeech(actor, text);
+}
+
+void TinselEngine::mcpOnPrint(const char *text) {
+	if (_mcpBridge)
+		_mcpBridge->onPrint(text);
+}
+
+bool TinselEngine::mcpTakeObjectName(SCNHANDLE hText, int objectId) {
+	return _mcpBridge && _mcpBridge->takeObjectName(hText, objectId);
 }
 
 TinselEngine::~TinselEngine() {
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
 	_system->getAudioCDManager()->stop();
 	delete _spriter;
 	delete _systemReel;
@@ -1142,6 +1180,13 @@ Common::Error TinselEngine::run() {
 			timerVal = g_system->getMillis();
 			_system->getAudioCDManager()->update();
 			NextGameCycle();
+			// One bridge frame per game cycle, so every budget the bridge
+			// counts in frames means a game tick.
+			mcpPump();
+		} else {
+			// Keep answering between cycles, and through a movie, without
+			// advancing the frame counter.
+			mcpPumpTransport();
 		}
 
 		if (g_bRestart) {

@@ -24,6 +24,8 @@ MODULE_OBJS := \
 	heapmem.o \
 	inv_objects.o \
 	mareels.o \
+	mcp.o \
+	mcp_names.o \
 	metaengine.o \
 	move.o \
 	movers.o \

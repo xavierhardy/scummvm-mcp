@@ -134,7 +134,14 @@ def _launch_args(
     save_path: str,
 ) -> list[str]:
     """Build the ScummVM command line for ``game_id``."""
-    if game_id in ("atlantis", "maniac", "woodruff", "gob1-demo"):
+    if game_id in (
+        "atlantis",
+        "maniac",
+        "woodruff",
+        "gob1-demo",
+        "dw1-demo",
+        "dw2-demo",
+    ):
         # No save slot — these games start from scratch and handle their own intro.
         return [scummvm_binary, "-c", ini_path, game_id]
     return [
@@ -248,6 +255,8 @@ _GAME_PATH_ENV = {
     "queen": "QUEEN_PATH",
     "woodruff": "WOODRUFF_PATH",
     "gob1-demo": "GOB1_DEMO_PATH",
+    "dw1-demo": "DW1_DEMO_PATH",
+    "dw2-demo": "DW2_DEMO_PATH",
 }
 
 LOCAL_PATHS_FILE = os.path.normpath(

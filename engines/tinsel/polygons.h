@@ -148,6 +148,10 @@ bool PolyTagFollowsCursor(HPOLYGON hp);
 SCNHANDLE GetPolyTagHandle(HPOLYGON hp);
 bool IsTagPolygon(int tagno);
 void GetPolyMidBottom(HPOLYGON hp, int *pX, int *pY);
+// Tinsel 2 stores a polygon's corners relative to an offset of its own (see
+// IsInPolygon, which subtracts it from the point it is given); Tinsel 1 has no
+// offset. Returns what has to be added to a corner to reach world coordinates.
+void GetPolyOffset(HPOLYGON hp, int *pX, int *pY);
 int PathCount();
 void MovePolygon(PTYPE ptype, int id, int x, int y);
 void MovePolygonTo(PTYPE ptype, int id, int x, int y);

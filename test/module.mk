@@ -74,6 +74,10 @@ ifeq ($(ENABLE_GOB), STATIC_PLUGIN)
 	TESTS += $(srcdir)/test/engines/gob/*.h
 	TEST_LIBS += engines/gob/libgob.a
 endif
+ifeq ($(ENABLE_TINSEL), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/tinsel/*.h
+	TEST_LIBS += engines/tinsel/libtinsel.a
+endif
 
 # The MCP naming/normalization helpers are shared by the per-engine MCP test
 # suites. They are listed as bare objects rather than engines/libengines.a so
@@ -83,7 +87,7 @@ endif
 # They land after the archives above, so — as with the libcommon/libformats
 # cycle — the archives they draw on (JSON parsing, Common::String) have to be
 # repeated afterwards for linkers that resolve archives strictly in order.
-ifneq (,$(filter STATIC_PLUGIN,$(ENABLE_SCUMM) $(ENABLE_SWORD1) $(ENABLE_SKY) $(ENABLE_GOB)))
+ifneq (,$(filter STATIC_PLUGIN,$(ENABLE_SCUMM) $(ENABLE_SWORD1) $(ENABLE_SKY) $(ENABLE_GOB) $(ENABLE_TINSEL)))
 	TEST_LIBS += backends/networking/mcp/mcp_server.o engines/mcp_bridge_text.o \
 		common/libcommon.a common/formats/libformats.a common/libcommon.a
 endif

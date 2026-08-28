@@ -339,6 +339,22 @@ public:
 
 	int whichInventoryOpen();
 
+	// --- MCP bridge -------------------------------------------------------
+	// Read-only access to an inventory's contents (INV_CONV, INV_1, INV_2),
+	// which is what the bridge publishes as the carried items and as the
+	// options a conversation is offering.
+	int mcpInventoryCount(int invno) const;
+	int mcpInventoryItem(int invno, int index) const;
+	// Every inventory object the game defines, so the bridge can learn their
+	// names before one is ever picked up.
+	int mcpObjectCount() const;
+	int mcpObjectIdAt(int index) const;
+	// Run one inventory object's POINTED script, whose printobj() reports the
+	// object's name. Nothing is displayed: the bridge intercepts the print.
+	// False when the object has no script to run, so there is nothing to wait
+	// for.
+	bool mcpRunObjectNameScript(int id);
+
 	bool isTopWindow();
 	bool menuActive();
 	bool isConvWindow();

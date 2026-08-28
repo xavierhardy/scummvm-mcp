@@ -44,7 +44,7 @@ showed it. The wire protocol is documented in `docs/protocols/mcp.json`.
 | Path | Role |
 |------|------|
 | `backends/networking/mcp/mcp_server.{h,cpp}` | Engine-agnostic MCP transport: TCP listener, HTTP framing, JSON-RPC 2.0 dispatch, SSE streaming, tool registry (`IToolHandler`), and pure string/JSON helpers (`mcpNormalizeSpaces`, `mcpSanitizeString`, `mcpJson*`). |
-| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM, Broken Sword, Beneath a Steel Sky, Flight of the Amazon Queen and Woodruff (gob). |
+| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM, Broken Sword, Beneath a Steel Sky, Flight of the Amazon Queen, Woodruff (gob) and Discworld (tinsel). |
 | `engines/mcp_bridge_text.cpp` | `normalizeActionName` + the verb-alias table, `mcpStripNamePadding`, `mcpCleanGameText`, `mcpJsonKeyToKeyState` — deliberately free of `Engine` so both engines' unit tests link them without a running engine. |
 | `engines/scumm/mcp.{h,cpp}` (+ `mcp_subclasses.h`, `mcp_v*/mcp_classic.cpp`) | `ScummMcpBridge : MCP::McpBridge` — the SCUMM adapter. Builds the state snapshot, implements every SCUMM tool, and holds the game/engine-version-specific logic. The large file. |
 | `engines/scumm/mcp_actionname.cpp` | A shim: `Scumm::mcpStripNamePadding` forwards to the shared `MCP::` version (kept for the external symbol the SCUMM unit test forward-declares). |
@@ -55,6 +55,8 @@ showed it. The wire protocol is documented in `docs/protocols/mcp.json`.
 | `engines/queen/mcp.{h,cpp}` | `QueenMcpBridge : MCP::McpBridge` — the Flight of the Amazon Queen adapter (verb-panel game). `act` builds the finished command in the panel's own encoding and hands it to `Command::mcpExecute()`; dialogues answer through the digit-shortcut path `Talk::selectSentence()` already polls. |
 | `engines/gob/mcp.{h,cpp}` | `GobMcpBridge : MCP::McpBridge` — the gob-engine adapter, covering two very different game shapes. **Woodruff**: script-driven one-click game; no verb bar, no object model — just rectangular `Hotspots`. Every action replays real cursor input through `Util::processInput`; a single left click is walk-to-then-default-action. Object/inventory names are harvested live from the status-bar text the game draws (`Draw_v2` DRAW_PRINTTEXT) by parking the cursor on each hotspot (name sweep) and by opening the game's own inventory overlay after each action. **Gobliiins** (`usesCharacterTeam()`, gated on `kGameTypeGob1`): no hover text and one screen-wide click zone, so the snapshot comes from the engine's own tables instead (`Goblin::_goblins[3]`, `_objects[]`, `_itemIndInPocket`); a click means whatever the *cursor* means, and the right button cycles that through the game's three settings (`VAR(111)`: 0 walk there, 3 use the character's ability, 4 take/put down — `Goblin::doMove()` reads it as the action for the click), so `act`/`walk` first right-click until the cursor matches the verb (`kStepCursorMode`) and then left-click the named object or the plain x/y; `switch_character` calls `Goblin::switchGoblin()`. `gameBusy()` reads the goblin's own `_pathExistence`/`_goesAtTarget`/`_readyToAct` so a stream closes only once the character has stopped. The name sweep and the inventory overlay machine are off there. Tools are registered from `onGameIdentified()` (called by `GobEngine::initGame`), not from the constructor: the bridge is built before the game is known, and the tool table depends on it. |
 | `engines/gob/mcp_names.{h,cpp}` | gob naming helpers (hover-label → identifier, exit detection, TOT file → room name/id). Engine-free, so its unit test links without the engine. |
+| `engines/tinsel/mcp.{h,cpp}` | `TinselMcpBridge : MCP::McpBridge` — the Tinsel adapter, covering Discworld (V1) and Discworld II (V2). Pointer game with no verb bar: the whole vocabulary is which button was pressed over what, so `act` is walk_to / look_at / use, mapped onto `PLR_WALKTO` / `PLR_LOOK` / `PLR_ACTION`. The game acts on whatever its *tag process* last latched onto rather than on a coordinate, so every action parks the cursor on the target (`Cursor::SetCursorXY`), waits `kPointFrames` for the tag to latch, and only then raises the event through `ProcessKeyEvent()` — the same entry point the keyboard bindings use. Scenery comes from the scene's TAG/EXIT polygons and its tagged actors, named from their tag strings. Items carry **no** name in the data: the only thing that ever says what an item is, is the item's own script when it is pointed at, so the bridge runs that script (`Dialogs::mcpRunObjectNameScript`) with the print intercepted (`TinselEngine::mcpTakeObjectName`) and keeps the string — a background sweep over every inventory object while the game is idle. Conversations are icon windows: the options are the contents of `INV_CONV` and `answer(id)` calls `Dialogs::convAction()`, with the last id always the way out. |
+| `engines/tinsel/mcp_names.{h,cpp}` | Tinsel naming helpers (data file → scene name, painted label → identifier, fallbacks, duplicate suffixing). Engine-free, so its unit test links without the engine. |
 
 Enable / configure via the game's `scummvm.ini` `[gameid]` section:
 `mcp=true`, `mcp_port=N`, `mcp_host=...`, `mcp_skip_tool=true`,
@@ -74,8 +76,8 @@ per game cycle, and pump-transport-only from any place the main loop stalls
 ### MCP server tests
 
 - **C++ unit tests** — `test/engines/scumm/mcp.h`,
-  `test/engines/sword1/mcp.h`, `test/engines/sky/mcp.h` and
-  `test/engines/gob/mcp.h` (CxxTest). Cover
+  `test/engines/sword1/mcp.h`, `test/engines/sky/mcp.h`,
+  `test/engines/gob/mcp.h` and `test/engines/tinsel/mcp.h` (CxxTest). Cover
   the engine-independent helpers only (no running engine). Wired into
   `make test` via `test/module.mk` under the matching
   `ENABLE_<ENGINE>=STATIC_PLUGIN`; the shared `mcp_server.o` +
@@ -91,7 +93,10 @@ per game cycle, and pump-transport-only from any place the main loop stalls
   Queen (`test_queen.py`, engine `queen`) and Woodruff
   (`test_woodruff.py`, engine `gob` — no save support, so it starts fresh and
   skips the intro like the atlantis/ft demos) and Gobliiins
-  (`test_gob1.py`, engine `gob`, same fresh-start pattern),
+  (`test_gob1.py`, engine `gob`, same fresh-start pattern) and the two
+  Discworld demos (`test_dw1.py` / `test_dw2.py`, engine `tinsel`, also
+  fresh-start — note that only the *Windows* Discworld II demo runs at all, the
+  DOS one is flagged `ADGF_UNSUPPORTED` by the engine),
   and pure-Python unit tests in `test/mcp/test_unit.py`. See
   `test/mcp/README.md` for the full game/fixture map. (`launcher._SAVE_NAME_FMT`
   maps a game to its engine's save-file naming — sword1 uses `sword1.NNN`,
@@ -151,7 +156,8 @@ root or point them at the surrounding ScummVM source (not ours to lint).
 ```bash
 # Build the engine (produces ./scummvm). First time:
 ./configure --disable-all-engines --enable-engine=scumm --enable-engine=scumm-7-8 \
-    --enable-engine=sword1 --enable-engine=sky --enable-engine=queen --enable-engine=gob
+    --enable-engine=sword1 --enable-engine=sky --enable-engine=queen \
+    --enable-engine=gob --enable-engine=tinsel
 make
 
 # C++ unit tests (CxxTest). Needs a `python` on PATH for cxxtestgen — if only
@@ -245,7 +251,7 @@ blindly:
 When working on the MCP server, its tests, or the MCP bench:
 
 - **Stay in scope.** Limit changes to the MCP server (`backends/networking/mcp/`,
-  `engines/mcp_bridge*`, the per-engine adapters `engines/{scumm,sword1,sky,queen}/mcp*`),
+  `engines/mcp_bridge*`, the per-engine adapters `engines/{scumm,sword1,sky,queen,gob,tinsel}/mcp*`),
   `test/mcp/`, and `scummvm_bench/`. Avoid editing the rest of the engine; touch
   shared engine code only when there is no alternative, and keep it minimal.
 - **Do not break retro-compatibility.** A change made for one game must not break

@@ -35,6 +35,8 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | Flight of the Amazon Queen (talkie) | queen | `queen` | `test_queen.py` | `QUEEN_PATH` |
 | Woodruff and the Schnibble | gob | `woodruff` | `test_woodruff.py` | `WOODRUFF_PATH` |
 | Gobliiins (interactive demo) | gob | `gob1-demo` | `test_gob1.py` | `GOB1_DEMO_PATH` |
+| Discworld (CD demo) | tinsel | `dw1-demo` | `test_dw1.py` | `DW1_DEMO_PATH` |
+| Discworld II (demo) | tinsel | `dw2-demo` | `test_dw2.py` | `DW2_DEMO_PATH` |
 
 Game-data folders are per-machine and are **never** in tracked code: list them
 under `[games]` in the non-committed `game_paths.local.toml` at the repository
@@ -43,6 +45,11 @@ overrides the file. Each test **skips** (not fails) when its game has no folder
 configured or the folder is missing. Flight of the Amazon Queen additionally
 needs `queen.tbl`, which the launcher serves automatically from the repository's
 `dists/engine-data` via `extrapath`.
+
+Discworld II needs the **Windows** demo (`dw2-win-demo-en`): the DOS demo is
+flagged unsupported by ScummVM's Tinsel engine — its scripts use a library-call
+numbering the interpreter has no table for — so it refuses to start and
+`dw2-demo` must not be pointed at it.
 
 Zak McKracken, Monkey Island 2 and Day of the Tentacle are **full games**, not
 demos, so their coverage is deliberately shallow — compatibility smoke tests
@@ -106,9 +113,9 @@ it down — so tests are independent and parallel-safe. Ports are assigned per
 
 Full Throttle and Atlantis demos cannot save/load arbitrary states, so their
 fixtures are **session-scoped** ordered walkthroughs pinned to a single worker
-via the `xdist_group` mark. Woodruff, Gobliiins and the full Maniac Mansion run
-the same way, each starting fresh and skipping past its intro (or, for Maniac,
-its kid selection).
+via the `xdist_group` mark. Woodruff, Gobliiins, the two Discworld demos and
+the full Maniac Mansion run the same way, each starting fresh and skipping past
+its intro (or, for Maniac, its kid selection).
 
 ## Code map
 

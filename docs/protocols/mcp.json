@@ -2,7 +2,7 @@
   "protocol": "ScummVM MCP",
   "protocolVersion": "2025-03-26",
   "transport": "Streamable HTTP (JSON-RPC 2.0 over HTTP + SSE)",
-  "scope": "SCUMM engine games (MI1, MI2, Indiana Jones, DOTT, Sam & Max, etc.) and Broken Sword 1 (sword1). The core tools — state / act / answer / walk / skip — and this wire protocol are shared across engines via a common bridge base (engines/mcp_bridge.*); each engine maps them onto its own world model.",
+  "scope": "SCUMM engine games (MI1, MI2, Indiana Jones, DOTT, Sam & Max, etc.), Broken Sword 1 (sword1), Beneath a Steel Sky (sky), Flight of the Amazon Queen (queen), the gob games (Woodruff, Gobliiins) and the Discworld games (tinsel). The core tools — state / act / answer / walk / skip — and this wire protocol are shared across engines via a common bridge base (engines/mcp_bridge.*); each engine maps them onto its own world model.",
   "activationConfig": "mcp=true",
   "server": {
     "name": "scummvm",
@@ -1128,6 +1128,21 @@
       "question": "This game asks no dialog questions, so answer is never used.",
       "skip": "The demo has no save states; skip breaks the intro videos one at a time. Once the game is interactive skip is rejected with \"nothing to skip\", which is the done signal for an intro-skip loop.",
       "screenshots": "Because names are positional here, the screenshot tool (mcp_debug) is the natural companion: it returns the frame as an image, which is how to tell what an object_<id> actually is."
+    },
+    "discworld": {
+      "scope": "Discworld and Discworld II (tinsel).",
+      "interface": "Pointer game with no verb bar: the vocabulary is which button was pressed over what — a single left click walks there, a double left click is the action, a right click looks. act maps onto those three. What the game acts on is not a coordinate but whatever its own tag process last latched onto, so the bridge parks the cursor on the target, lets a few frames pass, and then raises the same player event the keyboard bindings raise.",
+      "verbs": "Always three: walk_to, look_at, use. interact / pick_up / talk_to / open / close / push / pull / give are accepted as aliases for use, since the target itself decides what the action is.",
+      "coordinates": "Scene coordinates — 320x200 in the first game, 640x480 in the second — and the scene is often wider than the screen. walk(x, y) clamps to the scene.",
+      "objectNaming": "Names are the labels the game paints next to the cursor, folded into identifiers (lower case, spaces as underscores, punctuation dropped) and de-duplicated (door, door_2). Something the game never labels is still targetable, as object_<n> / exit_<n> / actor_<n>.",
+      "objects": "state.objects carries id, name, kind (character for a tagged actor, scenery for a tag/exit polygon), x/y (the spot the bridge points at) and pathway=true when going there leaves the scene. The player character is state.position and is never listed.",
+      "inventory": "state.inventory lists every carried item with its id, and marks the one in hand with held=true (also state.held_item). Nothing in the game data maps an item to a name — the game only says what an item is by running that item's own script when the player points at it — so the bridge asks each item's script for its name while the game is idle and publishes what it prints. An item not yet asked reads as item_<id>.",
+      "itemsOnThings": "An action is carried out with whatever is in hand. act(verb='use', target1=<thing>, target2=<item>) puts the named carried item in hand first, which is how one thing is used on another; either target may be the item.",
+      "canAct": "state.can_act is false while a scene is playing itself out, while a movie runs and while a conversation is waiting for an answer; act/walk are rejected until it is true.",
+      "question": "A conversation is an icon window rather than lines of text: state.question.choices are the options it is offering (named the same way inventory items are), and the last choice always ends the conversation. answer(id) picks one.",
+      "changes": "objects_changed reports things that appeared or vanished within the scene ({name, old_state, new_state} with present/absent) — opening the wardrobe revealing the pouch. held_item reports the item in hand after the action when it changed (empty string when the hand was emptied), and room_name accompanies room_changed.",
+      "skip": "skip presses Escape, which is what cuts an escapable sequence short and what stops a movie. It reports what that one press did rather than waiting for the game to hand control back, which it may not do for several scenes yet.",
+      "debug": "The debug tool (mcp_debug) has sections system / objects / items."
     }
   }
 }
