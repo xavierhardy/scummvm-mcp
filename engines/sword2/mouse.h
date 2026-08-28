@@ -195,6 +195,10 @@ private:
 
 	bool _objectLabels;
 
+	// MCP: the subject the bridge picked, consumed by chooseMouse() in place
+	// of a click. -1 when there is none.
+	int _mcpSubjectChoice;
+
 	uint32 _menuSelectedPos;
 
 	void decompressMouse(byte *decomp, byte *comp, uint8 frame, int width, int height, int pitch, int xOff = 0, int yOff = 0);
@@ -252,6 +256,36 @@ public:
 	void closeMenuImmediately();
 
 	void refreshInventory();
+
+	// --- MCP bridge -------------------------------------------------------
+	// All read-only, except the two that stand in for a click. Nothing here
+	// runs unless mcp=true; see Sword2::Sword2McpBridge.
+
+	// The mouse-detection boxes registered for this cycle: everything the
+	// player could point at, with the label the game would show for it.
+	uint32 mcpHotspotCount() const { return _curMouse; }
+	const MouseUnit &mcpHotspot(uint32 i) const { return _mouseList[i]; }
+
+	// The carried objects, as the game's own build_menu script reports them.
+	// Asked for directly rather than read off the master list, which is only
+	// rebuilt when the player opens the inventory. Returns how many were
+	// written to `outIcons`/`outLuggage`.
+	uint32 mcpBuildInventory(int32 *outIcons, int32 *outLuggage, uint32 max);
+
+	// Put a carried object in hand, the way clicking its icon does, so that
+	// the next click reads as "use this on that".
+	void mcpHoldObject(int32 iconRes, int32 luggageRes);
+
+	// Is the conversation chooser up, waiting for a subject to be picked?
+	bool mcpChoosing() const { return _choosing; }
+	uint32 mcpSubject(uint32 i) const { return _subjectList[i].res; }
+	// Pick the i'th subject as if it had been clicked. False when the
+	// chooser is not up, so nothing would consume the choice.
+	bool mcpChooseSubject(uint32 index);
+
+	// Replay what a click on `id` at world position (x, y) does: the button
+	// flags, the click bookkeeping and the player action event.
+	void mcpClick(uint32 id, int x, int y, bool rightButton);
 
 	void startConversation();
 	void endConversation();

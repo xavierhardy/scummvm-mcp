@@ -87,6 +87,12 @@ public:
 	void closeResource(uint32 res);
 
 	bool checkValid(uint32 res);
+
+	// MCP: is this resource actually reachable? checkValid() only says the
+	// conversion table knows it; a demo's table lists resources whose cluster
+	// files it does not ship, and opening one of those is a fatal error. Used
+	// by the MCP bridge, which reads resources the game itself never asks for.
+	bool mcpIsAvailable(uint32 res);
 	uint32 fetchLen(uint32 res);
 	uint8 fetchType(byte *ptr);
 	uint8 fetchType(uint32 res) {

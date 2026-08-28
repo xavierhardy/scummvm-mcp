@@ -1064,17 +1064,18 @@
       "fights": "Indiana Jones and the Last Crusade (and its segment in Passport to Adventure) puts the player in fist fights, which suspend the whole interface: the verb bar empties, nothing is selectable and the game reads only its own fighting keys. state reports the fight under 'fight' (each fighter's health and punch-power gauge), the fight tool makes the moves, and act/answer/walk/skip/play_note are refused with an error naming the fight until it ends — so an agent is never left sending actions the game silently drops."
     },
     "sword-family": {
-      "scope": "Broken Sword 1 (sword1). The contract is written to extend to Broken Sword 2 (sword2) unchanged; only the engine adapter differs.",
+      "scope": "Broken Sword 1 (sword1) and Broken Sword 2 (sword2). One contract, two engine adapters: the games play the same way and mean the same thing by every verb, and where they differ is called out below.",
       "interface": "One-click game: a left click runs an object's interaction script, a right click looks at it. There is no verb bar.",
       "verbs": "A fixed set, always: look_at (right click), and interact / use / talk_to / pick_up (all left click), plus walk_to. state.verbs advertises it.",
       "coordinates": "World (compact) coordinates everywhere — the space of the compacts' o_xcoord/o_ycoord and mouse boxes, and of scriptVars MOUSE_X/MOUSE_Y. Scroll-invariant. Screen coordinates appear only inside debug.",
-      "objectNaming": "Broken Sword attaches no name to a scene object, so the bridge ships naming tables and every unnamed compact falls back to 'object_<section>_<index>', derived from its (fixed) compact id. That fallback is a first-class target: act accepts it, a raw decimal id, an 0x-prefixed hex id, an authored name, or an inventory item name.",
-      "objects": "state.objects carries id, name, kind (floor/character/object/hotspot), position (mouse-box centre) and box ([x1,y1,x2,y2], inclusive). The player is excluded and reported as state.position ({x,y,dir}).",
+      "objectNaming": "The two games name things differently. In the first, nothing on screen carries a name, so the bridge ships naming tables and every unnamed compact falls back to 'object_<section>_<index>', derived from its (fixed) compact id; that fallback is a first-class target. In the second, every mouse-detection box may carry the text line the game draws next to the cursor, so names come from the game itself (falling back to the resource's authored name, then 'object_<id>'); duplicates on one screen are suffixed ('door', 'door_2'). Reading that line does not depend on the object-labels game option, which only decides whether a human player sees it too. Either way, act accepts what state showed it, a raw decimal id, an 0x-prefixed hex id, or an inventory item name.",
+      "objects": "state.objects carries id, name, kind, position (mouse-box centre) and box ([x1,y1,x2,y2], inclusive). The player is excluded and reported as state.position. kind is floor/character/object/hotspot in the first game; in the second it is read off the cursor the game would show — floor/exit/person/item/scroll/object.",
       "inventory": "state.inventory carries name, pocket number and, when the game provides one, a description (the item's own text).",
       "canAct": "state.can_act is false while the game is not accepting input (cutscene, fade, control panel); act/walk/answer are rejected until it is true.",
       "question": "A pending conversation is the subject bar: state.question.choices are its topics; answer(id) picks the 1-based slot.",
+      "exits": "In the second game an exit takes two goes — the first arms it, the second crosses — exactly as it does for a player; act reports each one, and the screen change lands on the second.",
       "walk": "walk(x,y) drives the floor compact under (x,y); a point on no floor returns a validation error listing the screen's floor boxes.",
-      "debug": "The debug tool (mcp_debug) has sections vars / compacts / pockets / system; 'compacts' is the dump used to author the object-name tables."
+      "debug": "The debug tool (mcp_debug) differs per game. First game: sections vars / compacts / pockets / system, where 'compacts' is the dump used to author the object-name tables. Second game: flags system / objects / items / vars (with 'from'/'to'), where 'objects' shows both candidate names for each thing so it is clear which one the snapshot published."
     },
     "sky": {
       "scope": "Beneath a Steel Sky (sky).",

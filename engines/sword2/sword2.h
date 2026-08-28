@@ -55,6 +55,8 @@ class OSystem;
  */
 namespace Sword2 {
 
+class Sword2McpBridge;
+
 class MemoryManager;
 class ResourceManager;
 class Sound;
@@ -185,6 +187,19 @@ public:
 	uint32 _speechFontId;
 	uint32 _controlsFontId;
 	uint32 _redFontId;
+
+	// MCP bridge hooks. All no-ops unless mcp=true. See Sword2::Sword2McpBridge.
+	bool mcpEnabled() const;
+	// One bridge frame per game cycle, from the main loop.
+	void mcpPump();
+	// Service the server without advancing the frame counter, from the one
+	// place every stalling loop goes through (Screen::updateDisplay).
+	void mcpPumpTransport();
+	// Every line the game says, whether or not subtitles show it. `id` is the
+	// speaking object's resource id.
+	void mcpOnSpeech(uint32 id, const char *text);
+
+	Sword2McpBridge *_mcpBridge = nullptr;
 
 	uint32 setInputEventFilter(uint32 filter);
 

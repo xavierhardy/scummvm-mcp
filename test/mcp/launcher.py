@@ -144,6 +144,12 @@ def _launch_args(
     ):
         # No save slot — these games start from scratch and handle their own intro.
         return [scummvm_binary, "-c", ini_path, game_id]
+    if game_id == "sword2-demo":
+        # Starts from scratch like the demos above, but this engine offers to
+        # restore whenever a save exists — including the autosave it writes
+        # itself — and that dialog would block a headless run forever. An
+        # isolated (empty) save folder keeps every launch on the same path.
+        return [scummvm_binary, "-c", ini_path, f"--savepath={save_path}", game_id]
     return [
         scummvm_binary,
         "-c",
@@ -257,6 +263,7 @@ _GAME_PATH_ENV = {
     "gob1-demo": "GOB1_DEMO_PATH",
     "dw1-demo": "DW1_DEMO_PATH",
     "dw2-demo": "DW2_DEMO_PATH",
+    "sword2-demo": "SWORD2_DEMO_PATH",
 }
 
 LOCAL_PATHS_FILE = os.path.normpath(

@@ -14,6 +14,8 @@ MODULE_OBJS := \
 	layers.o \
 	logic.o \
 	maketext.o \
+	mcp.o \
+	mcp_names.o \
 	memory.o \
 	menu.o \
 	metaengine.o \

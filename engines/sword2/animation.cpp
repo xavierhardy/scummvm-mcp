@@ -334,6 +334,12 @@ bool MoviePlayer::playVideo() {
 	uint16 y = (g_system->getHeight() - _decoder->getHeight()) / 2;
 
 	while (!_vm->shouldQuit() && !_decoder->endOfVideo()) {
+		// A movie owns the loop for as long as it runs, and never goes
+		// through Screen::updateDisplay(): without a pump here the MCP server
+		// would be unreachable, and a client's socket would simply hang, for
+		// the whole of it.
+		_vm->mcpPumpTransport();
+
 		if (_decoder->needsUpdate()) {
 			const Graphics::Surface *frame = _decoder->decodeNextFrame();
 			if (frame) {

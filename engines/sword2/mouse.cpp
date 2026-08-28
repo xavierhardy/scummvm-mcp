@@ -83,6 +83,7 @@ Mouse::Mouse(Sword2Engine *vm) {
 	_oldButton = 0;
 	_buttonClick = 0;
 	_pointerTextBlocNo = 0;
+	_mcpSubjectChoice = -1;
 	_playerActivityDelay = 0;
 	_realLuggageItem = 0;
 
@@ -953,19 +954,29 @@ uint32 Mouse::chooseMouse() {
 	// The menu is there - we're just waiting for a click. We only care
 	// about left clicks.
 
-	MouseEvent *me = _vm->mouseEvent();
-	int mouseX, mouseY;
+	int hit;
 
-	getPos(mouseX, mouseY);
+	if (_mcpSubjectChoice >= 0) {
+		// MCP: the bridge picked a subject; it stands in for the click.
+		hit = _mcpSubjectChoice;
+		_mcpSubjectChoice = -1;
+		if (hit >= (int)in_subject)
+			return (uint32)-1;
+	} else {
+		MouseEvent *me = _vm->mouseEvent();
+		int mouseX, mouseY;
 
-	if (!me || !(me->buttons & RD_LEFTBUTTONDOWN) || mouseY < 400)
-		return (uint32)-1;
+		getPos(mouseX, mouseY);
 
-	// Check for click on a menu.
+		if (!me || !(me->buttons & RD_LEFTBUTTONDOWN) || mouseY < 400)
+			return (uint32)-1;
 
-	int hit = _vm->_mouse->menuClick(in_subject);
-	if (hit < 0)
-		return (uint32)-1;
+		// Check for click on a menu.
+
+		hit = _vm->_mouse->menuClick(in_subject);
+		if (hit < 0)
+			return (uint32)-1;
+	}
 
 	// Hilight the clicked icon by greying the others. This can look a bit
 	// odd when you click on the exit icon, but there are also cases when
@@ -1132,6 +1143,76 @@ void Mouse::setObjectHeld(uint32 res) {
 
 	// mode locked - no menu available
 	_mouseModeLocked = true;
+}
+
+// --- MCP bridge ------------------------------------------------------------
+
+uint32 Mouse::mcpBuildInventory(int32 *outIcons, int32 *outLuggage, uint32 max) {
+	// buildMenu() clears these before it uses them, so borrowing them here
+	// cannot disturb the menu the player sees.
+	for (uint32 i = 0; i < TOTAL_engine_pockets; i++)
+		_tempList[i].icon_resource = 0;
+	_totalTemp = 0;
+
+	// The same script the inventory bar is built from: it registers one menu
+	// object per carried item through fnAddMenuObject().
+	_vm->_logic->runResScript(MENU_MASTER_OBJECT, 0);
+
+	uint32 count = 0;
+	for (uint32 i = 0; i < _totalTemp && count < max; i++) {
+		if (!_tempList[i].icon_resource)
+			continue;
+		outIcons[count] = _tempList[i].icon_resource;
+		outLuggage[count] = _tempList[i].luggage_resource;
+		count++;
+	}
+	return count;
+}
+
+void Mouse::mcpHoldObject(int32 iconRes, int32 luggageRes) {
+	_vm->_logic->writeVar(OBJECT_HELD, iconRes);
+	_currentLuggageResource = luggageRes;
+	setLuggage(luggageRes);
+}
+
+bool Mouse::mcpChooseSubject(uint32 index) {
+	if (!_choosing)
+		return false;
+	_mcpSubjectChoice = (int)index;
+	return true;
+}
+
+void Mouse::mcpClick(uint32 id, int x, int y, bool rightButton) {
+	// Exactly what mouseEngine() does for a click on an object, both branches.
+	_vm->_logic->writeVar(LEFT_BUTTON, rightButton ? 0 : 1);
+	_vm->_logic->writeVar(RIGHT_BUTTON, rightButton ? 1 : 0);
+	_buttonClick = rightButton ? 1 : 0;
+
+	_vm->_logic->writeVar(MOUSE_X, x);
+	_vm->_logic->writeVar(MOUSE_Y, y);
+
+	// So the cursor bookkeeping agrees with what was just clicked; the next
+	// cycle recomputes it from the real cursor, which the bridge warps.
+	_mouseTouching = id;
+	_oldMouseTouching = id;
+
+	if (id == _vm->_logic->readVar(EXIT_CLICK_ID) && !rightButton) {
+		// The exit double-click: the first click walked the player to the way
+		// out, and this one takes it. Let the interaction that is already
+		// running carry on, and start fading down.
+		_oldButton = _buttonClick;
+		noHuman();
+		_vm->_logic->fnFadeDown(nullptr);
+		_vm->_logic->writeVar(EXIT_FADING, 1);
+		return;
+	}
+
+	_oldButton = _buttonClick;
+	_vm->_logic->writeVar(CLICKED_ID, id);
+	_vm->_logic->writeVar(EXIT_CLICK_ID, 0);
+	_vm->_logic->writeVar(EXIT_FADING, 0);
+
+	_vm->_logic->setPlayerActionEvent(CUR_PLAYER_ID, id);
 }
 
 uint32 Mouse::checkMouseList() {

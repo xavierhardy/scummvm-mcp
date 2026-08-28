@@ -194,6 +194,11 @@ void Screen::markAsDirty(int16 x0, int16 y0, int16 x1, int16 y1) {
  */
 
 void Screen::updateDisplay(bool redrawScene) {
+	// Reached from every loop that stalls the main one — fades, sleepUntil(),
+	// the control panel, the movie player. Without a pump here the MCP server
+	// would be unreachable, and a client's socket would simply hang, for the
+	// whole of any of them.
+	_vm->mcpPumpTransport();
 	_vm->parseInputEvents();
 	fadeServer();
 

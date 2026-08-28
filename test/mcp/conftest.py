@@ -87,6 +87,7 @@ _FIXTURE_INDEX = {
     "plain_tools": 32,
     "dw1": 33,
     "dw2": 34,
+    "sword2": 35,
 }
 
 
@@ -372,6 +373,15 @@ def gob1_client() -> Iterator[McpClient]:
     No save support: one ordered sequence on a single instance, started fresh
     and skipped past the intro (like woodruff and the atlantis/ft demos)."""
     yield from _client("gob1-demo", "gob1")
+
+
+@pytest.fixture(scope="session")
+def sword2_client() -> Iterator[McpClient]:
+    """Broken Sword 2 demo (sword2 engine).
+
+    No save to load: the demo starts on its own opening and hands over on the
+    docks, so the whole run is one ordered sequence on a single instance."""
+    yield from _client("sword2-demo", "sword2")
 
 
 @pytest.fixture(scope="session")

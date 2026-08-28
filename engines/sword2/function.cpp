@@ -856,6 +856,9 @@ int32 Logic::fnISpeak(int32 *params) {
 
 		byte *text = _vm->fetchTextLine(_vm->_resman->openResource(text_res), local_text);
 		_officialTextNumber = READ_LE_UINT16(text);
+		// MCP: report the line whether or not it ends up on screen. The
+		// first two bytes are the line reference number, not the text.
+		_vm->mcpOnSpeech(readVar(ID), (const char *)text + 2);
 		_vm->_resman->closeResource(text_res);
 
 		// Prevent dud lines from appearing while testing text & speech

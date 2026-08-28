@@ -43,6 +43,7 @@ FORBIDDEN_WORDS = [
     "full throttle",
     "the dig",
     "broken sword",
+    "smoking mirror",
     "beneath a steel sky",
     "amazon queen",
     "woodruff",
@@ -124,6 +125,7 @@ def _check_tools(tools: list[dict]) -> None:
         "sky_client",
         "queen_client",
         "sword1_client",
+        "sword2_client",
         "dw1_client",
     ],
 )

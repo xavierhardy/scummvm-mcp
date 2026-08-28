@@ -31,6 +31,7 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | The Dig (demo) | V7 | `dig-demo` | `test_dig.py`, `test_dig_wreck.py` | `DIG_DEMO_PATH` |
 | The Curse of Monkey Island (demo) | V8 | `comi-demo` | `test_comi.py`, `test_comi_cannon.py`, `test_comi_s3.py` | `COMI_DEMO_PATH` |
 | Broken Sword 1: Shadow of the Templars (demo) | sword1 | `sword1-demo` | `test_sword1.py` | `SWORD1_DEMO_PATH` |
+| Broken Sword 2: The Smoking Mirror (demo) | sword2 | `sword2-demo` | `test_sword2.py` | `SWORD2_DEMO_PATH` |
 | Beneath a Steel Sky (CD) | sky | `sky` | `test_sky.py` | `SKY_PATH` |
 | Flight of the Amazon Queen (talkie) | queen | `queen` | `test_queen.py` | `QUEEN_PATH` |
 | Woodruff and the Schnibble | gob | `woodruff` | `test_woodruff.py` | `WOODRUFF_PATH` |
@@ -45,6 +46,12 @@ overrides the file. Each test **skips** (not fails) when its game has no folder
 configured or the folder is missing. Flight of the Amazon Queen additionally
 needs `queen.tbl`, which the launcher serves automatically from the repository's
 `dists/engine-data` via `extrapath`.
+
+Broken Sword 2 has no save to load: its test is one ordered sequence on a
+single fresh instance, past the demo's opening. Its ini asks the engine for the
+`object_labels` game option — the bridge reads a thing's label out of its mouse
+box whatever the option says, so the option only decides whether a human player
+sees the same label on screen.
 
 Discworld II needs the **Windows** demo (`dw2-win-demo-en`): the DOS demo is
 flagged unsupported by ScummVM's Tinsel engine — its scripts use a library-call

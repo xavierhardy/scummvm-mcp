@@ -44,12 +44,14 @@ showed it. The wire protocol is documented in `docs/protocols/mcp.json`.
 | Path | Role |
 |------|------|
 | `backends/networking/mcp/mcp_server.{h,cpp}` | Engine-agnostic MCP transport: TCP listener, HTTP framing, JSON-RPC 2.0 dispatch, SSE streaming, tool registry (`IToolHandler`), and pure string/JSON helpers (`mcpNormalizeSpaces`, `mcpSanitizeString`, `mcpJson*`). |
-| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM, Broken Sword, Beneath a Steel Sky, Flight of the Amazon Queen, Woodruff (gob) and Discworld (tinsel). |
+| `engines/mcp_bridge.{h,cpp}` | `MCP::McpBridge` — the engine-agnostic *bridge* base (one level up from transport). Owns `mcp*` config reading + server lifecycle, the captured-message queue, the frame counter, `callTool()` dispatch, `registerTools()` + `buildChangesSchema()`, the generic debug-tool plumbing, and the per-frame streaming state machine (timing budgets are virtuals so each engine can scale them). Shared by SCUMM, both Broken Sword games, Beneath a Steel Sky, Flight of the Amazon Queen, Woodruff (gob) and Discworld (tinsel). |
 | `engines/mcp_bridge_text.cpp` | `normalizeActionName` + the verb-alias table, `mcpStripNamePadding`, `mcpCleanGameText`, `mcpJsonKeyToKeyState` — deliberately free of `Engine` so both engines' unit tests link them without a running engine. |
 | `engines/scumm/mcp.{h,cpp}` (+ `mcp_subclasses.h`, `mcp_v*/mcp_classic.cpp`) | `ScummMcpBridge : MCP::McpBridge` — the SCUMM adapter. Builds the state snapshot, implements every SCUMM tool, and holds the game/engine-version-specific logic. The large file. |
 | `engines/scumm/mcp_actionname.cpp` | A shim: `Scumm::mcpStripNamePadding` forwards to the shared `MCP::` version (kept for the external symbol the SCUMM unit test forward-declares). |
-| `engines/sword1/mcp.{h,cpp}` | `Sword1McpBridge : MCP::McpBridge` — the Broken Sword 1 adapter (one-click game; world coordinates; click injection replays `Mouse::engine()`). Written to extend to Broken Sword 2 unchanged. |
+| `engines/sword1/mcp.{h,cpp}` | `Sword1McpBridge : MCP::McpBridge` — the Broken Sword 1 adapter (one-click game; world coordinates; click injection replays `Mouse::engine()`). Names come from authored tables — the game itself labels nothing. |
 | `engines/sword1/mcp_names.{h,cpp}` | Broken Sword naming tables (pockets, symbolic compact ids, screens) + the `object_<section>_<index>` fallback resolver. Engine-free, so its unit test links without the engine. |
+| `engines/sword2/mcp.{h,cpp}` | `Sword2McpBridge : MCP::McpBridge` — the Broken Sword 2 adapter. Same six verbs and the same one-click meaning as the first game, but a separate class rather than a subclass: the two games are separate ScummVM engines and share no types, so the only base they can have in common is `MCP::McpBridge`. It also gets far more out of the engine — every mouse-detection box may carry a `pointer_text`, the line the game paints next to the cursor, so objects are named the way the game names them (the `object_labels` game option only decides whether a *player* sees it). Actions replay a real click (`Mouse::mcpClick`: button flags, `MOUSE_X/Y`, `CLICKED_ID`, `setPlayerActionEvent`); exits need two goes, as they do for a player. Inventory comes from the game's own `build_menu` script, so it is rebuilt from `pumpGame()` only — running it from a tool call would re-enter the interpreter. |
+| `engines/sword2/mcp_names.{h,cpp}` | Broken Sword 2 naming helpers (cursor id → kind, label → identifier, fallback, duplicate suffixing). Engine-free, so its unit test links without the engine. |
 | `engines/sky/mcp.{h,cpp}` | `SkyMcpBridge : MCP::McpBridge` — the Beneath a Steel Sky adapter (two-button game; game/compact coordinates). Every action replays real input: warp the virtual cursor + press a button, and `Mouse::mouseEngine()` does the rest; inventory acts drive the game's own top icon bar through a per-frame click machine. Names come from the game data (cursorText / compact names). |
 | `engines/sky/mcp_names.{h,cpp}` | BASS naming tables (talkable-character ids, screen names). Engine-free, so its unit test links without the engine. |
 | `engines/queen/mcp.{h,cpp}` | `QueenMcpBridge : MCP::McpBridge` — the Flight of the Amazon Queen adapter (verb-panel game). `act` builds the finished command in the panel's own encoding and hands it to `Command::mcpExecute()`; dialogues answer through the digit-shortcut path `Talk::selectSentence()` already polls. |
@@ -76,7 +78,7 @@ per game cycle, and pump-transport-only from any place the main loop stalls
 ### MCP server tests
 
 - **C++ unit tests** — `test/engines/scumm/mcp.h`,
-  `test/engines/sword1/mcp.h`, `test/engines/sky/mcp.h`,
+  `test/engines/sword1/mcp.h`, `test/engines/sword2/mcp.h`, `test/engines/sky/mcp.h`,
   `test/engines/gob/mcp.h` and `test/engines/tinsel/mcp.h` (CxxTest). Cover
   the engine-independent helpers only (no running engine). Wired into
   `make test` via `test/module.mk` under the matching
@@ -88,7 +90,8 @@ per game cycle, and pump-transport-only from any place the main loop stalls
   compatibility smoke tests only (Zak McKracken `test_zak.py`, Monkey Island 2
   `test_monkey2.py`, Day of the Tentacle `test_tentacle.py`, and Maniac Mansion
   `test_maniac_full.py`, which starts fresh at the title screen) — plus
-  Broken Sword 1 (`test_sword1.py`, engine `sword1`),
+  Broken Sword 1 (`test_sword1.py`, engine `sword1`), Broken Sword 2
+  (`test_sword2.py`, engine `sword2` — no save, so it starts fresh),
   Beneath a Steel Sky (`test_sky.py`, engine `sky`), Flight of the Amazon
   Queen (`test_queen.py`, engine `queen`) and Woodruff
   (`test_woodruff.py`, engine `gob` — no save support, so it starts fresh and
@@ -156,7 +159,7 @@ root or point them at the surrounding ScummVM source (not ours to lint).
 ```bash
 # Build the engine (produces ./scummvm). First time:
 ./configure --disable-all-engines --enable-engine=scumm --enable-engine=scumm-7-8 \
-    --enable-engine=sword1 --enable-engine=sky --enable-engine=queen \
+    --enable-engine=sword1 --enable-engine=sword2 --enable-engine=sky --enable-engine=queen \
     --enable-engine=gob --enable-engine=tinsel
 make
 
@@ -251,7 +254,7 @@ blindly:
 When working on the MCP server, its tests, or the MCP bench:
 
 - **Stay in scope.** Limit changes to the MCP server (`backends/networking/mcp/`,
-  `engines/mcp_bridge*`, the per-engine adapters `engines/{scumm,sword1,sky,queen,gob,tinsel}/mcp*`),
+  `engines/mcp_bridge*`, the per-engine adapters `engines/{scumm,sword1,sword2,sky,queen,gob,tinsel}/mcp*`),
   `test/mcp/`, and `scummvm_bench/`. Avoid editing the rest of the engine; touch
   shared engine code only when there is no alternative, and keep it minimal.
 - **Do not break retro-compatibility.** A change made for one game must not break

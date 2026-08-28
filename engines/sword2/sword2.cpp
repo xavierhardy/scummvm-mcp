@@ -30,6 +30,7 @@
 
 #include "engines/util.h"
 
+#include "sword2/mcp.h"
 #include "sword2/sword2.h"
 #include "sword2/defs.h"
 #include "sword2/detection.h"
@@ -86,6 +87,34 @@ Sword2Engine::Sword2Engine(OSystem *syst, const ADGameDescription *gameDesc) : E
 	_gmmLoadSlot = -1; // Used to manage GMM Loading
 
 	_isKorTrs = gameDesc->language == Common::KO_KOR;
+
+	// Bind the MCP server here, before run() touches graphics, audio or the
+	// resource clusters: a client can connect while the game is still starting
+	// up (every tool says so until there is something to read).
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = Sword2McpBridge::create(this);
+}
+
+bool Sword2Engine::mcpEnabled() const {
+	return _mcpBridge != nullptr && _mcpBridge->isEnabled();
+}
+
+void Sword2Engine::mcpPump() {
+	if (_mcpBridge)
+		_mcpBridge->pump();
+}
+
+void Sword2Engine::mcpPumpTransport() {
+	// Never advances the bridge's frame counter: streaming budgets stay in
+	// game-cycle units, which only the main loop produces. The bridge's
+	// wall-clock timeout is what covers a stream that starts here.
+	if (_mcpBridge)
+		_mcpBridge->pumpTransportOnly();
+}
+
+void Sword2Engine::mcpOnSpeech(uint32 id, const char *text) {
+	if (_mcpBridge)
+		_mcpBridge->onSpeech(id, text);
 }
 
 Sword2Engine::~Sword2Engine() {
@@ -93,6 +122,9 @@ Sword2Engine::~Sword2Engine() {
 	// game engine is half-deleted, causing it to crash.
 	if (isPaused())
 		_gamePauseToken.clear();
+
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
 
 	//_debugger is deleted by Engine
 	delete _sound;
@@ -321,6 +353,11 @@ Common::Error Sword2Engine::run() {
 		if (!isPaused()) {
 			_gameCycle++;
 			gameCycle();
+			// Every object has run its logic for this cycle, so the MCP
+			// server reports a settled snapshot; and a click it injects is
+			// picked up by the *next* cycle's logic, exactly as a real
+			// click is (Mouse::mouseEngine runs at the end of the cycle).
+			mcpPump();
 		}
 
 		// We can't use this as termination condition for the loop,

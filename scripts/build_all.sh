@@ -37,7 +37,7 @@ BENCH="$REPO_ROOT/scummvm_bench"
 # The engines with an MCP bridge (engines/*/mcp.cpp). scumm-7-8 is a separate
 # configure sub-engine covering V7/V8 (FT, Dig, COMI), which the SCUMM bridge
 # supports and the integration tests exercise.
-ENGINES=(scumm scumm-7-8 sword1 sky queen gob tinsel)
+ENGINES=(scumm scumm-7-8 sword1 sword2 sky queen gob tinsel)
 
 STEPS=()
 FAILED=0

@@ -518,6 +518,21 @@ void ResourceManager::readCluIndex(uint16 fileNum, Common::File *file) {
  * Returns true if resource is valid, otherwise false.
  */
 
+bool ResourceManager::mcpIsAvailable(uint32 res) {
+	if (!checkValid(res))
+		return false;
+
+	uint16 fileNum = _resConvTable[res * 2];
+	if (fileNum >= _totalClusters)
+		return false;
+
+	// Already indexed, so the file was opened once and is there.
+	if (_resFiles[fileNum].entryTab)
+		return true;
+
+	return Common::File::exists(Common::Path(_resFiles[fileNum].fileName));
+}
+
 bool ResourceManager::checkValid(uint32 res) {
 	// Resource number out of range
 	if (res >= _totalResFiles)

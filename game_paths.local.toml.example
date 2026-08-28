@@ -35,6 +35,7 @@ comi-demo = "~/games/comi-win-large-demo-en"              # COMI_DEMO_PATH
 
 # --- Other engines -------------------------------------------------------
 sword1-demo = "~/games/broken-sword-1-demo"               # SWORD1_DEMO_PATH
+sword2-demo = "~/games/broken-sword-2-demo"               # SWORD2_DEMO_PATH
 sky = "~/games/sky/Contents/Resources/game/game"          # SKY_PATH
 queen = "~/games/queen/Contents/Resources/game/game"      # QUEEN_PATH
 woodruff = "~/games/woodruff"                             # WOODRUFF_PATH
