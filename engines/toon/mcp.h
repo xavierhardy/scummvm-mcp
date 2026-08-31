@@ -220,6 +220,15 @@ private:
 
 	// Resolve a target name (or numeric id) to something in the scene.
 	bool resolveTarget(const Common::String &name, Target &out, Common::String &errorOut) const;
+	// True when a click at (x, y) would be a plain "walk over there": nothing
+	// claims the spot and the character can get to it.
+	bool groundIsClear(int x, int y) const;
+	// A spot on open ground to stop at beside `target`, as close to it as the
+	// game leaves room for. False when it is walled in on every side.
+	bool groundBeside(const Target &target, int &x, int &y) const;
+	// The published name of whatever a click at (x, y) would act on, empty
+	// when that is nothing.
+	Common::String coveringName(int x, int y) const;
 	// Resolve a target name (or numeric id) to a carried item.
 	bool resolveItem(const Common::String &name, int &id) const;
 

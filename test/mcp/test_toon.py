@@ -116,7 +116,15 @@ def test_01_toon_state_describes_the_scene(playing: McpClient) -> None:
         f"a character the game names came out numbered: {characters}"
     )
 
-    assert state["position"]["x"] > 0 and state["position"]["y"] > 0, state
+    # Where the player character stands is a point in the scene, and it is the
+    # one the engine itself holds.
+    system = _system(playing)
+    assert 0 <= state["position"]["x"] < system["scene_width"], state
+    assert 0 <= state["position"]["y"] < 400, state
+    assert (state["position"]["x"], state["position"]["y"]) == (
+        system["lead_x"],
+        system["lead_y"],
+    ), f"the snapshot and the engine disagree: {state['position']} vs {system}"
 
 
 def test_02_toon_items_are_named_the_way_the_game_names_them(
@@ -183,7 +191,32 @@ def test_05_toon_walking_onto_something_is_refused(playing: McpClient) -> None:
         playing.walk(covered["x"], covered["y"])
 
 
-def test_06_toon_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
+def test_06_toon_walk_to_stops_beside_a_target(playing: McpClient) -> None:
+    """'walk_to' goes to a thing without touching it.
+
+    A click on the thing would act on it, so what walk_to aims at is the open
+    ground the game itself would put the character on to act — which is why it
+    ends up somewhere near the target rather than on it, and why it leaves the
+    hand and the scene alone."""
+    _wait_idle(playing)
+    sidekick = next(
+        obj for obj in playing.state()["objects"] if obj["kind"] == "character"
+    )
+    before = playing.state()
+
+    result = playing.act("walk_to", sidekick["name"])
+    after = playing.state()
+
+    assert after["position"] != before["position"], (
+        f"walk_to {sidekick['name']} never moved him: {result}"
+    )
+    assert "inventory_added" not in result, (
+        f"walk_to picked something up instead of walking: {result}"
+    )
+    assert after["room"] == before["room"], f"walk_to left the scene: {result}"
+
+
+def test_07_toon_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
     """The errors say what to do instead, rather than failing silently."""
     target = playing.state()["objects"][0]["name"]
 
@@ -197,7 +230,7 @@ def test_06_toon_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
         playing.answer(1)
 
 
-def test_07_toon_an_item_can_be_put_in_the_hand(playing: McpClient) -> None:
+def test_09_toon_an_item_can_be_put_in_the_hand(playing: McpClient) -> None:
     """'target2' is the item an action is carried out with.
 
     There is one hand and it holds one thing, so naming an item is what takes
@@ -222,7 +255,7 @@ def test_07_toon_an_item_can_be_put_in_the_hand(playing: McpClient) -> None:
     assert not [e for e in playing.state()["inventory"] if e.get("held")]
 
 
-def test_08_toon_a_way_out_leads_somewhere_and_says_so(playing: McpClient) -> None:
+def test_10_toon_a_way_out_leads_somewhere_and_says_so(playing: McpClient) -> None:
     """Taking a pathway reports the scene it arrived in, by name."""
     _wait_idle(playing)
     ways_out = [obj for obj in playing.state()["objects"] if obj.get("pathway")]
@@ -236,7 +269,7 @@ def test_08_toon_a_way_out_leads_somewhere_and_says_so(playing: McpClient) -> No
     assert _scene(playing) == WACME_ROW
 
 
-def test_09_toon_reaches_a_target_off_screen(playing: McpClient) -> None:
+def test_11_toon_reaches_a_target_off_screen(playing: McpClient) -> None:
     """This scene is wider than the screen, and its far end is still usable.
 
     The game acts on whatever it thinks is being pointed at, and the pointer is
@@ -269,7 +302,7 @@ def test_09_toon_reaches_a_target_off_screen(playing: McpClient) -> None:
     )
 
 
-def test_10_toon_a_conversation_is_a_question_with_named_choices(
+def test_12_toon_a_conversation_is_a_question_with_named_choices(
     playing: McpClient,
 ) -> None:
     """Talking opens a question; the options are named by what they say."""
@@ -302,7 +335,7 @@ def test_10_toon_a_conversation_is_a_question_with_named_choices(
         playing.answer(len(choices) + 1)
 
 
-def test_11_toon_answering_carries_the_conversation_on(playing: McpClient) -> None:
+def test_13_toon_answering_carries_the_conversation_on(playing: McpClient) -> None:
     """An answer plays the exchange out and hands back the next question."""
     question = playing.state()["question"]
     opening = [c for c in question["choices"] if not c.get("ends_conversation")][0]
@@ -312,7 +345,7 @@ def test_11_toon_answering_carries_the_conversation_on(playing: McpClient) -> No
     assert result.get("question"), f"the conversation stopped dead: {result}"
 
 
-def test_12_toon_the_last_choice_ends_the_conversation(playing: McpClient) -> None:
+def test_14_toon_the_last_choice_ends_the_conversation(playing: McpClient) -> None:
     """The option flagged as the way out is the one that closes it."""
     question = playing.state()["question"]
     way_out = [c for c in question["choices"] if c.get("ends_conversation")][0]
@@ -324,7 +357,7 @@ def test_12_toon_the_last_choice_ends_the_conversation(playing: McpClient) -> No
     assert _system(playing)["in_conversation"] is False
 
 
-def test_13_toon_skip_is_accepted(playing: McpClient) -> None:
+def test_15_toon_skip_is_accepted(playing: McpClient) -> None:
     """skip() cuts a line short; with nothing to cut it is still a no-op, not
     an error, so an agent can always reach for it."""
     _wait_idle(playing)
@@ -333,7 +366,7 @@ def test_13_toon_skip_is_accepted(playing: McpClient) -> None:
     _wait_idle(playing)
 
 
-def test_14_toon_debug_reads_the_engine(playing: McpClient) -> None:
+def test_16_toon_debug_reads_the_engine(playing: McpClient) -> None:
     """The debug tool reports what the engine thinks, for diagnosis."""
     _wait_idle(playing)
     system = _system(playing)
@@ -355,7 +388,7 @@ def test_14_toon_debug_reads_the_engine(playing: McpClient) -> None:
     assert all(item["description"] for item in items), items
 
 
-def test_15_toon_the_pointer_can_be_driven_directly(playing: McpClient) -> None:
+def test_17_toon_the_pointer_can_be_driven_directly(playing: McpClient) -> None:
     """mouse_move speaks the coordinates everything else here speaks."""
     _wait_idle(playing)
     target = playing.state()["objects"][0]
@@ -367,7 +400,7 @@ def test_15_toon_the_pointer_can_be_driven_directly(playing: McpClient) -> None:
     )
 
 
-def test_16_toon_screenshot_returns_the_frame(playing: McpClient) -> None:
+def test_18_toon_screenshot_returns_the_frame(playing: McpClient) -> None:
     """A screenshot comes back as an image, at the game's own resolution."""
     structured = playing.call_tool_raw("screenshot")["structuredContent"]
     assert structured["width"] == 640, f"unexpected frame size: {structured}"

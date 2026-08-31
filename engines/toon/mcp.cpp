@@ -958,18 +958,11 @@ bool ToonMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 	_skipStream = false;
 
 	if (verb->walkOnly) {
-		// Go there without touching it. The game walks the character to a spot
-		// of the thing's own choosing before running it, so aim at that spot -
-		// but as a click on the ground, which walks and stops there.
-		int wx = scene.x, wy = scene.y;
-		HotspotData *hot = (scene.id >= 0) ? _vm->getHotspots()->get(scene.id) : nullptr;
-		if (hot && hot->getData(5)) {
-			wx = hot->getData(5);
-			wy = hot->getData(6);
-		} else {
-			wy = scene.y2;   // the foot of it, where the ground is
-		}
-		if (_vm->getHotspots()->find(wx, wy) != -1) {
+		// Go there without touching it: a click on the ground beside it, which
+		// walks and stops, rather than a click on the thing, which would act
+		// on it.
+		int wx = 0, wy = 0;
+		if (!groundBeside(scene, wx, wy)) {
 			errorOut = "act: there is no clear ground beside '" + scene.name +
 			           "' to stop at; use verb='use' to go and act on it, or "
 			           "walk() to a point of your own";
@@ -983,6 +976,76 @@ bool ToonMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 	queueClick(scene.x, scene.y, verb->rightButton, item > 0 ? item : kHandEmpty);
 	beginStream();
 	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Walking
+// ---------------------------------------------------------------------------
+
+Common::String ToonMcpBridge::coveringName(int x, int y) const {
+	// The characters are looked at first: the game tests them before its
+	// boxes, so one standing over a box is what a click there would reach.
+	Common::Array<Target> targets;
+	collectTargets(targets);
+	for (uint i = 0; i < targets.size(); i++) {
+		const Target &t = targets[i];
+		if (t.isCharacter && x >= t.x1 && x <= t.x2 && y >= t.y1 && y <= t.y2)
+			return t.name;
+	}
+	const int32 covered = _vm->getHotspots()->find(x, y);
+	if (covered == -1)
+		return Common::String();
+	for (uint i = 0; i < targets.size(); i++)
+		if (targets[i].id == covered)
+			return targets[i].name;
+	// A box the snapshot does not publish (switched off, or buried under
+	// another): name it the way an unnamed one would be named anyway.
+	Common::String label = hotspotLabel(covered);
+	return label.empty() ? toonFallbackName("object", covered) : label;
+}
+
+bool ToonMcpBridge::groundIsClear(int x, int y) const {
+	if (x < 0 || y < 0 || x >= sceneWidth() || y >= TOON_SCREEN_HEIGHT)
+		return false;
+	if (!coveringName(x, y).empty())
+		return false;
+	int16 wx = 0, wy = 0;
+	return _vm->getPathFinding()->findClosestWalkingPoint(x, y, &wx, &wy) != 0;
+}
+
+bool ToonMcpBridge::groundBeside(const Target &target, int &x, int &y) const {
+	// The spot the thing itself names, when it has one: that is where the game
+	// puts the character to act on it, so it is the right place to stop.
+	HotspotData *hot = (target.id >= 0) ? _vm->getHotspots()->get(target.id) : nullptr;
+	if (hot && hot->getData(5) && groundIsClear(hot->getData(5), hot->getData(6))) {
+		x = hot->getData(5);
+		y = hot->getData(6);
+		return true;
+	}
+
+	// Otherwise work outwards from its foot: below it first, which is where
+	// the ground in front of something is, then to either side of it.
+	static const int kSteps[] = { 4, 12, 24, 40, 60, 90 };
+	const int midX = (target.x1 + target.x2) / 2;
+	for (uint i = 0; i < ARRAYSIZE(kSteps); i++) {
+		const int d = kSteps[i];
+		if (groundIsClear(midX, target.y2 + d)) {
+			x = midX;
+			y = target.y2 + d;
+			return true;
+		}
+		if (groundIsClear(target.x1 - d, target.y2)) {
+			x = target.x1 - d;
+			y = target.y2;
+			return true;
+		}
+		if (groundIsClear(target.x2 + d, target.y2)) {
+			x = target.x2 + d;
+			y = target.y2;
+			return true;
+		}
+	}
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1003,16 +1066,19 @@ bool ToonMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &erro
 		errorOut = "walk: the game is not accepting input right now";
 		return false;
 	}
+	if (_vm->state()->_inCutaway || _vm->state()->_inCloseUp) {
+		errorOut = "walk: this is a scene played out close up, with nowhere to "
+		           "walk to; act on what it shows, or skip past it";
+		return false;
+	}
 	int x = CLIP<int>((int)args.asObject()["x"]->asIntegerNumber(), 0, sceneWidth() - 1);
 	int y = CLIP<int>((int)args.asObject()["y"]->asIntegerNumber(), 0, TOON_SCREEN_HEIGHT - 1);
 
 	// A click only walks where it lands on nothing: anywhere else the game
 	// gives it to the thing that is there and acts on it instead.
-	const int32 covered = _vm->getHotspots()->find(x, y);
-	if (covered != -1) {
-		Common::String what = hotspotLabel(covered);
-		if (what.empty())
-			what = toonFallbackName("object", covered);
+	const Common::String covered = coveringName(x, y);
+	if (!covered.empty()) {
+		const Common::String &what = covered;
 		errorOut = Common::String::format(
 		    "walk: (%d, %d) is covered by '%s', so going there means acting on "
 		    "it - use act(verb='walk_to', target1='%s') to stop beside it, or "
