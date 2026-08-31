@@ -45,3 +45,15 @@ dw1-demo = "~/games/dw-dos-cd-demo-en/DISCWLD"            # DW1_DEMO_PATH
 # the DOS demo is flagged unsupported by the engine and will not start.
 dw2-demo = "~/games/dw2-win-demo-en"                      # DW2_DEMO_PATH
 toon-demo = "~/games/toon-demo-en"                        # TOON_DEMO_PATH
+
+# --- SCI (Sierra) --------------------------------------------------------
+# Only the *interactive* demos are instrumented. Sierra shipped most of its
+# Quest-series demos as non-interactive ones - a slideshow that runs itself
+# and takes no input - and there is nothing for an agent to do in those.
+gk1-demo = "~/games/gk1-dos-demo-en"                      # GK1_DEMO_PATH
+sq6-demo = "~/games/sq6-dos-demo-en"                      # SQ6_DEMO_PATH
+
+# --- More gob demos ------------------------------------------------------
+gob2-demo = "~/games/gob2-dos-demo-en"                    # GOB2_DEMO_PATH
+gob3-demo = "~/games/gob3-dos-demo-en"                    # GOB3_DEMO_PATH
+ween-demo = "~/games/ween-dos-demo-en"                    # WEEN_DEMO_PATH

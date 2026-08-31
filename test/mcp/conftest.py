@@ -89,7 +89,19 @@ _FIXTURE_INDEX = {
     "dw2": 34,
     "sword2": 35,
     "toon": 36,
+    "gk1": 37,
+    "sq6": 38,
+    "gob2": 39,
+    "gob3": 40,
+    "ween": 41,
 }
+
+
+#: How long to keep asking an engine that binds its port long before it runs
+#: its first game cycle. SCI loads its resources, sets up its sound driver and
+#: runs its start-up script before it ever hands time back, and only a game
+#: cycle answers a tool call.
+SLOW_BOOT_SECS = 180.0
 
 
 def _client(
@@ -98,6 +110,7 @@ def _client(
     save_slot: int = 1,
     checkpoint: bool = False,
     ini_overrides: dict[str, str] | None = None,
+    connect_timeout: float = MCP_CONNECT_TIMEOUT_SECS,
 ) -> Iterator[McpClient]:
     """Launch ScummVM for *game_id*, yield a connected McpClient, then tear down.
 
@@ -119,7 +132,14 @@ def _client(
         save_slot=save_slot,
         ini_overrides=ini_overrides,
     )
-    client = wait_for_mcp(MCP_HOST, port, timeout=MCP_CONNECT_TIMEOUT_SECS)
+    # connect_timeout is how long to keep asking; timeout is how long one
+    # request may take. They were the same number until an engine turned up
+    # that binds its port long before it runs its first game cycle - which is
+    # what actually answers - and SCI takes about a minute to get there.
+    client = wait_for_mcp(
+        MCP_HOST, port, connect_timeout=connect_timeout,
+        timeout=MCP_CONNECT_TIMEOUT_SECS,
+    )
     # Where this instance's screenshot tool writes, for tests that look there.
     client.screenshot_path = getattr(proc, "screenshot_path", None)
     try:
@@ -365,6 +385,49 @@ def plain_tools_client() -> Iterator[McpClient]:
         "plain_tools",
         ini_overrides={"mcp_debug": "false", "mcp_skip_tool": "false"},
     )
+
+
+@pytest.fixture(scope="session")
+def gk1_client() -> Iterator[McpClient]:
+    """Gabriel Knight demo (SCI engine, SCI1.1, icon-bar verbs).
+
+    No save support - the demo answers "game cannot be saved in the current
+    state" wherever it is asked - so this is one ordered sequence on a single
+    instance, clicked in from the title screen."""
+    yield from _client("gk1-demo", "gk1", connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture(scope="session")
+def sq6_client() -> Iterator[McpClient]:
+    """Space Quest 6 demo (SCI engine, SCI2.1/SCI32, icon-bar verbs).
+
+    Same shape as gk1: no save support, one ordered sequence, skipped in."""
+    yield from _client("sq6-demo", "sq6", connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture(scope="session")
+def gob2_client() -> Iterator[McpClient]:
+    """Gobliins 2 interactive demo (Gob engine, hotspots with hover names).
+
+    Nothing like Gobliiins on the same engine: gob2 has per-object hotspots
+    that name themselves in the status bar, so it goes down the same path
+    Woodruff does. No save support; one ordered sequence."""
+    yield from _client("gob2-demo", "gob2")
+
+
+@pytest.fixture(scope="session")
+def gob3_client() -> Iterator[McpClient]:
+    """Goblins Quest 3 interactive demo (Gob engine, hotspots)."""
+    yield from _client("gob3-demo", "gob3")
+
+
+@pytest.fixture(scope="session")
+def ween_client() -> Iterator[McpClient]:
+    """Ween: The Prophecy demo (Gob engine, hotspots).
+
+    Opens with minutes of video, so its tests skip their way in and give the
+    opening a generous number of goes."""
+    yield from _client("ween-demo", "ween")
 
 
 @pytest.fixture(scope="session")
