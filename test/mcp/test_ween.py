@@ -1,14 +1,19 @@
 """
 Integration test for the Ween: The Prophecy demo (Gob engine).
 
-Ween opens with minutes of video, and that is the thing worth testing here.
-The engine's pump point is Util::processInput, which a video's own wait loop
-never reaches - it sits in Util::delay - so for the whole of that opening the
-server used to stop answering, and a skip issued inside it could not even end
-itself: the budget that closes a stream is only ever checked from a pump.
+Ween is here for two things neither of the other gob demos shows.
 
-So these tests are mostly about staying alive: the server answers while the
-opening plays, and a skip returns rather than hanging.
+The first is staying alive through video. The engine's pump point is
+Util::processInput, which a video's own wait loop never reaches: it sits in
+Util::delay. For the whole of Ween's opening the server used to stop
+answering, and a skip issued inside it could not even end itself, because the
+budget that closes a stream is only ever checked from a pump.
+
+The second is typing. This demo will not start until a number is typed: it
+opens on a copy-protection screen - a row of coloured cards, four spaces
+waiting for the number of the colour that belongs in each - and an agent that
+can only point at things is stuck there forever. `type_text` is what gets past
+it, and this is the only game instrumented here that registers the tool.
 
 No save support, so this is one ordered sequence on a fresh instance.
 """
@@ -46,37 +51,57 @@ def test_02_a_skip_returns_rather_than_hanging(playing: McpClient) -> None:
     assert isinstance(result, dict), result
 
 
-def test_03_the_opening_gives_way_to_something(playing: McpClient) -> None:
-    """Each skip cuts one piece of the opening short; the pause between them
-    is what lets the next piece start, rather than spending the whole budget
-    inside the first."""
-    rooms: set[str] = set()
-    for _ in range(20):
-        room = (playing.state().get("room") or {}).get("name")
-        if room:
-            rooms.add(room)
-        if len(rooms) > 1:
-            return
+def _at_the_protection_screen(client: McpClient, tries: int = 10) -> dict:
+    """Skip the opening until the screen with the coloured cards is up."""
+    for _ in range(tries):
+        state = client.state()
+        if len(state.get("objects") or []) >= 8:
+            return state
         try:
-            playing.skip()
+            client.skip()
         except RuntimeError as exc:
             if "nothing to skip" not in str(exc):
                 raise
         time.sleep(2)
-    assert len(rooms) > 1, f"the demo never moved on: {sorted(rooms)}"
+    raise AssertionError("the opening never reached the copy-protection screen")
 
 
-def test_04_the_narration_is_captured(playing: McpClient) -> None:
+def test_03_the_opening_gives_way_to_the_screen_that_wants_typing(
+    playing: McpClient,
+) -> None:
+    state = _at_the_protection_screen(playing)
+    # Eight cards, one per colour. They are hotspots with no label: this
+    # screen paints no hover text, and a number is what it wants anyway.
+    assert len(state["objects"]) >= 8, state
+
+
+def test_04_typing_reaches_the_game(playing: McpClient) -> None:
+    """The tool exists for exactly this screen. What it answers is what it
+    typed; that the game took it is visible in the answer boxes filling in."""
+    _at_the_protection_screen(playing)
+    result = playing.call_tool("type_text", {"text": "1"})
+    assert result == {"text": "1", "enter": True}, result
+
+
+def test_05_a_line_longer_than_any_game_reads_is_refused(playing: McpClient) -> None:
+    """The cap is there because this drives a 1990s parser: a line that long
+    is a mistake being made, not a sentence.
+
+    A non-streaming tool reports a refusal in its own result rather than as a
+    protocol error, so this reads the answer instead of catching an exception.
+    """
+    result = playing.call_tool("type_text", {"text": "x" * 500})
+    assert "error" in result, result
+    assert "256" in result["error"], result
+
+
+def test_06_the_narration_is_captured(playing: McpClient) -> None:
     """Ween narrates its opening in text drawn to a surface, which is where
     the gob bridge listens."""
     seen: list[str] = []
-    for _ in range(20):
+    for _ in range(8):
         seen += [m["text"] for m in playing.state().get("messages", [])]
         if seen:
             break
-        try:
-            playing.skip()
-        except RuntimeError:
-            pass
         time.sleep(2)
     assert seen, "the opening said nothing at all"
