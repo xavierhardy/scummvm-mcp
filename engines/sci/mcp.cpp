@@ -50,6 +50,9 @@ SciMcpBridge *SciMcpBridge::create(SciEngine *vm) {
 SciMcpBridge::SciMcpBridge(SciEngine *vm) :
 	MCP::McpBridge(vm),
 	_vm(vm),
+	_pendingVerbLoop(-1),
+	_cyclesSent(0),
+	_cycleFrame(0),
 	_pendingClick(false),
 	_pendingRight(false),
 	_pendingX(0),
@@ -183,6 +186,90 @@ reg_t SciMcpBridge::castList() const {
 	if (cast.isNull() || s->_segMan->getSegmentType(cast.getSegment()) != SEG_TYPE_LISTS)
 		return NULL_REG;
 	return cast;
+}
+
+// ---------------------------------------------------------------------------
+// Verbs, which in an icon-bar game are cursors
+// ---------------------------------------------------------------------------
+//
+// There is no verb bar to read and no list of verbs anywhere in the script
+// state: the cursor *is* the verb, and the right mouse button cycles it. So a
+// verb is reached the way a player reaches it - press the right button until
+// the cursor is the wanted one - and the only thing that has to be written
+// down is which cursor means what.
+//
+// These tables were read off the games themselves rather than out of any
+// documentation: cycle to a loop, click something, and the refusal names the
+// verb ("There's nothing in that part of the shop to operate."). A game with
+// no table here still works; it just has the two buttons and nothing else,
+// which is what actToolDescription() then says.
+
+// Gabriel Knight keeps every cursor in view 958 and picks the verb by loop.
+static const SciMcpBridge::VerbCursor kGabrielKnightVerbs[] = {
+	{ "walk_to",   4 },
+	{ "look_at",   5 },
+	{ "talk_to",   6 },
+	{ "ask_about", 7 },
+	{ "take",      0 },
+	{ "use",       1 },
+	{ "open",      2 },
+	{ "move",      3 }
+};
+
+// The verbs this game offers, as a sentence to put in a refusal.
+Common::String SciMcpBridge::verbList() const {
+	uint count = 0;
+	const VerbCursor *verbs = verbTable(count);
+	if (verbs == nullptr)
+		return Common::String();
+	Common::String out("The verbs here are: ");
+	for (uint i = 0; i < count; i++) {
+		if (i > 0)
+			out += ", ";
+		out += verbs[i].verb;
+	}
+	return out + ".";
+}
+
+const SciMcpBridge::VerbCursor *SciMcpBridge::verbTable(uint &count) const {
+	const Common::String game(_vm->getGameIdStr());
+	if (game == "gk1" || game == "gk1demo") {
+		count = ARRAYSIZE(kGabrielKnightVerbs);
+		return kGabrielKnightVerbs;
+	}
+	count = 0;
+	return nullptr;
+}
+
+int SciMcpBridge::verbCursorView() const {
+	const Common::String game(_vm->getGameIdStr());
+	if (game == "gk1" || game == "gk1demo")
+		return 958;
+	return -1;
+}
+
+Common::String SciMcpBridge::currentVerb() const {
+	uint count = 0;
+	const VerbCursor *verbs = verbTable(count);
+	if (verbs == nullptr || _vm->mcpCursorView() != verbCursorView())
+		return Common::String();
+	for (uint i = 0; i < count; i++) {
+		if (verbs[i].loop == _vm->mcpCursorLoop())
+			return verbs[i].verb;
+	}
+	return Common::String();
+}
+
+int SciMcpBridge::loopForVerb(const Common::String &verb) const {
+	uint count = 0;
+	const VerbCursor *verbs = verbTable(count);
+	if (verbs == nullptr)
+		return -1;
+	for (uint i = 0; i < count; i++) {
+		if (verb == verbs[i].verb)
+			return verbs[i].loop;
+	}
+	return -1;
 }
 
 void SciMcpBridge::collectTargets(Common::Array<Target> &out) const {
@@ -321,6 +408,18 @@ Common::JSONValue *SciMcpBridge::toolState(const Common::JSONValue &, Common::St
 	}
 	out.setVal("objects", new Common::JSONValue(objects));
 
+	uint verbCount = 0;
+	const VerbCursor *table = verbTable(verbCount);
+	if (table != nullptr) {
+		Common::JSONArray verbs;
+		for (uint i = 0; i < verbCount; i++)
+			verbs.push_back(mcpJsonString(table[i].verb));
+		out.setVal("verbs", new Common::JSONValue(verbs));
+		const Common::String showing = currentVerb();
+		if (!showing.empty())
+			out.setVal("current_verb", mcpJsonString(showing));
+	}
+
 	// The lines said since the last read, cleared after reading: without this
 	// an agent could never see what was said while can_act was false.
 	Common::JSONArray messages;
@@ -367,22 +466,32 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 		return false;
 	}
 
-	// One cursor, two buttons: the left one does whatever the thing is for,
-	// the right one looks at it. The verb chooses the button and nothing else,
-	// so an agent is told plainly which two words mean anything here.
-	bool right = false;
-	if (verb == "look_at") {
-		right = true;
-	} else if (verb != "use" && verb != "walk_to" && verb != "talk_to") {
-		errorOut = Common::String::format(
-			"act: '%s' is not a verb here. This game has one cursor and two "
-			"buttons: 'use' does whatever the thing is for, 'look_at' looks "
-			"at it.", verb.c_str());
+	uint count = 0;
+	const int loop = loopForVerb(verb);
+	if (verbTable(count) != nullptr && loop < 0) {
+		errorOut = Common::String::format("act: '%s' is not a verb here. %s",
+		                                  verb.c_str(), verbList().c_str());
 		return false;
 	}
 
+	// Without a table for this game there is no verb cursor to reach, and the
+	// two buttons are the whole vocabulary: the left one does whatever the
+	// thing is for, the right one looks at it.
+	bool right = false;
+	if (loop < 0) {
+		if (verb == "look_at") {
+			right = true;
+		} else if (verb != "use" && verb != "walk_to" && verb != "talk_to") {
+			errorOut = Common::String::format(
+				"act: '%s' is not a verb here. This game has one cursor and "
+				"two buttons: 'use' does whatever the thing is for, 'look_at' "
+				"looks at it.", verb.c_str());
+			return false;
+		}
+	}
+
 	_skipStream = false;
-	pointAndClick(target.x, target.y, right);
+	pointAndClick(target.x, target.y, right, loop);
 	beginStream();
 	return true;
 }
@@ -405,7 +514,7 @@ bool SciMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &error
 	const int y = (int)args.asObject()["y"]->asIntegerNumber();
 
 	_skipStream = false;
-	pointAndClick(x, y, false);
+	pointAndClick(x, y, false, loopForVerb("walk_to"));
 	beginStream();
 	return true;
 }
@@ -538,7 +647,7 @@ void SciMcpBridge::injectMouseClick(int x, int y, const Common::String &button, 
 	}
 }
 
-void SciMcpBridge::pointAndClick(int x, int y, bool rightButton) {
+void SciMcpBridge::pointAndClick(int x, int y, bool rightButton, int verbLoop) {
 	// Point first, click after: the game hit-tests a click against where the
 	// pointer already is, so arriving and pressing in the same cycle resolves
 	// the press against wherever the pointer was before.
@@ -548,10 +657,43 @@ void SciMcpBridge::pointAndClick(int x, int y, bool rightButton) {
 	_pendingX = x;
 	_pendingY = y;
 	_pendingFrame = _frameCounter;
+	_pendingVerbLoop = verbLoop;
+	_cyclesSent = 0;
+	_cycleFrame = _frameCounter;
 }
 
 void SciMcpBridge::pumpPendingClick() {
-	if (!_pendingClick || (_frameCounter - _pendingFrame) < kPointFrames)
+	if (!_pendingClick)
+		return;
+
+	// Cycle the cursor onto the wanted verb before pressing. The right button
+	// is what a player uses for this, and it is sent over several frames
+	// because the game only takes one press per cycle.
+	if (_pendingVerbLoop >= 0) {
+		if (_vm->mcpCursorView() == verbCursorView() &&
+		    _vm->mcpCursorLoop() == _pendingVerbLoop) {
+			_pendingVerbLoop = -1;
+			_pendingFrame = _frameCounter;
+			return;
+		}
+		if (_cyclesSent >= kCycleLimit) {
+			// Give up on the verb rather than on the action: a click with
+			// whatever cursor is showing is still what the player asked for
+			// somewhere to happen, and the refusal the game gives is more use
+			// than silence.
+			_pendingVerbLoop = -1;
+			_pendingFrame = _frameCounter;
+			return;
+		}
+		if ((_frameCounter - _cycleFrame) >= kCycleFrames) {
+			injectMouseClick(_pendingX, _pendingY, "right", false);
+			_cyclesSent++;
+			_cycleFrame = _frameCounter;
+		}
+		return;
+	}
+
+	if ((_frameCounter - _pendingFrame) < kPointFrames)
 		return;
 	_pendingClick = false;
 	injectMouseClick(_pendingX, _pendingY, _pendingRight ? "right" : "left", false);
