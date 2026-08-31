@@ -10,6 +10,8 @@ MODULE_OBJS := \
 	flux.o \
 	font.o \
 	hotspot.o \
+	mcp.o \
+	mcp_names.o \
 	metaengine.o \
 	movie.o \
 	path.o \

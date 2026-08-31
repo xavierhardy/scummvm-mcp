@@ -141,6 +141,7 @@ def _launch_args(
         "gob1-demo",
         "dw1-demo",
         "dw2-demo",
+        "toon-demo",
     ):
         # No save slot — these games start from scratch and handle their own intro.
         return [scummvm_binary, "-c", ini_path, game_id]
@@ -264,6 +265,7 @@ _GAME_PATH_ENV = {
     "dw1-demo": "DW1_DEMO_PATH",
     "dw2-demo": "DW2_DEMO_PATH",
     "sword2-demo": "SWORD2_DEMO_PATH",
+    "toon-demo": "TOON_DEMO_PATH",
 }
 
 LOCAL_PATHS_FILE = os.path.normpath(

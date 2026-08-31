@@ -38,20 +38,25 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | Gobliiins (interactive demo) | gob | `gob1-demo` | `test_gob1.py` | `GOB1_DEMO_PATH` |
 | Discworld (CD demo) | tinsel | `dw1-demo` | `test_dw1.py` | `DW1_DEMO_PATH` |
 | Discworld II (demo) | tinsel | `dw2-demo` | `test_dw2.py` | `DW2_DEMO_PATH` |
+| Toonstruck (demo) | toon | `toon-demo` | `test_toon.py` | `TOON_DEMO_PATH` |
 
 Game-data folders are per-machine and are **never** in tracked code: list them
 under `[games]` in the non-committed `game_paths.local.toml` at the repository
 root (see `game_paths.local.toml.example`), or set the env var above, which
 overrides the file. Each test **skips** (not fails) when its game has no folder
 configured or the folder is missing. Flight of the Amazon Queen additionally
-needs `queen.tbl`, which the launcher serves automatically from the repository's
-`dists/engine-data` via `extrapath`.
+needs `queen.tbl`, and Toonstruck needs `toon.dat`; the launcher serves both
+automatically from the repository's `dists/engine-data` via `extrapath`.
 
 Broken Sword 2 has no save to load: its test is one ordered sequence on a
 single fresh instance, past the demo's opening. Its ini asks the engine for the
 `object_labels` game option — the bridge reads a thing's label out of its mouse
 box whatever the option says, so the option only decides whether a human player
 sees the same label on screen.
+
+Toonstruck's demo has no save to load either: it opens on a logo movie and
+then plays, so its test is one ordered walkthrough on a single fresh instance,
+skipped past the opening.
 
 Discworld II needs the **Windows** demo (`dw2-win-demo-en`): the DOS demo is
 flagged unsupported by ScummVM's Tinsel engine — its scripts use a library-call

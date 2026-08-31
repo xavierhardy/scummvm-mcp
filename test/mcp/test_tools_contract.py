@@ -127,6 +127,7 @@ def _check_tools(tools: list[dict]) -> None:
         "sword1_client",
         "sword2_client",
         "dw1_client",
+        "toon_client",
     ],
 )
 def test_tool_table_keeps_its_promises(fixture_name: str, request) -> None:

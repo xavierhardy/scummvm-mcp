@@ -114,6 +114,7 @@ class FontRenderer;
 class TextResource;
 class AudioManager;
 class PathFinding;
+class ToonMcpBridge;
 
 class ToonEngine : public Engine {
 public:
@@ -363,6 +364,27 @@ public:
 	void addDirtyRect(int32 left, int32 top, int32 right, int32 bottom);
 	void clearDirtyRects();
 
+	// MCP bridge hooks. All no-ops unless mcp=true. See Toon::ToonMcpBridge.
+	//
+	// mcpPump() is one game cycle; mcpPumpTransportOnly() is for the places
+	// the main loop stalls in a loop of its own (a movie, a wait, the bag
+	// screen), where the server should still answer but no game cycle has
+	// passed. Both are guarded against re-entry: the engine calls doFrame()
+	// from inside blocking work of its own, and the bridge must not start
+	// servicing a second tool call in the middle of the first.
+	void mcpPump();
+	void mcpPumpTransportOnly();
+	// Every line the game says, whether or not subtitles show it.
+	void mcpOnSpeech(int32 characterId, const char *line);
+	// The game has just put something in the player's hand.
+	void mcpOnItemInHand(int32 item);
+	// The line a dialogue id says, or nullptr. Room lines are numbered below
+	// 1000 and the ones every room shares from 1000 up, exactly as
+	// characterTalk() reads them.
+	char *mcpText(int32 dialogId);
+	// What the game currently thinks the player is pointing at.
+	int32 mcpCurrentHotspotItem() const { return _currentHotspotItem; }
+
 protected:
 	int32 _tickLength;
 	Resources *_resources;
@@ -467,6 +489,9 @@ protected:
 	bool _useAlternativeFont;
 	bool _needPaletteFlush;
 	bool _noMusicDriver; // If "Music Device" is set to "No Music" from Audio tab
+
+	ToonMcpBridge *_mcpBridge;
+	bool _inMcpPump;
 };
 
 } // End of namespace Toon

@@ -179,6 +179,10 @@ void Movie::playVideo(bool isFirstIntroVideo) {
 				return;
 			}
 
+		// A movie is the longest the main loop ever stalls for; keep the MCP
+		// server answering (and skippable) while it plays.
+		_vm->mcpPumpTransportOnly();
+
 		_vm->_system->delayMillis(10);
 	}
 	_vm->dirtyAllScreen();

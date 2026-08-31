@@ -44,3 +44,4 @@ dw1-demo = "~/games/dw-dos-cd-demo-en/DISCWLD"            # DW1_DEMO_PATH
 # Discworld II: only the *Windows* demo (dw2-win-demo-en) runs under ScummVM —
 # the DOS demo is flagged unsupported by the engine and will not start.
 dw2-demo = "~/games/dw2-win-demo-en"                      # DW2_DEMO_PATH
+toon-demo = "~/games/toon-demo-en"                        # TOON_DEMO_PATH

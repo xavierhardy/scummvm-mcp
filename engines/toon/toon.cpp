@@ -50,6 +50,7 @@
 #include "toon/flux.h"
 #include "toon/drew.h"
 #include "toon/path.h"
+#include "toon/mcp.h"
 
 namespace Toon {
 
@@ -195,6 +196,7 @@ void ToonEngine::waitForScriptStep() {
 	if (++_scriptStep >= 40) {
 		_system->delayMillis(1);
 		_scriptStep = 0;
+		mcpPumpTransportOnly();
 	}
 }
 
@@ -316,6 +318,43 @@ void ToonEngine::parseInput() {
 		selectHotspot();
 		clickEvent();
 	}
+}
+
+void ToonEngine::mcpPump() {
+	if (!_mcpBridge || _inMcpPump)
+		return;
+	_inMcpPump = true;
+	_mcpBridge->pump();
+	_inMcpPump = false;
+}
+
+void ToonEngine::mcpPumpTransportOnly() {
+	if (!_mcpBridge || _inMcpPump)
+		return;
+	// Never advances the bridge's frame counter: streaming budgets stay in
+	// game-cycle units, which only doFrame() produces. The bridge's wall-clock
+	// timeout covers a stream stuck in a secondary loop.
+	_inMcpPump = true;
+	_mcpBridge->pumpTransport();
+	_inMcpPump = false;
+}
+
+void ToonEngine::mcpOnSpeech(int32 characterId, const char *line) {
+	if (_mcpBridge)
+		_mcpBridge->onSpeech(characterId, line);
+}
+
+void ToonEngine::mcpOnItemInHand(int32 item) {
+	if (_mcpBridge)
+		_mcpBridge->onItemInHand(item);
+}
+
+char *ToonEngine::mcpText(int32 dialogId) {
+	if (dialogId < 0)
+		return nullptr;
+	if (dialogId < 1000)
+		return _roomTexts ? _roomTexts->getText(dialogId) : nullptr;
+	return _genericTexts ? _genericTexts->getText(dialogId - 1000) : nullptr;
 }
 
 void ToonEngine::enableTimer(int32 timerId) {
@@ -613,6 +652,12 @@ void ToonEngine::doFrame() {
 		_oldTimer2 = currentTimer;
 	}
 	parseInput();
+
+	// One game cycle has passed: every script has had its turn and the input
+	// for this frame has been consumed, so the snapshot the MCP server reports
+	// is a settled one, and a click the bridge injects here is picked up by
+	// the *next* parseInput(), exactly as a real click is.
+	mcpPump();
 }
 
 enum MainMenuSelections {
@@ -1733,9 +1778,17 @@ ToonEngine::ToonEngine(OSystem *syst, const ADGameDescription *gameDescription)
 	}
 	_currentScriptRegion = 0;
 	_currentFont = nullptr;
+
+	// Create the MCP bridge last thing in the constructor, so the server binds
+	// its port before anything that can block (initGraphics() and the logo
+	// movie in run()). Every tool call before a scene is loaded is rejected.
+	ConfMan.registerDefault("mcp", false);
+	_inMcpPump = false;
+	_mcpBridge = ToonMcpBridge::create(this);
 }
 
 ToonEngine::~ToonEngine() {
+	delete _mcpBridge;
 	delete _currentPicture;
 	delete _currentCutaway;
 	delete _currentMask;
@@ -2904,6 +2957,7 @@ int32 ToonEngine::characterTalk(int32 dialogid, bool blocking) {
 	_currentTextLine = myLine;
 	_currentTextLineCharacterId = talkerId;
 	_currentTextLineId = dialogid;
+	mcpOnSpeech(talkerId, myLine);
 
 	if (blocking) {
 		Character *character = getCharacterById(talkerId);
@@ -3352,6 +3406,7 @@ int32 ToonEngine::waitTicks(int32 numTicks, bool breakOnMouseClick) {
 		updateAnimationSceneScripts(0);
 		getMouseEvent();
 		simpleUpdate();
+		mcpPumpTransportOnly();
 
 		if (breakOnMouseClick && (_mouseButton & 0x2))
 			break;
@@ -3496,6 +3551,7 @@ int32 ToonEngine::showInventory() {
 		}
 
 		renderInventory();
+		mcpPumpTransportOnly();
 		_system->delayMillis(10);
 	}
 
@@ -3572,6 +3628,7 @@ void ToonEngine::addItemToInventory(int32 item) {
 void ToonEngine::createMouseItem(int32 item) {
 	_gameState->_mouseState = item;
 	setCursor(_gameState->_mouseState, true, -18, -14);
+	mcpOnItemInHand(item);
 }
 
 void ToonEngine::deleteMouseItem() {

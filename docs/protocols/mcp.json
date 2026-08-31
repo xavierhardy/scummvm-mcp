@@ -1144,6 +1144,21 @@
       "changes": "objects_changed reports things that appeared or vanished within the scene ({name, old_state, new_state} with present/absent) — opening the wardrobe revealing the pouch. held_item reports the item in hand after the action when it changed (empty string when the hand was emptied), and room_name accompanies room_changed.",
       "skip": "skip presses Escape, which is what cuts an escapable sequence short and what stops a movie. It reports what that one press did rather than waiting for the game to hand control back, which it may not do for several scenes yet.",
       "debug": "The debug tool (mcp_debug) has sections system / objects / items."
+    },
+    "toonstruck": {
+      "scope": "Toonstruck (toon).",
+      "interface": "One-click game with no verb bar: a left click is whatever the thing itself is for (open it, take it, talk to it), a right click is a remark about it, and a click on open ground walks there. act maps onto those. Every action is a real click: the bridge brings the view onto the target if it is off screen, parks the pointer on it and presses, so the game resolves the click the same way it does for a player.",
+      "verbs": "Always three: use, look_at, walk_to. interact / pick_up / talk_to / open / close / push / pull / give are accepted as aliases for use, since the target itself decides what the action is.",
+      "coordinates": "Scene coordinates, 640x400 per screen, and a scene is often two screens wide. walk(x, y) goes to the nearest walkable point; a point something covers is refused, because going there would mean acting on that thing.",
+      "objectNaming": "Names are the lines the game writes along the bottom of the screen for whatever is being pointed at, folded into identifiers (lower case, spaces as underscores, punctuation dropped) and de-duplicated (path, path_2). A way out is named after where it leads. Something the game never labels is still targetable, as object_<n> / exit_<n>.",
+      "objects": "state.objects carries id, name, kind (character or scenery), x/y (the spot the bridge points at) and pathway=true when going there leaves the scene. The player character is state.position and is never listed; the sidekick is listed, and can be acted on. The bag is not listed: what is in it is state.inventory.",
+      "inventory": "state.inventory lists every carried item with its id, and marks the one in hand with held=true (also state.held_item). The game labels nothing in the bag — the only place it ever says what an item is, is the line the player character speaks about it — so a name is the opening of that line (\"A plunger.\" -> plunger). An item with no line reads as item_<id>.",
+      "itemsOnThings": "There is one hand and it holds one thing. act(verb='use', target1=<thing>, target2=<item>) takes the named carried item out of the bag first, which is how one thing is used on another; an action with no item named empties the hand first.",
+      "canAct": "state.can_act is false while the game is busy with something of its own (a line being spoken, a scene playing itself out, a movie) and while a conversation is waiting for an answer; act/walk are rejected until it is true, but a pending question can still be answered.",
+      "question": "A conversation is a row of icons rather than lines of text: state.question.choices are the options it is offering, each named after the opening of the line picking it would say, and the one that leaves carries ends_conversation. answer(id) picks one.",
+      "changes": "objects_changed reports things that appeared or vanished within the scene ({name, new_state} with present/gone). held_item reports the item in hand after the action when it changed (empty string when the hand was emptied), and room_name accompanies room_changed.",
+      "skip": "skip presses Escape and then stops whatever is being spoken — what cuts a line, a cutaway or a movie short. It reports what that one press did rather than waiting for the game to hand control back.",
+      "debug": "The debug tool (mcp_debug) has sections system / objects / items. Its coordinates, including the pointer's, are the scene coordinates everything else uses."
     }
   }
 }

@@ -88,6 +88,7 @@ _FIXTURE_INDEX = {
     "dw1": 33,
     "dw2": 34,
     "sword2": 35,
+    "toon": 36,
 }
 
 
@@ -402,6 +403,16 @@ def dw2_client() -> Iterator[McpClient]:
     that only the Windows demo runs under ScummVM — the DOS one is flagged
     unsupported by the engine, so pointing dw2-demo at it will not start."""
     yield from _client("dw2-demo", "dw2")
+
+
+@pytest.fixture(scope="session")
+def toon_client() -> Iterator[McpClient]:
+    """Toonstruck demo (Toon engine).
+
+    No save slot to load: the demo opens on a logo movie and then plays, so the
+    whole run is one ordered sequence on a single instance, skipped past the
+    opening the way the other fresh-start demos are."""
+    yield from _client("toon-demo", "toon")
 
 
 @pytest.fixture(scope="session")
