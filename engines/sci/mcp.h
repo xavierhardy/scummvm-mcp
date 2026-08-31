@@ -168,6 +168,9 @@ private:
 	// One selector of an object, or `missing` when it has no such selector.
 	int selector(reg_t object, int selectorId, int missing = 0) const;
 
+	// The list of everything on screen, followed through the Set object the
+	// later SCI versions wrap it in. Null when there is none.
+	reg_t castList() const;
 	// Everything in the cast an agent could act on, names disambiguated.
 	void collectTargets(Common::Array<Target> &out) const;
 	// Resolve a name (or a numeric index into the snapshot) to a target.

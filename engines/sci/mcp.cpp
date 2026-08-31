@@ -156,18 +156,41 @@ bool SciMcpBridge::playerHasControl() const {
 // What is in the room
 // ---------------------------------------------------------------------------
 
+// The raw list of everything on screen, or a null reference when the game is
+// between rooms and there is none.
+//
+// The global does not hold the same kind of thing in every SCI version. In the
+// earliest it is the list itself; from SCI1 on it is a Set - an ordinary
+// script object whose `elements` selector holds the list. Both are followed
+// here, and neither is followed blindly: the segment manager's own
+// lookupList/lookupNode call error() when handed an address that is not the
+// kind of thing they expect, and error() stops the engine dead. A bridge
+// answering a question must never be able to do that, so every address is
+// checked against its segment type before it is looked up.
+reg_t SciMcpBridge::castList() const {
+	EngineState *s = _vm->getEngineState();
+	if (s == nullptr || s->_segMan == nullptr)
+		return NULL_REG;
+	reg_t cast = global(kGlobalVarCast);
+	if (cast.isNull())
+		return NULL_REG;
+	if (s->_segMan->getSegmentType(cast.getSegment()) == SEG_TYPE_LISTS)
+		return cast;
+	const Object *object = s->_segMan->getObject(cast);
+	if (object == nullptr || object->locateVarSelector(s->_segMan, SELECTOR(elements)) < 0)
+		return NULL_REG;
+	cast = readSelector(s->_segMan, cast, SELECTOR(elements));
+	if (cast.isNull() || s->_segMan->getSegmentType(cast.getSegment()) != SEG_TYPE_LISTS)
+		return NULL_REG;
+	return cast;
+}
+
 void SciMcpBridge::collectTargets(Common::Array<Target> &out) const {
 	EngineState *s = _vm->getEngineState();
 	if (s == nullptr || s->_segMan == nullptr)
 		return;
-	// The segment manager's own lookups call error() - which stops the engine
-	// dead - when an address is not the kind of thing they expect. A bridge
-	// asking a question must never be able to do that, so the segment type is
-	// checked here before anything is looked up. In SCI32 the global does not
-	// always hold a list at all, and that is an ordinary answer: no cast.
-	const reg_t castReg = global(kGlobalVarCast);
-	if (castReg.isNull() ||
-	    s->_segMan->getSegmentType(castReg.getSegment()) != SEG_TYPE_LISTS)
+	const reg_t castReg = castList();
+	if (castReg.isNull())
 		return;
 	List *cast = s->_segMan->lookupList(castReg);
 	if (cast == nullptr)
