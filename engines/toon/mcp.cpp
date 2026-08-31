@@ -478,6 +478,8 @@ Common::String ToonMcpBridge::itemName(int id) const {
 	return toonDisambiguate(base, occurrence);
 }
 
+// Remember what an item was taken out of, as a name for it. Only ever used
+// when the game has no line about the item itself.
 void ToonMcpBridge::nameItem(int32 item, const Common::String &name) {
 	if (item <= 0 || name.empty())
 		return;
@@ -742,10 +744,12 @@ Common::String ToonMcpBridge::answerToolDescription() const {
 }
 
 Common::String ToonMcpBridge::walkToolDescription() const {
-	return "Walk the player character to a point, given in the coordinates "
-	       "state reports positions in (clamped to the scene). The character "
-	       "goes to the nearest reachable spot, so a point on no walkable "
-	       "ground leaves them close by rather than exactly there. " +
+	return "Walk the player character to a point of open ground, given in the "
+	       "coordinates state reports positions in (clamped to the scene). The "
+	       "character goes to the nearest reachable spot, so a point on no "
+	       "walkable ground leaves them close by rather than exactly there. A "
+	       "point something covers is refused and names what is in the way: "
+	       "going there would mean acting on it, which is what act does. " +
 	       streamingToolNote();
 }
 
@@ -952,8 +956,8 @@ bool ToonMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 		return false;
 	}
 
-	// Remember what was aimed at: if the click hands over an object, the thing
-	// it came from is the only place its name is written down.
+	// Remember what was aimed at: if the click hands over an item the game
+	// says nothing about, what it came out of is the only name it can have.
 	_lastClickedName = scene.name;
 	_skipStream = false;
 

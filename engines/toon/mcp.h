@@ -48,11 +48,12 @@ class ToonEngine;
 //
 // Names come from the game's own data. The line the game writes along the
 // bottom of the screen when the player points at something names the scenery
-// and the ways out; an item in the bag carries no name anywhere in the data,
-// so the bridge remembers the name of whatever the item was taken from and
-// calls it that from then on. Conversation options are icons with no text
-// either, so each one is named after the line the player character will say
-// when it is picked, read out of the conversation script without running it.
+// and the ways out. Nothing labels an item in the bag, so an item is named
+// after the line the player character speaks when asked about it - the only
+// place the game ever says what it is - falling back on whatever the item was
+// taken out of. Conversation options are icons with no text either, so each
+// one is named after the line picking it would say, read out of the
+// conversation script without running it.
 class ToonMcpBridge : public MCP::McpBridge {
 public:
 	// Factory mirroring the other bridges' two-phase construction.
@@ -63,9 +64,9 @@ public:
 
 	// Called for every line the game says, whether or not subtitles show it.
 	void onSpeech(int32 characterId, const char *text);
-	// Called when the game puts something in the player's hand. The thing it
-	// came from is the only place its name is ever written down, so this is
-	// where an item gets named.
+	// Called when the game puts something in the player's hand, so the thing
+	// it came out of can stand in as a name for an item the game says nothing
+	// about of its own.
 	void onItemInHand(int32 item);
 
 	// Pump the transport from a secondary loop of the engine's, and get out of
@@ -95,6 +96,8 @@ protected:
 
 	// Reject every tool until the engine has loaded a scene (the bridge is
 	// built in the constructor so the port binds before the intro plays).
+	// state and skip are let through: one says that much, the other cuts the
+	// intro short.
 	Common::JSONValue *callTool(const Common::String &name,
 	                            const Common::JSONValue &args,
 	                            Common::String &errorOut) override;
