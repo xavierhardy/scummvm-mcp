@@ -101,6 +101,12 @@ protected:
 	// nothing an agent reads mentions it.
 	bool usesDialogQuestions() const override { return false; }
 
+	// The early SCI games read a typed sentence rather than a click, and the
+	// engine already knows which those are. None of the demos instrumented
+	// here is one - both are icon-bar games - but the tool belongs to the
+	// engine rather than to the demo, and hasParser() is the honest test.
+	bool usesTypedInput() const override;
+
 	// Refuse every tool until the interpreter is running a room. The bridge is
 	// built early so the port binds before the game's own start-up blocks.
 	Common::JSONValue *callTool(const Common::String &name,

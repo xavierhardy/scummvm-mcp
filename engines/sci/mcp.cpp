@@ -217,6 +217,10 @@ static const SciMcpBridge::VerbCursor kGabrielKnightVerbs[] = {
 };
 
 // The verbs this game offers, as a sentence to put in a refusal.
+bool SciMcpBridge::usesTypedInput() const {
+	return _vm->hasParser();
+}
+
 Common::String SciMcpBridge::verbList() const {
 	uint count = 0;
 	const VerbCursor *verbs = verbTable(count);

@@ -321,6 +321,10 @@ private:
 	// right button cycles it, the left one carries it out where it is pointed
 	// (see the cursor-mode block in the cpp).
 	bool usesCharacterTeam() const;
+	// Ween stops on a copy-protection screen before it will start: it shows a
+	// row of coloured cards and waits for the number of one to be typed. An
+	// agent that can only point at things cannot get past it.
+	bool usesTypedInput() const override;
 	static const int kTeamSize = 3;
 	// Stable name for team member *index*, after the ability the game gives it.
 	static const char *teamCharacterName(int index);

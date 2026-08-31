@@ -162,6 +162,15 @@ protected:
 	// `answer` tool is not registered and nothing refers to it.
 	virtual bool usesDialogQuestions() const { return true; }
 
+	// Does this game ever ask for something to be *typed*? Most of these games
+	// are pointed at and never take a word from the keyboard, so the tool is
+	// off by default and nothing refers to it. Turn it on for a game that
+	// stops and waits for a line - a copy-protection screen asking for a
+	// number, a parser waiting for a sentence, a name being entered.
+	virtual bool usesTypedInput() const { return false; }
+	// What an agent reads about `type_text`.
+	virtual Common::String typeTextToolDescription() const;
+
 	// The sentence every streaming tool ends with. Kept in one place so all of
 	// them say the same thing, and so a tool that is not registered is never
 	// named.
@@ -323,6 +332,7 @@ private:
 	void registerTools();
 	Common::JSONValue *toolScreenshot(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolKeystroke(const Common::JSONValue &args, Common::String &errorOut);
+	Common::JSONValue *toolTypeText(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseMove(const Common::JSONValue &args, Common::String &errorOut);
 	bool toolMouseClick(const Common::JSONValue &args, Common::String &errorOut);
 

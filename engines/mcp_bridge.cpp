@@ -454,6 +454,30 @@ void McpBridge::registerTools() {
 		_server->registerTool(spec);
 	}
 
+	// --- type_text ---
+	// Only for a game that ever asks for something to be typed. It is not a
+	// debug tool: a screen that stops and waits for a line is part of playing
+	// the game, and an agent that can only point at things cannot get past
+	// one.
+	if (usesTypedInput()) {
+		Networking::McpServer::ToolSpec spec;
+		spec.name = "type_text";
+		spec.description = typeTextToolDescription();
+		Common::JSONObject props;
+		props.setVal("text", mcpProp("string",
+		    "The line to type. Typed one character at a time, as at a keyboard."));
+		props.setVal("enter", mcpProp("boolean",
+		    "Press Return afterwards (default true), which is what submits a line."));
+		const char *req[] = {"text"};
+		spec.inputSchema = mcpObjectSchema(props, req, 1);
+		Common::JSONObject outProps;
+		outProps.setVal("text", mcpProp("string", "What was typed."));
+		outProps.setVal("enter", mcpProp("boolean", "Whether Return followed it."));
+		spec.outputSchema = mcpObjectSchema(outProps);
+		spec.streaming = false;
+		_server->registerTool(spec);
+	}
+
 	// Game-specific tools (registered only for the games that provide them).
 	registerGameTools();
 
@@ -654,6 +678,7 @@ Common::JSONValue *McpBridge::callTool(const Common::String &name,
 		    a.contains("double") && a["double"]->isBool() && a["double"]->asBool()));
 		return new Common::JSONValue(out);
 	}
+	if (name == "type_text")    return toolTypeText(args, errorOut);
 	if (name == "screenshot")   return toolScreenshot(args, errorOut);
 	if (name == "save_state")   return toolSaveState(args, errorOut);
 	// Game-specific tools (shoot_cannon, …) handled by the leaf class.
@@ -668,6 +693,50 @@ Common::JSONValue *McpBridge::callTool(const Common::String &name,
 // ---------------------------------------------------------------------------
 // Shared debug tools
 // ---------------------------------------------------------------------------
+
+Common::String McpBridge::typeTextToolDescription() const {
+	return "Type a line, for the places this game stops and waits for one "
+	       "rather than for something to be pointed at. Each character is sent "
+	       "as its own keypress, and Return follows unless you say otherwise.";
+}
+
+Common::JSONValue *McpBridge::toolTypeText(const Common::JSONValue &args,
+                                           Common::String &errorOut) {
+	if (!args.isObject() || !args.asObject().contains("text") ||
+	    !args.asObject()["text"]->isString()) {
+		errorOut = "type_text: a string 'text' is required";
+		return nullptr;
+	}
+	const Common::String text = args.asObject()["text"]->asString();
+	// A cap rather than no bound at all: this drives a 1990s parser, and a
+	// megabyte of keypresses is a mistake being made, not a sentence.
+	if (text.size() > 256) {
+		errorOut = "type_text: 'text' is longer than anything these games read (256)";
+		return nullptr;
+	}
+	const bool enter = !args.asObject().contains("enter") ||
+	                   !args.asObject()["enter"]->isBool() ||
+	                   args.asObject()["enter"]->asBool();
+
+	for (uint i = 0; i < text.size(); i++) {
+		const byte c = (byte)text[i];
+		// Printable ASCII only. Anything else has no keypress that means it,
+		// and inventing one would type something the agent did not ask for.
+		if (c < 0x20 || c > 0x7e) {
+			errorOut = Common::String::format(
+				"type_text: '%c' is not a character these games can be sent", text[i]);
+			return nullptr;
+		}
+		injectKey(Common::KeyState(Common::KEYCODE_INVALID, c));
+	}
+	if (enter)
+		injectKey(Common::KeyState(Common::KEYCODE_RETURN, 13));
+
+	Common::JSONObject out;
+	out.setVal("text", mcpJsonString(text));
+	out.setVal("enter", mcpJsonBool(enter));
+	return new Common::JSONValue(out);
+}
 
 bool McpBridge::toolKeystroke(const Common::JSONValue &args, Common::String &errorOut) {
 	if (!args.isObject()) {

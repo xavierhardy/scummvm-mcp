@@ -1039,6 +1039,10 @@ int GobMcpBridge::currentRoomForMessages() const {
 // active character somewhere, the other makes them act there.
 // ---------------------------------------------------------------------------
 
+bool GobMcpBridge::usesTypedInput() const {
+	return _vm->getGameType() == kGameTypeWeen;
+}
+
 bool GobMcpBridge::usesCharacterTeam() const {
 	return _vm->getGameType() == kGameTypeGob1;
 }
