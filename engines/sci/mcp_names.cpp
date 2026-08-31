@@ -33,7 +33,12 @@ namespace Sci {
 static const char *const kInternalPrefixes[] = {
 	"aMover", "aPolyPath", "aAvoider", "aScript", "aChangeState", "aRegionScript",
 	"cycler", "aCycler", "sound", "aSound", "theMusic", "aTimer", "aScaler",
-	"aList", "aSet", "aCode", "aPlane", "aCast", nullptr
+	"aList", "aSet", "aCode", "aPlane", "aCast",
+	// Text and border objects a game puts in the cast to draw with. They are
+	// on screen, but they are the screen furniture rather than things in the
+	// room, and an agent offered "dtext" as something to look at is being
+	// offered a distraction.
+	"dtext", "dText", "theText", "aText", "bord", "border", "aBorder", nullptr
 };
 
 // Names that are bookkeeping exactly, and something else when they are longer.

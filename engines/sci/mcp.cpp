@@ -231,11 +231,27 @@ Common::String SciMcpBridge::verbList() const {
 	return out + ".";
 }
 
+// Space Quest 6 writes its verbs along the bottom of the screen - FEET, EYES,
+// HANDS, MOUTH - and clicking one is the other way to reach what the right
+// button also cycles through. Cycling is what the bridge uses, because it
+// needs no screen coordinates and so cannot be thrown off by a game that
+// moves or hides its bar.
+static const SciMcpBridge::VerbCursor kSpaceQuest6Verbs[] = {
+	{ "use",     0 },  // HANDS
+	{ "look_at", 1 },  // EYES
+	{ "walk_to", 2 },  // FEET
+	{ "talk_to", 3 }   // MOUTH
+};
+
 const SciMcpBridge::VerbCursor *SciMcpBridge::verbTable(uint &count) const {
 	const Common::String game(_vm->getGameIdStr());
 	if (game == "gk1" || game == "gk1demo") {
 		count = ARRAYSIZE(kGabrielKnightVerbs);
 		return kGabrielKnightVerbs;
+	}
+	if (game == "sq6") {
+		count = ARRAYSIZE(kSpaceQuest6Verbs);
+		return kSpaceQuest6Verbs;
 	}
 	count = 0;
 	return nullptr;
@@ -245,6 +261,8 @@ int SciMcpBridge::verbCursorView() const {
 	const Common::String game(_vm->getGameIdStr());
 	if (game == "gk1" || game == "gk1demo")
 		return 958;
+	if (game == "sq6")
+		return 953;
 	return -1;
 }
 
