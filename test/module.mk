@@ -82,6 +82,10 @@ ifeq ($(ENABLE_TINSEL), STATIC_PLUGIN)
 	TESTS += $(srcdir)/test/engines/tinsel/*.h
 	TEST_LIBS += engines/tinsel/libtinsel.a
 endif
+ifeq ($(ENABLE_SCI), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/sci/*.h
+	TEST_LIBS += engines/sci/libsci.a
+endif
 ifeq ($(ENABLE_TOON), STATIC_PLUGIN)
 	TESTS += $(srcdir)/test/engines/toon/*.h
 	TEST_LIBS += engines/toon/libtoon.a
@@ -95,7 +99,7 @@ endif
 # They land after the archives above, so — as with the libcommon/libformats
 # cycle — the archives they draw on (JSON parsing, Common::String) have to be
 # repeated afterwards for linkers that resolve archives strictly in order.
-ifneq (,$(filter STATIC_PLUGIN,$(ENABLE_SCUMM) $(ENABLE_SWORD1) $(ENABLE_SWORD2) $(ENABLE_SKY) $(ENABLE_GOB) $(ENABLE_TINSEL) $(ENABLE_TOON)))
+ifneq (,$(filter STATIC_PLUGIN,$(ENABLE_SCUMM) $(ENABLE_SWORD1) $(ENABLE_SWORD2) $(ENABLE_SKY) $(ENABLE_GOB) $(ENABLE_TINSEL) $(ENABLE_TOON) $(ENABLE_SCI)))
 	TEST_LIBS += backends/networking/mcp/mcp_server.o engines/mcp_bridge_text.o \
 		common/libcommon.a common/formats/libformats.a common/libcommon.a
 endif

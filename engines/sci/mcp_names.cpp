@@ -70,27 +70,29 @@ bool sciIsInternalName(const Common::String &scriptName) {
 Common::String sciObjectName(const Common::String &scriptName) {
 	// Split camel humps, keep digits with the word they trail, drop the rest.
 	Common::String out;
-	bool previousLower = false;
+	bool wordOpen = false;
 	for (uint i = 0; i < scriptName.size(); i++) {
 		const char c = scriptName[i];
 		if (c >= 'A' && c <= 'Z') {
-			// A hump only starts a word when something lower-case came before
-			// it, so an all-caps run ("GK1") stays one word.
-			if (previousLower && !out.empty())
+			// A hump starts a word when the run before it has ended - after a
+			// lower-case letter or a digit. An unbroken run of capitals
+			// ("GK", "SQ") is one word, but the capital after its number
+			// starts the next one, so "GK1Door" is a door.
+			if (wordOpen && !out.empty())
 				out += '_';
 			out += (char)(c - 'A' + 'a');
-			previousLower = false;
+			wordOpen = false;
 			continue;
 		}
 		if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
 			out += c;
-			previousLower = (c >= 'a' && c <= 'z');
+			wordOpen = true;
 			continue;
 		}
 		// Everything else is a separator, and separators never double up.
 		if (!out.empty() && out.lastChar() != '_')
 			out += '_';
-		previousLower = false;
+		wordOpen = false;
 	}
 	while (!out.empty() && out.lastChar() == '_')
 		out.deleteLastChar();
