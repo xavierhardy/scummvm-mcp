@@ -190,6 +190,13 @@ private:
 
 	// Everything pointable on this screen, names disambiguated.
 	void collectHotspots(Common::Array<Hotspot> &out) const;
+	// The detection box a click at a world point lands in, resolved the way
+	// the game's own mouse code resolves it: lowest priority first, then the
+	// order the screen listed them in. nullptr when the point is on nothing.
+	// The strips that scroll the view are skipped: they sit on top of half
+	// the screen, they move with the view, and they are a way of looking
+	// around rather than something in the world.
+	static const Hotspot *hotspotAt(const Common::Array<Hotspot> &hotspots, int x, int y);
 	// The carried objects (from the cache pumpGame() keeps fresh).
 	const Common::Array<Item> &inventory() const { return _inventory; }
 	// Rebuild that cache from the game's own script.

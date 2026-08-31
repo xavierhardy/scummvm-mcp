@@ -201,6 +201,27 @@ Common::String Sword2McpBridge::nameForObject(uint32 id, int32 pointerText) cons
 	return sword2FallbackName((int32)id);
 }
 
+const Sword2McpBridge::Hotspot *Sword2McpBridge::hotspotAt(
+    const Common::Array<Hotspot> &hotspots, int x, int y) {
+	// Mouse::checkMouseList(): boxes overlap, and the game settles that by
+	// priority - the lowest number wins, then the order the screen listed
+	// them in. Resolving it any other way picks a different thing than the
+	// player's own click would.
+	for (int priority = 0; priority < 10; priority++) {
+		for (uint i = 0; i < hotspots.size(); i++) {
+			if (hotspots[i].priority != priority)
+				continue;
+			// The view-scrolling strips are not part of the world.
+			if (!strcmp(hotspots[i].kind, "scroll"))
+				continue;
+			if (x >= hotspots[i].x1 && x <= hotspots[i].x2 &&
+			    y >= hotspots[i].y1 && y <= hotspots[i].y2)
+				return &hotspots[i];
+		}
+	}
+	return nullptr;
+}
+
 void Sword2McpBridge::collectHotspots(Common::Array<Hotspot> &out) const {
 	out.clear();
 	if (!engineReady())
@@ -368,10 +389,14 @@ void Sword2McpBridge::clickHotspot(const Hotspot &hotspot, int x, int y, bool ri
 	// the warp it would immediately report the player as pointing at whatever
 	// sits under the never-moved one.
 	ScreenInfo *screenInfo = _vm->_screen->getScreenInfo();
+	// The cursor is a window position, and the picture starts below the menu
+	// bar - which is exactly what the game takes back off the cursor before
+	// it reads a world coordinate from it. Warping without putting it back
+	// leaves the game pointing at whatever sits a menu bar higher up.
 	int sx = x - (int)screenInfo->scroll_offset_x;
-	int sy = y - (int)screenInfo->scroll_offset_y;
-	if (sx >= 0 && sy >= 0 && sx < _vm->_screen->getScreenWide() &&
-	    sy < _vm->_screen->getScreenDeep())
+	int sy = y - (int)screenInfo->scroll_offset_y + MENUDEEP;
+	if (sx >= 0 && sx < _vm->_screen->getScreenWide() &&
+	    sy >= MENUDEEP && sy < _vm->_screen->getScreenDeep() - MENUDEEP)
 		g_system->warpMouse(sx, sy);
 
 	_vm->_mouse->mcpClick(hotspot.id, x, y, rightButton);
@@ -409,9 +434,12 @@ Common::String Sword2McpBridge::actToolDescription() const {
 
 Common::String Sword2McpBridge::walkToolDescription() const {
 	return "Walk the player character to a point, given in the coordinates "
-	       "state reports positions in. The point has to be on one of the "
-	       "walkable areas state lists (kind 'floor'); the error says which "
-	       "those are. " + streamingToolNote();
+	       "state reports positions in. The point has to be on open ground: on "
+	       "one of the walkable areas state lists (kind 'floor'), and not "
+	       "under something else, since going there would then mean acting on "
+	       "that instead. The error says which areas there are, and names "
+	       "whatever is in the way. A point the character has no route to "
+	       "leaves them where they stand. " + streamingToolNote();
 }
 
 void Sword2McpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
@@ -731,20 +759,19 @@ bool Sword2McpBridge::toolWalk(const Common::JSONValue &args, Common::String &er
 		areas += Common::String::format("[%d,%d,%d,%d]", hotspots[i].x1, hotspots[i].y1,
 		                                hotspots[i].x2, hotspots[i].y2);
 	}
-	// Areas overlap, and the game resolves that by priority: the lowest number
-	// wins, then list order. Pick the same one a click there would, or the
-	// walk would go to a different area than the player's own click.
-	const Hotspot *floor = nullptr;
-	for (int priority = 0; priority < 10 && !floor; priority++) {
-		for (uint i = 0; i < hotspots.size(); i++) {
-			if (!hotspots[i].isFloor || hotspots[i].priority != priority)
-				continue;
-			if (x >= hotspots[i].x1 && x <= hotspots[i].x2 &&
-			    y >= hotspots[i].y1 && y <= hotspots[i].y2) {
-				floor = &hotspots[i];
-				break;
-			}
-		}
+	// Resolve the point over *everything* on the screen, not just the walkable
+	// areas: a walkable area often lies under something else, and the game
+	// gives the click to whichever comes first. Clicking the area underneath
+	// is not what a click there does, and the game simply ignores it - the
+	// character stands still and nothing says why.
+	const Hotspot *floor = hotspotAt(hotspots, x, y);
+	if (floor && !floor->isFloor) {
+		errorOut = Common::String::format(
+		    "walk: (%d, %d) is covered by '%s', so going there means acting on "
+		    "it - use act(verb='walk_to', target='%s') for that, or aim at a "
+		    "point on open ground. The walkable areas on this screen are: ",
+		    x, y, floor->name.c_str(), floor->name.c_str()) + areas;
+		return false;
 	}
 	if (!floor) {
 		errorOut = Common::String::format(

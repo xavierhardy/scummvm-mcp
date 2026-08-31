@@ -150,17 +150,25 @@ def test_03_sword2_look_at_reports_what_is_said(playing: McpClient) -> None:
 
 
 def test_04_sword2_walk_moves_george(playing: McpClient) -> None:
-    """walk() takes a point on one of the walkable areas."""
+    """walk() takes a point on one of the walkable areas — and arrives at it.
+
+    The point aimed at is on the band George is already standing in, since
+    that is walkable by definition; he stops on the nearest spot his own
+    route-finder will put him, which is a few pixels off rather than exact."""
     before = playing.state()["position"]
     floor = _by_kind(playing.state(), "floor")
     assert floor, "the screen has no walkable area at all"
 
-    result = playing.walk(700, 500)
+    target_x, target_y = before["x"] - 200, before["y"]
+    result = playing.walk(target_x, target_y)
     assert "position" in result, f"walk reported no position: {result}"
     after = playing.state()["position"]
     assert after != before, f"he never moved (still at {after})"
     assert result["position"] == after, (
         f"walk returned {result['position']} but he stands at {after}"
+    )
+    assert abs(after["x"] - target_x) <= 60 and abs(after["y"] - target_y) <= 60, (
+        f"asked for ({target_x}, {target_y}) but he stopped at {after}"
     )
 
     # A point off every walkable area is refused, and the error says where they are.
@@ -168,7 +176,23 @@ def test_04_sword2_walk_moves_george(playing: McpClient) -> None:
         playing.walk(-50, -50)
 
 
-def test_05_sword2_an_exit_takes_two_goes(playing: McpClient) -> None:
+def test_05_sword2_walking_onto_something_is_refused(playing: McpClient) -> None:
+    """A walkable area runs on underneath the things standing on it.
+
+    The game gives a click to whatever is on top, so walking to a point that
+    something covers is not walking at all — it is acting on that thing. The
+    click the bridge would have made there is one the game quietly ignores, so
+    say what is in the way instead of standing still without a word."""
+    covered = [obj for obj in _by_kind(playing.state(), "object") if "box" in obj]
+    assert covered, "nothing on this screen stands on the floor"
+    target = covered[0]
+    x, y = target["position"]["x"], target["position"]["y"]
+
+    with pytest.raises(RuntimeError, match=f"covered by '{target['name']}'"):
+        playing.walk(x, y)
+
+
+def test_06_sword2_an_exit_takes_two_goes(playing: McpClient) -> None:
     """A way out is walked to first and taken second — as it is for a player."""
     start = playing.state()["room"]["id"]
 
@@ -184,7 +208,7 @@ def test_05_sword2_an_exit_takes_two_goes(playing: McpClient) -> None:
     assert state["objects"], "the new screen reported nothing to point at"
 
 
-def test_06_sword2_picking_something_up(playing: McpClient) -> None:
+def test_07_sword2_picking_something_up(playing: McpClient) -> None:
     """An item joins the inventory under the name the game gives it."""
     names = _names(playing.state())
     assert "hook" in names, f"the boat hook is not on this screen: {names}"
@@ -196,7 +220,7 @@ def test_06_sword2_picking_something_up(playing: McpClient) -> None:
     assert "boathook" in [i["name"] for i in playing.state()["inventory"]]
 
 
-def test_07_sword2_using_an_item_on_something(playing: McpClient) -> None:
+def test_08_sword2_using_an_item_on_something(playing: McpClient) -> None:
     """`target2` is the item to do it with, and the game answers per item."""
     dog = _by_kind(playing.state(), "person")
     assert dog, "the dog is not on this screen yet"
@@ -217,7 +241,7 @@ def test_07_sword2_using_an_item_on_something(playing: McpClient) -> None:
     assert "held_item" not in playing.state(), "an item was left in hand"
 
 
-def test_08_sword2_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
+def test_09_sword2_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
     """The errors say what to do instead, rather than failing silently."""
     with pytest.raises(RuntimeError, match="unknown verb"):
         playing.act("juggle", "trapdoor")
@@ -237,7 +261,7 @@ def test_08_sword2_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
         playing.call_tool("answer", {"id": 1})
 
 
-def test_09_sword2_debug_reads_the_engine(playing: McpClient) -> None:
+def test_10_sword2_debug_reads_the_engine(playing: McpClient) -> None:
     """The debug tool reports what the engine thinks, for diagnosis."""
     system = playing.call_tool("debug")["system"]
 
@@ -257,7 +281,7 @@ def test_09_sword2_debug_reads_the_engine(playing: McpClient) -> None:
     assert variables[0]["index"] == 62, variables
 
 
-def test_10_sword2_raw_input_tools_are_accepted(playing: McpClient) -> None:
+def test_11_sword2_raw_input_tools_are_accepted(playing: McpClient) -> None:
     """The raw input tools work here too, for an agent driving by screenshot."""
     playing.call_tool("mouse_move", {"x": 320, "y": 240})
     playing.call_tool("keystroke", {"key": "Escape"})
