@@ -271,6 +271,9 @@ public:
 	// MCP bridge hooks. All no-ops unless mcp=true. See Gob::GobMcpBridge.
 	GobMcpBridge *_mcpBridge;
 	void mcpPumpInput();
+	// Service the server without advancing the frame counter, from a place
+	// the engine stalls in and never reaches processInput().
+	void mcpPumpTransport();
 	void mcpOnTextDrawn(const char *text, int16 x, int16 y, int16 surface);
 	void mcpOnInputPoll(uint8 handleMouse);
 

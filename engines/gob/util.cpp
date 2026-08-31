@@ -77,6 +77,14 @@ void Util::notifyPaused(uint32 duration) {
 }
 
 void Util::delay(uint16 msecs) {
+	// The other stall in this engine, and the one processInput() does not
+	// cover: a video waits for its next frame here, in a loop of its own that
+	// never asks for input. Ween's introduction spends minutes in it, and
+	// without this the server stops answering for all of them - and a skip
+	// that was already streaming has no way to ever close, because the
+	// deadline that would close it is only ever checked from a pump.
+	// Transport only: the frame counter belongs to the game loop.
+	_vm->mcpPumpTransport();
 	g_system->delayMillis(msecs / _vm->_global->_speedFactor);
 }
 

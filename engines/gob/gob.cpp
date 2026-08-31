@@ -167,6 +167,11 @@ void GobEngine::mcpPumpInput() {
 		_mcpBridge->pumpFromInput();
 }
 
+void GobEngine::mcpPumpTransport() {
+	if (_mcpBridge)
+		_mcpBridge->pumpFromStall();
+}
+
 void GobEngine::mcpOnTextDrawn(const char *text, int16 x, int16 y, int16 surface) {
 	if (_mcpBridge)
 		_mcpBridge->onTextDrawn(text, x, y, surface);

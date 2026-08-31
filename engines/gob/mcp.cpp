@@ -171,6 +171,14 @@ void GobMcpBridge::pumpFromInput() {
 	_inPump = false;
 }
 
+void GobMcpBridge::pumpFromStall() {
+	if (!isEnabled() || _inPump)
+		return;
+	_inPump = true;
+	pumpTransportOnly();
+	_inPump = false;
+}
+
 void GobMcpBridge::onInputPoll(uint8 handleMouse) {
 	if (!isEnabled())
 		return;

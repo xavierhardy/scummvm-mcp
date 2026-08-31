@@ -80,6 +80,11 @@ public:
 	// Called from Util::processInput(). Advances the frame counter at most
 	// once per kFrameMs; other calls only service the transport.
 	void pumpFromInput();
+	// Service the server from a place the engine stalls in without ever
+	// reaching processInput() - a video waiting for its next frame. Shares
+	// pumpFromInput()'s guard, because the pump's own work reaches the delay
+	// this is called from and must not walk back into itself.
+	void pumpFromStall();
 
 	// Called from Draw_v2::spriteOperation for every string drawn to a
 	// surface. Captures dialogue lines, subtitles and hover names.
@@ -144,7 +149,13 @@ protected:
 	// the game routinely goes from "walk finished" to "and now the character
 	// speaks" with a couple of idle frames in between.
 	uint32 settleFrames() const override { return 14; }
-	uint32 wallClockTimeoutMs() const override { return 180000; }
+	// A skip only has to break whatever is playing; it is not waiting for an
+	// action to finish. Its budgets are frames like everything else's, and
+	// frames only advance from the game loop - so in a game that spends
+	// minutes inside a video, with the loop never reached, the wall clock is
+	// the only thing that can ever end a skip's stream. Three minutes of
+	// silence is the right allowance for an action; for a skip it is a hang.
+	uint32 wallClockTimeoutMs() const override { return _sseSkipFast ? 8000 : 180000; }
 	// Anchor the deadline to the last sign of life: videos and scripted
 	// sequences run long while still progressing.
 	uint32 streamTimeoutAnchor() const override {
