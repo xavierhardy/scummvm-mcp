@@ -1181,10 +1181,12 @@ Common::JSONValue *ToonMcpBridge::callTool(const Common::String &name,
                                            const Common::JSONValue &args,
                                            Common::String &errorOut) {
 	// The bridge is constructed before run() loads the first scene, so a call
-	// arriving that early has nothing to read. state is the exception: it
-	// answers whatever the game is doing - with can_act false and nothing in
-	// it - because it is what an agent reads to find out that much.
-	if (name != "state" && !engineReady()) {
+	// arriving that early has nothing to read. Two are the exception: state,
+	// which answers whatever the game is doing - with can_act false and
+	// nothing in it - because it is what an agent reads to find out that much,
+	// and skip, because the opening movie is the first thing there is to cut
+	// short. Both look after themselves.
+	if (name != "state" && name != "skip" && !engineReady()) {
 		errorOut = name + ": the game is still starting up";
 		return nullptr;
 	}
@@ -1367,12 +1369,13 @@ bool ToonMcpBridge::isActionDone() const {
 	// The click has not even been made yet.
 	if (_pendingPhase != kPhaseNone)
 		return false;
-	if (!engineReady())
-		return false;
 	// A skip is one press: it reports what that press did rather than waiting
-	// for whatever it cut short to unwind.
+	// for whatever it cut short to unwind. It is answered even before the
+	// first scene is up, because that is when the opening is being cut short.
 	if (_skipStream)
 		return _frameCounter - _sseStartFrame >= kSkipFrames;
+	if (!engineReady())
+		return false;
 	// A conversation asking for an answer is a settled state: the stream
 	// closes and reports the question.
 	if (inConversation())

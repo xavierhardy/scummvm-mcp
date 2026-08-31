@@ -130,7 +130,12 @@ protected:
 	uint32 timeoutFrames() const override { return 2400; }
 	uint32 absoluteTimeoutFrames() const override { return 12000; }
 	uint32 settleFrames() const override { return 45; }
-	uint32 wallClockTimeoutMs() const override { return 180000; }
+	// A stream can outlive the frame counter entirely - a movie, a fade and a
+	// scene load all run in loops of the engine's own, which pump the server
+	// but produce no game cycle - so the last word is wall clock, set below
+	// what a client will wait for, so a stuck action comes back as a failed
+	// action rather than as a dropped connection.
+	uint32 wallClockTimeoutMs() const override { return 45000; }
 	// Anchor the deadline to the last sign of life: a scene can talk for a
 	// long while and still be making progress.
 	uint32 streamTimeoutAnchor() const override {
