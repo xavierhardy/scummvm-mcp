@@ -238,8 +238,14 @@ void SciEngine::mcpPump() {
 }
 
 void SciEngine::mcpPumpTransport() {
-	if (_mcpBridge)
-		_mcpBridge->pumpTransportOnly();
+	// Reached from the event path, which the bridge's own work can walk back
+	// into: injecting a click leaves an event behind, and reading one polls
+	// for more. One level is all this ever needs.
+	if (_mcpBridge == nullptr || _mcpInPump)
+		return;
+	_mcpInPump = true;
+	_mcpBridge->pumpTransportOnly();
+	_mcpInPump = false;
 }
 
 void SciEngine::mcpOnText(const Common::String &text, int talker) {

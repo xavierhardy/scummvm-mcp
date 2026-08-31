@@ -192,6 +192,9 @@ public:
 	// Service the server without advancing the frame counter, from a place the
 	// interpreter stalls in (a video, a modal window).
 	void mcpPumpTransport();
+	// True while a pump is running, so a pump reached from inside the event
+	// path cannot re-enter itself.
+	bool _mcpInPump = false;
 	// Every line of game text as it is displayed. `talker` is the game's own
 	// talker number, or -1 for narration nobody speaks.
 	void mcpOnText(const Common::String &text, int talker);

@@ -575,10 +575,11 @@ void GfxText16::Box(const char *text, uint16 languageSplitter, bool show, const 
 	const char *curTextPos = text;
 	const char *curTextLine = text;
 
-	// Every line the game puts on screen passes through here. `show` is false
-	// when the caller is only measuring, and a measurement is not something
-	// anybody said.
-	if (show && text != nullptr && *text != '\0')
+	// Every line the game puts on screen passes through here. `show` is not
+	// the test for whether it is really being drawn - it only says whether to
+	// blit immediately, and the text controls that carry a game's subtitles
+	// pass false and blit separately. Measuring goes through Size(), not here.
+	if (text != nullptr && *text != '\0')
 		g_sci->mcpOnText(Common::String(text), -1);
 
 	if (fontId != -1)

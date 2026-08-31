@@ -454,6 +454,15 @@ SciEvent EventManager::getSciEvent(SciEventType mask) {
 		updateScreen();
 	}
 
+	// Every loop the interpreter runs asks for events, including the ones that
+	// never hand time back to the game cycle: an icon bar being held open, a
+	// modal window, a menu. The game cycle is where the bridge is normally
+	// pumped, so without this the server stops answering for as long as one of
+	// those is up - which is exactly when an agent most needs to be told what
+	// is on screen. Transport only: the frame counter belongs to the game
+	// cycle, so a stalled loop does not age a streaming action's budget.
+	g_sci->mcpPumpTransport();
+
 	// Get all queued events from graphics driver
 	do {
 		event = getScummVMEvent();
