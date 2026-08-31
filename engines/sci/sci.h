@@ -195,6 +195,21 @@ public:
 	// Every line of game text as it is displayed. `talker` is the game's own
 	// talker number, or -1 for narration nobody speaks.
 	void mcpOnText(const Common::String &text, int talker);
+	// The view resource the game last gave the cursor. In an icon-bar game
+	// the cursor *is* the verb - which of them is showing is the only record
+	// of what a click would mean - and nothing in the script state says so,
+	// so it is noted here as the game sets it.
+	void mcpOnCursorView(int viewNum, int loopNum, int celNum) {
+		_mcpCursorView = viewNum;
+		_mcpCursorLoop = loopNum;
+		_mcpCursorCel = celNum;
+	}
+	int mcpCursorView() const { return _mcpCursorView; }
+	// Which verb it is showing. Both games keep every cursor in one view
+	// resource and pick between them by loop, so this - not the view - is
+	// what changes when the player cycles the cursor.
+	int mcpCursorLoop() const { return _mcpCursorLoop; }
+	int mcpCursorCel() const { return _mcpCursorCel; }
 
 	const SciGameId &getGameId() const { return _gameId; }
 	const char *getGameIdStr() const;
@@ -431,6 +446,9 @@ private:
 	reg_t _gameObjectAddress; /**< Pointer to the game object */
 	Console *_console;
 	SciMcpBridge *_mcpBridge;
+	int _mcpCursorView;
+	int _mcpCursorLoop;
+	int _mcpCursorCel;
 	Common::RandomSource _rng;
 	Common::MacResManager _macExecutable;
 	bool _useHiresGraphics; // user-option for GK1, KQ6, PQ4

@@ -181,6 +181,8 @@ void GfxCursor::kernelSetShape(GuiResourceId resourceId) {
 }
 
 void GfxCursor::kernelSetView(GuiResourceId viewNum, int loopNum, int celNum, Common::Point *hotspot) {
+	g_sci->mcpOnCursorView(viewNum, loopNum, celNum);
+
 	if (_cachedCursors.size() >= MAX_CACHED_CURSORS)
 		purgeCache();
 

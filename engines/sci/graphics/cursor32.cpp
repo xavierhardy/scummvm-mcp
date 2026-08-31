@@ -193,6 +193,8 @@ void GfxCursor32::clearRestrictedArea() {
 }
 
 void GfxCursor32::setView(const GuiResourceId viewId, const int16 loopNo, const int16 celNo) {
+	g_sci->mcpOnCursorView(viewId, loopNo, celNo);
+
 	hide();
 
 	_cursorInfo.resourceId = viewId;

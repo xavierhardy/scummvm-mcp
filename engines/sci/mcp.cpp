@@ -491,6 +491,9 @@ Common::JSONValue *SciMcpBridge::toolDebug(const Common::JSONValue &args, Common
 	engine.setVal("game_id", mcpJsonString(_vm->getGameIdStr()));
 	engine.setVal("has_parser", mcpJsonBool(_vm->hasParser()));
 	engine.setVal("is_demo", mcpJsonBool(_vm->isDemo()));
+	engine.setVal("cursor_view", mcpJsonInt(_vm->mcpCursorView()));
+	engine.setVal("cursor_loop", mcpJsonInt(_vm->mcpCursorLoop()));
+	engine.setVal("cursor_cel", mcpJsonInt(_vm->mcpCursorCel()));
 	out.setVal("engine", new Common::JSONValue(engine));
 
 	return new Common::JSONValue(out);
