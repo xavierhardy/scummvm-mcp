@@ -164,6 +164,10 @@ private:
 	// Frames an action is given to show its first effect before it is taken
 	// to have been a no-op.
 	static const uint32 kNoOpFrames = 16;
+	// Frames a window in the way is given to close, and how often the press
+	// that closes it is repeated meanwhile.
+	static const uint32 kCloseFrames = 40;
+	static const uint32 kCloseRetryFrames = 5;
 	// Frames a scroll is given to reach its destination before the bridge
 	// stops waiting for it. A scroll moves a handful of pixels per frame, so
 	// this is generous enough for the widest scene either game has.
@@ -212,14 +216,20 @@ private:
 	// Resolve a target name (or numeric id) to an inventory item id.
 	bool resolveItem(const Common::String &name, int &id) const;
 
+	// Is a window the bridge never opened - the inventory, or one of the
+	// game's own menus - up and swallowing every click?
+	bool inventoryBlocking() const;
+
 	// Bring a scene position into view if the scene is wider or taller than
 	// the screen and the position lies outside it. Returns true when a scroll
 	// was asked for, i.e. the caller has to wait before pointing.
 	bool requestScroll(int x, int y) const;
 	// Point the cursor at a scene position and queue the player event that
-	// follows once the tag process has caught up. Scrolls the view onto the
-	// position first if it is off screen.
+	// follows once the tag process has caught up. Closes a window standing in
+	// the way and scrolls the view onto the position first.
 	void pointAndQueue(int x, int y, PLR_EVENT event);
+	// Move the queued event on from clearing the way to pointing at it.
+	void beginPointing();
 
 	// Register a speaking actor's name for the message queue.
 	int actorSlot(int actor);
@@ -241,6 +251,13 @@ private:
 	// Escape whose effect is reported after a short fixed window.
 	bool _skipStream;
 
+	// What still has to happen before the queued player event can be raised.
+	enum PendingPhase {
+		kPhaseClose,  // a window is in the way
+		kPhaseScroll, // the view is travelling to the target
+		kPhasePoint   // the cursor is on the target, waiting to be noticed
+	};
+
 	// The player event waiting on the cursor having been noticed.
 	bool _pendingEvent;
 	PLR_EVENT _pendingKind;
@@ -248,7 +265,8 @@ private:
 	// Where that event is aimed, and whether the view still has to scroll
 	// onto it before the cursor can be put there.
 	int _pendingX, _pendingY;
-	bool _pendingScroll;
+	PendingPhase _pendingPhase;
+	uint32 _pendingRetryFrame;
 
 	// Pre-action snapshot.
 	int _ssePreScene;

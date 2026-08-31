@@ -122,7 +122,42 @@ def test_03_dw1_use_changes_the_scene(playing: McpClient) -> None:
     assert "pouch" in _names(playing.state())
 
 
-def test_04_dw1_taking_an_item_names_it(playing: McpClient) -> None:
+def _window_open(client: McpClient) -> int:
+    """Which of the game's own windows is up, if any (0 for none)."""
+    return client.call_tool("debug")["system"]["inventory_open"]
+
+
+def test_04_dw1_a_window_the_game_opens_does_not_block_play(playing: McpClient) -> None:
+    """A window a game script opens is closed on the way to the next action.
+
+    Nothing the bridge does opens one — but the scripts do, and while one is up
+    the game hands every click to it, so the scene cannot be acted on at all.
+    That used to be reported as "not accepting input" and left an agent with
+    nothing but skip() to get out of it. Now the state still says the game is
+    playable, and the next action shuts the window before it acts.
+
+    Getting the demo to put a window up takes poking at the room bare-handed
+    for a while, so this is a sweep rather than one call."""
+    for name in ("door", "diploma", "shape", "bed"):
+        for verb in ("use", "look_at"):
+            playing.act(verb, name)
+            if _window_open(playing):
+                break
+        if _window_open(playing):
+            break
+    else:
+        pytest.skip("nothing in this room put a window up")
+
+    # can_act tells the truth: the window is not the end of the game.
+    assert playing.state()["can_act"] is True, "the window was reported as a dead end"
+
+    result = playing.act("look_at", "bed")
+    assert _window_open(playing) == 0, "the window was still up after acting"
+    said = " ".join(line["text"] for line in result.get("messages", []))
+    assert said, f"the action never reached the game: {result}"
+
+
+def test_05_dw1_taking_an_item_names_it(playing: McpClient) -> None:
     """An item enters the inventory under the name the game itself prints.
 
     Nothing in the data maps an item to a name — only the item's own script
@@ -143,7 +178,7 @@ def test_04_dw1_taking_an_item_names_it(playing: McpClient) -> None:
     assert "pouch" not in _names(state)
 
 
-def test_05_dw1_use_with_an_item_in_hand(playing: McpClient) -> None:
+def test_06_dw1_use_with_an_item_in_hand(playing: McpClient) -> None:
     """`target2` is the item to do it with — that is 'use X on Y' here."""
     result = playing.act("use", "luggage", "pouch")
 
@@ -153,7 +188,7 @@ def test_05_dw1_use_with_an_item_in_hand(playing: McpClient) -> None:
     assert said, f"using the pouch on the luggage said nothing: {result}"
 
 
-def test_06_dw1_walk_moves_the_character(playing: McpClient) -> None:
+def test_07_dw1_walk_moves_the_character(playing: McpClient) -> None:
     """walk() takes a point and the call waits for the walk to finish."""
     before = playing.state()["position"]
 
@@ -171,7 +206,7 @@ def test_06_dw1_walk_moves_the_character(playing: McpClient) -> None:
     assert playing.state()["can_act"] is True
 
 
-def test_07_dw1_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
+def test_08_dw1_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
     """The errors say what to do instead, rather than failing silently."""
     with pytest.raises(RuntimeError, match="unknown verb"):
         playing.act("juggle", "bed")
@@ -185,7 +220,7 @@ def test_07_dw1_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
         playing.call_tool("answer", {"id": 1})
 
 
-def test_08_dw1_targets_resolve_by_id_too(playing: McpClient) -> None:
+def test_09_dw1_targets_resolve_by_id_too(playing: McpClient) -> None:
     """Scenery can be named or given by the id the snapshot published."""
     bed = next(obj for obj in playing.state()["objects"] if obj["name"] == "bed")
 
@@ -194,7 +229,7 @@ def test_08_dw1_targets_resolve_by_id_too(playing: McpClient) -> None:
     assert "bed" in said, f"that is not the bed speech: {result}"
 
 
-def test_09_dw1_debug_reads_the_engine(playing: McpClient) -> None:
+def test_10_dw1_debug_reads_the_engine(playing: McpClient) -> None:
     """The debug tool reports what the engine thinks, for diagnosis."""
     system = playing.call_tool("debug")["system"]
 
@@ -210,7 +245,7 @@ def test_09_dw1_debug_reads_the_engine(playing: McpClient) -> None:
     assert any(obj["name"] == "wardrobe" and not obj["actor"] for obj in objects)
 
 
-def test_10_dw1_raw_input_tools_are_accepted(playing: McpClient) -> None:
+def test_11_dw1_raw_input_tools_are_accepted(playing: McpClient) -> None:
     """The raw input tools work here too, for an agent driving by screenshot."""
     playing.call_tool("mouse_move", {"x": 160, "y": 100})
     playing.call_tool("keystroke", {"key": "Escape"})

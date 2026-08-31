@@ -130,7 +130,8 @@ TinselMcpBridge::TinselMcpBridge(TinselEngine *vm)
 	  _pendingFrame(0),
 	  _pendingX(0),
 	  _pendingY(0),
-	  _pendingScroll(false),
+	  _pendingPhase(kPhasePoint),
+	  _pendingRetryFrame(0),
 	  _ssePreScene(0),
 	  _ssePreHeld(0),
 	  _sseActionStarted(false),
@@ -172,13 +173,18 @@ bool TinselMcpBridge::canAct() const {
 		return false;
 	if (_vm->_bmv->MoviePlaying())
 		return false;
-	if (inConversation() || _vm->_dialogs->menuActive())
+	if (inConversation())
 		return false;
-	// The inventory or a menu being up means the player is elsewhere; the
-	// bridge never opens either, so this only guards against the game doing it.
-	if (_vm->_dialogs->inventoryActive() && _vm->_dialogs->whichInventoryOpen() != INV_CONV)
-		return false;
+	// An inventory or menu window being up is *not* a reason to refuse: the
+	// bridge never opens one, and a game script that does would otherwise
+	// leave an agent with nothing it can do. It is closed on the way to the
+	// action instead - see pointAndQueue().
 	return ControlIsOn() && !leadMoving();
+}
+
+bool TinselMcpBridge::inventoryBlocking() const {
+	return engineReady() && _vm->_dialogs->inventoryActive() &&
+	       _vm->_dialogs->whichInventoryOpen() != INV_CONV;
 }
 
 void TinselMcpBridge::leadPos(int &x, int &y) const {
@@ -601,11 +607,25 @@ void TinselMcpBridge::pointAndQueue(int x, int y, PLR_EVENT event) {
 	_pendingX = x;
 	_pendingY = y;
 
+	// A window a game script opened takes every click for itself while it is
+	// up, so nothing in the scene can be acted on until it is gone. Close it
+	// the way the player would, then carry on with the action.
+	if (inventoryBlocking()) {
+		ProcessKeyEvent(PLR_ESCAPE);
+		_pendingPhase = kPhaseClose;
+		_pendingFrame = _frameCounter + kCloseFrames;
+		_pendingRetryFrame = _frameCounter + kCloseRetryFrames;
+		return;
+	}
+	beginPointing();
+}
+
+void TinselMcpBridge::beginPointing() {
 	// The cursor is a screen object, so a target beyond the edge of the
 	// screen cannot be pointed at until the view has come to it. Scroll
 	// first, then point once the view has arrived.
-	_pendingScroll = requestScroll(x, y);
-	if (_pendingScroll) {
+	if (requestScroll(_pendingX, _pendingY)) {
+		_pendingPhase = kPhaseScroll;
 		_pendingFrame = _frameCounter + kScrollFrames;
 		return;
 	}
@@ -613,7 +633,8 @@ void TinselMcpBridge::pointAndQueue(int x, int y, PLR_EVENT event) {
 	// Point first: the game resolves a click against whatever its tag process
 	// last latched onto, and that only updates once the cursor has been where
 	// it is for a cycle.
-	_vm->_cursor->SetCursorXY(x, y);
+	_vm->_cursor->SetCursorXY(_pendingX, _pendingY);
+	_pendingPhase = kPhasePoint;
 	_pendingFrame = _frameCounter + kPointFrames;
 }
 
@@ -1046,19 +1067,38 @@ void TinselMcpBridge::snapshotPreAction() {
 }
 
 bool TinselMcpBridge::pumpStreamGameEarly() {
-	if (_pendingEvent && _pendingScroll) {
-		// The view is on its way to the target. Count it as activity so the
-		// stream's deadline is not spent travelling, and point as soon as it
-		// has arrived (or given up, for a destination it cannot reach).
+	if (!_pendingEvent)
+		return false;
+
+	// Clearing the way counts as activity, so that the stream's deadline is
+	// not spent waiting for a window to close or for the view to travel.
+	if (_pendingPhase == kPhaseClose) {
+		// Give up on the window after a while and act anyway: one press is
+		// all a player has to close it with either.
+		if (!inventoryBlocking() || _frameCounter >= _pendingFrame) {
+			beginPointing();
+		} else if (_frameCounter >= _pendingRetryFrame) {
+			// A menu can be layered, and each press only takes off the top.
+			ProcessKeyEvent(PLR_ESCAPE);
+			_pendingRetryFrame = _frameCounter + kCloseRetryFrames;
+		}
+		_sseLastEventFrame = _frameCounter;
+		return false;
+	}
+
+	if (_pendingPhase == kPhaseScroll) {
+		// Point as soon as the view has arrived (or given up, for a
+		// destination the scene will not scroll to).
 		if (!_vm->_scroll->IsScrolling() || _frameCounter >= _pendingFrame) {
-			_pendingScroll = false;
 			_vm->_cursor->SetCursorXY(_pendingX, _pendingY);
+			_pendingPhase = kPhasePoint;
 			_pendingFrame = _frameCounter + kPointFrames;
 		}
 		_sseLastEventFrame = _frameCounter;
 		return false;
 	}
-	if (_pendingEvent && _frameCounter >= _pendingFrame) {
+
+	if (_frameCounter >= _pendingFrame) {
 		_pendingEvent = false;
 		// The same entry point the keyboard bindings use: it reads the cursor
 		// we parked on the target and raises the player event there.
