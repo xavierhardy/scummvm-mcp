@@ -73,6 +73,7 @@
 #include "ags/engine/script/script_api.h"
 #include "ags/engine/script/script_runtime.h"
 #include "ags/engine/ac/dynobj/script_string.h"
+#include "ags/ags.h"
 #include "ags/globals.h"
 
 namespace AGS3 {
@@ -2800,6 +2801,11 @@ int get_character_currently_talking() {
 }
 
 void DisplaySpeech(const char *texx, int aschar) {
+	// Every spoken line, with the character saying it, whether or not the
+	// game is set to show it as text.
+	if (texx != nullptr && *texx != '\0')
+		::AGS::g_vm->mcpOnText(Common::String(texx), aschar);
+
 	_displayspeech(texx, aschar, -1, -1, -1, 0);
 }
 

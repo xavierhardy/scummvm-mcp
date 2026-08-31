@@ -20,6 +20,7 @@
  */
 
 #include "ags/ags.h"
+#include "ags/mcp.h"
 #include "ags/detection.h"
 #include "ags/events.h"
 #include "ags/game_scanner.h"
@@ -88,12 +89,48 @@ AGSEngine::AGSEngine(OSystem *syst, const AGSGameDescription *gameDesc) : Engine
 	if (ConfMan.getActiveDomain()->tryGetVal("force_text_aa", forceAA))
 		Common::parseBool(forceAA, _forceTextAA);
 
+	// Bind the MCP server here, before run() touches graphics or audio: a
+	// client can then connect while the game is still starting up (every tool
+	// says so until a room is loaded).
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = ::AGS3::AgsMcpBridge::create(this);
+
 	// WORKAROUND: Certain games need to force AA to render the text correctly
 	if (_gameDescription->features & GAMEFLAG_FORCE_AA)
 		_forceTextAA = true;
 }
 
+bool AGSEngine::mcpEnabled() const {
+	return _mcpBridge != nullptr && _mcpBridge->isEnabled();
+}
+
+void AGSEngine::mcpPump() {
+	if (_mcpBridge == nullptr || _mcpInPump)
+		return;
+	_mcpInPump = true;
+	_mcpBridge->pump();
+	_mcpInPump = false;
+}
+
+void AGSEngine::mcpPumpTransport() {
+	// Reached from places the engine stalls in, which its own work can walk
+	// back into. One level is all this ever needs.
+	if (_mcpBridge == nullptr || _mcpInPump)
+		return;
+	_mcpInPump = true;
+	_mcpBridge->pumpTransportOnly();
+	_mcpInPump = false;
+}
+
+void AGSEngine::mcpOnText(const Common::String &text, int charId) {
+	if (_mcpBridge)
+		_mcpBridge->onGameText(text, charId);
+}
+
 AGSEngine::~AGSEngine() {
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
+
 	if (_globals && _G(proper_exit) == 0) {
 		_G(platform)->DisplayAlert("Error: the program has exited without requesting it.\n"
 		                           "Program pointer: %+03d  (write this number down), engine version %s\n"

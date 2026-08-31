@@ -38,6 +38,7 @@
 #include "ags/lib/allegro/system.h"
 
 namespace AGS3 {
+class AgsMcpBridge;
 class Globals;
 }
 
@@ -77,6 +78,8 @@ public:
 	::AGS3::GFX_DRIVER *_gfxDriver;
 	::AGS3::Globals *_globals;
 	bool _forceTextAA;
+	::AGS3::AgsMcpBridge *_mcpBridge = nullptr;
+	bool _mcpInPump = false;
 protected:
 	// Engine APIs
 	Common::Error run() override;
@@ -84,6 +87,19 @@ public:
 	AGSEngine(OSystem *syst, const AGSGameDescription *gameDesc);
 	~AGSEngine() override;
 	void GUIError(const Common::String &msg);
+
+	// --- MCP ---------------------------------------------------------------
+	// The bridge is built in the constructor, before run() touches graphics or
+	// audio, so a client can connect while the game is still starting up.
+	bool mcpEnabled() const;
+	// Once per game loop.
+	void mcpPump();
+	// Service the server without advancing the frame counter, from a place the
+	// engine stalls in.
+	void mcpPumpTransport();
+	// Every line the game displays. `charId` is the speaking character, or -1
+	// for narration nobody speaks.
+	void mcpOnText(const Common::String &text, int charId);
 
 	void set_window_title(const char *str) {
 		// No implementation

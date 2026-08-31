@@ -32,6 +32,7 @@
 #include "ags/engine/ac/draw.h"
 #include "ags/engine/ac/event.h"
 #include "ags/engine/ac/game.h"
+#include "ags/ags.h"
 #include "ags/engine/ac/game_setup.h"
 #include "ags/shared/ac/game_setup_struct.h"
 #include "ags/engine/ac/game_state.h"
@@ -784,6 +785,11 @@ void set_loop_counter(unsigned int new_counter) {
 void UpdateGameOnce(bool checkControls, IDriverDependantBitmap *extraBitmap, int extraX, int extraY) {
 
 	int res;
+
+	// One turn of the game loop. This is where the MCP server is serviced, so
+	// a tool call is answered between two loops rather than in the middle of
+	// one (no-op unless mcp=true).
+	::AGS::g_vm->mcpPump();
 
 	sys_evt_process_pending();
 

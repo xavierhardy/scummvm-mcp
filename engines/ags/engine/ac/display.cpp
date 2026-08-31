@@ -384,6 +384,11 @@ ScreenOverlay *display_main(int xx, int yy, int wii, const char *text, int disp_
 }
 
 void display_at(int xx, int yy, int wii, const char *text) {
+	// Everything the game prints in a box comes through here: narration,
+	// and the descriptions a look produces.
+	if (text != nullptr && *text != '\0')
+		::AGS::g_vm->mcpOnText(Common::String(text), -1);
+
 	EndSkippingUntilCharStops();
 	// Start voice-over, if requested by the tokens in speech text
 	try_auto_play_speech(text, text, _GP(play).narrator_speech);
