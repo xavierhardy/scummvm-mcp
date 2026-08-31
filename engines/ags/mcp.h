@@ -79,6 +79,11 @@ protected:
 	Common::String debugToolDescription() const override;
 	Common::JSONValue *buildDebugSchema() const override;
 	void augmentStateSchema(Common::JSONObject &outputProps) override;
+	// select_verb, for the games whose verbs are buttons rather than cursors.
+	void registerGameTools() override;
+	Common::JSONValue *dispatchGameTool(const Common::String &name,
+	                                    const Common::JSONValue &args,
+	                                    Common::String &errorOut, bool &handled) override;
 	void augmentChangesSchema(Common::JSONObject &props) override;
 
 	// AGS conversations are a list of things to say, and the engine draws them
@@ -138,6 +143,17 @@ private:
 	static const uint32 kPointFrames = 2;
 	// Frames a skip is given to let one keypress land.
 	static const uint32 kSkipFrames = 15;
+	// Presses allowed while looking for a verb on the bar. A bar has a
+	// handful of buttons; more than a couple of times round it is a game that
+	// is not letting the verb change at all.
+	static const uint kVerbAttempts = 16;
+	// Milliseconds to leave between pressing a verb button and believing the
+	// status line. Wall clock rather than frames on purpose: the game writes
+	// that line from its own script and needs real time to do it, and a
+	// headless run has no vsync - the loop turns over as fast as the machine
+	// allows, so a frame here is worth a fraction of what it is worth to a
+	// player.
+	static const uint32 kVerbSettleMs = 400;
 
 	// Is a room loaded and the engine far enough along to be asked?
 	bool engineReady() const;
@@ -160,26 +176,71 @@ private:
 	void collectInventory(Common::Array<Common::String> &names,
 	                      Common::Array<int> &ids) const;
 
-	// The cursor modes this game kept, as verb names. A mode the game removed
-	// is not offered, because clicking with it would do nothing.
-	void collectVerbs(Common::Array<Common::String> &verbs) const;
-	// The engine's cursor mode for a verb name, or -1.
-	int modeForVerb(const Common::String &verb) const;
+	// One verb this game offers, and how to select it.
+	struct Verb {
+		Common::String name;
+		int mode;        // the engine cursor mode, or -1 when there is none
+		int guiId;       // the GUI holding the button, or -1
+		int controlId;   // the button in it, or -1
+		int x, y;        // where to click that button, in screen coordinates
+	};
+
+	// The verbs this game offers.
+	//
+	// Two shapes, and which one a game is decides how a verb is chosen. Most
+	// AGS games use the engine's own cursor modes: the verb is the cursor, and
+	// set_cursor_mode picks it. But a great many fan games - and both Zak
+	// games here - build a SCUMM-style verb bar out of ordinary GUI buttons
+	// labelled Look, Use, Pick up, Talk, Give, and drive their own verb state
+	// from those. For those the cursor mode means nothing and the button has
+	// to be clicked, exactly as a player clicks it.
+	void collectVerbs(Common::Array<Verb> &verbs) const;
+	// The verb bar's buttons, when this game has one. Empty when it does not.
+	void collectVerbButtons(Common::Array<Verb> &verbs) const;
+	// The verb the game says is selected, read off its own status line, or an
+	// empty string when it does not keep one. A game with a verb bar writes
+	// the current verb there - "walk", "look at", "pick up" - which is the
+	// only place it is ever stated, and it is stated in the game's own words
+	// rather than in a table kept here.
+	Common::String currentVerbFromLabel() const;
+	// The verb of that name this game offers, or false when it has none.
+	bool findVerb(const Common::String &verb, Verb &out) const;
 	// The verbs this game has, as a sentence to put in a refusal.
 	Common::String verbList() const;
 
 	// Point at a room position and queue the click that follows once the game
-	// has seen the pointer arrive, having first set the cursor mode.
-	void pointAndClick(int x, int y, int mode);
+	// has seen the pointer arrive, having first selected *verb* - by setting
+	// the cursor mode, or by clicking the verb bar's button.
+	void pointAndClick(int x, int y, const Verb &verb);
 	void pumpPendingClick();
 	void moveCursorTo(int x, int y);
 
 	::AGS::AGSEngine *_vm;
 
-	// The click waiting on the pointer having been noticed.
+	// The click waiting on the pointer having been noticed, and the verb
+	// button that has to be pressed before it.
 	bool _pendingClick;
 	int _pendingX, _pendingY;
 	uint32 _pendingFrame;
+	// Reaching a verb on a bar means pressing buttons until the status line
+	// says the wanted one, so this carries what is being reached for and how
+	// many goes it has had.
+	bool _pendingVerbClick;
+	int _pendingVerbX, _pendingVerbY;
+	Common::String _wantedVerb;
+	uint _verbButtonNext;
+	uint _verbAttempts;
+	// What each verb button turned out to mean, learned by pressing it and
+	// reading the status line. A game never changes which button is which, so
+	// once a button has said what it is, reaching that verb again is one
+	// press rather than a search.
+	Common::Array<int> _learnedButtons;
+	Common::Array<Common::String> _learnedVerbs;
+	// The button pressed most recently, so the next look at the status line
+	// can be attributed to it.
+	int _pressedButton;
+	// The moment the status line may be believed from.
+	uint32 _verbReadyMs;
 
 	// What the stream in flight is.
 	bool _skipStream;

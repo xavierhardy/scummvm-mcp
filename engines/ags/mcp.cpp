@@ -32,6 +32,10 @@
 #include "ags/shared/ac/game_setup_struct.h"
 #include "ags/shared/game/room_struct.h"
 #include "ags/shared/gfx/bitmap.h"
+#include "ags/shared/gui/gui_button.h"
+#include "ags/shared/gui/gui_label.h"
+#include "ags/shared/gui/gui_main.h"
+#include "ags/shared/gui/gui_object.h"
 
 #include "common/events.h"
 #include "common/system.h"
@@ -72,6 +76,13 @@ AgsMcpBridge::AgsMcpBridge(::AGS::AGSEngine *vm) :
 	_pendingX(0),
 	_pendingY(0),
 	_pendingFrame(0),
+	_pendingVerbClick(false),
+	_pendingVerbX(0),
+	_pendingVerbY(0),
+	_verbButtonNext(0),
+	_verbAttempts(0),
+	_pressedButton(-1),
+	_verbReadyMs(0),
 	_skipStream(false),
 	_sseTrackRoom(-1),
 	_sseTrackPosX(-1),
@@ -259,9 +270,166 @@ void AgsMcpBridge::collectInventory(Common::Array<Common::String> &names,
 	}
 }
 
-void AgsMcpBridge::collectVerbs(Common::Array<Common::String> &verbs) const {
+// What a verb bar's button says, and the verb it means. Matched against the
+// button's own label, folded, so a game gets its verbs from the words it
+// shows the player rather than from a list of game names kept here.
+static const struct { const char *label; const char *verb; } kButtonVerbs[] = {
+	{ "walk_to",  "walk_to" },
+	{ "walk",     "walk_to" },
+	{ "go_to",    "walk_to" },
+	{ "look",     "look_at" },
+	{ "look_at",  "look_at" },
+	{ "examine",  "look_at" },
+	{ "use",      "use" },
+	{ "open",     "open" },
+	{ "close",    "close" },
+	{ "push",     "push" },
+	{ "pull",     "pull" },
+	{ "talk",     "talk_to" },
+	{ "talk_to",  "talk_to" },
+	{ "pick_up",  "take" },
+	{ "take",     "take" },
+	{ "give",     "give" },
+	{ "turn_on",  "turn_on" },
+	{ "turn_off", "turn_off" },
+	{ "fix",      "fix" },
+	{ "new_kid",  "switch_character" }
+};
+
+// The verb a label's text means, folded through the same vocabulary the
+// buttons are matched against. Empty when the words are not a verb at all.
+static Common::String verbFromWords(const Common::String &words) {
+	const Common::String folded = agsDisplayName(words);
+	for (uint k = 0; k < ARRAYSIZE(kButtonVerbs); k++) {
+		if (folded == kButtonVerbs[k].label)
+			return kButtonVerbs[k].verb;
+	}
+	return Common::String();
+}
+
+Common::String AgsMcpBridge::currentVerbFromLabel() const {
+	if (!engineReady() || _G(guis) == nullptr)
+		return Common::String();
+	for (uint g = 0; g < _GP(guis).size(); g++) {
+		const AGS::Shared::GUIMain &gui = _GP(guis)[g];
+		if (!gui.IsDisplayed())
+			continue;
+		for (int32_t ci = 0; ci < gui.GetControlCount(); ci++) {
+			const AGS::Shared::GUILabel *label =
+				dynamic_cast<const AGS::Shared::GUILabel *>(gui.GetControl(ci));
+			if (label == nullptr)
+				continue;
+			// The status line reads "<verb> <whatever is under the pointer>",
+			// so the verb is however much of the front of it is a verb. Two
+			// words first, because "pick up" and "look at" are two.
+			const Common::String text(label->GetText().GetCStr());
+			Common::String words[2];
+			uint word = 0;
+			for (uint i = 0; i < text.size() && word < 2; i++) {
+				if (text[i] == ' ') {
+					word++;
+					continue;
+				}
+				words[word] += text[i];
+			}
+			const Common::String two = words[0] + " " + words[1];
+			Common::String verb = verbFromWords(two);
+			if (verb.empty())
+				verb = verbFromWords(words[0]);
+			if (!verb.empty())
+				return verb;
+		}
+	}
+	return Common::String();
+}
+
+void AgsMcpBridge::collectVerbButtons(Common::Array<Verb> &verbs) const {
+	if (!engineReady() || _G(guis) == nullptr)
+		return;
+	for (uint g = 0; g < _GP(guis).size(); g++) {
+		const AGS::Shared::GUIMain &gui = _GP(guis)[g];
+		if (!gui.IsDisplayed())
+			continue;
+		for (int32_t ci = 0; ci < gui.GetControlCount(); ci++) {
+			const AGS::Shared::GUIObject *control = gui.GetControl(ci);
+			if (control == nullptr || !control->IsVisible() || !control->IsEnabled())
+				continue;
+			const AGS::Shared::GUIButton *button =
+				dynamic_cast<const AGS::Shared::GUIButton *>(control);
+			if (button == nullptr)
+				continue;
+			// Most fan games never change a button's Text from the editor's
+			// default and draw their own labels, so matching on the label is
+			// only the easy case. When it does not match, the button is still
+			// offered as a verb button with no name yet: which verb it is is
+			// found by pressing it and reading the status line.
+			const Common::String label =
+				agsDisplayName(Common::String(button->GetText().GetCStr()));
+			Common::String named;
+			for (uint k = 0; k < ARRAYSIZE(kButtonVerbs); k++) {
+				if (label == kButtonVerbs[k].label)
+					named = kButtonVerbs[k].verb;
+			}
+			{
+				Verb verb;
+				verb.name = named;
+				verb.mode = -1;
+				verb.guiId = (int)g;
+				verb.controlId = (int)ci;
+				// The middle of the button, in screen coordinates: a GUI
+				// control's position is relative to the GUI it sits on.
+				verb.x = gui.X + control->X + control->GetWidth() / 2;
+				verb.y = gui.Y + control->Y + control->GetHeight() / 2;
+				verbs.push_back(verb);
+			}
+		}
+	}
+}
+
+void AgsMcpBridge::collectVerbs(Common::Array<Verb> &verbs) const {
 	if (!engineReady())
 		return;
+
+	// A verb bar, when the game has one, is the whole answer: a game that
+	// drives its own verb state from buttons ignores the cursor mode
+	// entirely, so offering modes as well would offer clicks that do nothing.
+	Common::Array<Verb> buttons;
+	collectVerbButtons(buttons);
+	if (!buttons.empty()) {
+		// Which button is which verb is not written anywhere: most games
+		// leave the editor's default text on them and draw their own labels.
+		// So what is offered is the vocabulary the bridge knows how to reach
+		// by pressing, and act() finds the button by pressing and reading the
+		// status line back. A button whose text did say what it was keeps
+		// that name and is reached in one press.
+		for (uint b = 0; b < buttons.size(); b++) {
+			if (buttons[b].name.empty())
+				continue;
+			bool already = false;
+			for (uint v = 0; v < verbs.size(); v++)
+				already = already || verbs[v].name == buttons[b].name;
+			if (!already)
+				verbs.push_back(buttons[b]);
+		}
+		if (!verbs.empty())
+			return;
+		// Nothing named itself. Offer the standard bar vocabulary; a verb the
+		// game does not have simply cannot be reached, and act() says so.
+		static const char *const kBarVerbs[] = {
+			"walk_to", "look_at", "use", "talk_to", "take", "give", nullptr
+		};
+		for (int i = 0; kBarVerbs[i] != nullptr; i++) {
+			Verb verb;
+			verb.name = kBarVerbs[i];
+			verb.mode = -1;
+			verb.guiId = buttons[0].guiId;
+			verb.controlId = -2;  // "on the bar, button not yet known"
+			verb.x = verb.y = 0;
+			verbs.push_back(verb);
+		}
+		return;
+	}
+
 	for (uint i = 0; i < ARRAYSIZE(kVerbModes); i++) {
 		const int mode = kVerbModes[i].mode;
 		if (mode >= (int)_GP(game).mcurs.size())
@@ -270,20 +438,29 @@ void AgsMcpBridge::collectVerbs(Common::Array<Common::String> &verbs) const {
 		// would be offering a click that does nothing.
 		if (_GP(game).mcurs[mode].flags & MCF_DISABLED)
 			continue;
-		verbs.push_back(kVerbModes[i].verb);
+		Verb verb;
+		verb.name = kVerbModes[i].verb;
+		verb.mode = mode;
+		verb.guiId = verb.controlId = -1;
+		verb.x = verb.y = 0;
+		verbs.push_back(verb);
 	}
 }
 
-int AgsMcpBridge::modeForVerb(const Common::String &verb) const {
-	for (uint i = 0; i < ARRAYSIZE(kVerbModes); i++) {
-		if (verb == kVerbModes[i].verb)
-			return kVerbModes[i].mode;
+bool AgsMcpBridge::findVerb(const Common::String &verb, Verb &out) const {
+	Common::Array<Verb> verbs;
+	collectVerbs(verbs);
+	for (uint i = 0; i < verbs.size(); i++) {
+		if (verbs[i].name == verb) {
+			out = verbs[i];
+			return true;
+		}
 	}
-	return -1;
+	return false;
 }
 
 Common::String AgsMcpBridge::verbList() const {
-	Common::Array<Common::String> verbs;
+	Common::Array<Verb> verbs;
 	collectVerbs(verbs);
 	if (verbs.empty())
 		return Common::String();
@@ -291,7 +468,7 @@ Common::String AgsMcpBridge::verbList() const {
 	for (uint i = 0; i < verbs.size(); i++) {
 		if (i > 0)
 			out += ", ";
-		out += verbs[i];
+		out += verbs[i].name;
 	}
 	return out + ".";
 }
@@ -355,11 +532,14 @@ Common::JSONValue *AgsMcpBridge::toolState(const Common::JSONValue &, Common::St
 	out.setVal("inventory", new Common::JSONValue(inventory));
 
 	Common::JSONArray verbs;
-	Common::Array<Common::String> verbNames;
-	collectVerbs(verbNames);
-	for (uint i = 0; i < verbNames.size(); i++)
-		verbs.push_back(mcpJsonString(verbNames[i]));
+	Common::Array<Verb> verbList_;
+	collectVerbs(verbList_);
+	for (uint i = 0; i < verbList_.size(); i++)
+		verbs.push_back(mcpJsonString(verbList_[i].name));
 	out.setVal("verbs", new Common::JSONValue(verbs));
+	const Common::String showing = currentVerbFromLabel();
+	if (!showing.empty())
+		out.setVal("current_verb", mcpJsonString(showing));
 
 	Common::JSONArray messages;
 	for (uint i = 0; i < _messages.size(); i++) {
@@ -398,20 +578,10 @@ bool AgsMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	Common::String verb = "use";
 	if (args.asObject().contains("verb") && args.asObject()["verb"]->isString())
 		verb = MCP::McpBridge::normalizeActionName(args.asObject()["verb"]->asString());
-	const int mode = modeForVerb(verb);
-	if (mode < 0) {
+	Verb chosen;
+	if (!findVerb(verb, chosen)) {
 		errorOut = Common::String::format("act: '%s' is not a verb here. %s",
 		                                  verb.c_str(), verbList().c_str());
-		return false;
-	}
-	Common::Array<Common::String> available;
-	collectVerbs(available);
-	bool offered = false;
-	for (uint i = 0; i < available.size(); i++)
-		offered = offered || available[i] == verb;
-	if (!offered) {
-		errorOut = Common::String::format(
-			"act: this game has no '%s'. %s", verb.c_str(), verbList().c_str());
 		return false;
 	}
 
@@ -423,7 +593,7 @@ bool AgsMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 
 	// Using an inventory item on something is the same click with the item
 	// held: the engine reads activeinv when the mode is MODE_USE.
-	if (mode == MODE_USE && args.asObject().contains("target2") &&
+	if (chosen.mode == MODE_USE && args.asObject().contains("target2") &&
 	    args.asObject()["target2"]->isString()) {
 		Common::Array<Common::String> itemNames;
 		Common::Array<int> itemIds;
@@ -445,7 +615,7 @@ bool AgsMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	}
 
 	_skipStream = false;
-	pointAndClick(target.x, target.y, mode);
+	pointAndClick(target.x, target.y, chosen);
 	beginStream();
 	return true;
 }
@@ -464,9 +634,18 @@ bool AgsMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &error
 		errorOut = "walk: the game is not accepting input right now";
 		return false;
 	}
+	Verb walk;
+	if (!findVerb("walk_to", walk)) {
+		// Not every game has a walk verb of its own; a plain click on the
+		// floor is what walks in those.
+		walk.name = "walk_to";
+		walk.mode = MODE_WALK;
+		walk.guiId = walk.controlId = -1;
+		walk.x = walk.y = 0;
+	}
 	_skipStream = false;
 	pointAndClick((int)args.asObject()["x"]->asIntegerNumber(),
-	              (int)args.asObject()["y"]->asIntegerNumber(), MODE_WALK);
+	              (int)args.asObject()["y"]->asIntegerNumber(), walk);
 	beginStream();
 	return true;
 }
@@ -514,6 +693,198 @@ Common::JSONValue *AgsMcpBridge::toolDebug(const Common::JSONValue &, Common::St
 	}
 	out.setVal("player", new Common::JSONValue(player));
 
+	// The game's own interface, which is where a verb bar lives when there is
+	// one. Worth reporting because whether a game has one decides how a verb
+	// is chosen at all, and that is invisible from anywhere else.
+	Common::JSONArray guis;
+	if (engineReady() && _G(guis) != nullptr) {
+		for (uint g = 0; g < _GP(guis).size(); g++) {
+			const AGS::Shared::GUIMain &gui = _GP(guis)[g];
+			Common::JSONObject entry;
+			entry.setVal("id", mcpJsonInt((int)g));
+			entry.setVal("name", mcpJsonString(gui.Name.GetCStr()));
+			entry.setVal("displayed", mcpJsonBool(gui.IsDisplayed()));
+			Common::JSONArray labels;
+			for (int32_t ci = 0; ci < gui.GetControlCount(); ci++) {
+				const AGS::Shared::GUIObject *control = gui.GetControl(ci);
+				const AGS::Shared::GUIButton *button =
+					dynamic_cast<const AGS::Shared::GUIButton *>(control);
+				if (button == nullptr)
+					continue;
+				labels.push_back(mcpJsonString(button->GetText().GetCStr()));
+			}
+			entry.setVal("buttons", new Common::JSONValue(labels));
+			Common::JSONArray texts;
+			for (int32_t ci = 0; ci < gui.GetControlCount(); ci++) {
+				const AGS::Shared::GUILabel *label =
+					dynamic_cast<const AGS::Shared::GUILabel *>(gui.GetControl(ci));
+				if (label == nullptr)
+					continue;
+				texts.push_back(mcpJsonString(label->GetText().GetCStr()));
+			}
+			entry.setVal("labels", new Common::JSONValue(texts));
+			guis.push_back(new Common::JSONValue(entry));
+		}
+	}
+	out.setVal("guis", new Common::JSONValue(guis));
+
+	// Where the bridge thinks the verb bar's buttons are, and what the game
+	// says is selected. The two together are the whole of how a verb is
+	// chosen on a bar, and both are invisible from anywhere else.
+	Common::JSONArray bar;
+	Common::Array<Verb> buttons;
+	collectVerbButtons(buttons);
+	for (uint i = 0; i < buttons.size(); i++) {
+		Common::JSONObject b;
+		b.setVal("gui", mcpJsonInt(buttons[i].guiId));
+		b.setVal("control", mcpJsonInt(buttons[i].controlId));
+		b.setVal("x", mcpJsonInt(buttons[i].x));
+		b.setVal("y", mcpJsonInt(buttons[i].y));
+		if (!buttons[i].name.empty())
+			b.setVal("verb", mcpJsonString(buttons[i].name));
+		bar.push_back(new Common::JSONValue(b));
+	}
+	out.setVal("verb_buttons", new Common::JSONValue(bar));
+	out.setVal("current_verb", mcpJsonString(currentVerbFromLabel()));
+
+	return new Common::JSONValue(out);
+}
+
+// ---------------------------------------------------------------------------
+// select_verb
+// ---------------------------------------------------------------------------
+//
+// A game whose verbs are cursor modes needs nothing here: act() sets the mode
+// itself, in the same breath as the click. A game whose verbs are buttons on a
+// bar is different, and honestly so: which button is which verb is written
+// nowhere - most of these games leave the editor's default text on them and
+// draw their own labels - so the only way to find out is to press one and read
+// what the game then writes on its status line.
+//
+// That is a thing an agent can do perfectly well, and doing it in the open is
+// better than a bridge guessing: press, read the answer back, and now both
+// know. So the tool is one press and one answer, and it is registered only for
+// the games that have a bar.
+
+void AgsMcpBridge::registerGameTools() {
+	// Registered whatever the game turns out to be, because this runs while
+	// the engine is still starting up and no room is loaded yet - there is
+	// nothing to ask about a verb bar at this point. A game that has no bar
+	// refuses the call instead, which is the honest place for that answer.
+	Networking::McpServer::ToolSpec spec;
+	spec.name = "select_verb";
+	spec.description =
+		"Choose the verb the next act() will use, on a game whose verbs are "
+		"buttons along the bottom of the screen. Give a verb name to press the "
+		"button known to mean it, or a button number to press that one and find "
+		"out what it means. The answer is what the game then says is selected, "
+		"so pressing each button once is how an agent learns the bar.";
+	Common::JSONObject props;
+	props.setVal("verb", Networking::mcpProp("string",
+		"The verb to select, when it is already known which button means it."));
+	props.setVal("button", Networking::mcpProp("integer",
+		"The button to press, counted from 0, when the verb is not known yet."));
+	spec.inputSchema = Networking::mcpObjectSchema(props);
+	Common::JSONObject outProps;
+	outProps.setVal("was", Networking::mcpProp("string",
+		"What was selected before this press; the game writes what it is now "
+		"on a later loop, so read state() for that."));
+	outProps.setVal("known", Networking::mcpProp("array",
+		"Which button means which verb, as far as has been found out."));
+	outProps.setVal("button", Networking::mcpProp("integer", "The button pressed."));
+	outProps.setVal("buttons", Networking::mcpProp("integer",
+		"How many buttons the bar has."));
+	spec.outputSchema = Networking::mcpObjectSchema(outProps);
+	spec.streaming = false;
+	_server->registerTool(spec);
+}
+
+Common::JSONValue *AgsMcpBridge::dispatchGameTool(const Common::String &name,
+                                                  const Common::JSONValue &args,
+                                                  Common::String &errorOut,
+                                                  bool &handled) {
+	if (name != "select_verb")
+		return MCP::McpBridge::dispatchGameTool(name, args, errorOut, handled);
+	handled = true;
+
+	Common::Array<Verb> buttons;
+	collectVerbButtons(buttons);
+	if (buttons.empty()) {
+		errorOut = "select_verb: this game has no verb bar";
+		return nullptr;
+	}
+
+	// Before anything else, learn from the press before this one. The status
+	// line has had a whole call's worth of real time to be written by now,
+	// which is what makes reading it here reliable where reading it a few
+	// frames after the press was not.
+	const Common::String showing = currentVerbFromLabel();
+	if (_pressedButton >= 0 && !showing.empty()) {
+		bool known = false;
+		for (uint i = 0; i < _learnedButtons.size(); i++)
+			known = known || _learnedButtons[i] == _pressedButton;
+		if (!known) {
+			_learnedButtons.push_back(_pressedButton);
+			_learnedVerbs.push_back(showing);
+		}
+		_pressedButton = -1;
+	}
+
+	int pick = -1;
+	if (args.isObject() && args.asObject().contains("button") &&
+	    args.asObject()["button"]->isIntegerNumber()) {
+		pick = (int)args.asObject()["button"]->asIntegerNumber();
+	} else if (args.isObject() && args.asObject().contains("verb") &&
+	           args.asObject()["verb"]->isString()) {
+		const Common::String wanted =
+			MCP::McpBridge::normalizeActionName(args.asObject()["verb"]->asString());
+		for (uint i = 0; i < _learnedButtons.size() && pick < 0; i++) {
+			if (_learnedVerbs[i] == wanted)
+				pick = _learnedButtons[i];
+		}
+		for (uint i = 0; i < buttons.size() && pick < 0; i++) {
+			if (buttons[i].name == wanted)
+				pick = (int)i;
+		}
+		if (pick < 0) {
+			errorOut = Common::String::format(
+				"select_verb: nothing is known to mean \'%s\' yet. Press the "
+				"buttons by number - there are %u - and each answer says what "
+				"that one means.", wanted.c_str(), (uint)buttons.size());
+			return nullptr;
+		}
+	} else {
+		errorOut = "select_verb: a 'verb' name or a 'button' number is required";
+		return nullptr;
+	}
+	if (pick < 0 || pick >= (int)buttons.size()) {
+		errorOut = Common::String::format(
+			"select_verb: there are %u buttons, counted from 0", (uint)buttons.size());
+		return nullptr;
+	}
+
+	injectMouseClick(buttons[pick].x, buttons[pick].y, "left", false);
+	_pressedButton = pick;
+	_verbReadyMs = g_system->getMillis() + kVerbSettleMs;
+
+	Common::JSONObject out;
+	out.setVal("button", mcpJsonInt(pick));
+	out.setVal("buttons", mcpJsonInt((int)buttons.size()));
+	// What the press just made of it is not on the status line yet - the game
+	// writes that from its own script, on a later loop. So this answers with
+	// what was selected *before*, and the verb the press produced is what the
+	// next state() reports. Pressing each button once and reading state()
+	// after each is how an agent learns the bar; the bridge learns it at the
+	// same time, from the same answers.
+	out.setVal("was", mcpJsonString(showing));
+	Common::JSONArray learned;
+	for (uint i = 0; i < _learnedButtons.size(); i++) {
+		Common::JSONObject entry;
+		entry.setVal("button", mcpJsonInt(_learnedButtons[i]));
+		entry.setVal("verb", mcpJsonString(_learnedVerbs[i]));
+		learned.push_back(new Common::JSONValue(entry));
+	}
+	out.setVal("known", new Common::JSONValue(learned));
 	return new Common::JSONValue(out);
 }
 
@@ -556,12 +927,19 @@ void AgsMcpBridge::injectMouseClick(int x, int y, const Common::String &button, 
 	}
 }
 
-void AgsMcpBridge::pointAndClick(int x, int y, int mode) {
-	// The mode first, because the engine resolves a click against whatever the
-	// cursor means at the moment the button goes down; then the pointer, and
-	// the press a couple of frames later so the hit-testing has seen it move.
-	if (mode >= 0)
-		set_cursor_mode(mode);
+void AgsMcpBridge::pointAndClick(int x, int y, const Verb &verb) {
+	// The verb first, because the game resolves a click against whatever the
+	// verb is at the moment the button goes down. A cursor mode can be set
+	// outright; a verb bar's button has to be pressed, and that press needs
+	// its own frames before the one on the target - which is what
+	// _pendingVerbClick carries.
+	// A cursor-mode game can have its verb set outright, in the same breath as
+	// the click. A verb-bar game cannot: its verb is whatever its own script
+	// last wrote on its status line, and the only way to change that is to
+	// press a button and give the game real time to notice - which is what
+	// select_verb is for, and why act() does not try to do it here.
+	if (verb.mode >= 0)
+		set_cursor_mode(verb.mode);
 	moveCursorTo(x, y);
 	_pendingClick = true;
 	_pendingX = x;
@@ -572,6 +950,7 @@ void AgsMcpBridge::pointAndClick(int x, int y, int mode) {
 void AgsMcpBridge::pumpPendingClick() {
 	if (!_pendingClick || (_frameCounter - _pendingFrame) < kPointFrames)
 		return;
+
 	_pendingClick = false;
 	injectMouseClick(_pendingX, _pendingY, "left", false);
 }
@@ -719,6 +1098,16 @@ Common::String AgsMcpBridge::stateToolDescription() const {
 }
 
 Common::String AgsMcpBridge::actToolDescription() const {
+	Common::Array<Verb> buttons;
+	collectVerbButtons(buttons);
+	if (!buttons.empty()) {
+		return "Act on something state() named, using the verb that is "
+		       "currently selected - state() reports it as current_verb, and "
+		       "select_verb changes it. The verb given here is checked against "
+		       "that one rather than setting it, because on this game a verb is "
+		       "a button that has to be pressed and noticed. " +
+		       streamingToolNote();
+	}
 	return "Act on something state() named. The verb is one of the ones "
 	       "state() lists; target1 is the name from state(). To use a carried "
 	       "thing on something, pass verb='use_inv' with the carried thing as "
