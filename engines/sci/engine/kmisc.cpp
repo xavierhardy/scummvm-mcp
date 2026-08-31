@@ -190,6 +190,12 @@ reg_t kGameIsRestarting(EngineState *s, int argc, reg_t *argv) {
 		break;
 	}
 
+	// One game cycle has gone by. This is where SCI16 games — and the SCI32
+	// ones that still call it — hand time back, so it is where the MCP server
+	// is serviced: a tool call is answered between two cycles rather than in
+	// the middle of one.
+	g_sci->mcpPump();
+
 	s->speedThrottler(neededSleep);
 
 	s->_eventCounter = 0;

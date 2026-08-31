@@ -65,6 +65,7 @@ class GfxControls16;
 class GfxControls32;
 class GfxCoordAdjuster16;
 class GfxCursor;
+class SciMcpBridge;
 class GfxMacFontManager;
 class GfxMacIconBar;
 class GfxMenu;
@@ -180,6 +181,20 @@ public:
 	 * shouldn't be allowed, we could re-enable this feature.
 	 */
 	int getAutosaveSlot() const override { return -1; }
+
+	// --- MCP ---------------------------------------------------------------
+	// The bridge is built in the constructor, before run() touches graphics or
+	// audio, so a client can connect while the game is still starting up.
+	bool mcpEnabled() const;
+	// Once per game cycle: the interpreter throttles itself in two places
+	// depending on its version, and both call this.
+	void mcpPump();
+	// Service the server without advancing the frame counter, from a place the
+	// interpreter stalls in (a video, a modal window).
+	void mcpPumpTransport();
+	// Every line of game text as it is displayed. `talker` is the game's own
+	// talker number, or -1 for narration nobody speaks.
+	void mcpOnText(const Common::String &text, int talker);
 
 	const SciGameId &getGameId() const { return _gameId; }
 	const char *getGameIdStr() const;
@@ -415,6 +430,7 @@ private:
 	EventManager *_eventMan;
 	reg_t _gameObjectAddress; /**< Pointer to the game object */
 	Console *_console;
+	SciMcpBridge *_mcpBridge;
 	Common::RandomSource _rng;
 	Common::MacResManager _macExecutable;
 	bool _useHiresGraphics; // user-option for GK1, KQ6, PQ4

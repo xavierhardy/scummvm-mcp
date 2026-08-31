@@ -65,6 +65,11 @@ void GfxText32::init() {
 }
 
 reg_t GfxText32::createFontBitmap(int16 width, int16 height, const Common::Rect &rect, const Common::String &text, const uint8 foreColor, const uint8 backColor, const uint8 skipColor, const GuiResourceId fontId, const TextAlign alignment, const int16 borderColor, const bool dimmed, const bool doScaling, const bool gc) {
+	// Every line SCI32 draws is built here first, so this is where the bridge
+	// hears what the game said.
+	if (!text.empty())
+		g_sci->mcpOnText(text, -1);
+
 
 	_borderColor = borderColor;
 	_text = text;

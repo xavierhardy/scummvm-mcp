@@ -28,6 +28,7 @@
 #include "engines/util.h"
 
 #include "sci/sci.h"
+#include "sci/mcp.h"
 #include "sci/debug.h"
 #include "sci/console.h"
 #include "sci/event.h"
@@ -134,6 +135,7 @@ SciEngine::SciEngine(OSystem *syst, const ADGameDescription *desc, SciGameId gam
 	_eventMan(nullptr),
 	_gameObjectAddress(),
 	_console(nullptr),
+	_mcpBridge(nullptr),
 	_tts(nullptr),
 	_rng("sci"),
 	_useHiresGraphics(false),
@@ -141,6 +143,12 @@ SciEngine::SciEngine(OSystem *syst, const ADGameDescription *desc, SciGameId gam
 
 	assert(g_sci == nullptr);
 	g_sci = this;
+
+	// Bind the MCP server here, before run() touches graphics or audio: a
+	// client can then connect while the game is still starting up (every tool
+	// says so until there is a room to read).
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = SciMcpBridge::create(this);
 
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 
@@ -217,7 +225,29 @@ SciEngine::SciEngine(OSystem *syst, const ADGameDescription *desc, SciGameId gam
 	}
 }
 
+bool SciEngine::mcpEnabled() const {
+	return _mcpBridge != nullptr && _mcpBridge->isEnabled();
+}
+
+void SciEngine::mcpPump() {
+	if (_mcpBridge)
+		_mcpBridge->pump();
+}
+
+void SciEngine::mcpPumpTransport() {
+	if (_mcpBridge)
+		_mcpBridge->pumpTransportOnly();
+}
+
+void SciEngine::mcpOnText(const Common::String &text, int talker) {
+	if (_mcpBridge)
+		_mcpBridge->onGameText(text, talker);
+}
+
 SciEngine::~SciEngine() {
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
+
 #ifdef ENABLE_SCI32
 	delete _gfxControls32;
 	delete _gfxPaint32;

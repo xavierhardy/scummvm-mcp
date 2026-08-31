@@ -1,6 +1,8 @@
 MODULE := engines/sci
 
 MODULE_OBJS := \
+	mcp.o \
+	mcp_names.o \
 	console.o \
 	detection_internal.o \
 	dialogs.o \

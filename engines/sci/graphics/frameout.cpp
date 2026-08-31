@@ -1247,6 +1247,12 @@ void GfxFrameout::throttle() {
 		++_throttleState;
 	}
 
+	// The SCI32 game cycle. Games that also call kGameIsRestarting are pumped
+	// there too; pump() is cheap and idempotent within a cycle, and a doubled
+	// count only makes the streaming budgets shorter in real time, never
+	// wrong.
+	g_sci->mcpPump();
+
 	g_sci->getEngineState()->speedThrottler(throttleTime);
 	g_sci->getEngineState()->_throttleTrigger = true;
 }
