@@ -164,6 +164,14 @@ private:
 	// Frames an action is given to show its first effect before it is taken
 	// to have been a no-op.
 	static const uint32 kNoOpFrames = 16;
+	// Frames a scroll is given to reach its destination before the bridge
+	// stops waiting for it. A scroll moves a handful of pixels per frame, so
+	// this is generous enough for the widest scene either game has.
+	static const uint32 kScrollFrames = 240;
+	// How close to the edge of the screen a point may sit and still be
+	// pointed at. A tag area is bigger than the spot the bridge picks in it,
+	// so leave room for the cursor to land inside it.
+	static const int kScrollMargin = 24;
 	// Frames a skip is given to let its effect land. Escape hands control
 	// back only at the end of the sequence it cut short, which may be several
 	// scenes away, so a skip reports what one press did rather than waiting.
@@ -204,8 +212,13 @@ private:
 	// Resolve a target name (or numeric id) to an inventory item id.
 	bool resolveItem(const Common::String &name, int &id) const;
 
+	// Bring a scene position into view if the scene is wider or taller than
+	// the screen and the position lies outside it. Returns true when a scroll
+	// was asked for, i.e. the caller has to wait before pointing.
+	bool requestScroll(int x, int y) const;
 	// Point the cursor at a scene position and queue the player event that
-	// follows once the tag process has caught up.
+	// follows once the tag process has caught up. Scrolls the view onto the
+	// position first if it is off screen.
 	void pointAndQueue(int x, int y, PLR_EVENT event);
 
 	// Register a speaking actor's name for the message queue.
@@ -232,6 +245,10 @@ private:
 	bool _pendingEvent;
 	PLR_EVENT _pendingKind;
 	uint32 _pendingFrame;
+	// Where that event is aimed, and whether the view still has to scroll
+	// onto it before the cursor can be put there.
+	int _pendingX, _pendingY;
+	bool _pendingScroll;
 
 	// Pre-action snapshot.
 	int _ssePreScene;

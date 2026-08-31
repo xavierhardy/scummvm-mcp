@@ -142,7 +142,39 @@ def test_04_dw2_act_rejects_what_it_cannot_do(playing: McpClient) -> None:
         playing.call_tool("answer", {"id": 1})
 
 
-def test_05_dw2_debug_reads_the_engine(playing: McpClient) -> None:
+def test_05_dw2_reaches_a_target_off_screen(playing: McpClient) -> None:
+    """A scene here is wider than the screen, and its far end is still usable.
+
+    What the game acts on is what it thinks is being pointed at, and the
+    pointer is a screen object — so a target beyond the edge cannot be pointed
+    at until the view has come to it. The bridge scrolls there first, which is
+    what makes the far end of a scene reachable at all."""
+    _wait_idle(playing)
+    system = playing.call_tool("debug")["system"]
+    width = system["scene_width"]
+    if width <= 640:
+        pytest.skip(f"this scene is no wider than the screen ({width})")
+
+    # The thing furthest from what is currently on screen.
+    view = system["view_x"]
+    offscreen = [obj for obj in _scenery(playing) if not view <= obj["x"] < view + 640]
+    if not offscreen:
+        pytest.skip("everything in this scene is already on screen")
+    target = max(offscreen, key=lambda obj: abs(obj["x"] - view))
+
+    playing.act("look_at", target["name"])
+
+    after = playing.call_tool("debug")["system"]
+    assert after["view_x"] <= target["x"] < after["view_x"] + 640, (
+        f"{target['name']} at x={target['x']} is still off screen: {after}"
+    )
+    # And the cursor ended up on it, which is what the game reads a click at.
+    assert abs(after["cursor_x"] - target["x"]) <= 2, (
+        f"the cursor never reached {target['name']}: {after}"
+    )
+
+
+def test_06_dw2_debug_reads_the_engine(playing: McpClient) -> None:
     """The debug tool reports what the engine thinks, for diagnosis."""
     _wait_idle(playing)
     system = playing.call_tool("debug")["system"]
@@ -155,7 +187,7 @@ def test_05_dw2_debug_reads_the_engine(playing: McpClient) -> None:
     assert objects, f"the scene has no pointable things: {objects}"
 
 
-def test_06_dw2_screenshot_returns_the_frame(playing: McpClient) -> None:
+def test_07_dw2_screenshot_returns_the_frame(playing: McpClient) -> None:
     """A screenshot comes back as an image, at the sequel's own resolution."""
     structured = playing.call_tool_raw("screenshot")["structuredContent"]
     assert structured["width"] == 640, f"unexpected frame size: {structured}"

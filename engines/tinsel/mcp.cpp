@@ -33,6 +33,7 @@
 #include "tinsel/pcode.h"
 #include "tinsel/polygons.h"
 #include "tinsel/scene.h"
+#include "tinsel/scroll.h"
 #include "tinsel/strres.h"
 #include "tinsel/tinsel.h"
 
@@ -127,6 +128,9 @@ TinselMcpBridge::TinselMcpBridge(TinselEngine *vm)
 	  _pendingEvent(false),
 	  _pendingKind(PLR_NOEVENT),
 	  _pendingFrame(0),
+	  _pendingX(0),
+	  _pendingY(0),
+	  _pendingScroll(false),
 	  _ssePreScene(0),
 	  _ssePreHeld(0),
 	  _sseActionStarted(false),
@@ -566,13 +570,50 @@ bool TinselMcpBridge::resolveItem(const Common::String &name, int &id) const {
 	return false;
 }
 
+bool TinselMcpBridge::requestScroll(int x, int y) const {
+	const int screenW = SCREEN_WIDTH, screenH = SCREEN_HEIGHT;
+	const int bgW = _vm->_bg->BgWidth(), bgH = _vm->_bg->BgHeight();
+
+	int left = 0, top = 0;
+	_vm->_bg->PlayfieldGetPos(FIELD_WORLD, &left, &top);
+
+	// How far the view can travel at all. A scene no bigger than the screen
+	// never scrolls — the scroll process kills itself in that case.
+	const int maxLeft = MAX(0, bgW - screenW);
+	const int maxTop = MAX(0, bgH - screenH);
+
+	int wantLeft = left, wantTop = top;
+	if (maxLeft > 0 && (x - left < kScrollMargin || x - left > screenW - kScrollMargin))
+		wantLeft = CLIP<int>(x - screenW / 2, 0, maxLeft);
+	if (maxTop > 0 && (y - top < kScrollMargin || y - top > screenH - kScrollMargin))
+		wantTop = CLIP<int>(y - screenH / 2, 0, maxTop);
+
+	if (wantLeft == left && wantTop == top)
+		return false;
+
+	_vm->_scroll->ScrollTo(wantLeft, wantTop, 0, 0);
+	return true;
+}
+
 void TinselMcpBridge::pointAndQueue(int x, int y, PLR_EVENT event) {
+	_pendingEvent = true;
+	_pendingKind = event;
+	_pendingX = x;
+	_pendingY = y;
+
+	// The cursor is a screen object, so a target beyond the edge of the
+	// screen cannot be pointed at until the view has come to it. Scroll
+	// first, then point once the view has arrived.
+	_pendingScroll = requestScroll(x, y);
+	if (_pendingScroll) {
+		_pendingFrame = _frameCounter + kScrollFrames;
+		return;
+	}
+
 	// Point first: the game resolves a click against whatever its tag process
 	// last latched onto, and that only updates once the cursor has been where
 	// it is for a cycle.
 	_vm->_cursor->SetCursorXY(x, y);
-	_pendingEvent = true;
-	_pendingKind = event;
 	_pendingFrame = _frameCounter + kPointFrames;
 }
 
@@ -1005,6 +1046,18 @@ void TinselMcpBridge::snapshotPreAction() {
 }
 
 bool TinselMcpBridge::pumpStreamGameEarly() {
+	if (_pendingEvent && _pendingScroll) {
+		// The view is on its way to the target. Count it as activity so the
+		// stream's deadline is not spent travelling, and point as soon as it
+		// has arrived (or given up, for a destination it cannot reach).
+		if (!_vm->_scroll->IsScrolling() || _frameCounter >= _pendingFrame) {
+			_pendingScroll = false;
+			_vm->_cursor->SetCursorXY(_pendingX, _pendingY);
+			_pendingFrame = _frameCounter + kPointFrames;
+		}
+		_sseLastEventFrame = _frameCounter;
+		return false;
+	}
 	if (_pendingEvent && _frameCounter >= _pendingFrame) {
 		_pendingEvent = false;
 		// The same entry point the keyboard bindings use: it reads the cursor
@@ -1200,8 +1253,9 @@ Common::JSONObject TinselMcpBridge::buildStateChanges() const {
 
 Common::String TinselMcpBridge::debugToolDescription() const {
 	return "Return raw engine state for diagnostics. Sections are selected by "
-	       "flag: 'system' (scene, control, cursor, what the game currently "
-	       "thinks is being pointed at), 'objects' (every pointable thing with "
+	       "flag: 'system' (scene, its size and the part of it on screen, "
+	       "control, cursor, what the game currently thinks is being pointed "
+	       "at), 'objects' (every pointable thing with "
 	       "its raw record), 'items' (the inventories and their harvested "
 	       "names). Defaults to 'system'.";
 }
@@ -1247,6 +1301,12 @@ Common::JSONValue *TinselMcpBridge::toolDebug(const Common::JSONValue &args, Com
 		leadPos(px, py);
 		sys.setVal("lead_x",       mcpJsonInt(px));
 		sys.setVal("lead_y",       mcpJsonInt(py));
+		int viewX = 0, viewY = 0;
+		_vm->_bg->PlayfieldGetPos(FIELD_WORLD, &viewX, &viewY);
+		sys.setVal("view_x",       mcpJsonInt(viewX));
+		sys.setVal("view_y",       mcpJsonInt(viewY));
+		sys.setVal("scene_width",  mcpJsonInt(_vm->_bg->BgWidth()));
+		sys.setVal("scene_height", mcpJsonInt(_vm->_bg->BgHeight()));
 		sys.setVal("frame_counter", mcpJsonInt((int)_frameCounter));
 		out.setVal("system", new Common::JSONValue(sys));
 	}
