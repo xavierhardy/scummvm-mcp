@@ -50,6 +50,7 @@ KyraMcpBridge::KyraMcpBridge(KyraEngine_v1 *vm) :
 	MCP::McpBridge(vm, "scummvm", "1.0"),
 	_vm(vm),
 	_inStallPump(false),
+	_lastFrameMs(0),
 	_skipStream(false),
 	_pendingClick(false),
 	_pendingRight(false),
@@ -64,7 +65,20 @@ KyraMcpBridge::~KyraMcpBridge() {
 }
 
 bool KyraMcpBridge::engineReady() const {
-	return _vm != nullptr;
+	if (_vm == nullptr)
+		return false;
+	// The bridge is built in the engine's constructor so the port binds before
+	// anything can block on startup, which means a call can arrive long before
+	// there is a game behind it. Answering those with a room of -1 and an
+	// empty scene is worse than answering "still starting up": a caller that
+	// waits for a room gets one immediately and starts playing a game that is
+	// not there yet.
+	if (isFirstGame()) {
+		const KyraEngine_LoK *lok = static_cast<const KyraEngine_LoK *>(_vm);
+		return lok->_currentCharacter != nullptr && lok->_roomTable != nullptr;
+	}
+	const KyraEngine_v2 *v2 = static_cast<const KyraEngine_v2 *>(_vm);
+	return v2->_sceneList != nullptr;
 }
 
 bool KyraMcpBridge::isFirstGame() const {
@@ -85,7 +99,16 @@ void KyraMcpBridge::pumpFromStall() {
 	if (!isEnabled() || _inStallPump)
 		return;
 	_inStallPump = true;
-	pumpTransportOnly();
+	// See the declaration: a frame has to pass here too, or time stops for the
+	// length of every walk. Throttled on the wall clock because delay() is
+	// called far faster than the game loop is.
+	const uint32 now = g_system != nullptr ? g_system->getMillis() : 0;
+	if (now - _lastFrameMs >= kFrameMs) {
+		_lastFrameMs = now;
+		MCP::McpBridge::pump();
+	} else {
+		pumpTransportOnly();
+	}
 	_inStallPump = false;
 }
 
@@ -134,14 +157,15 @@ void KyraMcpBridge::heroPosition(int &x, int &y) const {
 }
 
 bool KyraMcpBridge::playerHasControl() const {
-	// Kyrandia keeps no "the player is in control" flag of its own, and the
-	// nearest thing it has - the hand-item state - is about what is being
-	// carried rather than about who is driving. What every engine does answer
-	// is whether it would let the game be saved right now, and for an
-	// adventure engine that is the same question asked another way: a
-	// cutscene, a spoken line and a modal panel all say no, and standing in a
-	// room waiting for a click says yes.
-	return engineReady() && _vm->canSaveGameStateCurrently(nullptr);
+	// canSaveGameStateCurrently() is no use here: Kyrandia holds the flag
+	// behind it true only for the instant it is inside updateInput() and sets
+	// it straight back to false, so from outside it always reads false and a
+	// game standing in a room waiting for a click would report that it was
+	// taking nothing. What that flag encodes is whether the poll it is set
+	// around belongs to the main loop rather than to a cutscene, and that is
+	// the question worth asking - so the engine keeps the answer for the
+	// length of the poll's kind rather than the poll.
+	return engineReady() && _vm->_mcpInMainLoop;
 }
 
 Common::String KyraMcpBridge::itemLabel(int itemId) const {
@@ -262,6 +286,11 @@ void KyraMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		Target target;
 		target.name = kyraExitName(i);
 		target.label = Common::String::format("to scene %d", exits[i]);
+		// The coordinate the scene carries is where the character stands at
+		// this edge - which is where a player clicks to leave by it, and where
+		// acting on the exit walks him. Aiming past it was tried and is worse:
+		// a point outside the walkable area is a click the game ignores
+		// entirely, and the action then waits on a walk that never starts.
 		target.x = exitX[i];
 		target.y = exitY[i];
 		target.isExit = true;

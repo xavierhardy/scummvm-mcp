@@ -65,9 +65,16 @@ public:
 	// of its own, and they all call this.
 	void pump() override;
 	// From the engine's delay(), which is where every one of its blocking
-	// waits ends up: a cutscene, a spoken line, a fade. The loop is not
-	// reached from there, so this is the only thing that answers a call made
-	// during one. Does not advance the frame counter.
+	// waits ends up: a cutscene, a spoken line, a fade - and, crucially, the
+	// whole of a walk. The game loop is not reached from there, so this is the
+	// only thing that answers a call made during one.
+	//
+	// It advances the frame counter as well, at most once per kFrameMs. It has
+	// to: an action here *is* a walk, so if a frame were only a pass of the
+	// game loop then time would stop for the entire length of every action
+	// this bridge performs, and none of the frame-based budgets below could
+	// ever fire. A click the game quietly ignores would then hang until the
+	// three-minute wall clock rather than reporting that nothing happened.
 	void pumpFromStall();
 
 	// Every line the game prints into its text area.
@@ -139,6 +146,8 @@ private:
 	};
 
 	static const uint32 kSkipMs = 1500;
+	// Wall-clock length of one bridge frame, for the delay()-side pump.
+	static const uint32 kFrameMs = 16;
 	// Frames the cursor is left on a target before the click is sent, so the
 	// game's own hit-testing has seen the pointer arrive.
 	static const uint32 kPointFrames = 3;
@@ -171,6 +180,7 @@ private:
 	KyraEngine_v1 *_vm;
 
 	bool _inStallPump;
+	uint32 _lastFrameMs;
 	bool _skipStream;
 
 	// The click waiting on the pointer having been noticed.

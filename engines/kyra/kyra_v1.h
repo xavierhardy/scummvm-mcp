@@ -321,6 +321,13 @@ protected:
 	// --- MCP ---------------------------------------------------------------
 	// Built in the constructor so the server binds its port before anything
 	// can block on startup, and null when `mcp` was not asked for.
+	// Whether the last input poll was the main loop's rather than a
+	// cutscene's. Kyrandia holds _isSaveAllowed true only for the instant it
+	// is inside updateInput() and sets it straight back to false, so from
+	// outside it always reads false; what it encodes, though - "this poll is
+	// the main loop's" - is exactly the question an agent needs answered, so
+	// it is kept here for the length of the poll's kind rather than the poll.
+	bool _mcpInMainLoop = false;
 	KyraMcpBridge *_mcpBridge = nullptr;
 	// Once per pass of whichever of the three games' loops is running.
 	void mcpPump();

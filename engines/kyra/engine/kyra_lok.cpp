@@ -548,6 +548,12 @@ void KyraEngine_LoK::delayUntil(uint32 timestamp, bool updateTimers, bool update
 }
 
 void KyraEngine_LoK::delay(uint32 amount, bool update, bool isMainLoop) {
+	// Every blocking wait in this game comes through here - a cutscene, a
+	// spoken line, and the whole of a walk - and the game loop is not reached
+	// again until it returns. Service the server so a call made during one is
+	// answered rather than left waiting. Overrides the base's delay(), which
+	// is why it needs saying twice.
+	mcpPumpTransport();
 	uint32 start = _system->getMillis();
 	uint32 ct = start;
 	do {
@@ -566,6 +572,7 @@ void KyraEngine_LoK::delay(uint32 amount, bool update, bool isMainLoop) {
 		_isSaveAllowed = isMainLoop;
 		updateInput();
 		_isSaveAllowed = false;
+		_mcpInMainLoop = isMainLoop;
 
 		if (_currentCharacter && _currentCharacter->sceneId == 210 && update)
 			updateKyragemFading();
