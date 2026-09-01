@@ -94,6 +94,8 @@ _FIXTURE_INDEX = {
     "gob2": 39,
     "gob3": 40,
     "ween": 41,
+    "zak_repixeled": 42,
+    "zak_seamonster": 43,
 }
 
 
@@ -428,6 +430,24 @@ def ween_client() -> Iterator[McpClient]:
     Opens with minutes of video, so its tests skip their way in and give the
     opening a generous number of goes."""
     yield from _client("ween-demo", "ween")
+
+
+@pytest.fixture(scope="session")
+def zak_repixeled_client() -> Iterator[McpClient]:
+    """Zak McKracken - repixeled (AGS engine, verbs on a bar).
+
+    A SCUMM-style fan game: its verbs are GUI buttons rather than cursor
+    modes, which is what select_verb exists for. No save support."""
+    yield from _client("zak-repixeled", "zak_repixeled", connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture(scope="session")
+def zak_seamonster_client() -> Iterator[McpClient]:
+    """Zak McKracken and the Lonely Sea Monster (AGS engine, cursor verbs).
+
+    The other AGS shape: the verb is the cursor mode, so act() sets it
+    itself and there is no bar. No save support."""
+    yield from _client("zak-seamonster", "zak_seamonster", connect_timeout=SLOW_BOOT_SECS)
 
 
 @pytest.fixture(scope="session")

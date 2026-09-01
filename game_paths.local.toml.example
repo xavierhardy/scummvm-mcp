@@ -59,3 +59,9 @@ gob3-demo = "~/games/gob3-dos-demo-en"                    # GOB3_DEMO_PATH
 # The v1.2 demo, not the other one: it is the one that stays up, and it opens
 # on the copy-protection screen that type_text exists for.
 ween-demo = "~/games/ween-dos-demo2-uk"                   # WEEN_DEMO_PATH
+
+# --- AGS (Adventure Game Studio) -----------------------------------------
+# Two shapes of the same engine: repixeled puts its verbs on a SCUMM-style
+# bar of GUI buttons, the Sea Monster demo uses the engine's cursor modes.
+zak-repixeled = "~/games/ags/zakrepixeled"                # ZAK_REPIXELED_PATH
+zak-seamonster = "~/games/ags/zakseamonster-demo"         # ZAK_SEAMONSTER_PATH

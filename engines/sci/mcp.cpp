@@ -41,6 +41,18 @@ using Networking::mcpJsonString;
 using Networking::mcpJsonInt;
 using Networking::mcpJsonBool;
 
+// An array-of-objects schema, for the parts of the snapshot that are lists of
+// things with the same shape.
+static Common::JSONValue *objectArraySchema(Common::JSONObject &props) {
+	Common::JSONObject item;
+	item.setVal("type", Networking::mcpJsonString("object"));
+	item.setVal("properties", new Common::JSONValue(props));
+	Common::JSONObject array;
+	array.setVal("type", Networking::mcpJsonString("array"));
+	array.setVal("items", new Common::JSONValue(item));
+	return new Common::JSONValue(array);
+}
+
 SciMcpBridge *SciMcpBridge::create(SciEngine *vm) {
 	SciMcpBridge *bridge = new SciMcpBridge(vm);
 	bridge->init();
@@ -925,6 +937,19 @@ Common::JSONValue *SciMcpBridge::buildDebugSchema() const {
 }
 
 void SciMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
+	outputProps.setVal("can_act", Networking::mcpProp("boolean",
+	    "False while the game is not accepting a new action - the character is "
+	    "walking, or a sequence is playing itself out."));
+
+	Common::JSONObject obj;
+	obj.setVal("name", Networking::mcpProp("string", "Name to use in act()."));
+	obj.setVal("x", Networking::mcpProp("integer", "Where it is, in game coordinates."));
+	obj.setVal("y", Networking::mcpProp("integer", "Where it is, in game coordinates."));
+	outputProps.setVal("objects", objectArraySchema(obj));
+
+	outputProps.setVal("current_verb", Networking::mcpProp("string",
+	    "The verb the cursor is showing, when it is one of this game's verbs."));
+
 	Common::JSONObject score;
 	score.setVal("type", mcpJsonString("integer"));
 	score.setVal("description",
@@ -933,6 +958,23 @@ void SciMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 }
 
 void SciMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
+	// The base schema carries `room_changed` as a plain flag; both these
+	// bridges answer with the room itself, because an agent that has just
+	// walked through a door wants to know where it came out.
+	Common::JSONObject room;
+	room.setVal("type", Networking::mcpJsonString("object"));
+	Common::JSONObject roomProps;
+	roomProps.setVal("id", Networking::mcpProp("integer", "The room now."));
+	roomProps.setVal("name", Networking::mcpProp("string", "Its name, when it has one."));
+	roomProps.setVal("changed", Networking::mcpProp("boolean",
+	    "Whether this action left the room it started in."));
+	room.setVal("properties", new Common::JSONValue(roomProps));
+	props.setVal("room", new Common::JSONValue(room));
+
+	props.setVal("can_act", Networking::mcpProp("boolean",
+	    "Whether the game is ready for another action now."));
+
+
 	Common::JSONObject appeared;
 	appeared.setVal("type", mcpJsonString("array"));
 	Common::JSONObject name;

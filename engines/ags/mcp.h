@@ -143,17 +143,7 @@ private:
 	static const uint32 kPointFrames = 2;
 	// Frames a skip is given to let one keypress land.
 	static const uint32 kSkipFrames = 15;
-	// Presses allowed while looking for a verb on the bar. A bar has a
-	// handful of buttons; more than a couple of times round it is a game that
-	// is not letting the verb change at all.
-	static const uint kVerbAttempts = 16;
-	// Milliseconds to leave between pressing a verb button and believing the
-	// status line. Wall clock rather than frames on purpose: the game writes
-	// that line from its own script and needs real time to do it, and a
-	// headless run has no vsync - the loop turns over as fast as the machine
-	// allows, so a frame here is worth a fraction of what it is worth to a
-	// player.
-	static const uint32 kVerbSettleMs = 400;
+
 
 	// Is a room loaded and the engine far enough along to be asked?
 	bool engineReady() const;
@@ -222,25 +212,7 @@ private:
 	bool _pendingClick;
 	int _pendingX, _pendingY;
 	uint32 _pendingFrame;
-	// Reaching a verb on a bar means pressing buttons until the status line
-	// says the wanted one, so this carries what is being reached for and how
-	// many goes it has had.
-	bool _pendingVerbClick;
-	int _pendingVerbX, _pendingVerbY;
-	Common::String _wantedVerb;
-	uint _verbButtonNext;
-	uint _verbAttempts;
-	// What each verb button turned out to mean, learned by pressing it and
-	// reading the status line. A game never changes which button is which, so
-	// once a button has said what it is, reaching that verb again is one
-	// press rather than a search.
-	Common::Array<int> _learnedButtons;
-	Common::Array<Common::String> _learnedVerbs;
-	// The button pressed most recently, so the next look at the status line
-	// can be attributed to it.
-	int _pressedButton;
-	// The moment the status line may be believed from.
-	uint32 _verbReadyMs;
+
 
 	// What the stream in flight is.
 	bool _skipStream;

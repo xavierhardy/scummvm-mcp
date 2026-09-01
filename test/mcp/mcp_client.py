@@ -78,6 +78,8 @@ class McpClient:
         self._client = httpx.Client(timeout=httpx.Timeout(timeout))
         # Filled by the fixtures with the launched instance's screenshot folder.
         self.screenshot_path: str | None = None
+        # The notifications the most recent streaming call carried.
+        self.last_notifications: list[dict[str, Any]] = []
 
     def _next_id(self) -> int:
         self._req_id += 1
@@ -144,6 +146,11 @@ class McpClient:
     def _decode_stream_response(self, resp: httpx.Response, tool: str):
         if resp.status_code >= 400:
             raise RuntimeError(f"Act error: HTTP {resp.status_code}")
+        # The lines a game says while an action runs arrive as notifications
+        # on the action's own stream, and are gone from the next snapshot by
+        # the time it is asked for. Kept here so a test can assert on what was
+        # actually said rather than on what happened to still be queued.
+        self.last_notifications = []
         for line in resp.iter_lines():
             if line.startswith("data: "):
                 raw = line[6:].strip()
@@ -159,6 +166,10 @@ class McpClient:
                 raise RuntimeError(
                     f"Failed to decode JSON (error: {exc}): '{raw}'"
                 ) from exc
+
+            if msg.get("method") == "notifications/message":
+                self.last_notifications.append(msg.get("params", {}))
+                continue
 
             if "result" in msg:
                 result = self._extract_result(msg)

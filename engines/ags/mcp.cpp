@@ -63,6 +63,18 @@ static const VerbMode kVerbModes[] = {
 	{ "take",    MODE_PICKUP }
 };
 
+// An array-of-objects schema, for the parts of the snapshot that are lists of
+// things with the same shape.
+static Common::JSONValue *objectArraySchema(Common::JSONObject &props) {
+	Common::JSONObject item;
+	item.setVal("type", Networking::mcpJsonString("object"));
+	item.setVal("properties", new Common::JSONValue(props));
+	Common::JSONObject array;
+	array.setVal("type", Networking::mcpJsonString("array"));
+	array.setVal("items", new Common::JSONValue(item));
+	return new Common::JSONValue(array);
+}
+
 AgsMcpBridge *AgsMcpBridge::create(::AGS::AGSEngine *vm) {
 	AgsMcpBridge *bridge = new AgsMcpBridge(vm);
 	bridge->init();
@@ -76,13 +88,6 @@ AgsMcpBridge::AgsMcpBridge(::AGS::AGSEngine *vm) :
 	_pendingX(0),
 	_pendingY(0),
 	_pendingFrame(0),
-	_pendingVerbClick(false),
-	_pendingVerbX(0),
-	_pendingVerbY(0),
-	_verbButtonNext(0),
-	_verbAttempts(0),
-	_pressedButton(-1),
-	_verbReadyMs(0),
 	_skipStream(false),
 	_sseTrackRoom(-1),
 	_sseTrackPosX(-1),
@@ -776,9 +781,10 @@ void AgsMcpBridge::registerGameTools() {
 	spec.description =
 		"Choose the verb the next act() will use, on a game whose verbs are "
 		"buttons along the bottom of the screen. Give a verb name to press the "
-		"button known to mean it, or a button number to press that one and find "
-		"out what it means. The answer is what the game then says is selected, "
-		"so pressing each button once is how an agent learns the bar.";
+		"button when it says what it is, or a button number otherwise. Most of "
+		"these games leave the editor's text on their buttons and draw their "
+		"own labels, so pressing each one by number and reading state() back "
+		"is how the bar is learned: current_verb is what that press selected.";
 	Common::JSONObject props;
 	props.setVal("verb", Networking::mcpProp("string",
 		"The verb to select, when it is already known which button means it."));
@@ -789,8 +795,7 @@ void AgsMcpBridge::registerGameTools() {
 	outProps.setVal("was", Networking::mcpProp("string",
 		"What was selected before this press; the game writes what it is now "
 		"on a later loop, so read state() for that."));
-	outProps.setVal("known", Networking::mcpProp("array",
-		"Which button means which verb, as far as has been found out."));
+
 	outProps.setVal("button", Networking::mcpProp("integer", "The button pressed."));
 	outProps.setVal("buttons", Networking::mcpProp("integer",
 		"How many buttons the bar has."));
@@ -814,43 +819,30 @@ Common::JSONValue *AgsMcpBridge::dispatchGameTool(const Common::String &name,
 		return nullptr;
 	}
 
-	// Before anything else, learn from the press before this one. The status
-	// line has had a whole call's worth of real time to be written by now,
-	// which is what makes reading it here reliable where reading it a few
-	// frames after the press was not.
 	const Common::String showing = currentVerbFromLabel();
-	if (_pressedButton >= 0 && !showing.empty()) {
-		bool known = false;
-		for (uint i = 0; i < _learnedButtons.size(); i++)
-			known = known || _learnedButtons[i] == _pressedButton;
-		if (!known) {
-			_learnedButtons.push_back(_pressedButton);
-			_learnedVerbs.push_back(showing);
-		}
-		_pressedButton = -1;
-	}
-
 	int pick = -1;
 	if (args.isObject() && args.asObject().contains("button") &&
 	    args.asObject()["button"]->isIntegerNumber()) {
 		pick = (int)args.asObject()["button"]->asIntegerNumber();
 	} else if (args.isObject() && args.asObject().contains("verb") &&
 	           args.asObject()["verb"]->isString()) {
+		// By name only when the button says what it is. Most of these games
+		// leave the editor's text on their buttons and draw their own labels,
+		// and then the only way to know which is which is to press one and
+		// read state() back - which is the agent's to remember, not this
+		// bridge's to guess at from a status line written a loop later.
 		const Common::String wanted =
 			MCP::McpBridge::normalizeActionName(args.asObject()["verb"]->asString());
-		for (uint i = 0; i < _learnedButtons.size() && pick < 0; i++) {
-			if (_learnedVerbs[i] == wanted)
-				pick = _learnedButtons[i];
-		}
 		for (uint i = 0; i < buttons.size() && pick < 0; i++) {
 			if (buttons[i].name == wanted)
 				pick = (int)i;
 		}
 		if (pick < 0) {
 			errorOut = Common::String::format(
-				"select_verb: nothing is known to mean \'%s\' yet. Press the "
-				"buttons by number - there are %u - and each answer says what "
-				"that one means.", wanted.c_str(), (uint)buttons.size());
+				"select_verb: this game's buttons do not say what they are, so "
+				"'%s' cannot be found by name. Press them by number - there are "
+				"%u - and read state() after each: current_verb is what that "
+				"one selected.", wanted.c_str(), (uint)buttons.size());
 			return nullptr;
 		}
 	} else {
@@ -864,8 +856,6 @@ Common::JSONValue *AgsMcpBridge::dispatchGameTool(const Common::String &name,
 	}
 
 	injectMouseClick(buttons[pick].x, buttons[pick].y, "left", false);
-	_pressedButton = pick;
-	_verbReadyMs = g_system->getMillis() + kVerbSettleMs;
 
 	Common::JSONObject out;
 	out.setVal("button", mcpJsonInt(pick));
@@ -877,14 +867,6 @@ Common::JSONValue *AgsMcpBridge::dispatchGameTool(const Common::String &name,
 	// after each is how an agent learns the bar; the bridge learns it at the
 	// same time, from the same answers.
 	out.setVal("was", mcpJsonString(showing));
-	Common::JSONArray learned;
-	for (uint i = 0; i < _learnedButtons.size(); i++) {
-		Common::JSONObject entry;
-		entry.setVal("button", mcpJsonInt(_learnedButtons[i]));
-		entry.setVal("verb", mcpJsonString(_learnedVerbs[i]));
-		learned.push_back(new Common::JSONValue(entry));
-	}
-	out.setVal("known", new Common::JSONValue(learned));
 	return new Common::JSONValue(out);
 }
 
@@ -1139,14 +1121,50 @@ Common::JSONValue *AgsMcpBridge::buildDebugSchema() const {
 }
 
 void AgsMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
-	Common::JSONObject kind;
-	kind.setVal("type", mcpJsonString("string"));
-	kind.setVal("description", mcpJsonString(
-		"What sort of thing each object is: object, hotspot or character."));
-	outputProps.setVal("object_kind", new Common::JSONValue(kind));
+	outputProps.setVal("can_act", Networking::mcpProp("boolean",
+	    "False while the game is not accepting a new action - the character is "
+	    "walking, or a scene is playing itself out. act and walk are refused "
+	    "then."));
+
+	Common::JSONObject obj;
+	obj.setVal("id",   Networking::mcpProp("integer", "Identifier in this room."));
+	obj.setVal("name", Networking::mcpProp("string",  "Name to use in act()."));
+	obj.setVal("kind", Networking::mcpProp("string",
+	    "'object' for something the room draws, 'hotspot' for a part of the "
+	    "scenery, 'character' for someone standing in it."));
+	obj.setVal("x",    Networking::mcpProp("integer", "Where it is, in room coordinates."));
+	obj.setVal("y",    Networking::mcpProp("integer", "Where it is, in room coordinates."));
+	outputProps.setVal("objects", objectArraySchema(obj));
+
+	Common::JSONObject item;
+	item.setVal("id",   Networking::mcpProp("integer", "Identifier of the item."));
+	item.setVal("name", Networking::mcpProp("string",  "Name to use as target2."));
+	item.setVal("held", Networking::mcpProp("boolean", "Present when this is the item in hand."));
+	outputProps.setVal("inventory", objectArraySchema(item));
+
+	outputProps.setVal("current_verb", Networking::mcpProp("string",
+	    "The verb the game has selected, on a game whose verbs are buttons. "
+	    "act() uses this one; select_verb changes it."));
 }
 
 void AgsMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
+	// The base schema carries `room_changed` as a plain flag; both these
+	// bridges answer with the room itself, because an agent that has just
+	// walked through a door wants to know where it came out.
+	Common::JSONObject room;
+	room.setVal("type", Networking::mcpJsonString("object"));
+	Common::JSONObject roomProps;
+	roomProps.setVal("id", Networking::mcpProp("integer", "The room now."));
+	roomProps.setVal("name", Networking::mcpProp("string", "Its name, when it has one."));
+	roomProps.setVal("changed", Networking::mcpProp("boolean",
+	    "Whether this action left the room it started in."));
+	room.setVal("properties", new Common::JSONValue(roomProps));
+	props.setVal("room", new Common::JSONValue(room));
+
+	props.setVal("can_act", Networking::mcpProp("boolean",
+	    "Whether the game is ready for another action now."));
+
+
 	Common::JSONObject gained;
 	gained.setVal("type", mcpJsonString("array"));
 	Common::JSONObject name;

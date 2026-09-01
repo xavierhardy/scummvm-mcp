@@ -146,6 +146,8 @@ def _launch_args(
         "gob2-demo",
         "gob3-demo",
         "ween-demo",
+        "zak-repixeled",
+        "zak-seamonster",
     ):
         # No save slot — these games start from scratch and handle their own intro.
         return [scummvm_binary, "-c", ini_path, game_id]
@@ -275,6 +277,8 @@ _GAME_PATH_ENV = {
     "gob2-demo": "GOB2_DEMO_PATH",
     "gob3-demo": "GOB3_DEMO_PATH",
     "ween-demo": "WEEN_DEMO_PATH",
+    "zak-repixeled": "ZAK_REPIXELED_PATH",
+    "zak-seamonster": "ZAK_SEAMONSTER_PATH",
 }
 
 LOCAL_PATHS_FILE = os.path.normpath(
