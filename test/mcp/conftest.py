@@ -764,54 +764,62 @@ def pq2_full_client() -> Iterator[McpClient]:
 def kq2_client() -> Iterator[McpClient]:
     """King's Quest II (past the opening, slot 1)."""
     yield from _client("kq2", "kq2", checkpoint=has_captured_save("kq2"),
-                       connect_timeout=SLOW_BOOT_SECS)
+                       connect_timeout=SLOW_BOOT_SECS,
+                       request_timeout=180.0)
 
 
 @pytest.fixture
 def kq3_client() -> Iterator[McpClient]:
     """King's Quest III (Amiga) (past the opening, slot 1)."""
     yield from _client("kq3", "kq3", checkpoint=has_captured_save("kq3"),
-                       connect_timeout=SLOW_BOOT_SECS)
+                       connect_timeout=SLOW_BOOT_SECS,
+                       request_timeout=180.0)
 
 
 @pytest.fixture
 def pq1_client() -> Iterator[McpClient]:
     """Police Quest (past the opening, slot 1)."""
     yield from _client("pq1", "pq1", checkpoint=has_captured_save("pq1"),
-                       connect_timeout=SLOW_BOOT_SECS)
+                       connect_timeout=SLOW_BOOT_SECS,
+                       request_timeout=180.0)
 
 
 @pytest.fixture
 def kyra1_client() -> Iterator[McpClient]:
     """The Legend of Kyrandia (past the opening, slot 1)."""
     yield from _client("kyra1", "kyra1", checkpoint=has_captured_save("kyra1"),
-                       connect_timeout=SLOW_BOOT_SECS)
+                       connect_timeout=SLOW_BOOT_SECS,
+                       request_timeout=180.0)
 
 
 @pytest.fixture
 def kyra2_client() -> Iterator[McpClient]:
     """Kyrandia: The Hand of Fate (past the opening, slot 1)."""
     yield from _client("kyra2", "kyra2", checkpoint=has_captured_save("kyra2"),
-                       connect_timeout=SLOW_BOOT_SECS)
+                       connect_timeout=SLOW_BOOT_SECS,
+                       request_timeout=180.0)
 
 
 @pytest.fixture
 def kyra3_client() -> Iterator[McpClient]:
     """Kyrandia: Malcolm's Revenge (past the opening, slot 1)."""
     yield from _client("kyra3", "kyra3", checkpoint=has_captured_save("kyra3"),
-                       connect_timeout=SLOW_BOOT_SECS)
+                       connect_timeout=SLOW_BOOT_SECS,
+                       request_timeout=180.0)
 
 
 @pytest.fixture
 def simon1_client() -> Iterator[McpClient]:
     """Simon the Sorcerer (Amiga) (past the opening, slot 1)."""
     yield from _client("simon1", "simon1", checkpoint=has_captured_save("simon1"),
-                       connect_timeout=SLOW_BOOT_SECS)
+                       connect_timeout=SLOW_BOOT_SECS,
+                       request_timeout=180.0)
 
 
 @pytest.fixture
 def sanitarium_client() -> Iterator[McpClient]:
     """Sanitarium (past the opening, slot 1)."""
     yield from _client("sanitarium", "sanitarium", checkpoint=has_captured_save("sanitarium"),
-                       connect_timeout=SLOW_BOOT_SECS)
+                       connect_timeout=SLOW_BOOT_SECS,
+                       request_timeout=180.0)
 

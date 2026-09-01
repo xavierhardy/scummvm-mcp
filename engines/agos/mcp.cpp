@@ -386,10 +386,6 @@ bool AgosMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 		errorOut = "act: a string 'target1' is required";
 		return false;
 	}
-	if (!playerHasControl()) {
-		errorOut = "act: the game is not accepting input right now";
-		return false;
-	}
 
 	Common::String verb = "look_at";
 	if (args.asObject().contains("verb") && args.asObject()["verb"]->isString())
@@ -411,6 +407,15 @@ bool AgosMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 	Target target;
 	if (!resolveTarget(args.asObject()["target1"]->asString(), target, errorOut)) {
 		errorOut = Common::String("act: ") + errorOut;
+		return false;
+	}
+
+	// Asked *after* the name has been checked, deliberately. A name this room
+	// does not have is wrong whatever the game happens to be doing, and saying
+	// so is the only way a caller learns it; answering "not accepting input"
+	// instead sends it away to wait for a moment that would not have helped.
+	if (!playerHasControl()) {
+		errorOut = "act: the game is not accepting input right now";
 		return false;
 	}
 
@@ -576,6 +581,18 @@ void AgosMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 }
 
 void AgosMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
+	// The base schema carries `room_changed` as a plain flag; this bridge
+	// answers with the room itself, because an agent that has just left one
+	// wants to know where it came out.
+	Common::JSONObject room;
+	room.setVal("type", Networking::mcpJsonString("object"));
+	Common::JSONObject roomProps;
+	roomProps.setVal("id", Networking::mcpProp("integer", "The room now."));
+	roomProps.setVal("changed", Networking::mcpProp("boolean",
+	    "Whether this action left the room it started in."));
+	room.setVal("properties", new Common::JSONValue(roomProps));
+	props.setVal("room", new Common::JSONValue(room));
+
 	props.setVal("can_act", Networking::mcpProp("boolean",
 	    "Whether the game is taking input now the action is over."));
 	props.setVal("objects_appeared", Networking::mcpProp("array",

@@ -590,6 +590,18 @@ void AgiMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 }
 
 void AgiMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
+	// The base schema carries `room_changed` as a plain flag; this bridge
+	// answers with the room itself, because an agent that has just left one
+	// wants to know where it came out.
+	Common::JSONObject room;
+	room.setVal("type", Networking::mcpJsonString("object"));
+	Common::JSONObject roomProps;
+	roomProps.setVal("id", Networking::mcpProp("integer", "The room now."));
+	roomProps.setVal("changed", Networking::mcpProp("boolean",
+	    "Whether this action left the room it started in."));
+	room.setVal("properties", new Common::JSONValue(roomProps));
+	props.setVal("room", new Common::JSONValue(room));
+
 	props.setVal("can_act", Networking::mcpProp("boolean",
 	    "Whether the game is taking commands now the action is over."));
 	props.setVal("score_changed", Networking::mcpProp("integer",
