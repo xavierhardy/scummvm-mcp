@@ -229,10 +229,6 @@ static const SciMcpBridge::VerbCursor kGabrielKnightVerbs[] = {
 };
 
 // The verbs this game offers, as a sentence to put in a refusal.
-bool SciMcpBridge::usesTypedInput() const {
-	return _vm->hasParser();
-}
-
 Common::String SciMcpBridge::verbList() const {
 	uint count = 0;
 	const VerbCursor *verbs = verbTable(count);
@@ -402,6 +398,13 @@ Common::JSONValue *SciMcpBridge::callTool(const Common::String &name,
                                           Common::String &errorOut) {
 	if (!engineReady()) {
 		errorOut = "the game is still starting up";
+		return nullptr;
+	}
+	// Registered for every SCI game because the question could not be asked
+	// while the tools were being registered; answered here, where it can be.
+	if (name == "type_text" && !_vm->hasParser()) {
+		errorOut = "type_text: this game never asks for anything to be typed - "
+		           "it is played by pointing at things, and act() is how";
 		return nullptr;
 	}
 	return MCP::McpBridge::callTool(name, args, errorOut);

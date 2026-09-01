@@ -101,11 +101,14 @@ protected:
 	// nothing an agent reads mentions it.
 	bool usesDialogQuestions() const override { return false; }
 
-	// The early SCI games read a typed sentence rather than a click, and the
-	// engine already knows which those are. None of the demos instrumented
-	// here is one - both are icon-bar games - but the tool belongs to the
-	// engine rather than to the demo, and hasParser() is the honest test.
-	bool usesTypedInput() const override;
+	// The early SCI games read a typed sentence rather than a click. Which
+	// those are is the engine's to say - hasParser() - but it cannot be asked
+	// yet: tools are registered while the interpreter is still starting up,
+	// and hasParser() reads the SCI version, which is not set until a game is
+	// loaded and asserts if asked before then. So the tool is registered for
+	// every SCI game and refuses at call time on one that reads no typed
+	// input, which is the only point at which the question can be answered.
+	bool usesTypedInput() const override { return true; }
 
 	// Refuse every tool until the interpreter is running a room. The bridge is
 	// built early so the port binds before the game's own start-up blocks.
