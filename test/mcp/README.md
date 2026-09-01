@@ -62,6 +62,23 @@ printed manual. The bridge drives that screen correctly — `type_text` types at
 the prompt and the game echoes and refuses each answer — but there is no room
 to start a test from.
 
+### The engines taught MCP for these games
+
+Four more engines and eight games, covered by `test_new_engines.py`. Each
+engine answers a different question about what a room even is, so the module is
+split accordingly:
+
+| Engine | Games | Shape |
+|--------|-------|-------|
+| agi | `kq2`, `kq3`, `pq1` | A parser game. Nothing on screen is labelled and nothing is clicked — the player types. `state` names the items from the OBJECT file, the `vocabulary` tool lists every word the parser knows, and `act` composes a sentence and types it. |
+| kyra | `kyra1`, `kyra2`, `kyra3` | A pointer game with no verb bar: the left button does whatever the thing is for and the right button looks at it. Names come from the item table, and the four compass exits are named by the bridge because the engine never named them. |
+| agos | `simon1` | A bar of twelve verbs, and every clickable thing carries the name the game writes along the bottom of the screen — the one engine here where an agent reads the same words the player does. |
+| asylum | `sanitarium` | No verbs at all: the cursor changes shape to say what a click would do. Objects carry the names their authors typed in the editor, filtered — the game ships hundreds called `0` or `xxx`. |
+
+Kyrandia additionally needs `kyra.dat`, which the launcher serves from the
+repository's `dists/engine-data` through `extrapath`, the same way Flight of
+the Amazon Queen gets `queen.tbl`.
+
 Game-data folders are per-machine and are **never** in tracked code: list them
 under `[games]` in the non-committed `game_paths.local.toml` at the repository
 root (see `game_paths.local.toml.example`), or set the env var above, which

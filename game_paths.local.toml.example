@@ -102,3 +102,16 @@ qfg2-full = "~/games/questforglory2_amiga_win/QuestForGlory2/fsuae/Hard Drives/d
 sq2vga = "~/games/sq2vga_v2_win/SQ2VGA"
 # Unpacked from the three AmigaDOS floppy images its repack ships.
 pq2-full = "~/games/pq2-amiga/game"
+
+# --- The engines taught MCP for these games ------------------------------
+# AGI is a parser engine, Kyrandia and Sanitarium are pointer games with no
+# verb bar, AGOS has a bar of twelve. Kyrandia additionally needs kyra.dat,
+# which the launcher serves from dists/engine-data through extrapath.
+kq2 = "~/games/kingsquest2_scumm_win/KingsQuest2/kq2"
+kq3 = "~/games/kingsquest3_amiga_win/KingsQuest3/fsuae/Hard Drives/data/Data"
+pq1 = "~/games/policequest_dos_win/PoliceQuest/pq"
+kyra1 = "~/games/legendofkyrandia_dos_win/legend_of_kyrandia/Legend_Of_Kyrandia"
+kyra2 = "~/games/legendofkyrandia2_dos_win/legendofkyrandia2/l2"
+kyra3 = "~/games/thelegendofkyrandia3_dos_win/TheLegendofKyrandia3/cd"
+simon1 = "~/games/simonthesorcerer_amiga_win/SimonTheSorcerer/fsuae/Hard Drives/data"
+sanitarium = "~/games/sanitarium_win/Sanitarium/Game/Data"

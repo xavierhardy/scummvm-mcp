@@ -125,6 +125,15 @@ _FIXTURE_INDEX = {
     "qfg2_full": 69,
     "sq2vga": 70,
     "pq2_full": 71,
+    # The games whose engines had no bridge before.
+    "kq2": 72,
+    "kq3": 73,
+    "pq1": 74,
+    "kyra1": 75,
+    "kyra2": 76,
+    "kyra3": 77,
+    "simon1": 78,
+    "sanitarium": 79,
 }
 
 
@@ -736,3 +745,67 @@ def pq2_full_client() -> Iterator[McpClient]:
     """Police Quest II, Amiga (past the opening, slot 1)."""
     yield from _client("pq2-full", "pq2_full", checkpoint=True,
                        connect_timeout=SLOW_BOOT_SECS)
+
+# ---------------------------------------------------------------------------
+# The games on the engines taught MCP for them.
+#
+# Each starts from its own slot 1, captured past the opening. A game whose
+# slot has not been captured on this machine skips rather than fails.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def kq2_client() -> Iterator[McpClient]:
+    """King's Quest II (past the opening, slot 1)."""
+    yield from _client("kq2", "kq2", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kq3_client() -> Iterator[McpClient]:
+    """King's Quest III (Amiga) (past the opening, slot 1)."""
+    yield from _client("kq3", "kq3", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def pq1_client() -> Iterator[McpClient]:
+    """Police Quest (past the opening, slot 1)."""
+    yield from _client("pq1", "pq1", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kyra1_client() -> Iterator[McpClient]:
+    """The Legend of Kyrandia (past the opening, slot 1)."""
+    yield from _client("kyra1", "kyra1", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kyra2_client() -> Iterator[McpClient]:
+    """Kyrandia: The Hand of Fate (past the opening, slot 1)."""
+    yield from _client("kyra2", "kyra2", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kyra3_client() -> Iterator[McpClient]:
+    """Kyrandia: Malcolm's Revenge (past the opening, slot 1)."""
+    yield from _client("kyra3", "kyra3", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def simon1_client() -> Iterator[McpClient]:
+    """Simon the Sorcerer (Amiga) (past the opening, slot 1)."""
+    yield from _client("simon1", "simon1", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def sanitarium_client() -> Iterator[McpClient]:
+    """Sanitarium (past the opening, slot 1)."""
+    yield from _client("sanitarium", "sanitarium", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)
+
