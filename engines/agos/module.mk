@@ -1,6 +1,8 @@
 MODULE := engines/agos
 
 MODULE_OBJS := \
+	mcp.o \
+	mcp_names.o \
 	drivers/accolade/adlib.o \
 	drivers/accolade/casio.o \
 	drivers/accolade/cms.o \

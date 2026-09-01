@@ -1,6 +1,8 @@
 MODULE := engines/asylum
 
 MODULE_OBJS := \
+	mcp.o \
+	mcp_names.o \
 	puzzles/board.o \
 	puzzles/boardkeyhidesto.o \
 	puzzles/boardsalvation.o \

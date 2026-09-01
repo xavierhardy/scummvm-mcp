@@ -20,6 +20,7 @@
  */
 
 #include "agos/agos.h"
+#include "agos/mcp.h"
 #include "agos/animation.h"
 #include "agos/debugger.h"
 #include "agos/sound.h"
@@ -464,7 +465,23 @@ void AGOSEngine::monsterDamageEvent(VgaTimerEntry * vte, uint dx) {
 	}
 }
 
+void AGOSEngine::mcpPump() {
+	if (_mcpBridge)
+		_mcpBridge->pumpFromDelay();
+}
+
+void AGOSEngine::mcpOnText(const Common::String &text) {
+	if (_mcpBridge)
+		_mcpBridge->onGameText(text);
+}
+
 void AGOSEngine::delay(uint amount) {
+	// The engine's whole loop is waitForInput() / handleVerbClicked() /
+	// delay(), and every blocking wait inside it goes through here as well.
+	// So this is the one place the server can be serviced from, whatever the
+	// game is doing.
+	mcpPump();
+
 	Common::Event event;
 
 	uint32 start = _system->getMillis();

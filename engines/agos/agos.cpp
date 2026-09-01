@@ -31,6 +31,7 @@
 #include "agos/debugger.h"
 #include "agos/intern.h"
 #include "agos/agos.h"
+#include "agos/mcp.h"
 #include "agos/midi.h"
 #include "agos/sound.h"
 
@@ -167,6 +168,11 @@ Common::Error AGOSEngine_Elvira1::init() {
 
 AGOSEngine::AGOSEngine(OSystem *system, const AGOSGameDescription *gd)
 	: Engine(system), _rnd("agos"), _gameDescription(gd) {
+	// Built first, and before anything that can block: the server binds its
+	// port here, so a client can connect and be told the game is still
+	// starting rather than find nothing listening at all.
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = AgosMcpBridge::create(this);
 
 	//Image dumping command disabled as it doesn't work well
 #if 0
@@ -1083,6 +1089,8 @@ const AGOSEngine::PnAmigaTextPlane *AGOSEngine::getPnAmigaTextPlane(const Window
 
 
 AGOSEngine::~AGOSEngine() {
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
 	_system->getAudioCDManager()->stop();
 	stopMusic();
 	delete _pnAmigaFont;

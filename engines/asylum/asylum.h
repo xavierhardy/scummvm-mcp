@@ -70,6 +70,8 @@ class VideoPlayer;
 extern const char *const engineKeyMapId;
 extern const char *const resviewerKeyMapId;
 
+class AsylumMcpBridge;
+
 class AsylumEngine: public Engine, public Common::Serializable {
 protected:
 	// Engine APIs
@@ -140,6 +142,15 @@ public:
 	ResourceManager *resource()  { return _resource; }
 	Savegame        *savegame()  { return _savegame; }
 	Scene           *scene()     { return _scene; }
+
+	// --- MCP ---------------------------------------------------------------
+	// Built in the constructor so the server binds its port before anything
+	// can block on startup, and null when `mcp` was not asked for.
+	AsylumMcpBridge *_mcpBridge = nullptr;
+	// From handleEvents(), which every screen in this engine goes through.
+	void mcpPump();
+	// Every line of speech or narration the game shows.
+	void mcpOnText(const Common::String &text);
 	Screen          *screen()    { return _screen; }
 	ScriptManager   *script()    { return _script; }
 	Special         *special()   { return _special; }

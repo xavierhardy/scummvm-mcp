@@ -474,6 +474,10 @@ bool AGOSEngine::printNameOf(Item *item, uint x, uint y) {
 		return false;
 
 	stringPtr = getStringPtrByID(subObject->objectName);
+	// The name the player reads along the bottom of the screen when the
+	// pointer rests on something. The bridge publishes the same words.
+	if (stringPtr != nullptr)
+		mcpOnText(Common::String((const char *)stringPtr));
 	if (getGameType() == GType_FF) {
 		getPixelLength((const char *)stringPtr, 400, pixels);
 		w = pixels + 1;

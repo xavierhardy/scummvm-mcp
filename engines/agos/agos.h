@@ -71,6 +71,8 @@ class SeekableAudioStream;
 
 namespace AGOS {
 
+class AgosMcpBridge;
+
 class ElviraAtariSTPlayer;
 
 enum {
@@ -238,6 +240,10 @@ class Debugger;
 #endif
 
 class AGOSEngine : public Engine {
+	// The bridge reads the hit areas, the item tree and the room number, which
+	// the engine keeps protected. It only ever reads them.
+	friend class AgosMcpBridge;
+
 protected:
 	// List of Simon 1 DOS floppy SFX which use rhythm notes.
 	static const byte SIMON1_RHYTHM_SFX[];
@@ -440,6 +446,15 @@ protected:
 	uint16	_currentBoxNum;
 	uint16 _needHitAreaRecalc;
 	uint16 _verbHitArea;
+
+	// --- MCP ---------------------------------------------------------------
+	// Built in the constructor so the server binds its port before anything
+	// can block on startup, and null when `mcp` was not asked for.
+	AgosMcpBridge *_mcpBridge = nullptr;
+	// From delay(), which every loop in this engine goes through.
+	void mcpPump();
+	// Every line the game shows.
+	void mcpOnText(const Common::String &text);
 	uint16 _defaultVerb;
 	bool _iOverflow;
 	bool _nameLocked;

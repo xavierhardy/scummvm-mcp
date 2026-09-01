@@ -31,6 +31,7 @@
 #include "gui/message.h"
 
 #include "asylum/asylum.h"
+#include "asylum/mcp.h"
 
 #include "asylum/resources/actor.h"
 #include "asylum/resources/encounters.h"
@@ -63,6 +64,12 @@ AsylumEngine::AsylumEngine(OSystem *system, const ADGameDescription *gd) : Engin
 	_scene(nullptr), _screen(nullptr), _script(nullptr), _special(nullptr), _speech(nullptr), _sound(nullptr), _text(nullptr),
 	_video(nullptr), _handler(nullptr), _puzzles(nullptr) {
 
+	// Built first, and before anything that can block: the server binds its
+	// port here, so a client can connect and be told the game is still
+	// starting rather than find nothing listening at all.
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = AsylumMcpBridge::create(this);
+
 	// Init data
 	resetFlags();
 	_introPlayed = false;
@@ -86,6 +93,8 @@ AsylumEngine::AsylumEngine(OSystem *system, const ADGameDescription *gd) : Engin
 }
 
 AsylumEngine::~AsylumEngine() {
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
 	_handler = nullptr;
 
 	delete _cursor;
@@ -396,9 +405,23 @@ void AsylumEngine::playIntro() {
 	switchEventHandler(_scene);
 }
 
+void AsylumEngine::mcpPump() {
+	if (_mcpBridge)
+		_mcpBridge->pumpFromEvents();
+}
+
+void AsylumEngine::mcpOnText(const Common::String &text) {
+	if (_mcpBridge)
+		_mcpBridge->onGameText(text);
+}
+
 void AsylumEngine::handleEvents() {
 	if (!_video || !_screen || !_sound || !_menu || !_cursor)
 		error("[AsylumEngine::handleEvents] Subsystems not initialized properly!");
+
+	// Every screen this engine has - the game, the menu, the video player, the
+	// puzzles - comes through here, so this is where the server is serviced.
+	mcpPump();
 
 	AsylumEvent ev;
 	Common::Keymapper *const keymapper = _eventMan->getKeymapper();
