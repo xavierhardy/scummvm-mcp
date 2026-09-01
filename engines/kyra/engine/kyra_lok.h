@@ -95,6 +95,9 @@ struct BeadState {
 };
 
 class KyraEngine_LoK : public KyraEngine_v1 {
+	// The bridge reads this game's scene tables and inventory, which are
+	// protected. It only ever reads them.
+	friend class KyraMcpBridge;
 	friend class MusicPlayer;
 	friend class Debugger_LoK;
 	friend class Animator_LoK;

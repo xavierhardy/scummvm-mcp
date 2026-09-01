@@ -123,7 +123,12 @@ class GUI;
 
 struct Button;
 
+class KyraMcpBridge;
+
 class KyraEngine_v1 : public Engine {
+	// The bridge reads the scene tables and the inventory, which the engine
+	// keeps protected. It only ever reads them.
+	friend class KyraMcpBridge;
 friend class Debugger;
 friend class ::KyraMetaEngine;
 friend class GUI;
@@ -312,6 +317,18 @@ protected:
 
 	// items
 	int _mouseState;
+
+	// --- MCP ---------------------------------------------------------------
+	// Built in the constructor so the server binds its port before anything
+	// can block on startup, and null when `mcp` was not asked for.
+	KyraMcpBridge *_mcpBridge = nullptr;
+	// Once per pass of whichever of the three games' loops is running.
+	void mcpPump();
+	// From delay(), which is where every blocking wait in this engine ends up.
+	// Does not advance the frame counter.
+	void mcpPumpTransport();
+	// Every line the game prints.
+	void mcpOnText(const Common::String &text);
 
 	virtual void setHandItem(Item item) = 0;
 	virtual void removeHandItem() = 0;

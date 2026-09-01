@@ -51,6 +51,9 @@ struct ActiveItemAnim {
 class Screen_v2;
 
 class KyraEngine_v2 : public KyraEngine_v1 {
+	// The bridge reads this game's scene tables and inventory, which are
+	// protected. It only ever reads them.
+	friend class KyraMcpBridge;
 friend class Debugger_v2;
 friend class GUI_v2;
 public:

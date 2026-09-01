@@ -481,6 +481,9 @@ void KyraEngine_LoK::mainLoop() {
 	bool updateGfx = true;
 
 	while (!shouldQuit()) {
+		// One pass of the loop is one MCP frame.
+		mcpPump();
+
 		int32 frameTime = (int32)_system->getMillis();
 
 		if (_currentCharacter->sceneId == 210) {

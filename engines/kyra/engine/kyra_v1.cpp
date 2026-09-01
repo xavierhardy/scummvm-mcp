@@ -20,6 +20,7 @@
  */
 
 #include "kyra/kyra_v1.h"
+#include "kyra/mcp.h"
 #include "kyra/sound/sound_intern.h"
 #include "kyra/resource/resource.h"
 #include "kyra/engine/timer.h"
@@ -33,6 +34,12 @@ namespace Kyra {
 
 KyraEngine_v1::KyraEngine_v1(OSystem *system, const GameFlags &flags)
 	: Engine(system), _flags(flags), _rnd("kyra") {
+	// Built first, and before anything that can block: the server binds its
+	// port here, so a client can connect and be told the game is still
+	// starting rather than find nothing listening at all.
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = KyraMcpBridge::create(this);
+
 	_res = nullptr;
 	_sound = nullptr;
 	_text = nullptr;
@@ -193,6 +200,8 @@ Common::Error KyraEngine_v1::init() {
 }
 
 KyraEngine_v1::~KyraEngine_v1() {
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
 	for (Common::Array<const Opcode *>::iterator i = _opcodes.begin(); i != _opcodes.end(); ++i)
 		delete *i;
 	_opcodes.clear();
@@ -543,7 +552,27 @@ void KyraEngine_v1::delayUntil(uint32 timestamp, bool updateTimers, bool update,
 	}
 }
 
+void KyraEngine_v1::mcpPump() {
+	if (_mcpBridge)
+		_mcpBridge->pump();
+}
+
+void KyraEngine_v1::mcpPumpTransport() {
+	if (_mcpBridge)
+		_mcpBridge->pumpFromStall();
+}
+
+void KyraEngine_v1::mcpOnText(const Common::String &text) {
+	if (_mcpBridge)
+		_mcpBridge->onGameText(text);
+}
+
 void KyraEngine_v1::delay(uint32 amount, bool update, bool isMainLoop) {
+	// Every blocking wait in this engine comes through here - a cutscene, a
+	// spoken line, a fade - and the game loop is not reached again until it
+	// returns. Service the server so a call made during one is answered.
+	mcpPumpTransport();
+
 	_system->delayMillis(amount);
 }
 

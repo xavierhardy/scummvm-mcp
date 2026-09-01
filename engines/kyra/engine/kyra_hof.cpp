@@ -423,6 +423,9 @@ void KyraEngine_HoF::runLoop() {
 
 	_runFlag = true;
 	while (!shouldQuit() && _runFlag) {
+		// One pass of the loop is one MCP frame.
+		mcpPump();
+
 		if (_deathHandler >= 0) {
 			removeHandItem();
 			delay(5);

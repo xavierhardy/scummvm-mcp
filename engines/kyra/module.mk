@@ -1,6 +1,8 @@
 MODULE := engines/kyra
 
 MODULE_OBJS := \
+	mcp.o \
+	mcp_names.o \
 	engine/items_lok.o \
 	engine/items_v2.o \
 	engine/items_hof.o \
