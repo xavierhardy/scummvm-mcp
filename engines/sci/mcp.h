@@ -70,11 +70,19 @@ public:
 	// spoken by an actor or printed as narration.
 	void onGameText(const Common::String &text, int talkerId);
 
-	// One verb an icon-bar game offers, and the cursor loop that means it.
+	// One verb an icon-bar game offers, and the cursor that means it.
 	// Public because the per-game tables are file-scope data in mcp.cpp,
 	// where the reasoning that produced them belongs.
+	//
+	// A cursor is named two different ways depending on the game's age. The
+	// later ones keep every cursor in one view and pick between them by loop;
+	// the SCI1 ones name a cursor *resource* and have no loop at all, which is
+	// what -1 means here. Both arrive through the same record - a game uses
+	// one mechanism or the other, never both - so `view` is the resource
+	// number for the older games and the view number for the newer ones.
 	struct VerbCursor {
 		const char *verb;
+		int view;
 		int loop;
 	};
 
@@ -170,6 +178,11 @@ private:
 	static const int kCycleLimit = 24;
 	// Frames a skip is given to let one Escape land.
 	static const uint32 kSkipFrames = 12;
+	// The same window in real time, for the loops where cycles do not run.
+	// Twelve cycles is about a third of a second at the interpreter's own
+	// rate; this is deliberately longer, because a game that is not cycling
+	// is one whose reaction has not started yet.
+	static const uint32 kSkipMs = 1500;
 
 	// Is the interpreter far enough along to answer questions about a room?
 	bool engineReady() const;
@@ -203,21 +216,18 @@ private:
 	// The verbs this game offers, or nullptr when it is not one the bridge
 	// has a table for. `count` is filled in either way.
 	const VerbCursor *verbTable(uint &count) const;
-	// The view resource this game keeps its verb cursors in; -1 when unknown.
-	int verbCursorView() const;
 	// The verb the cursor is showing now, or an empty string when the cursor
 	// is not one of the verbs (an hourglass, a door-side arrow).
 	Common::String currentVerb() const;
-	// The cursor loop that means *verb*, or -1 when this game has no such
-	// verb.
-	int loopForVerb(const Common::String &verb) const;
+	// This game's entry for *verb*, or nullptr when it has no such verb.
+	const VerbCursor *verbEntry(const Common::String &verb) const;
 	// The verbs this game offers, as a sentence to put in a refusal.
 	Common::String verbList() const;
 
 	// Put the pointer somewhere and queue the click that follows once the
-	// game has noticed it arrive. When *verbLoop* is not -1 the verb cursor is
-	// cycled onto it first.
-	void pointAndClick(int x, int y, bool rightButton, int verbLoop = -1);
+	// game has noticed it arrive. When *verb* is not nullptr the verb cursor
+	// is cycled onto it first.
+	void pointAndClick(int x, int y, bool rightButton, const VerbCursor *verb = nullptr);
 	// Send the queued click, if the pointer has been in place long enough.
 	void pumpPendingClick();
 	// Warp the pointer, and leave an event behind so a backend that draws
@@ -226,9 +236,10 @@ private:
 
 	SciEngine *_vm;
 
-	// The verb the queued click is waiting for the cursor to reach, or -1 when
-	// it is not waiting on one.
-	int _pendingVerbLoop;
+	// The verb the queued click is waiting for the cursor to reach, or nullptr
+	// when it is not waiting on one. The tables are file-scope constants, so
+	// the pointer outlives every click made with it.
+	const VerbCursor *_pendingVerb;
 	int _cyclesSent;
 	uint32 _cycleFrame;
 

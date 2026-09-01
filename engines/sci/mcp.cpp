@@ -62,7 +62,7 @@ SciMcpBridge *SciMcpBridge::create(SciEngine *vm) {
 SciMcpBridge::SciMcpBridge(SciEngine *vm) :
 	MCP::McpBridge(vm),
 	_vm(vm),
-	_pendingVerbLoop(-1),
+	_pendingVerb(nullptr),
 	_cyclesSent(0),
 	_cycleFrame(0),
 	_pendingClick(false),
@@ -218,14 +218,14 @@ reg_t SciMcpBridge::castList() const {
 
 // Gabriel Knight keeps every cursor in view 958 and picks the verb by loop.
 static const SciMcpBridge::VerbCursor kGabrielKnightVerbs[] = {
-	{ "walk_to",   4 },
-	{ "look_at",   5 },
-	{ "talk_to",   6 },
-	{ "ask_about", 7 },
-	{ "take",      0 },
-	{ "use",       1 },
-	{ "open",      2 },
-	{ "move",      3 }
+	{ "walk_to",   958, 4 },
+	{ "look_at",   958, 5 },
+	{ "talk_to",   958, 6 },
+	{ "ask_about", 958, 7 },
+	{ "take",      958, 0 },
+	{ "use",       958, 1 },
+	{ "open",      958, 2 },
+	{ "move",      958, 3 }
 };
 
 // The verbs this game offers, as a sentence to put in a refusal.
@@ -249,10 +249,10 @@ Common::String SciMcpBridge::verbList() const {
 // needs no screen coordinates and so cannot be thrown off by a game that
 // moves or hides its bar.
 static const SciMcpBridge::VerbCursor kSpaceQuest6Verbs[] = {
-	{ "use",     0 },  // HANDS
-	{ "look_at", 1 },  // EYES
-	{ "walk_to", 2 },  // FEET
-	{ "talk_to", 3 }   // MOUTH
+	{ "use",     953, 0 },  // HANDS
+	{ "look_at", 953, 1 },  // EYES
+	{ "walk_to", 953, 2 },  // FEET
+	{ "talk_to", 953, 3 }   // MOUTH
 };
 
 const SciMcpBridge::VerbCursor *SciMcpBridge::verbTable(uint &count) const {
@@ -269,37 +269,29 @@ const SciMcpBridge::VerbCursor *SciMcpBridge::verbTable(uint &count) const {
 	return nullptr;
 }
 
-int SciMcpBridge::verbCursorView() const {
-	const Common::String game(_vm->getGameIdStr());
-	if (game == "gk1" || game == "gk1demo")
-		return 958;
-	if (game == "sq6")
-		return 953;
-	return -1;
-}
-
 Common::String SciMcpBridge::currentVerb() const {
 	uint count = 0;
 	const VerbCursor *verbs = verbTable(count);
-	if (verbs == nullptr || _vm->mcpCursorView() != verbCursorView())
+	if (verbs == nullptr)
 		return Common::String();
 	for (uint i = 0; i < count; i++) {
-		if (verbs[i].loop == _vm->mcpCursorLoop())
+		if (verbs[i].view == _vm->mcpCursorView() &&
+		    verbs[i].loop == _vm->mcpCursorLoop())
 			return verbs[i].verb;
 	}
 	return Common::String();
 }
 
-int SciMcpBridge::loopForVerb(const Common::String &verb) const {
+const SciMcpBridge::VerbCursor *SciMcpBridge::verbEntry(const Common::String &verb) const {
 	uint count = 0;
 	const VerbCursor *verbs = verbTable(count);
 	if (verbs == nullptr)
-		return -1;
+		return nullptr;
 	for (uint i = 0; i < count; i++) {
 		if (verb == verbs[i].verb)
-			return verbs[i].loop;
+			return &verbs[i];
 	}
-	return -1;
+	return nullptr;
 }
 
 void SciMcpBridge::collectTargets(Common::Array<Target> &out) const {
@@ -504,8 +496,8 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	}
 
 	uint count = 0;
-	const int loop = loopForVerb(verb);
-	if (verbTable(count) != nullptr && loop < 0) {
+	const VerbCursor *entry = verbEntry(verb);
+	if (verbTable(count) != nullptr && entry == nullptr) {
 		errorOut = Common::String::format("act: '%s' is not a verb here. %s",
 		                                  verb.c_str(), verbList().c_str());
 		return false;
@@ -515,7 +507,7 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	// two buttons are the whole vocabulary: the left one does whatever the
 	// thing is for, the right one looks at it.
 	bool right = false;
-	if (loop < 0) {
+	if (entry == nullptr) {
 		if (verb == "look_at") {
 			right = true;
 		} else if (verb != "use" && verb != "walk_to" && verb != "talk_to") {
@@ -528,7 +520,7 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	}
 
 	_skipStream = false;
-	pointAndClick(target.x, target.y, right, loop);
+	pointAndClick(target.x, target.y, right, entry);
 	beginStream();
 	return true;
 }
@@ -551,7 +543,7 @@ bool SciMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &error
 	const int y = (int)args.asObject()["y"]->asIntegerNumber();
 
 	_skipStream = false;
-	pointAndClick(x, y, false, loopForVerb("walk_to"));
+	pointAndClick(x, y, false, verbEntry("walk_to"));
 	beginStream();
 	return true;
 }
@@ -684,7 +676,7 @@ void SciMcpBridge::injectMouseClick(int x, int y, const Common::String &button, 
 	}
 }
 
-void SciMcpBridge::pointAndClick(int x, int y, bool rightButton, int verbLoop) {
+void SciMcpBridge::pointAndClick(int x, int y, bool rightButton, const VerbCursor *verb) {
 	// Point first, click after: the game hit-tests a click against where the
 	// pointer already is, so arriving and pressing in the same cycle resolves
 	// the press against wherever the pointer was before.
@@ -694,7 +686,7 @@ void SciMcpBridge::pointAndClick(int x, int y, bool rightButton, int verbLoop) {
 	_pendingX = x;
 	_pendingY = y;
 	_pendingFrame = _frameCounter;
-	_pendingVerbLoop = verbLoop;
+	_pendingVerb = verb;
 	_cyclesSent = 0;
 	_cycleFrame = _frameCounter;
 }
@@ -706,10 +698,10 @@ void SciMcpBridge::pumpPendingClick() {
 	// Cycle the cursor onto the wanted verb before pressing. The right button
 	// is what a player uses for this, and it is sent over several frames
 	// because the game only takes one press per cycle.
-	if (_pendingVerbLoop >= 0) {
-		if (_vm->mcpCursorView() == verbCursorView() &&
-		    _vm->mcpCursorLoop() == _pendingVerbLoop) {
-			_pendingVerbLoop = -1;
+	if (_pendingVerb != nullptr) {
+		if (_vm->mcpCursorView() == _pendingVerb->view &&
+		    _vm->mcpCursorLoop() == _pendingVerb->loop) {
+			_pendingVerb = nullptr;
 			_pendingFrame = _frameCounter;
 			return;
 		}
@@ -718,7 +710,7 @@ void SciMcpBridge::pumpPendingClick() {
 			// whatever cursor is showing is still what the player asked for
 			// somewhere to happen, and the refusal the game gives is more use
 			// than silence.
-			_pendingVerbLoop = -1;
+			_pendingVerb = nullptr;
 			_pendingFrame = _frameCounter;
 			return;
 		}
@@ -851,8 +843,19 @@ Common::JSONObject SciMcpBridge::buildStateChanges() const {
 }
 
 bool SciMcpBridge::isActionDone() const {
-	if (_skipStream)
-		return (_frameCounter - _sseStartFrame) >= kSkipFrames;
+	if (_skipStream) {
+		// A frame here is a game cycle, and a game cycle is what the bridge is
+		// pumped from - so where the game is not running cycles the counter
+		// stands still. That is exactly where a skip is sent: the older games
+		// spend their openings in a tight loop asking for input, which reaches
+		// the transport (so the server answers) but never the frame counter.
+		// Waiting on frames there waits for the wall clock instead, three
+		// minutes away, and the skip comes back as a timeout. Real time is
+		// the only clock that runs in that loop, so honour it too.
+		if ((_frameCounter - _sseStartFrame) >= kSkipFrames)
+			return true;
+		return g_system != nullptr && (g_system->getMillis() - _sseStartMs) >= kSkipMs;
+	}
 	return !_pendingClick && playerHasControl();
 }
 

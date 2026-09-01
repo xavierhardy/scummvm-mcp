@@ -103,6 +103,14 @@ void GfxCursor::purgeCache() {
 }
 
 void GfxCursor::kernelSetShape(GuiResourceId resourceId) {
+	// The other half of the cursor record the bridge keeps. The SCI1 games
+	// name their cursors by cursor-resource number rather than by a loop of a
+	// view, and in an icon-bar game the cursor is the verb either way, so both
+	// paths have to be noted. A shape cursor has no loop, which is what -1
+	// says here; a game uses one mechanism or the other, never both, so the
+	// number is never ambiguous within a game's own table.
+	g_sci->mcpOnCursorView(resourceId, -1, -1);
+
 	if (resourceId == -1) {
 		// no resourceId given, so we actually hide the cursor
 		kernelHide();
