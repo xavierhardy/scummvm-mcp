@@ -33,6 +33,7 @@ namespace Mohawk {
 
 class CSTimeCase;
 class CSTimeInterface;
+class MohawkMcpBridge;
 class CSTimeView;
 class VideoManager;
 
@@ -143,6 +144,17 @@ public:
 
 	CSTimeView *getView() { return _view; }
 	CSTimeCase *getCase() { return _case; }
+
+	// --- MCP ---------------------------------------------------------------
+	// The bridge is built in the constructor, before run() touches graphics or
+	// audio, so a client can connect while the game is still starting up.
+	bool mcpEnabled() const;
+	// Once per turn of the main loop.
+	void mcpPump();
+	// Every line the game puts in a speech bubble; `charId` is who said it,
+	// or -1 for a line nobody speaks.
+	void mcpOnText(const Common::String &text, int charId);
+
 	CSTimeInterface *getInterface() { return _interface; }
 
 	void loadResourceFile(const Common::Path &name);
@@ -161,6 +173,8 @@ public:
 
 private:
 	CSTimeCase *_case;
+	MohawkMcpBridge *_mcpBridge = nullptr;
+	bool _mcpInPump = false;
 	CSTimeInterface *_interface;
 	CSTimeView *_view;
 

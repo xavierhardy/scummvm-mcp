@@ -20,6 +20,7 @@
  */
 
 #include "mohawk/cstime.h"
+#include "mohawk/mcp.h"
 #include "mohawk/cstime_cases.h"
 #include "mohawk/cstime_game.h"
 #include "mohawk/cstime_ui.h"
@@ -38,6 +39,12 @@
 namespace Mohawk {
 
 MohawkEngine_CSTime::MohawkEngine_CSTime(OSystem *syst, const MohawkGameDescription *gamedesc) : MohawkEngine(syst, gamedesc) {
+	// Bind the MCP server here, before run() touches graphics or audio: a
+	// client can then connect while the game is still starting up (every tool
+	// says so until a scene is loaded).
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = MohawkMcpBridge::create(this);
+
 	_rnd = new Common::RandomSource("cstime");
 
 	// If the user just copied the CD contents, the fonts are in a subdirectory.
@@ -62,7 +69,29 @@ MohawkEngine_CSTime::MohawkEngine_CSTime(OSystem *syst, const MohawkGameDescript
 	_nextSceneId = 1;
 }
 
+bool MohawkEngine_CSTime::mcpEnabled() const {
+	return _mcpBridge != nullptr && _mcpBridge->isEnabled();
+}
+
+void MohawkEngine_CSTime::mcpPump() {
+	// The pump's own work reaches the event handling this is called from, so
+	// it must not be able to walk back into itself.
+	if (_mcpBridge == nullptr || _mcpInPump)
+		return;
+	_mcpInPump = true;
+	_mcpBridge->pump();
+	_mcpInPump = false;
+}
+
+void MohawkEngine_CSTime::mcpOnText(const Common::String &text, int charId) {
+	if (_mcpBridge)
+		_mcpBridge->onGameText(text, charId);
+}
+
 MohawkEngine_CSTime::~MohawkEngine_CSTime() {
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
+
 	delete _interface;
 	delete _view;
 	delete _sound;
@@ -120,6 +149,10 @@ Common::Error MohawkEngine_CSTime::run() {
 }
 
 void MohawkEngine_CSTime::update() {
+	// One turn of the main loop, and where the MCP server is serviced: a tool
+	// call is answered between two turns rather than in the middle of one.
+	mcpPump();
+
 	Common::Event event;
 	while (_eventMan->pollEvent(event)) {
 		switch (event.type) {

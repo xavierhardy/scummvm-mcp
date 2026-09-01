@@ -96,6 +96,7 @@ _FIXTURE_INDEX = {
     "ween": 41,
     "zak_repixeled": 42,
     "zak_seamonster": 43,
+    "cstime": 44,
 }
 
 
@@ -104,6 +105,12 @@ _FIXTURE_INDEX = {
 #: runs its start-up script before it ever hands time back, and only a game
 #: cycle answers a tool call.
 SLOW_BOOT_SECS = 180.0
+
+#: Longer still, for an engine whose detection table has to be walked before
+#: the game starts. Mohawk's covers every Myst and Riven variant there is, and
+#: on a slow machine that scan takes several minutes - during which the port is
+#: bound but nothing answers, because only a game loop answers.
+HUGE_TABLE_BOOT_SECS = 600.0
 
 
 def _client(
@@ -430,6 +437,15 @@ def ween_client() -> Iterator[McpClient]:
     Opens with minutes of video, so its tests skip their way in and give the
     opening a generous number of goes."""
     yield from _client("ween-demo", "ween")
+
+
+@pytest.fixture(scope="session")
+def cstime_client() -> Iterator[McpClient]:
+    """Where in Time is Carmen Sandiego? (Mohawk engine, CSTime).
+
+    A pointer game with no verbs at all: a scene is a picture with regions
+    marked on it, and clicking one is the whole vocabulary. No save support."""
+    yield from _client("cstime-demo", "cstime", connect_timeout=HUGE_TABLE_BOOT_SECS)
 
 
 @pytest.fixture(scope="session")

@@ -1,6 +1,8 @@
 MODULE := engines/mohawk
 
 MODULE_OBJS = \
+	mcp.o \
+	mcp_names.o \
 	bitmap.o \
 	console.o \
 	cursors.o \

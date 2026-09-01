@@ -148,6 +148,7 @@ def _launch_args(
         "ween-demo",
         "zak-repixeled",
         "zak-seamonster",
+        "cstime-demo",
     ):
         # No save slot — these games start from scratch and handle their own intro.
         return [scummvm_binary, "-c", ini_path, game_id]
@@ -279,6 +280,7 @@ _GAME_PATH_ENV = {
     "ween-demo": "WEEN_DEMO_PATH",
     "zak-repixeled": "ZAK_REPIXELED_PATH",
     "zak-seamonster": "ZAK_SEAMONSTER_PATH",
+    "cstime-demo": "CSTIME_DEMO_PATH",
 }
 
 LOCAL_PATHS_FILE = os.path.normpath(

@@ -65,3 +65,8 @@ ween-demo = "~/games/ween-dos-demo2-uk"                   # WEEN_DEMO_PATH
 # bar of GUI buttons, the Sea Monster demo uses the engine's cursor modes.
 zak-repixeled = "~/games/ags/zakrepixeled"                # ZAK_REPIXELED_PATH
 zak-seamonster = "~/games/ags/zakseamonster-demo"         # ZAK_SEAMONSTER_PATH
+
+# --- Mohawk --------------------------------------------------------------
+# Only the CSTime game is instrumented; the mohawk engine also covers Myst
+# and Riven, which are a different shape entirely.
+cstime-demo = "~/games/cstime-win-demo-en"                # CSTIME_DEMO_PATH
