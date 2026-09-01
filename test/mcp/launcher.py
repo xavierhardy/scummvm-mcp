@@ -126,6 +126,19 @@ def _resolve_save_path(game_id: str, ini_path: str, isolate_saves: bool) -> str:
     return save_path
 
 
+def _has_captured_save(game_id: str) -> bool:
+    """Whether a save slot for *game_id* has been captured into the repository.
+
+    A game with none has to start from scratch: passing --save-slot for a save
+    that is not there leaves the engine sitting on an error, which headless is
+    a hang.
+    """
+    folder = os.path.join(os.path.dirname(__file__), "save_slots", game_id)
+    if not os.path.isdir(folder):
+        return False
+    return any(not name.startswith(".") for name in os.listdir(folder))
+
+
 def _launch_args(
     game_id: str,
     scummvm_binary: str,
@@ -134,23 +147,17 @@ def _launch_args(
     save_path: str,
 ) -> list[str]:
     """Build the ScummVM command line for ``game_id``."""
-    if game_id in (
-        "atlantis",
-        "maniac",
-        "woodruff",
-        "gob1-demo",
-        "dw1-demo",
-        "dw2-demo",
-        "gk1-demo",
-        "sq6-demo",
-        "gob2-demo",
-        "gob3-demo",
-        "ween-demo",
-        "zak-repixeled",
-        "zak-seamonster",
-        "cstime-demo",
-    ):
-        # No save slot — these games start from scratch and handle their own intro.
+    if not _has_captured_save(game_id):
+        # No save to start from, so start from scratch and let the game handle
+        # its own opening.
+        #
+        # This used to be a list of the games that could not save, which had to
+        # be added to every time another one turned up — and a great many of
+        # them do. Several of the full games refuse to save anywhere in their
+        # opening (Loom, both Discworlds, Gobliins 2 and 3 were all asked for
+        # seventeen minutes and answered "cannot be saved in the current state"
+        # the whole way), and every demo here has always refused. Whether a
+        # save was captured is the same question and answers itself.
         return [scummvm_binary, "-c", ini_path, game_id]
     if game_id == "sword2-demo":
         # Starts from scratch like the demos above, but this engine offers to
