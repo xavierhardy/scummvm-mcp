@@ -18,10 +18,23 @@ A game refuses to save while its opening is still running, and says so in
 those words - so the save attempt is itself the readiness test, retried on a
 long budget because an opening can be many minutes of film. Escape is pressed
 throughout: some openings take notice of it and some do not, and a good few
-take notice of nothing at all. Loom, both Discworlds and Gobliins 2 and 3 were
-each asked for seventeen minutes and refused the whole way; those games have no
-save here and start from scratch instead, which the launcher works out for
-itself.
+take notice of nothing at all.
+
+Some games refuse however long it waits, and for three different reasons worth
+knowing before spending seventeen minutes finding out:
+
+  * the game's own opening simply never permits it - Loom, both Discworlds,
+    Gobliins 2 and 3 and Ween were each asked for seventeen minutes and
+    refused the whole way;
+  * AGI only permits a save while the typing prompt is showing, and King's
+    Quest III keeps it hidden - so it refuses even standing in a room taking
+    commands;
+  * and SCI asks ``canSaveFromGMM()`` before anything else, which is false for
+    most of its games: ScummVM will not save them from outside their own menu
+    whatever state they are in.
+
+Those games have no save here and start from scratch instead, which the
+launcher works out for itself.
 
 And ``can_act`` is not the same question. It is true through a good deal of a
 cutscene, so it cannot say whether the player has control. Walking to where the
