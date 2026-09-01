@@ -126,8 +126,13 @@ void AsylumMcpBridge::heroPosition(int &x, int &y) const {
 	const Common::Point *point = player->getPoint1();
 	if (point == nullptr)
 		return;
-	x = point->x;
-	y = point->y;
+	// Everything the engine stores is in world coordinates and the scene
+	// scrolls under them, so what is published is what a click uses: the same
+	// point on the screen. The engine does the sum the other way round when it
+	// takes a click (Scene::handleEvent: xLeft + mouse.x).
+	const WorldStats *world = _vm->scene()->worldstats();
+	x = point->x - world->xLeft;
+	y = point->y - world->yTop;
 }
 
 bool AsylumMcpBridge::playerHasControl() const {
@@ -171,14 +176,15 @@ void AsylumMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		target.name = asylumDisambiguate(name, occurrence);
 		target.label = label;
 		// The bounding rectangle is where the game hit-tests, so its middle is
-		// where a player would aim.
+		// where a player would aim - converted to screen coordinates, because
+		// that is what a click is in and what walk() takes.
 		Common::Rect *bounds = object->getBoundingRect();
 		if (bounds != nullptr && bounds->width() > 0 && bounds->height() > 0) {
-			target.x = object->x + bounds->left + bounds->width() / 2;
-			target.y = object->y + bounds->top + bounds->height() / 2;
+			target.x = object->x + bounds->left + bounds->width() / 2 - world->xLeft;
+			target.y = object->y + bounds->top + bounds->height() / 2 - world->yTop;
 		} else {
-			target.x = object->x;
-			target.y = object->y;
+			target.x = object->x - world->xLeft;
+			target.y = object->y - world->yTop;
 		}
 		out.push_back(target);
 	}
