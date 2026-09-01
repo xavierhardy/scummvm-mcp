@@ -22,6 +22,8 @@
 #include "agi/agi.h"
 #include "agi/words.h"
 
+#include "common/algorithm.h"
+#include "common/array.h"
 #include "common/textconsole.h"
 
 namespace Agi {
@@ -388,6 +390,15 @@ void Words::parseUsingDictionary(const char *rawUserInput) {
 		_vm->setFlag(VM_FLAG_ENTERED_CLI, false);
 	}
 	_vm->setFlag(VM_FLAG_SAID_ACCEPTED_INPUT, false);
+}
+
+void Words::getAllWords(Common::Array<Common::String> &out) const {
+	for (Common::HashMap<byte, Common::Array<WordEntry>>::const_iterator it = _dictionary.begin();
+	     it != _dictionary.end(); ++it) {
+		for (uint i = 0; i < it->_value.size(); i++)
+			out.push_back(it->_value[i].word);
+	}
+	Common::sort(out.begin(), out.end());
 }
 
 uint16 Words::getEgoWordCount() const {

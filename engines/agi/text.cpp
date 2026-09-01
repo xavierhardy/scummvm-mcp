@@ -502,6 +502,10 @@ void TextMgr::messageBox_KeyPress(uint16 newKey) {
 }
 
 void TextMgr::drawMessageBox(const char *textPtr, int16 forcedHeight, int16 wantedWidth, bool forcedWidth) {
+	// Everything the game says to the player arrives here: this is the only
+	// way it says anything at all.
+	if (textPtr != nullptr)
+		_vm->mcpOnText(Common::String(textPtr));
 	int16 maxWidth = wantedWidth;
 	int16 startingRow = 0;
 	char *processedTextPtr;

@@ -155,6 +155,10 @@ void AgiEngine::resetControllers() {
 }
 
 void AgiEngine::interpretCycle() {
+	// One interpreter cycle is one MCP frame: it is the unit every streaming
+	// budget in the bridge is written in.
+	mcpPump();
+
 	ScreenObjEntry *screenObjEgo = &_game.screenObjTable[SCREENOBJECTS_EGO_ENTRY];
 
 	if (!_game.playerControl)
@@ -212,6 +216,12 @@ void AgiEngine::interpretCycle() {
 
 // We return the current key, or 0 if no key was pressed
 uint16 AgiEngine::processAGIEvents() {
+	// Every place the interpreter blocks without running a cycle comes through
+	// here - a message box, the inventory screen, a menu, the save dialog - so
+	// this is where the server is serviced while the game is not cycling.
+	// Transport only: no cycle has run, so no frame has passed.
+	mcpPumpTransport();
+
 	ScreenObjEntry *screenObjEgo = &_game.screenObjTable[SCREENOBJECTS_EGO_ENTRY];
 
 	wait(10);

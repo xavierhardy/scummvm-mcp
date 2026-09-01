@@ -52,6 +52,12 @@ private:
 
 	bool _hasExtendedCharacters; // true on WORDS.TOK.EXTENDED
 public:
+	// Every word in the dictionary, sorted. The MCP bridge publishes this:
+	// a parser game is only playable by somebody who knows which words it was
+	// built with, and the interpreter's answer to a word it has never heard is
+	// the same as its answer to a sensible idea it cannot carry out.
+	void getAllWords(Common::Array<Common::String> &out) const;
+
 	uint16 getEgoWordCount() const;
 	const char *getEgoWord(int16 wordNr) const;
 	uint16 getEgoWordId(int16 wordNr) const;

@@ -12,6 +12,8 @@ MODULE_OBJS := \
 	inv.o \
 	keyboard.o \
 	loader.o \
+	mcp.o \
+	mcp_names.o \
 	loader_a2.o \
 	loader_gal.o \
 	loader_gal_a2.o \

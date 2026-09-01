@@ -63,6 +63,8 @@ class RandomSource;
  */
 namespace Agi {
 
+class AgiMcpBridge;
+
 #define TITLE       "AGI engine"
 
 #define DIR_        "dir"
@@ -789,6 +791,19 @@ public:
 
 	byte getVar(int16 varNr);
 	void setVar(int16 varNr, byte newValue);
+
+	// --- MCP ---------------------------------------------------------------
+	// Built in the constructor so the server binds its port before anything
+	// can block on startup, and null when `mcp` was not asked for.
+	AgiMcpBridge *_mcpBridge = nullptr;
+	// Once per interpreter cycle.
+	void mcpPump();
+	// From every place the interpreter blocks without running a cycle - a
+	// message box, the inventory screen, a menu - so the server still answers
+	// there. Does not advance the frame counter.
+	void mcpPumpTransport();
+	// Every line the game prints.
+	void mcpOnText(const Common::String &text);
 
 private:
 	void applyVolumeToMixer();

@@ -38,6 +38,7 @@
 #include "audio/mididrv.h"
 
 #include "agi/agi.h"
+#include "agi/mcp.h"
 #include "agi/detection.h"
 #include "agi/font.h"
 #include "agi/graphics.h"
@@ -56,6 +57,21 @@ namespace Agi {
 
 void AgiEngine::allowSynthetic(bool allow) {
 	_allowSynthetic = allow;
+}
+
+void AgiEngine::mcpPump() {
+	if (_mcpBridge)
+		_mcpBridge->pump();
+}
+
+void AgiEngine::mcpPumpTransport() {
+	if (_mcpBridge)
+		_mcpBridge->pumpFromStall();
+}
+
+void AgiEngine::mcpOnText(const Common::String &text) {
+	if (_mcpBridge)
+		_mcpBridge->onGameText(text);
 }
 
 void AgiEngine::wait(uint32 msec, bool busy) {
@@ -412,6 +428,12 @@ const byte *AgiBase::getFontData() {
 }
 
 AgiEngine::AgiEngine(OSystem *syst, const AGIGameDescription *gameDesc) : AgiBase(syst, gameDesc) {
+	// Built first, and before anything that can block: the server binds its
+	// port here, so a client can connect and be told the game is still
+	// starting rather than find nothing listening at all.
+	ConfMan.registerDefault("mcp", false);
+	_mcpBridge = AgiMcpBridge::create(this);
+
 	// Setup mixer
 	syncSoundSettings();
 
@@ -591,6 +613,8 @@ void AgiEngine::redrawScreen() {
 }
 
 AgiEngine::~AgiEngine() {
+	delete _mcpBridge;
+	_mcpBridge = nullptr;
 	agiDeinit();
 	delete _loader;
 	if (_gfx) {
