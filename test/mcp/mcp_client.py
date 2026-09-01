@@ -559,6 +559,16 @@ class McpClient:
                     return notes, messages, None
         return notes, messages, result
 
+    def set_timeout(self, seconds: float) -> None:
+        """How long a single request may take from now on.
+
+        Separate from the timeout used while connecting: that one wants to be
+        short, so a game that is still starting up is asked often; this one
+        wants to be long enough for whatever the slowest action of this game
+        turns out to be.
+        """
+        self._client.timeout = httpx.Timeout(seconds)
+
     def close(self) -> None:
         """Close the client."""
         self._client.close()

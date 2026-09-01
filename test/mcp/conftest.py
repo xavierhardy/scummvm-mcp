@@ -103,8 +103,10 @@ _FIXTURE_INDEX = {
 #: How long to keep asking an engine that binds its port long before it runs
 #: its first game cycle. SCI loads its resources, sets up its sound driver and
 #: runs its start-up script before it ever hands time back, and only a game
-#: cycle answers a tool call.
-SLOW_BOOT_SECS = 180.0
+#: cycle answers a tool call. The number went up when AGS and Mohawk were
+#: built in: every engine's detection table is walked at start-up, and those
+#: two brought thousands of entries each.
+SLOW_BOOT_SECS = 360.0
 
 #: Longer still, for an engine whose detection table has to be walked before
 #: the game starts. Mohawk's covers every Myst and Riven variant there is, and
@@ -120,6 +122,7 @@ def _client(
     checkpoint: bool = False,
     ini_overrides: dict[str, str] | None = None,
     connect_timeout: float = MCP_CONNECT_TIMEOUT_SECS,
+    request_timeout: float = MCP_CONNECT_TIMEOUT_SECS,
 ) -> Iterator[McpClient]:
     """Launch ScummVM for *game_id*, yield a connected McpClient, then tear down.
 
@@ -145,10 +148,17 @@ def _client(
     # request may take. They were the same number until an engine turned up
     # that binds its port long before it runs its first game cycle - which is
     # what actually answers - and SCI takes about a minute to get there.
+    # Connect with the ordinary per-request timeout: while the game is still
+    # starting up every attempt fails at once, and a long one here would spend
+    # the whole connect budget on a handful of tries. The longer timeout is
+    # for the calls made afterwards, where a single action can genuinely take
+    # a while.
     client = wait_for_mcp(
         MCP_HOST, port, connect_timeout=connect_timeout,
         timeout=MCP_CONNECT_TIMEOUT_SECS,
     )
+    if request_timeout != MCP_CONNECT_TIMEOUT_SECS:
+        client.set_timeout(request_timeout)
     # Where this instance's screenshot tool writes, for tests that look there.
     client.screenshot_path = getattr(proc, "screenshot_path", None)
     try:
@@ -403,7 +413,12 @@ def gk1_client() -> Iterator[McpClient]:
     No save support - the demo answers "game cannot be saved in the current
     state" wherever it is asked - so this is one ordered sequence on a single
     instance, clicked in from the title screen."""
-    yield from _client("gk1-demo", "gk1", connect_timeout=SLOW_BOOT_SECS)
+    # A single act here can take a while: this game's verbs are cursors, and
+    # reaching one means cycling the cursor with the right button until it is
+    # the wanted one, several frames apart.
+    yield from _client(
+        "gk1-demo", "gk1", connect_timeout=SLOW_BOOT_SECS, request_timeout=120.0
+    )
 
 
 @pytest.fixture(scope="session")

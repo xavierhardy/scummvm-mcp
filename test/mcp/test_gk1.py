@@ -18,6 +18,8 @@ state" wherever it is asked - so the whole run is one ordered sequence on a
 single fresh instance, clicked in from the title screen.
 """
 
+import time
+
 import pytest
 
 from mcp_client import McpClient
@@ -30,13 +32,18 @@ BOOKSTORE = 210
 VERBS = ["walk_to", "look_at", "talk_to", "ask_about", "take", "use", "open", "move"]
 
 
-def _click_into_the_bookstore(client: McpClient, tries: int = 16) -> dict:
-    """Click past the title card and the DAY 1 card into the shop."""
+def _click_into_the_bookstore(client: McpClient, tries: int = 30) -> dict:
+    """Click past the title card and the DAY 1 card into the shop.
+
+    The pause matters: each card takes a moment to give way, and asking again
+    immediately just spends the whole budget on the first one.
+    """
     for _ in range(tries):
         state = client.state()
         if (state.get("room") or {}).get("id") == BOOKSTORE:
             return state
         client.call_tool("mouse_click", {"x": 160, "y": 100})
+        time.sleep(2)
     raise AssertionError("the opening never gave way to the bookstore")
 
 
@@ -117,8 +124,11 @@ def test_09_the_lines_the_game_says_are_captured(playing: McpClient) -> None:
     seen: list[str] = []
     for _ in range(12):
         seen += [m["text"] for m in playing.state().get("messages", [])]
-        if seen:
-            break
+        # A line said while an action is running arrives on that action's own
+        # stream rather than in the next snapshot.
+        seen += [m.get("text", "") for m in playing.last_notifications]
+        if any(len(line.strip()) > 4 for line in seen):
+            return
         playing.call_tool("mouse_click", {"x": 160, "y": 180})
-    assert seen, "the game said nothing at all through the whole scene"
-    assert any(len(line.strip()) > 4 for line in seen), f"only noise: {seen}"
+        time.sleep(2)
+    raise AssertionError(f"the game said nothing through the whole scene: {seen}")
