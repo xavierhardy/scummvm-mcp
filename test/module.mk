@@ -94,6 +94,22 @@ ifeq ($(ENABLE_TOON), STATIC_PLUGIN)
 	TESTS += $(srcdir)/test/engines/toon/*.h
 	TEST_LIBS += engines/toon/libtoon.a
 endif
+ifeq ($(ENABLE_AGI), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/agi/*.h
+	TEST_LIBS += engines/agi/libagi.a
+endif
+ifeq ($(ENABLE_KYRA), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/kyra/*.h
+	TEST_LIBS += engines/kyra/libkyra.a
+endif
+ifeq ($(ENABLE_AGOS), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/agos/*.h
+	TEST_LIBS += engines/agos/libagos.a
+endif
+ifeq ($(ENABLE_ASYLUM), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/asylum/*.h
+	TEST_LIBS += engines/asylum/libasylum.a
+endif
 
 # The MCP naming/normalization helpers are shared by the per-engine MCP test
 # suites. They are listed as bare objects rather than engines/libengines.a so
