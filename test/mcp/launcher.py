@@ -126,7 +126,7 @@ def _resolve_save_path(game_id: str, ini_path: str, isolate_saves: bool) -> str:
     return save_path
 
 
-def _has_captured_save(game_id: str) -> bool:
+def has_captured_save(game_id: str) -> bool:
     """Whether a save slot for *game_id* has been captured into the repository.
 
     A game with none has to start from scratch: passing --save-slot for a save
@@ -136,7 +136,10 @@ def _has_captured_save(game_id: str) -> bool:
     folder = os.path.join(os.path.dirname(__file__), "save_slots", game_id)
     if not os.path.isdir(folder):
         return False
-    return any(not name.startswith(".") for name in os.listdir(folder))
+    return any(
+        not name.startswith(".") and name != "timestamps"
+        for name in os.listdir(folder)
+    )
 
 
 def _launch_args(
@@ -147,7 +150,7 @@ def _launch_args(
     save_path: str,
 ) -> list[str]:
     """Build the ScummVM command line for ``game_id``."""
-    if not _has_captured_save(game_id):
+    if not has_captured_save(game_id):
         # No save to start from, so start from scratch and let the game handle
         # its own opening.
         #
@@ -366,16 +369,24 @@ def require_game_path(game_id: str) -> None:
 def save_slot_path(game_id: str, slot: int) -> str:
     """Path to the committed save file for *game_id*'s *slot*.
 
-    Defaults to the SCUMM ``<game>.sNN`` form; see ``_SAVE_NAME_FMT`` for the
-    engines that name their saves differently.
+    Every engine names its saves differently — ``monkey.s01``, ``sword1.001``,
+    ``SKY-VM.001``, ``kyra1.000`` — and the fifteen engines here between them
+    use most of the spellings there are. Rather than keep a table of them, the
+    SCUMM form is tried first (it is much the commonest) and then the folder is
+    asked: a save-slot folder holds this game's save and nothing else, so a
+    file sitting in it *is* the save whatever the engine chose to call it.
     """
+    folder = os.path.join(os.path.dirname(__file__), "save_slots", game_id)
     fmt = _SAVE_NAME_FMT.get(game_id, "{game_id}.s{slot:02d}")
-    return os.path.join(
-        os.path.dirname(__file__),
-        "save_slots",
-        game_id,
-        fmt.format(game_id=game_id, slot=slot),
+    named = os.path.join(folder, fmt.format(game_id=game_id, slot=slot))
+    if os.path.isfile(named) or not os.path.isdir(folder):
+        return named
+    saves = sorted(
+        name for name in os.listdir(folder)
+        # `timestamps` is ScummVM's own bookkeeping, not a save.
+        if not name.startswith(".") and name != "timestamps"
     )
+    return os.path.join(folder, saves[0]) if saves else named
 
 
 def require_save_slot(game_id: str, slot: int) -> None:

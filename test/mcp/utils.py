@@ -11,6 +11,7 @@ directly.
 
 from launcher import (
     GAME_PATHS,
+    has_captured_save,
     launch_scummvm,
     require_game_path,
     require_save_slot,
@@ -74,6 +75,7 @@ __all__ = [
     "find_object_by_name",
     "find_object_with_verb",
     "get_mcp_port",
+    "has_captured_save",
     "get_state_with_retry",
     "joined_message_text",
     "launch_scummvm",
