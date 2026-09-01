@@ -120,6 +120,12 @@ Common::Error MohawkEngine_CSTime::run() {
 	_view->setModule(new CSTimeModule(this));
 
 	while (!shouldQuit()) {
+		// Every turn of the loop, not only the ones that reach update():
+		// setting up a case and building a scene take a while, and a client
+		// connecting during them would otherwise wait on a bound port that
+		// nothing is listening to.
+		mcpPump();
+
 		switch (_state) {
 		case kCSTStateStartup:
 			// We just jump straight to the case for now.
