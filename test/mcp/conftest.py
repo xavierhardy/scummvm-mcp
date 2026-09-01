@@ -97,6 +97,33 @@ _FIXTURE_INDEX = {
     "zak_repixeled": 42,
     "zak_seamonster": 43,
     "cstime": 44,
+    # The full games. New indices only - never reuse one above.
+    "ft_full": 45,
+    "loom_full": 46,
+    "indy3_full": 47,
+    "atlantis_full": 48,
+    "samnmax_full": 49,
+    "monkey_full": 50,
+    "dw_full": 51,
+    "dw2_full": 52,
+    "sword1_full": 53,
+    "gob2_full": 54,
+    "gob3_full": 55,
+    "ween_full": 56,
+    "gk1_full": 57,
+    "sq6_full": 58,
+    "kq5_full": 59,
+    "kq6_full": 60,
+    "kq7_full": 61,
+    "sq4_full": 62,
+    "sq5_full": 63,
+    "pq3_full": 64,
+    "kq1sci_full": 65,
+    "kq4sci_full": 66,
+    "sq1sci_full": 67,
+    "qfg1_full": 68,
+    "qfg2_full": 69,
+    "sq2vga": 70,
 }
 
 
@@ -536,3 +563,169 @@ def woodruff_client() -> Iterator[McpClient]:
     No save support: the whole run is one ordered sequence on a single instance,
     started fresh and skipped past the intro (like the atlantis/ft demos)."""
     yield from _client("woodruff", "woodruff")
+
+# ---------------------------------------------------------------------------
+# The full games.
+#
+# Each starts from its own slot 1, captured just past the opening so the
+# tests begin where a player would rather than in the middle of a film. A
+# game whose slot has not been captured on this machine skips rather than
+# fails, the same way a game with no data configured does.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def ft_full_client() -> Iterator[McpClient]:
+    """Full Throttle (past the opening, slot 1)."""
+    yield from _client("ft-full", "ft_full", checkpoint=True)
+
+
+@pytest.fixture
+def loom_full_client() -> Iterator[McpClient]:
+    """Loom (CD) (past the opening, slot 1)."""
+    yield from _client("loom-full", "loom_full", checkpoint=True)
+
+
+@pytest.fixture
+def indy3_full_client() -> Iterator[McpClient]:
+    """Indiana Jones and the Last Crusade (past the opening, slot 1)."""
+    yield from _client("indy3-full", "indy3_full", checkpoint=True)
+
+
+@pytest.fixture
+def atlantis_full_client() -> Iterator[McpClient]:
+    """Indiana Jones and the Fate of Atlantis (past the opening, slot 1)."""
+    yield from _client("atlantis-full", "atlantis_full", checkpoint=True)
+
+
+@pytest.fixture
+def samnmax_full_client() -> Iterator[McpClient]:
+    """Sam & Max Hit the Road (past the opening, slot 1)."""
+    yield from _client("samnmax-full", "samnmax_full", checkpoint=True)
+
+
+@pytest.fixture
+def monkey_full_client() -> Iterator[McpClient]:
+    """The Secret of Monkey Island (Amiga) (past the opening, slot 1)."""
+    yield from _client("monkey-full", "monkey_full", checkpoint=True)
+
+
+@pytest.fixture
+def dw_full_client() -> Iterator[McpClient]:
+    """Discworld (past the opening, slot 1)."""
+    yield from _client("dw-full", "dw_full", checkpoint=True)
+
+
+@pytest.fixture
+def dw2_full_client() -> Iterator[McpClient]:
+    """Discworld II (past the opening, slot 1)."""
+    yield from _client("dw2-full", "dw2_full", checkpoint=True)
+
+
+@pytest.fixture
+def sword1_full_client() -> Iterator[McpClient]:
+    """Broken Sword: The Shadow of the Templars (past the opening, slot 1)."""
+    yield from _client("sword1-full", "sword1_full", checkpoint=True)
+
+
+@pytest.fixture
+def gob2_full_client() -> Iterator[McpClient]:
+    """Gobliins 2 (past the opening, slot 1)."""
+    yield from _client("gob2-full", "gob2_full", checkpoint=True)
+
+
+@pytest.fixture
+def gob3_full_client() -> Iterator[McpClient]:
+    """Goblins Quest 3 (past the opening, slot 1)."""
+    yield from _client("gob3-full", "gob3_full", checkpoint=True)
+
+
+@pytest.fixture
+def ween_full_client() -> Iterator[McpClient]:
+    """Ween: The Prophecy (Amiga) (past the opening, slot 1)."""
+    yield from _client("ween-full", "ween_full", checkpoint=True)
+
+
+@pytest.fixture
+def gk1_full_client() -> Iterator[McpClient]:
+    """Gabriel Knight: Sins of the Fathers (past the opening, slot 1)."""
+    yield from _client("gk1-full", "gk1_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def sq6_full_client() -> Iterator[McpClient]:
+    """Space Quest 6 (past the opening, slot 1)."""
+    yield from _client("sq6-full", "sq6_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kq5_full_client() -> Iterator[McpClient]:
+    """King's Quest V (past the opening, slot 1)."""
+    yield from _client("kq5-full", "kq5_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kq6_full_client() -> Iterator[McpClient]:
+    """King's Quest VI (past the opening, slot 1)."""
+    yield from _client("kq6-full", "kq6_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kq7_full_client() -> Iterator[McpClient]:
+    """King's Quest VII (past the opening, slot 1)."""
+    yield from _client("kq7-full", "kq7_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def sq4_full_client() -> Iterator[McpClient]:
+    """Space Quest IV (past the opening, slot 1)."""
+    yield from _client("sq4-full", "sq4_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def sq5_full_client() -> Iterator[McpClient]:
+    """Space Quest V (past the opening, slot 1)."""
+    yield from _client("sq5-full", "sq5_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def pq3_full_client() -> Iterator[McpClient]:
+    """Police Quest III (past the opening, slot 1)."""
+    yield from _client("pq3-full", "pq3_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kq1sci_full_client() -> Iterator[McpClient]:
+    """King's Quest I (SCI remake) (past the opening, slot 1)."""
+    yield from _client("kq1sci-full", "kq1sci_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def kq4sci_full_client() -> Iterator[McpClient]:
+    """King's Quest IV (past the opening, slot 1)."""
+    yield from _client("kq4sci-full", "kq4sci_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def sq1sci_full_client() -> Iterator[McpClient]:
+    """Space Quest I (SCI remake) (past the opening, slot 1)."""
+    yield from _client("sq1sci-full", "sq1sci_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def qfg1_full_client() -> Iterator[McpClient]:
+    """Hero's Quest (past the opening, slot 1)."""
+    yield from _client("qfg1-full", "qfg1_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def qfg2_full_client() -> Iterator[McpClient]:
+    """Quest for Glory II (past the opening, slot 1)."""
+    yield from _client("qfg2-full", "qfg2_full", checkpoint=True, connect_timeout=SLOW_BOOT_SECS)
+
+
+@pytest.fixture
+def sq2vga_client() -> Iterator[McpClient]:
+    """Space Quest II VGA remake (past the opening, slot 1)."""
+    yield from _client("sq2vga", "sq2vga", checkpoint=True)
+

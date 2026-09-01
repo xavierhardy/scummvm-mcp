@@ -856,10 +856,23 @@ void ResourceManager::scanNewSources() {
 	// be warned of bad resources in this situation (KQ Collection 1997 has a
 	// bad copy of KQ5 on CD 1; the working copy is on CD 2)
 	if (!_detectionMode && _hasBadResources) {
-		showScummVMDialog(_("Missing or corrupt game resources have been detected. "
-							"Some game features may not work properly. Please check "
-							"the console for more information, and verify that your "
-							"game files are valid."));
+		// The dialog is advisory - the game runs, with whatever the missing
+		// resource provided missing - but it is modal, and it is raised before
+		// the engine has run a single game cycle. Under MCP there is nobody at
+		// the keyboard to dismiss it: the server has bound its port by now and
+		// will never be serviced again, so the game hangs there forever rather
+		// than starting without its speech. Say it in the log instead.
+		// A repackaged CD game with its audio volume left on the disc is the
+		// ordinary way to arrive here.
+		if (ConfMan.getBool("mcp")) {
+			warning("Missing or corrupt game resources have been detected; "
+			        "some game features may not work properly");
+		} else {
+			showScummVMDialog(_("Missing or corrupt game resources have been detected. "
+								"Some game features may not work properly. Please check "
+								"the console for more information, and verify that your "
+								"game files are valid."));
+		}
 	}
 }
 

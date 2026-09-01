@@ -70,3 +70,33 @@ zak-seamonster = "~/games/ags/zakseamonster-demo"         # ZAK_SEAMONSTER_PATH
 # Only the CSTime game is instrumented; the mohawk engine also covers Myst
 # and Riven, which are a different shape entirely.
 cstime-demo = "~/games/cstime-win-demo-en"                # CSTIME_DEMO_PATH
+
+# --- Full games -----------------------------------------------------------
+# The retail games, beside the demos above. Each is a target of its own:
+# a demo and its full game are different data and different saves.
+ft-full = "~/games/full_throttle_scumm_win/Full Throttle/ft"
+loom-full = "~/games/loom_scumm_win/Loom/loomcd"
+indy3-full = "~/games/indycrusade_scumm_win/IndyCrusade/indy3"
+atlantis-full = "~/games/indianajonesantlantis_scumm_win/IndianaJonesAntlantis/atlantis"
+samnmax-full = "~/games/samandmax_scumm_win/SamAndMax/samnmax"
+monkey-full = "~/games/monkeyisland_amiga_win/MonkeyIsland/fsuae/Hard Drives/data"
+dw-full = "~/games/discworld_scumm_win/Discworld/dw-cd"
+dw2-full = "~/games/discworld2_scumm_win/Discworld2/dw2"
+sword1-full = "~/games/brokensword1_scumm_win/BrokenSword1/broken"
+gob2-full = "~/games/goblins2_dos_win/Goblins2/g2"
+gob3-full = "~/games/goblins3_dos_win/Goblins3/g3"
+ween-full = "~/games/weentheprophecy_amiga_win/WeenTheProphecy/fsuae/Hard Drives/data"
+gk1-full = "~/games/gabrielknight_dos_win/GabrielKnight/gabrielknight/GK1"
+sq6-full = "~/games/spacequest6_dos_win/SpaceQuest6/SQ6"
+kq5-full = "~/games/kingsquestv_dos_win/KingsQuestV/game"
+kq6-full = "~/games/kingsquest6cd_scumm_win/KingsQuest6_cd/sci"
+kq7-full = "~/games/kingsquest7_dos_win/KingsQuest7/kq7"
+sq4-full = "~/games/spacequest4timerippers_dos_win/SpaceQuestIVRogerWilcoandtheTimeRippers/sq4"
+sq5-full = "~/games/spacequest5_dos_win/SpaceQuest5/sq5"
+pq3-full = "~/games/policequest3_dos_win/PoliceQuest3/disk/pq3"
+kq1sci-full = "~/games/kingsquestenhanced_amiga_win/KingsQuestEnhanced/fsuae/Hard Drives/data"
+kq4sci-full = "~/games/kingsquest4_dos_win/KingsQuest4/game"
+sq1sci-full = "~/games/spacequestenhanced_dos_win/spacequestthesarienencounter/sq1"
+qfg1-full = "~/games/questforglory_amiga_win/QuestForGlory/fsuae/Hard Drives/data"
+qfg2-full = "~/games/questforglory2_amiga_win/QuestForGlory2/fsuae/Hard Drives/data"
+sq2vga = "~/games/sq2vga_v2_win/SQ2VGA"
