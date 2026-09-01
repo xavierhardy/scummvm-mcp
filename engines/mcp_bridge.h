@@ -227,6 +227,16 @@ protected:
 	// Wall-clock ceiling in milliseconds; 0 disables it. Needed by engines whose
 	// frame counter can stop advancing (see pumpTransportOnly()).
 	virtual uint32 wallClockTimeoutMs() const { return 0; }
+
+	// How long an action that is *done* may be held back by the frame-based
+	// gates below when the frame counter has stopped. A frame is a game cycle,
+	// and an engine that is not running cycles - one sitting in a tight input
+	// loop, say - never advances it, so minStreamFrames() and settleFrames()
+	// can never be satisfied and the only thing that ever fires is the
+	// wall-clock *timeout*, which reports a failure for an action that in fact
+	// finished. Real time is the only clock running there. Zero, the default,
+	// leaves every engine's behaviour exactly as it was.
+	virtual uint32 wallClockCloseMs() const { return 0; }
 	// The frame the timeout is measured from. By default the stream start, so
 	// background chatter cannot hold a stream open forever.
 	virtual uint32 streamTimeoutAnchor() const { return _sseStartFrame; }

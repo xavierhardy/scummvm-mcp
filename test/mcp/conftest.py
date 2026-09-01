@@ -124,6 +124,7 @@ _FIXTURE_INDEX = {
     "qfg1_full": 68,
     "qfg2_full": 69,
     "sq2vga": 70,
+    "pq2_full": 71,
 }
 
 
@@ -729,3 +730,9 @@ def sq2vga_client() -> Iterator[McpClient]:
     """Space Quest II VGA remake (past the opening, slot 1)."""
     yield from _client("sq2vga", "sq2vga", checkpoint=True)
 
+
+@pytest.fixture
+def pq2_full_client() -> Iterator[McpClient]:
+    """Police Quest II, Amiga (past the opening, slot 1)."""
+    yield from _client("pq2-full", "pq2_full", checkpoint=True,
+                       connect_timeout=SLOW_BOOT_SECS)

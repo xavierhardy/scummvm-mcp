@@ -990,7 +990,13 @@ void McpBridge::pumpStream() {
 	// Last engine step before the settle decision (multi-frame click machines).
 	pumpStreamPreSettle();
 
-	if (_frameCounter - _sseStartFrame < minStreamFrames())
+	// See wallClockCloseMs(): when cycles have stopped, the frame gates below
+	// can never be met and real time is what is left to judge by.
+	const uint32 closeMs = wallClockCloseMs();
+	const bool framesStopped = closeMs != 0 && g_system != nullptr &&
+	                           (g_system->getMillis() - _sseStartMs) >= closeMs;
+
+	if (!framesStopped && _frameCounter - _sseStartFrame < minStreamFrames())
 		return;
 
 	if (!isActionDone()) {
@@ -1019,7 +1025,7 @@ void McpBridge::pumpStream() {
 		}
 	}
 
-	if (shouldCloseStream()) {
+	if (shouldCloseStream() || framesStopped) {
 		debug(1, "mcp: closing stream at frame %d", _frameCounter);
 		closeStreamSuccess();
 	}

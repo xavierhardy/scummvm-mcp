@@ -100,3 +100,5 @@ sq1sci-full = "~/games/spacequestenhanced_dos_win/spacequestthesarienencounter/s
 qfg1-full = "~/games/questforglory_amiga_win/QuestForGlory/fsuae/Hard Drives/data"
 qfg2-full = "~/games/questforglory2_amiga_win/QuestForGlory2/fsuae/Hard Drives/data"
 sq2vga = "~/games/sq2vga_v2_win/SQ2VGA"
+# Unpacked from the three AmigaDOS floppy images its repack ships.
+pq2-full = "~/games/pq2-amiga/game"

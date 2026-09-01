@@ -152,6 +152,9 @@ protected:
 	uint32 absoluteTimeoutFrames() const override { return 1200; }
 	uint32 settleFrames() const override { return 8; }
 	uint32 wallClockTimeoutMs() const override { return 180000; }
+	// Only a skip: it is the one action sent into an opening, which is where
+	// the older games stop running cycles altogether.
+	uint32 wallClockCloseMs() const override { return _skipStream ? kSkipMs : 0; }
 	uint32 streamTimeoutAnchor() const override {
 		return _sseLastEventFrame > 0 ? _sseLastEventFrame : _sseStartFrame;
 	}

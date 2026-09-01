@@ -40,6 +40,28 @@ Tests for the ScummVM MCP server, spanning SCUMM engine versions **V0**
 | Discworld II (demo) | tinsel | `dw2-demo` | `test_dw2.py` | `DW2_DEMO_PATH` |
 | Toonstruck (demo) | toon | `toon-demo` | `test_toon.py` | `TOON_DEMO_PATH` |
 
+### The full games
+
+Twenty-six retail games, each the whole version of something above or beside
+it, and all covered by one module — `test_full_games.py`. It asks each of them
+the same shallow questions through the same tools an agent has: does `state`
+answer with a room, does the room name things, are the tools registered, does
+a wrong target come back as a refusal that says what *is* here, does an action
+reach the game. Anything deeper about one of them belongs in a module of its
+own.
+
+Their ids are the demo's id with `-full` after it, so `ft-full` is the whole of
+Full Throttle and `ft-demo` is still the demo; `sq2vga` and `pq2-full` have no
+demo here. Paths go in `game_paths.local.toml` under those same ids, and each
+starts from its own slot 1 captured just past the opening — a game whose slot
+has not been captured on this machine skips, like any other unconfigured game.
+
+King's Quest IV is deliberately absent: its copy ships a copy-protection crack
+ScummVM refuses to load, and without it the game asks a question out of its
+printed manual. The bridge drives that screen correctly — `type_text` types at
+the prompt and the game echoes and refuses each answer — but there is no room
+to start a test from.
+
 Game-data folders are per-machine and are **never** in tracked code: list them
 under `[games]` in the non-committed `game_paths.local.toml` at the repository
 root (see `game_paths.local.toml.example`), or set the env var above, which
