@@ -37,6 +37,14 @@ public:
 	explicit ScummMcpBridge(ScummEngine *vm);
 	~ScummMcpBridge() override;
 
+	// Service the server without advancing the frame counter, from a place
+	// the engine stalls in and never reaches its main loop. A SMUSH movie is
+	// the one that matters: its player runs a loop of its own for the whole
+	// length of the film - minutes, in a full game's opening - and until this
+	// existed every call made during one simply waited for the film to end.
+	// The guard is because the pump's own work can reach the same stall again.
+	void pumpFromStall();
+
 	// V7-only: invoked once per frame, just before the engine draws/clears the
 	// blast text queue. The bridge snapshots dialog-choice text + click target
 	// coordinates so toolState can expose the real labels and toolAnswer /
@@ -305,6 +313,10 @@ protected:
 	int32 _ssePrevNoteValue;
 	// Frame at which the most recent pending-note keypress was fed.
 	uint32 _sseLastNoteFedFrame;
+
+	// Set while pumpFromStall() is running, so a stall reached from inside
+	// the pump does not pump again.
+	bool _inStallPump = false;
 
 	// V7 talk-line polling state (see pump()).
 	Common::String _lastV7TalkText;

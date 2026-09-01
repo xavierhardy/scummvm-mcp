@@ -2145,6 +2145,14 @@ bool ScummMcpBridge::beginWalkStream(int gx, int gy, int dir) {
 // Tool: skip
 // ---------------------------------------------------------------------------
 
+void ScummMcpBridge::pumpFromStall() {
+	if (!isEnabled() || _inStallPump)
+		return;
+	_inStallPump = true;
+	pumpTransportOnly();
+	_inStallPump = false;
+}
+
 bool ScummMcpBridge::toolSkip(const Common::JSONValue &args, Common::String &errorOut) {
 	Common::String blocked = gameplayBlockedReason();
 	if (!blocked.empty()) {

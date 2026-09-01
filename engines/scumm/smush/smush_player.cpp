@@ -1524,6 +1524,15 @@ void SmushPlayer::play(const char *filename, int32 speed, int32 offset, int32 st
 			_fastForwardToFrame = 0;
 		}
 
+		// A movie's playback is a loop of its own: scummLoop() - and with it
+		// the once-per-frame MCP pump - is not reached again until the film
+		// ends, which in a full game's opening is minutes away. Service the
+		// server here so a call made during the opening is answered rather
+		// than left waiting, and so `skip` can set the key that ends it: the
+		// bridge writes _keyPressed, and processInput() just below is what
+		// turns that into _smushVideoShouldFinish.
+		_vm->mcpPumpTransport();
+
 		if (!fastForwarding) {
 			_vm->parseEvents();
 			_vm->processInput();

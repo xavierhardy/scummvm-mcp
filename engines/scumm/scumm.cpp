@@ -3137,6 +3137,11 @@ void ScummEngine_v0::scummLoop(int delta) {
 	ScummEngine::scummLoop(delta);
 }
 
+void ScummEngine::mcpPumpTransport() {
+	if (_mcpBridge)
+		_mcpBridge->pumpFromStall();
+}
+
 void ScummEngine::scummLoop(int delta) {
 	if (_mcpBridge)
 		_mcpBridge->pump();

@@ -548,6 +548,10 @@ public:
 	Sound *_sound = nullptr;
 	ScummMcpBridge *_mcpBridge = nullptr;
 
+	// Service the MCP server from a loop that is not the main one - the SMUSH
+	// player's, which runs for the whole length of a movie.
+	void mcpPumpTransport();
+
 	VerbSlot *_verbs = nullptr;
 	ObjectData *_objs = nullptr;
 
