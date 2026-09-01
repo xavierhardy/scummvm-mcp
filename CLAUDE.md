@@ -162,10 +162,14 @@ root or point them at the surrounding ScummVM source (not ours to lint).
 ## Build & run tests
 
 ```bash
-# Build the engine (produces ./scummvm). First time:
+# Build the engine (produces ./scummvm). First time - every engine that has an
+# MCP bridge, which is what the test suites expect to find in one binary:
 ./configure --disable-all-engines --enable-engine=scumm --enable-engine=scumm-7-8 \
     --enable-engine=sword1 --enable-engine=sword2 --enable-engine=sky --enable-engine=queen \
-    --enable-engine=gob --enable-engine=tinsel --enable-engine=toon
+    --enable-engine=gob --enable-engine=tinsel --enable-engine=toon \
+    --enable-engine=sci --enable-engine=sci32 --enable-engine=ags \
+    --enable-engine=mohawk --enable-engine=cstime \
+    --enable-engine=agi --enable-engine=kyra --enable-engine=agos --enable-engine=asylum
 make
 
 # C++ unit tests (CxxTest). Needs a `python` on PATH for cxxtestgen — if only
