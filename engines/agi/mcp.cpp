@@ -120,10 +120,16 @@ bool AgiMcpBridge::playerHasControl() const {
 	if (!engineReady())
 		return false;
 	// playerControl is the interpreter's own answer to "are the arrow keys
-	// live", which is off through every cutscene. A message box on screen is
-	// the other way commands stop being taken: the interpreter is inside
-	// wait() and is not running cycles at all.
-	return _vm->_game.playerControl && !_vm->_text->_messageState.window_Active;
+	// live", which is off through every cutscene. cycleInnerLoopActive is the
+	// other half: it is set while the interpreter is inside one of its modal
+	// waits - a message box wanting a key, the inventory screen, a menu - and
+	// is running no cycles at all.
+	//
+	// The message *window* is deliberately not consulted. It is up through a
+	// great deal of ordinary play (the status line and the game's own
+	// non-blocking text live in it), so reading it as "blocked" reports a game
+	// that is waiting for a command as a game that is not.
+	return _vm->_game.playerControl && !_vm->_game.cycleInnerLoopActive;
 }
 
 void AgiMcpBridge::collectItems(Common::Array<Item> &out) const {
@@ -407,13 +413,15 @@ bool AgiMcpBridge::toolSkip(const Common::JSONValue &, Common::String &errorOut)
 		errorOut = "skip: the game is still starting up";
 		return false;
 	}
-	// A message box is dismissed with Return or Escape and a cutscene is cut
-	// short with Escape, so both go: whichever the game is waiting for, one of
-	// them is it, and the other is harmless where it is not wanted.
+	// Return, and only Return. Every other bridge here sends Escape as well,
+	// because in those engines Escape is what cuts a cutscene short - but in
+	// AGI it is the menu key, and pressing it pauses the game behind a box
+	// reading "Game paused. Press Enter to continue." A skip that sends both
+	// therefore ends every call paused, which is the opposite of skipping.
+	// Return is what dismisses this engine's message boxes, and a message box
+	// is what a skip is for here.
 	Common::KeyState enter(Common::KEYCODE_RETURN, 13);
 	injectKey(enter);
-	Common::KeyState escape(Common::KEYCODE_ESCAPE, 27);
-	injectKey(escape);
 
 	if (!isStreaming()) {
 		_skipStream = true;
@@ -433,6 +441,7 @@ Common::JSONValue *AgiMcpBridge::toolDebug(const Common::JSONValue &, Common::St
 	out.setVal("logic", mcpJsonInt(_vm->_game.curLogicNr));
 	out.setVal("player_control", mcpJsonBool(_vm->_game.playerControl));
 	out.setVal("message_window", mcpJsonBool(_vm->_text->_messageState.window_Active));
+	out.setVal("inner_loop", mcpJsonBool(_vm->_game.cycleInnerLoopActive));
 	out.setVal("ego_direction", mcpJsonInt(_vm->getVar(VM_VAR_EGO_DIRECTION)));
 	out.setVal("object_count", mcpJsonInt((int)_vm->_game.numObjects));
 

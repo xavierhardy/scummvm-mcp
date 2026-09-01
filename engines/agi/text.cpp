@@ -338,6 +338,12 @@ Common::String rightAlign(Common::String line, va_list args) {
 }
 
 void TextMgr::displayText(const char *textPtr, bool disabledLook) {
+	// The other way the game says something: a message box is one route, and
+	// text written straight into the window is the other. The bridge's own
+	// filter drops the interpreter's furniture - the prompt row, the score
+	// line - so what is left is the game talking.
+	if (textPtr != nullptr)
+		_vm->mcpOnText(Common::String(textPtr));
 	Common::String textString;
 	if (_vm->isLanguageRTL()) {
 		textString = textPtr;

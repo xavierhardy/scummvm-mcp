@@ -131,7 +131,21 @@ bool agiIsInterfaceLine(const Common::String &text) {
 	// The prompt row is what the player types into, and it arrives as text
 	// like everything else. So do the status line and the interpreter's own
 	// "press a key" - none of them is the game saying anything.
-	if (lower.hasPrefix(">"))
+	if (lower.hasPrefix(">") || lower.hasPrefix("]"))
+		return true;
+	// The clock. King's Quest III draws a running "0:00:07" every second, and
+	// an agent reading those as lines the game said is reading a stopwatch:
+	// anything made only of digits, colons and dots is furniture.
+	bool digitsAndSeparators = true;
+	bool sawDigit = false;
+	for (uint i = 0; i < lower.size(); i++) {
+		const char c = lower[i];
+		if (c >= '0' && c <= '9')
+			sawDigit = true;
+		else if (c != ':' && c != '.' && c != ' ')
+			digitsAndSeparators = false;
+	}
+	if (sawDigit && digitsAndSeparators)
 		return true;
 	static const char *const kFurniture[] = {
 		"score:", "sound:", "press enter to continue", "press a key to continue",
