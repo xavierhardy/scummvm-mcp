@@ -196,6 +196,10 @@ void AGOSEngine::waitForInput() {
 		resetVerbs();
 	}
 
+	// Everything from here to the return is the game waiting for the player,
+	// which is the one thing an agent needs to know before it acts.
+	_mcpWaitingForInput = true;
+
 	while (!shouldQuit()) {
 		_lastHitArea = nullptr;
 		_lastHitArea3 = nullptr;
@@ -359,6 +363,9 @@ void AGOSEngine::waitForInput() {
 	}
 
 out_of_here:
+	// The player has clicked: from here on the game is acting, not waiting.
+	_mcpWaitingForInput = false;
+
 	if (getGameType() == GType_ELVIRA2 || getGameType() == GType_WW)
 		clearMenuStrip();
 	else if (getGameType() == GType_ELVIRA1)

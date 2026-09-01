@@ -451,6 +451,11 @@ protected:
 	// Built in the constructor so the server binds its port before anything
 	// can block on startup, and null when `mcp` was not asked for.
 	AgosMcpBridge *_mcpBridge = nullptr;
+	// True while waitForInput() is sitting in its loop, which is exactly when
+	// the game is waiting for the player rather than running a scene. AGOS
+	// implements no canSaveGameStateCurrently() of its own, so there is
+	// nothing else to ask.
+	bool _mcpWaitingForInput = false;
 	// From delay(), which every loop in this engine goes through.
 	void mcpPump();
 	// Every line the game shows.

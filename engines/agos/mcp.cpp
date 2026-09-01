@@ -128,11 +128,12 @@ int AgosMcpBridge::roomNumber() const {
 }
 
 bool AgosMcpBridge::playerHasControl() const {
-	// AGOS keeps no flag of its own for this, and the nearest thing - the
-	// verb bar being drawn - is up through cutscenes too. What the engine does
-	// answer is whether it would let the game be saved, which for an adventure
-	// engine is the same question: a cutscene and a modal panel both say no.
-	return engineReady() && _vm->canSaveGameStateCurrently(nullptr);
+	// AGOS implements no canSaveGameStateCurrently() of its own, so the answer
+	// every other bridge here leans on is not available. What it does have is
+	// waitForInput(), which is where its whole loop sits between actions -
+	// being inside that is exactly what "the game is waiting for the player"
+	// means, and it is false for the whole of a cutscene.
+	return engineReady() && _vm->_mcpWaitingForInput;
 }
 
 Common::String AgosMcpBridge::itemLabel(const Item *item) const {
