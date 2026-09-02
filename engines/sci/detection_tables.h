@@ -2274,6 +2274,23 @@ static const struct ADGameDescription SciGameDescriptions[] = {
 		AD_LISTEND},
 		Common::DE_DEU, Common::kPlatformDOS, ADGF_ADDENGLISH, GUIO_STD16	},
 
+	// King's Quest 5 - French DOS EGA (3.5" 720k disks)
+	// Game version 0.000.143 from about box, 1.000 from VERSION file
+	// SCI interpreter version 1.000.782
+	{"kq5", "EGA", {
+		{"resource.map", 0, "30ced377384f2ef42d89efa9f0a99eec", 8193},
+		{"resource.000", 0, "238364f82d48d0b6896dac22e897df93", 443131},
+		{"resource.001", 0, "98264221cbed38c8a8f5da8634b13218", 622057},
+		{"resource.002", 0, "51b8485110fb99d1625d46fb1a6758f5", 712514},
+		{"resource.003", 0, "daaa2edb3aba362171322fdcc29f0ac8", 558493},
+		{"resource.004", 0, "bef90d755076c110e67ee3e635503f82", 683010},
+		{"resource.005", 0, "1a3672476df51842488d657e97cd14ed", 726961},
+		{"resource.006", 0, "f7dc85307632ef657ceb1651204f6f51", 652108},
+		{"resource.007", 0, "7db4d0a1d8d547c0019cb7d2a6acbdd4", 716483},
+		{"resource.008", 0, "1bbecd2545b42329914fe7a84970c79b", 693470},
+		AD_LISTEND},
+		Common::FR_FRA, Common::kPlatformDOS, ADGF_ADDENGLISH, GUIO_STD16 },
+
 	// King's Quest 5 - French DOS Floppy (from the King's Quest Collector's Edition 1994, also includes english language)
 	// Supplied by aroenai in bug report #4378
 	// VERSION file reports "1.000", SCI interpreter version 1.000.784
@@ -6189,6 +6206,19 @@ static const struct ADGameDescription SciGameDescriptions[] = {
 		{"resource.001", 0, "a836bd3bc9574f2371f8b6f74a082313", 995949},
 		{"resource.002", 0, "bba9d6e685809fb7e482c9b33c1cac3f", 1140960},
 		{"resource.003", 0, "5b541ef2feb38b999cc331b5e4b6df8a", 1092315},
+		AD_LISTEND},
+		Common::DE_DEU, Common::kPlatformDOS, ADGF_ADDENGLISH, GUIO_STD16 },
+
+	// Space Quest 4 - German DOS EGA (3.5" 720k disks)
+	{"sq4", "EGA", {
+		{"resource.map", 0, "ff439d1737393322e0e86044e32605d9", 5967},
+		{"resource.000", 0, "5f6a1fff40584ee807efd547899b1ba5", 249229},
+		{"resource.001", 0, "d415a412ba05c7f7ee0dd4da47dc6362", 353099},
+		{"resource.002", 0, "a836bd3bc9574f2371f8b6f74a082313", 680309},
+		{"resource.003", 0, "bba9d6e685809fb7e482c9b33c1cac3f", 665548},
+		{"resource.004", 0, "561fa58110dad6966467fa28e299679f", 632261},
+		{"resource.005", 0, "5b541ef2feb38b999cc331b5e4b6df8a", 614232},
+		{"resource.006", 0, "98cd75300311674e893d343ba15927f5", 528646},
 		AD_LISTEND},
 		Common::DE_DEU, Common::kPlatformDOS, ADGF_ADDENGLISH, GUIO_STD16 },
 

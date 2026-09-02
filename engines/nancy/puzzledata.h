@@ -62,11 +62,14 @@ struct RippedLetterPuzzleData : public PuzzleData {
 	Common::Array<int8> order;
 	Common::Array<byte> rotations;
 	bool playerHasTriedPuzzle;
+	// Some games (e.g. Nancy7) have multiple instances of the same puzzle in
+	// different scenes, so we need to key the puzzle data by scene ID.
+	uint16 sceneId;
 
 	// Temporary values, do not save to file
-	int8 _pickedUpPieceID = -1;
-	byte _pickedUpPieceRot = 0;
-	int _pickedUpPieceLastPos = -1;
+	int8 pickedUpPieceID = -1;
+	byte pickedUpPieceRot = 0;
+	int pickedUpPieceLastPos = -1;
 };
 
 struct TowerPuzzleData : public PuzzleData {
@@ -260,6 +263,9 @@ struct CapturedPicture {
 	uint16 height = 0;
 	Common::Array<byte> pixels;   // width * height * 4, BGRA32
 	bool sent = false;            // true once the player has "sent" it
+
+	// Indices into UICL::cameraSubjects that were inside the viewfinder.
+	Common::Array<int16> subjects;
 };
 
 // Nancy 13 camera snapshots. Kept in its own lazily-created PuzzleData chunk so
@@ -391,6 +397,20 @@ struct HangmanData : public PuzzleData {
 	virtual void synchronize(Common::Serializer &ser);
 
 	Common::Array<Common::String> usedWords;
+};
+
+// Nancy14+ DecoderPuzzle (AR 182). The decoded line typed so far, plus the scene
+// it belongs to. A scene's two records (with and without the substitution table)
+// hand the line to each other through here; other scenes start empty.
+struct DecoderData : public PuzzleData {
+	DecoderData() {}
+	virtual ~DecoderData() {}
+
+	static constexpr uint32 getTag() { return MKTAG('D', 'C', 'D', 'R'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	uint16 sceneID = kNoScene;
+	Common::String text;
 };
 
 // Nancy12 DrivingPuzzle (AR 160). The car's position, heading and tire state persist

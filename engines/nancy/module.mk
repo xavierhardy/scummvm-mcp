@@ -6,6 +6,7 @@ MODULE_OBJS = \
   action/actionzone.o \
   action/arfactory.o \
   action/autotext.o \
+  action/cameraaction.o \
   action/datarecords.o \
   action/inventoryrecords.o \
   action/navigationrecords.o \
@@ -16,6 +17,7 @@ MODULE_OBJS = \
   action/overlay.o \
   action/secondarymovie.o \
   action/secondaryvideo.o \
+  action/puzzle/adjustpuzzle.o \
   action/puzzle/angletosspuzzle.o \
   action/puzzle/arcadepuzzle.o \
   action/puzzle/assemblypuzzle.o \
@@ -29,6 +31,7 @@ MODULE_OBJS = \
   action/puzzle/collisionpuzzle.o \
   action/puzzle/cubepuzzle.o \
   action/puzzle/cuttingpuzzle.o \
+  action/puzzle/decoderpuzzle.o \
   action/puzzle/dotconnectpuzzle.o \
   action/puzzle/drivingpuzzle.o \
   action/puzzle/dropsortpuzzle.o \
@@ -40,6 +43,7 @@ MODULE_OBJS = \
   action/puzzle/mazechasepuzzle.o \
   action/puzzle/matchpuzzle.o \
   action/puzzle/memorypuzzle.o \
+  action/puzzle/meterpuzzle.o \
   action/puzzle/mindpuzzle.o \
   action/puzzle/minigolfpuzzle.o \
   action/puzzle/mirrorlightpuzzle.o \
@@ -80,6 +84,7 @@ MODULE_OBJS = \
   ui/animatedbutton.o \
   ui/button.o \
   ui/clock.o \
+  ui/camera.o \
   ui/cellphonepopup.o \
   ui/conversationpopup.o \
   ui/inventorybox.o \

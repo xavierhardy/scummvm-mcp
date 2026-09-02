@@ -462,6 +462,9 @@ void InsaneRebel1::loadLocalizedUiStrings() {
 
 InsaneRebel1::InsaneRebel1(ScummEngine_v7 *scumm) : Insane(), _vm(scumm) {
 	Insane::_vm = scumm;
+	// Rebel Assault skips ScummEngine::resetScumm(), which normally clears this state.
+	for (int i = 0; i < kScummActionCount; i++)
+		_vm->_actionMap[i] = false;
 
 	_screenWidth = 384;
 	_screenHeight = 242;
@@ -562,10 +565,6 @@ InsaneRebel1::InsaneRebel1(ScummEngine_v7 *scumm) : Insane(), _vm(scumm) {
 	_interactiveVideoActive = false;
 	_preserveInteractiveRuntimeState = false;
 	_interactiveVideoCheatSkipped = false;
-	_restoreInteractiveVideoAudioState = false;
-	memset(_savedInteractiveVideoTrackState, 0, sizeof(_savedInteractiveVideoTrackState));
-	memset(_savedInteractiveVideoTrackGroupId, 0, sizeof(_savedInteractiveVideoTrackGroupId));
-	_savedInteractiveVideoTrackCount = 0;
 	_gameCounter = 0;
 	_pathBranchEnabled = false;
 	_rightPathSelected = false;
@@ -742,6 +741,10 @@ InsaneRebel1::~InsaneRebel1() {
 	_vm->_system->getEventManager()->getEventDispatcher()->unregisterObserver(this);
 	terminateAudio();
 	freeSfx();
+}
+
+bool InsaneRebel1::shouldPreserveWalkerRouteOnStop() const {
+	return _vm->_smushVideoShouldFinish && shouldPreserveWalkerRouteVideoState();
 }
 
 } // End of namespace Scumm

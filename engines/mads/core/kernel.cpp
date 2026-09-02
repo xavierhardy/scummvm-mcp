@@ -535,9 +535,6 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 	viewing_at_y = 0;
 	inter_viewing_at_y = inter_base_y;
 
-	// Mark the boundary between interface and room sprite series
-	kernel_room_series_marker = series_list_marker;
-
 	if (barebones) {
 		room_spots = nullptr;
 		goto finish;
@@ -571,6 +568,9 @@ int kernel_room_startup(int newRoom, int initial_variant, const char *interface,
 			inter_anim = nullptr;
 		}
 	}
+
+	// Mark the boundary between interface and room sprite series
+	kernel_room_series_marker = series_list_marker;
 
 	// Set up interface background screen
 	kernel_set_interface_mode(inter_input_mode);
@@ -1646,8 +1646,7 @@ static void kernel_process_animation(int handle, int asynchronous) {
 			match = false;
 			for (count = 0; !match && (count < image_base); count++) {
 				if (image_list[count].segment_id == (byte)(KERNEL_SEGMENT_ANIMATION + handle)) {
-					if (memcmp(&image_list[count].series_id,
-						&kernel_anim[handle].anim->image[kernel_anim[handle].image].series_id, 9) == 0) {
+					if (image_list[count].equals(kernel_anim[handle].anim->image[kernel_anim[handle].image])) {
 						image_list[count].flags = 0;
 
 						if (hot >= 0) {
@@ -2113,7 +2112,8 @@ static void kernel_message_update(KernelMessagePtr my_message) {
 		}
 	}
 
-	width = font_string_width(kernel_message_font, my_message->message, kernel_message_spacing);
+	width = g_engine->getMessageTextWidth(kernel_message_font,
+		my_message->message, kernel_message_spacing);
 
 	if (my_message->flags & (KERNEL_MESSAGE_CENTER | KERNEL_MESSAGE_RIGHT)) {
 		if (my_message->flags & KERNEL_MESSAGE_CENTER) {
@@ -2139,7 +2139,9 @@ static void kernel_message_update(KernelMessagePtr my_message) {
 	}
 
 	if (my_message->matte_message_handle < 0) {
-		matte_id = matte_add_message(kernel_message_font, my_message->message, xx, yy, my_message->color, kernel_message_spacing);
+		matte_id = matte_add_message(kernel_message_font, my_message->message,
+			xx, yy, my_message->color, kernel_message_spacing,
+			g_engine->hasMacintoshInterface());
 		if (matte_id < 0) goto done;
 		my_message->matte_message_handle = matte_id;
 	}

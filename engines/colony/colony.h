@@ -92,7 +92,9 @@ enum ColonyAction {
 	kActionToggleWireframe,
 	kActionToggleFullscreen,
 	kActionEscape,
-	kActionFire
+	kActionFire,
+	kActionAutomapZoomIn,
+	kActionAutomapZoomOut
 };
 
 enum GameMode {
@@ -201,8 +203,21 @@ enum ObjectType {
 enum ObjColor {
 	kColorClear = 0,
 	kColorBlack = 1,
+	kColorBlue = 2,
+	kColorGreen = 3,
+	kColorCyan = 4,
+	kColorRed = 5,
+	kColorMagenta = 6,
+	kColorBrown = 7,
+	kColorWhite = 8,
 	kColorDkGray = 9,
+	kColorLtBlue = 10,
 	kColorLtGreen = 11,
+	kColorLtCyan = 12,
+	kColorLtRed = 13,
+	kColorLtMagenta = 14,
+	kColorYellow = 15,
+	kColorIntWhite = 16,
 	kColorBath = 17,
 	kColorWater = 18,
 	kColorSilver = 19,
@@ -262,6 +277,8 @@ enum ObjColor {
 	kColorBottomSnoop = 60,
 	kColorUPyramid = 68,
 	kColorShadow = 74,
+	kColorLtGray = 75,
+	kColorGray = 76,
 	// Animated reactor/power suit colors (Mac: c_hcore1..c_hcore4, c_ccore, c_color0..c_color3)
 	kColorHCore1 = 100,
 	kColorHCore2 = 101,
@@ -314,6 +331,12 @@ enum MenuIndex {
 	kMenuEdit,
 	kMenuOptions
 };
+
+// Object and robot angles keep the original's convention, where the sine table's
+// own 45-degree phase supplied the last 32 steps; player angles are already
+// world-absolute. Convert whenever one is used as the other.
+uint8 objWorldAng(uint8 objectAng);
+uint8 objAngFromPlayer(uint8 playerAng);
 
 static const int kBaseObject = 20;
 static const int kMeNum = 101;
@@ -482,14 +505,18 @@ public:
 	void clearPlayerCellMarker();
 	void setPlayerCellMarker();
 	bool playerIntersectsObjectFootprint(const Thing &obj, int xloc, int yloc) const;
+	bool playerStartsInsideObject(int rnum) const;
 	void cCommand(int xnew, int ynew, bool allowInteraction);
 	bool scrollInfo(const Graphics::Font *macFont = nullptr);
 	bool checkSkipRequested();
 	bool checkClickRequested();
 	bool waitForInput();
+	bool waitForMessageInput();
 	void checkCenter();
 	void fallThroughHole();
 	void playTunnelEffect(bool falling);
+	int rideTunnel(const uint8 *map, Locate *pobject);
+	void doDnStairs();
 
 	void doText(int entry, int center);
 	void inform(const char *text, bool hold);
@@ -509,6 +536,7 @@ private:
 	uint8 _dirXY[32][32];
 	bool _visited[8][32][32];  // per-level fog-of-war: _visited[level-1][x][y]
 	bool _showAutomap;
+	float _automapZoom;        // automap scale factor, 1.0 = default cell size
 
 	Locate _me;
 	Common::Array<Thing> _objects;
@@ -584,6 +612,7 @@ private:
 	uint32 _lastAnimUpdate = 0;
 	uint32 _lastWarningChimeTime = 0;
 	uint32 _lastCollisionSoundTime = 0;
+	int _bumpedObject = 0;
 	int _action0 = 0, _action1 = 0;
 	int _creature = 0;
 	bool _allGrow = false;
@@ -637,6 +666,12 @@ private:
 	int _front = 0, _side = 0;
 	int _direction = 0;
 
+	float _eyeDepthPull = 0.0f; // world units the eye parts are pulled at the camera
+	// think.c: the snoop's snout bobs while it hunts (sniff/csniff).
+	int _snoopSnoutZ = 0;
+	int _snoopSniff = 5;
+	int _snoopSniffCount = 0;
+
 	Common::Rect _clip;
 	Common::Rect _screenR;
 	Common::Rect _dashBoardRect;
@@ -676,10 +711,16 @@ private:
 	void draw3DPrism(Thing &obj, const PrismPartDef &def, bool useLook, int colorOverride = -1, bool accumulateBounds = false, bool forceVisible = false);
 	void draw3DLeaf(const Thing &obj, const PrismPartDef &def);
 	void draw3DSphere(Thing &obj, int pt0x, int pt0y, int pt0z,
-		int pt1x, int pt1y, int pt1z, uint32 fillColor, uint32 outlineColor, bool accumulateBounds = false);
-	void drawPrismOval3D(Thing &thing, const PrismPartDef &def, bool useLook, int colorOverride, bool forceVisible = false);
+		int pt1x, int pt1y, int pt1z, uint32 fillColor, uint32 outlineColor,
+		bool accumulateBounds = false, bool dosFill = true);
+	void drawPrismOval3D(Thing &thing, const PrismPartDef &def, bool useLook, int colorOverride,
+		bool forceVisible = false, bool dosFill = true);
 	void drawEyeOverlays3D(Thing &thing, const PrismPartDef &irisDef, int irisColorOverride,
-		const PrismPartDef &pupilDef, int pupilColorOverride, bool useLook);
+		const PrismPartDef &pupilDef, int pupilColorOverride, bool useLook, bool dosFill = true);
+	void drawDOSEyeSlit3D(Thing &thing, const PrismPartDef &irisDef, bool useLook);
+	void drawBodyEye3D(Thing &obj, int eyeballColor, int pupilColor, float pull);
+	void drawEnemyEye3D(Thing &obj, Thing &eye, int eyeballColor, int irisColor, int pupilColor);
+	void pullTowardCamera(float *px, float *py, float *pz, int count) const;
 	float growRenderTickFraction() const;
 	bool drawInterpolatedGrowRobot(Thing &obj, int eyeballColor, int pupilColor);
 	void drawInterpolatedGrowPrism(Thing &obj, const PrismPartDef &fromDef, const PrismPartDef &toDef, float progress);
@@ -691,6 +732,17 @@ private:
 	void drawWallFeature3D(int cellX, int cellY, int direction);
 	void drawCellFeature3D(int cellX, int cellY);
 	void getWallFace3D(int cellX, int cellY, int direction, float corners[4][3]);
+	bool isRecessFeature(int x, int y, int direction) const;
+	bool wallSegmentIsOpenWell(int x, int y, uint8 bit) const;
+	void getWallRecess3D(const float corners[4][3], float farC[4][3]) const;
+	void recessPoint(const float nearC[4][3], const float farC[4][3], float u, float v, float depth, float out[3]) const;
+	void recessLine(const float nearC[4][3], const float farC[4][3], float u1, float v1, float d1,
+		float u2, float v2, float d2, uint32 color);
+	void recessQuad(const float nearC[4][3], const float farC[4][3], const float *u, const float *v,
+		const float *d, int count, uint32 color);
+	void clipToWallFace(const float corners[4][3]);
+	void macFillRecess(const float nearC[4][3], const float farC[4][3], const float *u, const float *v,
+		const float *d, int count, int macIdx, bool macColors);
 	void getCellFace3D(int cellX, int cellY, bool ceiling, float corners[4][3]);
 
 	int occupiedObjectAt(int xnew, int ynew, int x, int y, const Locate *pobject);
@@ -710,6 +762,8 @@ private:
 	int findAimedObject(const Common::Point &aim, bool *isBlocker = nullptr, int *targetDist = nullptr) const;
 	bool hasAimedRobotTarget() const;
 	void destroyRobot(int num);
+	void explodeFlash(int silentFlips);
+	void invertViewport();
 	void doShootCircles(int cx, int cy);
 	void doBurnHole(int cx, int cy, int radius);
 	void meGetShot();
@@ -741,6 +795,9 @@ private:
 	bool patchMapFrom(const PassPatch &from, uint8 *mapdata);
 	void exitForklift();
 	void dropCarriedObject();
+	bool stepOutOfCell();
+	bool exitTeleport();
+	void teleportPlayer();
 	bool setDoorState(int x, int y, int direction, int state);
 	int openAdjacentDoors(int x, int y);
 	int goToDestination(const uint8 *map, Locate *pobject);
@@ -760,6 +817,15 @@ private:
 	bool hasFoodAt(int x, int y) const;
 	void drawMiniMap(uint32 lineColor);
 	void drawAutomap();
+	void changeAutomapZoom(bool zoomIn);
+	void drawAutomapCryoMarker(int x, int y, int halfSize, uint32 color, const Common::Rect &clip);
+	void drawAutomapTeleportMarker(int x, int y, int halfSize, uint32 color, const Common::Rect &clip);
+	void drawAutomapForkliftMarker(int x, int y, int halfSize, uint32 color, const Common::Rect &clip);
+	void drawAutomapQueenMarker(int x, int y, int halfSize, uint32 color, const Common::Rect &clip);
+	void drawAutomapSnoopMarker(int x, int y, int halfSize, int dirX, int dirY, uint32 color, const Common::Rect &clip);
+	void drawAutomapDroneMarker(int x, int y, int halfSize, uint32 color, const Common::Rect &clip);
+	void drawAutomapRobotMarker(int x, int y, int halfSize, uint32 color, const Common::Rect &clip);
+	void drawAutomapObjectMarker(int x, int y, int halfSize, uint32 color, const Common::Rect &clip);
 	void markVisited();
 	void automapCellCorner(int dx, int dy, int xloc, int yloc, int lExt, int tsin, int tcos, int ccx, int ccy, int &sx, int &sy);
 	void automapDrawWall(const Common::Rect &vp, int x1, int y1, int x2, int y2, uint32 color);
@@ -817,6 +883,7 @@ private:
 	bool _animExitInside = false;
 	Common::Rect _animExitStrip;
 	Common::Rect _animExitButton;
+	Common::Rect _messageSourceRect;
 	int _coderPick[4] = {};
 	int _coderCursor = 0;
 	int _coderPressed = -1;
@@ -835,18 +902,23 @@ private:
 	int _airlockY = -1;
 	int _airlockDirection = -1;
 	bool _airlockTerminate = false;
+	int _teleportX = -1;
+	int _teleportY = -1;
+	bool _teleportInside = false;
+	bool _teleportDone = false;
 
 	void playIntro();
 	bool makeStars(const Common::Rect &r, int btn);
 	bool makeBlackHole();
 	bool makePlanet();
-	bool timeSquare(const Common::String &str, const Graphics::Font *macFont = nullptr);
+	bool timeSquare(const Common::String &str, const Graphics::Font *macFont = nullptr, bool gameOver = false);
 	bool drawPict(int resID);
 	bool loadAnimation(const Common::String &name);
 	void deleteAnimation();
 	void takeOff();
 	void fullOfStars();
 	void gameOver(bool kill);
+	void gameOver(bool kill, int savedCryos);
 	int countSavedCryos() const;
 	void playAnimation();
 	void updateAnimation();
@@ -874,6 +946,8 @@ private:
 	void handleDoorClick(int item);
 	void handleAirlockClick(int item);
 	void handleElevatorClick(int item);
+	void handleTeleportClick(int item);
+	void flashTeleportBooth();
 	void handleControlsClick(int item);
 	void dolSprite(int index);
 	void moveObject(int index);

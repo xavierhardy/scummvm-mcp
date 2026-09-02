@@ -19,16 +19,27 @@
  *
  */
 
-#ifndef ULTIMA_STD_CONTAINERS_H
-#define ULTIMA_STD_CONTAINERS_H
+#ifndef SCUMM_INSANE_REBEL_TOUCH_H
+#define SCUMM_INSANE_REBEL_TOUCH_H
 
-#include "common/algorithm.h"
-#include "common/array.h"
-#include "common/hashmap.h"
-#include "common/hash-str.h"
-#include "common/list.h"
-#include "common/queue.h"
-#include "common/stack.h"
-#include "common/util.h"
+#include "common/scummsys.h"
+
+namespace Scumm {
+
+// Double rather than single, because a single tap is the gameplay fire button.
+class RebelTouchTapDetector {
+public:
+	RebelTouchTapDetector();
+
+	bool addTap(int16 x, int16 y, uint32 now);
+	void reset();
+
+private:
+	uint32 _lastTapTime;
+	int16 _lastTapX;
+	int16 _lastTapY;
+};
+
+} // End of namespace Scumm
 
 #endif

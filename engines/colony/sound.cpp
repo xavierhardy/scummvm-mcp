@@ -194,6 +194,7 @@ void Sound::playPCSpeaker(int soundID) {
 		}
 		break;
 	case kChime:
+	case kDiDit:
 		queueTick(4649, 7);
 		queueTick(3690, 7);
 		queueTick(3103, 7);
@@ -359,11 +360,13 @@ bool Sound::playMacSound(int soundID, bool loop) {
 	case kPShot: resID = 27539; break;  // PLANETSHOT
 	case kTest: resID = 25795; break;
 	case kDit: resID = 1516; break;
+	case kDiDit: resID = 4274; break;
 	case kSink: resID = 2920; break;
 	case kClatter: resID = 11208; break;
 	case kStop: resID = 29382; break;   // FULLSTOP
 	case kTeleport: resID = 9757; break;
 	case kSlug: resID = 8347; break;
+	case kTunnel1: resID = 16403; break;
 	case kTunnel2: resID = 17354; break;
 	case kLift: resID = 28521; break;
 	case kGlass: resID = 19944; break;

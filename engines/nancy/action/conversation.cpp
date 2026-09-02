@@ -392,7 +392,7 @@ void ConversationSound::execute() {
 			}
 		}
 
-		if (!g_nancy->_sound->isSoundPlaying(_sound) && isVideoDonePlaying()) {
+		if (!g_nancy->_sound->isSoundPlaying(_sound) && (_isSkipped || isVideoDonePlaying())) {
 			g_nancy->_sound->stopSound(_sound);
 
 			bool hasResponses = false;
@@ -438,7 +438,7 @@ void ConversationSound::execute() {
 
 					// Nancy 11+: play a fresh random sequence as the character's response anim.
 					if (PlaySecondaryMovie *active = NancySceneState.getActiveMovie()) {
-						if (active->_isRandom) {
+						if (active->isRandom()) {
 							active->playRandomSequence();
 						}
 					}
@@ -449,6 +449,8 @@ void ConversationSound::execute() {
 		}
 		break;
 	case kActionTrigger:
+		_isSkipped = false;
+
 		if (!g_nancy->_sound->isSoundPlaying(_responseGenericSound)) {
 			// process flags structs
 			for (auto &flags : _flagsStructs) {
@@ -489,6 +491,23 @@ void ConversationSound::execute() {
 			finishExecution();
 		}
 
+		break;
+	}
+}
+
+void ConversationSound::skipLine() {
+	switch (_state) {
+	case kRun:
+		// Cut the NPC's line short. Stopping the sound and marking the line as
+		// skipped makes the next execute() take the "line has finished" path.
+		g_nancy->_sound->stopSound(_sound);
+		_isSkipped = true;
+		break;
+	case kActionTrigger:
+		// The player's chosen response is playing; cut that short instead
+		g_nancy->_sound->stopSound(_responseGenericSound);
+		break;
+	default:
 		break;
 	}
 }

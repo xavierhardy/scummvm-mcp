@@ -39,6 +39,7 @@
 #include "mads/core/popup.h"
 #include "mads/core/room.h"
 #include "mads/core/speech.h"
+#include "mads/nebular/popup.h"
 #include "mads/core/sprite.h"
 #include "mads/core/text.h"
 #include "mads/core/tile.h"
@@ -224,12 +225,13 @@ int object_examine(int number, long message, int speech) {
 		cursor_last = cursor_id;
 	}
 
-	inter_turn_off_object();
+	if (!isRex)
+		inter_turn_off_object();
 	inter_screen_update();
 	if (isMacRex)
 		inter_hide_macintosh_sentence();
 
-	memcpy(top_eight, &master_palette[248].r, 8 * sizeof(RGBcolor));
+	memcpy(&top_eight[0], &master_palette[248], 8 * sizeof(RGBcolor));
 
 	// Use attribute buffer to cheat on memory requirements a bit
 	old_master_palette = scr_depth.data;
@@ -341,7 +343,10 @@ int object_examine(int number, long message, int speech) {
 	if (message) {
 		text_saves_screen = false;
 
-		memcpy(&cycling_palette[248].r, &master_palette[248].r, 8 * sizeof(RGBcolor));
+		if (isRex)
+			RexNebular::popup_shift_dialog_colors(-10);
+
+		memcpy(&cycling_palette[248], &master_palette[248], 8 * sizeof(RGBcolor));
 
 		if (speech) {
 			if (speech_system_active && speech_on) {
@@ -350,6 +355,9 @@ int object_examine(int number, long message, int speech) {
 		}
 
 		text_show(message);
+
+		if (isRex)
+			RexNebular::popup_shift_dialog_colors(10);
 
 		if (speech && speech_system_active && speech_on) {
 			speech_all_off();
@@ -430,7 +438,7 @@ int object_examine(int number, long message, int speech) {
 	}
 
 	// Turn color cycling back on.
-	memcpy(&cycling_palette[248].r, top_eight, 8 * sizeof(RGBcolor));
+	memcpy(&cycling_palette[248], top_eight, 8 * sizeof(RGBcolor));
 	mcga_setpal_range(&cycling_palette, 248, 8);
 
 	cycling_active = cycling_save;

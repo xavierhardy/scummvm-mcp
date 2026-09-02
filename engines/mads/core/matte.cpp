@@ -227,12 +227,10 @@ void matte_init(int init_series) {
 int matte_allocate_image() {
 	int result;
 
-	if (image_marker >= IMAGE_LIST_SIZE) {
-		result = -1;
-	} else {
-		result = image_marker++;
-	}
+	if (image_marker >= IMAGE_LIST_SIZE)
+		error("Out of image list space");
 
+	result = image_marker++;
 	return result;
 }
 
@@ -244,7 +242,8 @@ void matte_refresh_work() {
 	image_list[id].segment_id = (byte)-1;
 }
 
-int matte_add_message(FontPtr font, char *text, int x, int y, int message_color, int auto_spacing) {
+int matte_add_message(FontPtr font, char *text, int x, int y,
+		int message_color, int auto_spacing, bool useMacintoshFont) {
 	int message_handle;
 	int count;
 
@@ -256,10 +255,13 @@ int matte_add_message(FontPtr font, char *text, int x, int y, int message_color,
 			message_list[message_handle].y = y;
 			message_list[message_handle].font = font;
 			message_list[message_handle].text = text;
-			message_list[message_handle].xs = font_string_width(font, text, auto_spacing);
+			message_list[message_handle].xs = useMacintoshFont ?
+				g_engine->getMessageTextWidth(font, text, auto_spacing) :
+				font_string_width(font, text, auto_spacing);
 			message_list[message_handle].ys = font ? font->max_y_size : 0;
 			message_list[message_handle].main_color = message_color;
 			message_list[message_handle].spacing = (char)auto_spacing;
+			message_list[message_handle].macintosh_font = useMacintoshFont;
 			message_list[message_handle].status = 1;
 			message_list[message_handle].active = true;
 		}
@@ -863,9 +865,14 @@ void matte_frame(int special_effect, int full_screen) {
 					high_color,
 					low_color,
 					0);
-				font_write(message->font,
-					&scr_work, message->text,
-					message->x, message->y, message->spacing);
+				if (!message->macintosh_font ||
+						!g_engine->drawMacintoshText(message->font,
+						&scr_work, message->text, message->x, message->y,
+						message->main_color, message->spacing)) {
+					font_write(message->font,
+						&scr_work, message->text,
+						message->x, message->y, message->spacing);
+				}
 			}
 		}
 		message++;
@@ -971,8 +978,10 @@ void matte_refresh_inter() {
 	int id;
 
 	id = matte_allocate_inter_image();
-	image_inter_list[id].flags = IMAGE_REFRESH;
-	image_inter_list[id].segment_id = (byte)-1;
+	if (id >= 0) {
+		image_inter_list[id].flags = IMAGE_REFRESH;
+		image_inter_list[id].segment_id = (byte)-1;
+	}
 }
 
 static void make_inter_matte(ImageInterPtr image, MattePtr matte) {

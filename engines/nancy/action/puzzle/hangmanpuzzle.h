@@ -80,14 +80,13 @@ protected:
 	Common::Rect glyphForLetter(char letter) const;	// glyph rect of the tile for this letter, or empty
 	int tileAtCursor(const Common::Point &mousePos) const;
 	void commitGuess(uint tileIndex);
-	void safeBlit(const Graphics::ManagedSurface &src, const Common::Rect &srcRect, const Common::Point &destPos);
 	void redraw();
 	void applyOutcome(const SceneOutcome &outcome);
 
 	// -- File data --
 	Common::Path _puzzleImageName;		// 0x3d
 	Common::Path _lettersImageName;		// 0x41
-	int16 _field45 = 0;					// 0x45
+	uint16 _hoverCursorType = 0;		// 0x45 - raw Nancy14 cursor type, shown over a letter tile
 
 	Common::Array<Common::String> _words;			// candidate word bank
 	Common::Array<Common::Rect> _hangPieceRects;	// 0x57, hang-stage pieces

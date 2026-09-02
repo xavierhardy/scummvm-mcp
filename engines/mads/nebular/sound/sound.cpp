@@ -43,6 +43,17 @@ RexSoundManager::RexSoundManager(Audio::Mixer *mixer, bool &soundFlag,
 					"falling back to AdLib");
 		}
 	}
+	if (_driverType == SOUND_MT32) {
+		// TODO Move to SoundManager superclass when other sound drivers have been reworked
+		_midiDriver = new MidiDriver_MT32GM(MusicType::MT_MT32);
+		int returnCode;
+		returnCode = _midiDriver->open();
+		if (returnCode != 0)
+			error("SoundManager - Failed to open MIDI music driver - error code %d.", returnCode);
+
+		_driverCallbackDelta = _midiDriver->getBaseTempo();
+		_midiDriver->setTimerCallback(this, &timerCallback);
+	}
 }
 
 void RexSoundManager::validate() {
@@ -70,21 +81,7 @@ void RexSoundManager::validate() {
 }
 
 void RexSoundManager::loadDriver(int sectionNumber) {
-	removeDriver();
-
-	if (_isDemo && _driverType == SOUND_ADLIB) {
-		switch (sectionNumber) {
-		case 1:
-			_driver = new ASoundDemo1(_mixer);
-			break;
-		case 9:
-			_driver = new ASoundDemo9(_mixer);
-			break;
-		default:
-			return;
-		}
-		return;
-	}
+	closeDriver();
 
 	switch (_driverType) {
 	case SOUND_MT32:
@@ -93,39 +90,39 @@ void RexSoundManager::loadDriver(int sectionNumber) {
 			// The demo shares RSOUND.001 across numbered gameplay sections
 			// and uses RSOUND.009 only for its opening presentation.
 			if (sectionNumber == 9)
-				_driver = new RSoundDemo9(_mixer);
+				_driver = new RSoundDemo9(_mixer, _midiDriver);
 			else
-				_driver = new RSoundDemo1(_mixer);
+				_driver = new RSoundDemo1(_mixer, _midiDriver);
 			break;
 		}
 
 		switch (sectionNumber) {
 		case 1:
-			_driver = new RSound1(_mixer);
+			_driver = new RSound1(_mixer, _midiDriver);
 			break;
 		case 2:
-			_driver = new RSound2(_mixer);
+			_driver = new RSound2(_mixer, _midiDriver);
 			break;
 		case 3:
-			_driver = new RSound3(_mixer);
+			_driver = new RSound3(_mixer, _midiDriver);
 			break;
 		case 4:
-			_driver = new RSound4(_mixer);
+			_driver = new RSound4(_mixer, _midiDriver);
 			break;
 		case 5:
-			_driver = new RSound5(_mixer);
+			_driver = new RSound5(_mixer, _midiDriver);
 			break;
 		case 6:
-			_driver = new RSound6(_mixer);
+			_driver = new RSound6(_mixer, _midiDriver);
 			break;
 		case 7:
-			_driver = new RSound7(_mixer);
+			_driver = new RSound7(_mixer, _midiDriver);
 			break;
 		case 8:
-			_driver = new RSound8(_mixer);
+			_driver = new RSound8(_mixer, _midiDriver);
 			break;
 		case 9:
-			_driver = new RSound9(_mixer);
+			_driver = new RSound9(_mixer, _midiDriver);
 			break;
 		default:
 			return;
@@ -225,37 +222,53 @@ void RexSoundManager::loadDriver(int sectionNumber) {
 
 	default:
 		// Adlib drivers
-		switch (sectionNumber) {
-		case 1:
-			_driver = new ASound1(_mixer);
-			break;
-		case 2:
-			_driver = new ASound2(_mixer);
-			break;
-		case 3:
-			_driver = new ASound3(_mixer);
-			break;
-		case 4:
-			_driver = new ASound4(_mixer);
-			break;
-		case 5:
-			_driver = new ASound5(_mixer);
-			break;
-		case 6:
-			_driver = new ASound6(_mixer);
-			break;
-		case 7:
-			_driver = new ASound7(_mixer);
-			break;
-		case 8:
-			_driver = new ASound8(_mixer);
-			break;
-		case 9:
-			_driver = new ASound9(_mixer);
-			break;
-		default:
-			return;
+		if (_isDemo) {
+			switch (sectionNumber) {
+			case 1:
+				_driver = new ASoundDemo1(_mixer);
+				break;
+			case 9:
+				_driver = new ASoundDemo9(_mixer);
+				break;
+			default:
+				return;
+			}
+		} else {
+			switch (sectionNumber) {
+			case 1:
+				_driver = new ASound1(_mixer);
+				break;
+			case 2:
+				_driver = new ASound2(_mixer);
+				break;
+			case 3:
+				_driver = new ASound3(_mixer);
+				break;
+			case 4:
+				_driver = new ASound4(_mixer);
+				break;
+			case 5:
+				_driver = new ASound5(_mixer);
+				break;
+			case 6:
+				_driver = new ASound6(_mixer);
+				break;
+			case 7:
+				_driver = new ASound7(_mixer);
+				break;
+			case 8:
+				_driver = new ASound8(_mixer);
+				break;
+			case 9:
+				_driver = new ASound9(_mixer);
+				break;
+			default:
+				return;
+			}
 		}
+
+		// Reset the driver
+		_driver->command(0, 0);
 	}
 }
 

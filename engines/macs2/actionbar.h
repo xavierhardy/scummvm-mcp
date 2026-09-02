@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef MACS2_SCUMMUI_H
-#define MACS2_SCUMMUI_H
+#ifndef MACS2_ACTIONBAR_H
+#define MACS2_ACTIONBAR_H
 
 #include "common/rect.h"
 #include "common/str.h"
@@ -32,10 +32,17 @@ namespace Macs2 {
 
 class View1;
 class GameObject;
+struct AnimFrame;
+struct GlyphData;
+struct HudButton;
 
-class ScummUI {
+/**
+ * Persistent bottom action bar: Scumm procedural strip (kEnhUIUX) or native
+ * megapic/button HUD when dialect-v2 panel assets are loaded.
+ */
+class ActionBar {
 public:
-	ScummUI(View1 *view);
+	ActionBar(View1 *view);
 
 	void draw(Graphics::ManagedSurface &s);
 	bool handleClick(const Common::Point &pos, bool scriptsRunning = false);
@@ -47,17 +54,22 @@ public:
 	void syncActiveVerbFromCursorMode();
 	void resetInventoryAfterLoad();
 
+	bool useScummSkin() const;
+	bool useNativeSkin() const;
+	/** Y where the interactive game area ends when this bar is shown. */
+	int gameAreaBottomY() const;
+
 private:
 	static constexpr int kSentenceH = 14;
 	static constexpr int kUITop = kGameHeight;
 	static constexpr int kSentenceY = kGameHeight;
 	static constexpr int kVerbY = kGameHeight + kSentenceH;
-	static constexpr int kVerbW = 64;
+	static constexpr int kBarPadX = 6;
+	static constexpr int kVerbW = 78;
 	static constexpr int kVerbH = 25;
 	static constexpr int kVerbCols = 2;
 	static constexpr int kVerbRows = 2;
-	static constexpr int kInvX = 128;
-	static constexpr int kInvItemW = 34;
+	static constexpr int kVerbInvGap = 4;
 	static constexpr int kInvItemH = 25;
 	static constexpr int kInvIconInset = 1;
 	static constexpr int kInvCols = 4;
@@ -69,6 +81,11 @@ private:
 	};
 	static const VerbDef kVerbs[4];
 
+	// --- Scumm skin ---
+	void drawScumm(Graphics::ManagedSurface &s);
+	bool handleClickScumm(const Common::Point &pos, bool scriptsRunning);
+	void handleMouseMoveScumm(const Common::Point &pos);
+	void actionBarFont(const GlyphData *&font, uint16 &fontCount, int &glyphH) const;
 	void drawSentenceLine(Graphics::ManagedSurface &s);
 	void drawVerbBar(Graphics::ManagedSurface &s);
 	void drawInventoryStrip(Graphics::ManagedSurface &s);
@@ -78,6 +95,7 @@ private:
 
 	int getScrollButtonWidth() const;
 	int getInvArrowX() const;
+	int getInvItemWidth() const;
 
 	Common::Array<GameObject *> getProtagonistItems() const;
 
@@ -88,6 +106,16 @@ private:
 	/** True if pos hits the inventory scroll/item area of the strip. */
 	bool isPointInInventoryStrip(const Common::Point &pos) const;
 
+	// --- Native skin (megapic + HudButton table) ---
+	void drawNative(Graphics::ManagedSurface &s);
+	bool handleClickNative(const Common::Point &pos);
+	void handleMouseMoveNative(const Common::Point &pos);
+	void refreshSaveSlotNames();
+	Common::String translatedVerbLabel(Script::MouseMode mode) const;
+	Common::String currentTargetDisplayName() const;
+	Common::String buildSentenceLine() const;
+	const HudButton *findHudButtonAt(const Common::Point &pos, int *outIndex = nullptr) const;
+
 	View1 *_view;
 	int _activeVerbIndex;
 	int _hoveredVerb;
@@ -96,8 +124,11 @@ private:
 	int _inventoryScrollOffset;
 	Common::Array<GameObject *> _protagonistItems;
 	Common::String _sentenceObject;
+
+	uint16 _hoveredButtonId = 0;
+	uint16 _pressedButtonId = 0;
 };
 
 } // namespace Macs2
 
-#endif // MACS2_SCUMMUI_H
+#endif // MACS2_ACTIONBAR_H
