@@ -30,8 +30,11 @@ namespace TextView {
 struct Presentation {
 	int bufferHeight;
 	int visibleHeight;
+	int matteHeight;
 	bool drawBoundaryLines;
 	bool macintoshFullFrame;
+	RGBcolor textColor;
+	RGBcolor shadowColor;
 };
 
 // Main textview function

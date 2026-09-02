@@ -69,6 +69,7 @@ class ViewportOrnaments;
 class TextboxOrnaments;
 class InventoryBoxOrnaments;
 class Clock;
+class Camera;
 }
 
 namespace State {
@@ -211,6 +212,7 @@ public:
 	UI::CellPhonePopup &getCellPhonePopup() { return _cellPhonePopup; }
 	UI::ConversationPopup &getConversationPopup() { return _conversationPopup; }
 	UI::Clock *getClock();
+	UI::Camera *getCamera() { return _camera; }
 	UI::Taskbar *getTaskbar() { return _taskbar; }
 
 	Action::ActionManager &getActionManager() { return _actionManager; }
@@ -347,6 +349,8 @@ private:
 	UI::InventoryBoxOrnaments *_inventoryBoxOrnaments;
 	RenderObject *_clock;
 
+	UI::Camera *_camera;	// Nancy14 only
+
 	Common::Rect _mapHotspot;
 
 	// General data
@@ -371,6 +375,9 @@ private:
 	// Set by notifyRandomMovieARLoaded; checked in clearSceneData to wind
 	// down a persistent random-movie whose scene chain is over.
 	bool _hadRandomMovieARThisScene = false;
+
+	// Whether esc was already down last frame, so a held key only skips once
+	bool _escHeld = false;
 
 	// Contains a screenshot of the Scene state from the last time it was exited
 	Graphics::ManagedSurface _lastScreenshot;

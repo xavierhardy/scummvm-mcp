@@ -64,8 +64,11 @@ static int16 xPos;
 static byte line_slice[156];
 static int bufferHeight;
 static int visibleHeight;
+static int matteHeight;
 static bool drawBoundaryLines;
 static bool macintoshFullFrame;
+static RGBcolor textColor;
+static RGBcolor shadowColor;
 
 static void present_matte_frame(int specialEffect, int fullScreen) {
 	if (!macintoshFullFrame) {
@@ -74,7 +77,7 @@ static void present_matte_frame(int specialEffect, int fullScreen) {
 	}
 
 	const int workHeight = scr_work.y;
-	scr_work.y = visibleHeight;
+	scr_work.y = fullScreen ? visibleHeight : matteHeight;
 	matte_frame(specialEffect, fullScreen);
 	scr_work.y = workHeight;
 }
@@ -165,12 +168,8 @@ static void load_background(const char *value) {
 
 	pal_init(8, 8);
 	pal_white(master_palette);
-	master_palette[5].r = 0;
-	master_palette[5].g = 63;
-	master_palette[5].b = 63;
-	master_palette[6].r = 0;
-	master_palette[6].g = 45;
-	master_palette[6].b = 45;
+	master_palette[5] = textColor;
+	master_palette[6] = shadowColor;
 
 	room = room_load(room_id, 0, nullptr, &scr_orig, &scr_depth, &scr_walk,
 		&scr_special, &picture_map, &depth_map, &picture_resource,
@@ -482,18 +481,29 @@ void textview_main(const char *resName) {
 	Presentation presentation;
 	presentation.bufferHeight = 156;
 	presentation.visibleHeight = 156;
+	presentation.matteHeight = presentation.visibleHeight;
 	presentation.drawBoundaryLines = true;
 	presentation.macintoshFullFrame = false;
+	presentation.textColor.r = 0;
+	presentation.textColor.g = 63;
+	presentation.textColor.b = 63;
+	presentation.shadowColor.r = 0;
+	presentation.shadowColor.g = 45;
+	presentation.shadowColor.b = 45;
 	textview_main(resName, presentation);
 }
 
 void textview_main(const char *resName, const Presentation &presentation) {
 	bufferHeight = presentation.bufferHeight;
 	visibleHeight = presentation.visibleHeight;
+	matteHeight = presentation.matteHeight;
 	drawBoundaryLines = presentation.drawBoundaryLines;
 	macintoshFullFrame = presentation.macintoshFullFrame;
+	textColor = presentation.textColor;
+	shadowColor = presentation.shadowColor;
 	assert(bufferHeight >= 156 && visibleHeight > 0 &&
-		visibleHeight <= bufferHeight && visibleHeight <= 200);
+		visibleHeight <= bufferHeight && visibleHeight <= 200 &&
+		matteHeight > 0 && matteHeight <= visibleHeight);
 
 	active = false;
 	isGoing = flag2 = true;
@@ -571,7 +581,10 @@ void textview_main(const char *resName, const Presentation &presentation) {
 	g_engine->_soundManager->removeDriver();
 	pal_interface(master_palette);
 	mcga_setpal(&master_palette);
-	mcga_reset();
+	// Native CODE 133 returns after restoring the interface palette. The
+	// additional MCGA reset belongs to the DOS viewer teardown.
+	if (!macintoshFullFrame)
+		mcga_reset();
 
 	buffer_free(&scr_depth);
 	buffer_free(&scr_orig);

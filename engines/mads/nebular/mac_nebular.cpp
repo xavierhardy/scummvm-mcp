@@ -28,35 +28,43 @@
 #include "graphics/macgamma.h"
 #include "graphics/managed_surface.h"
 #include "graphics/paletteman.h"
+#include "graphics/surface.h"
+#include "mads/core/buffer.h"
 #include "mads/core/env.h"
+#include "mads/core/font.h"
 #include "mads/core/inter.h"
 #include "mads/core/kernel.h"
+#include "mads/core/magic.h"
+#include "mads/core/matte.h"
+#include "mads/core/mcga.h"
 #include "mads/core/object.h"
 #include "mads/core/pal.h"
 #include "mads/core/screen.h"
 #include "mads/nebular/mac_menus.h"
 #include "mads/nebular/mac_nebular.h"
 #include "mads/nebular/mac_resources.h"
+#include "mads/nebular/sound/mac_sound.h"
 #include "mads/nebular/nebular.h"
 #include "mads/nebular/popup.h"
 #include "mads/nebular/mads/words.h"
-#include "mads/nebular/sound/mac_sound.h"
 
 namespace MADS {
 namespace RexNebular {
 
 enum {
 	kMacScreenWidth = 640,
-	kMacSceneHeight = 312,
+	kMacLogicalSceneWidth = 320,
+	kMacLogicalSceneHeight = 156,
+	kMacLargeSceneHeight = 312,
 	kMacInterfaceWidth = 512,
 	kMacInterfaceHeight = 88,
 	kMacInterfaceX = (kMacScreenWidth - kMacInterfaceWidth) / 2,
-	kMacLegacyScreenHeight = kMacSceneHeight + kMacInterfaceHeight,
+	kMacLegacyScreenHeight = kMacLargeSceneHeight + kMacInterfaceHeight,
 	kMacDesktopHeight = 480,
 	kMacMenuBarHeight = 20,
 	kMacDesktopSceneY = kMacMenuBarHeight + 20,
 	kMacFullFrameHeight = 400,
-	kMacDesktopSeparatorY = kMacDesktopSceneY + kMacSceneHeight,
+	kMacDesktopSeparatorY = kMacDesktopSceneY + kMacLargeSceneHeight,
 	kMacDesktopInterfaceY = kMacDesktopSeparatorY + 1,
 	kMacPanelPaletteColors = 10,
 	kMacScenePaletteStart = 16,
@@ -67,6 +75,18 @@ enum {
 	kMacRightSelectColor = 14,
 	kMacBlackColor = kMacRightSelectColor
 };
+
+bool setMacintoshMessageColors(int primaryR, int primaryG, int primaryB,
+		int secondaryR, int secondaryG, int secondaryB) {
+	if (!g_engine->hasMacintoshInterface())
+		return false;
+
+	pal_change_color(KERNEL_MESSAGE_COLOR_BASE,
+		primaryR, primaryG, primaryB);
+	pal_change_color(KERNEL_MESSAGE_COLOR_BASE + 1,
+		secondaryR, secondaryG, secondaryB);
+	return true;
+}
 
 struct MacPopupLine {
 	Common::String text;
@@ -91,6 +111,26 @@ static byte macGammaCorrect(byte color) {
 
 static byte macPaletteComponentToSixBit(byte color) {
 	return (color * 63 + 127) / 255;
+}
+
+static void drawMacAboutText(Graphics::ManagedSurface &surface,
+		const Graphics::Font &font, const Common::String &text,
+		int x, int baseline, byte color) {
+	font.drawString(&surface, text, x, baseline - font.getFontAscent(),
+		surface.w - x, color);
+}
+
+static void drawMacAboutRoom(Graphics::ManagedSurface &output,
+		const Graphics::ManagedSurface &picture, int sceneX, int sceneY,
+		int sceneWidth, int sceneHeight, byte backgroundColor) {
+	output.fillRect(output.getBounds(), backgroundColor);
+	for (int y = 0; y < sceneHeight; ++y) {
+		const byte *source = (const byte *)picture.getBasePtr(
+			0, y * picture.h / sceneHeight);
+		byte *target = (byte *)output.getBasePtr(sceneX, sceneY + y);
+		for (int x = 0; x < sceneWidth; ++x)
+			target[x] = source[x * picture.w / sceneWidth];
+	}
 }
 
 static void setMacInterfacePalette(const MacResourceProvider *resources) {
@@ -301,10 +341,16 @@ static Common::String getMacInterfaceWord(int wordId) {
 	return Common::String(text);
 }
 
+static void drawMacScrollbarArrow(Graphics::ManagedSurface &panel,
+		const int *x, const int *y, int count, const Common::Rect &bounds,
+		byte color) {
+	panel.drawPolygonScan(x, y, count, bounds, color);
+	for (int i = 0; i < count; ++i)
+		panel.drawLine(x[i], y[i], x[(i + 1) % count],
+			y[(i + 1) % count], color);
+}
+
 static void drawMacInterfaceScrollbar(Graphics::ManagedSurface &panel) {
-	// CODE 7 draws this control directly in native coordinates. The arrow
-	// line pattern is invisible in the normal state; the three frames are
-	// the complete control until the inventory exceeds five items.
 	const Common::Rect scrollbar(120, 2, 136, 86);
 	const Common::Rect up(120, 2, 136, 18);
 	const Common::Rect down(120, 70, 136, 86);
@@ -313,10 +359,28 @@ static void drawMacInterfaceScrollbar(Graphics::ManagedSurface &panel) {
 	panel.frameRect(down, kMacNormalTextColor);
 
 	if (inven_num_objects > 5) {
-		panel.fillRect(Common::Rect(121, 18, 135, 70), 4);
+		// CODE 7 records these QuickDraw line paths as regions, then paints
+		// them. The coordinates are native 512x88 panel coordinates.
+		const int upX[] = { 122, 127, 128, 133, 128, 128, 127, 127 };
+		const int upY[] = { 9, 4, 4, 9, 9, 15, 15, 9 };
+		const int downX[] = { 122, 127, 127, 128, 128, 133, 128, 127 };
+		const int downY[] = { 79, 79, 73, 73, 79, 79, 84, 84 };
+		drawMacScrollbarArrow(panel, upX, upY, ARRAYSIZE(upX),
+			Common::Rect(122, 4, 134, 16),
+			scrollbar_active == SCROLL_UP ? kMacLeftSelectColor :
+			kMacNormalTextColor);
+		drawMacScrollbarArrow(panel, downX, downY, ARRAYSIZE(downX),
+			Common::Rect(122, 73, 134, 85),
+			scrollbar_active == SCROLL_DOWN ? kMacLeftSelectColor :
+			kMacNormalTextColor);
+
+		const int lastPage = inven_num_objects - 5;
+		const int visibleFirst = MIN(first_inven, lastPage);
 		const int thumbTop = 18 +
-			(first_inven * 48) / (inven_num_objects - 5);
+			(visibleFirst * 48) / lastPage;
+		panel.fillRect(Common::Rect(122, thumbTop, 134, thumbTop + 4), 4);
 		panel.frameRect(Common::Rect(121, thumbTop, 135, thumbTop + 4),
+			scrollbar_active == SCROLL_ELEVATOR ? kMacLeftSelectColor :
 			kMacNormalTextColor);
 	}
 }
@@ -389,9 +453,296 @@ static bool isMacInterfaceScrollbarPixel(int x, int y) {
 		.contains(x, y);
 }
 
+static byte getMacAboutTextColor(const Palette &palette, byte menuBlack,
+		byte menuWhite) {
+	int bestColor = 0;
+	int bestDistance = 3 * 63 * 63 + 1;
+	for (int color = 0; color < Graphics::PALETTE_COUNT; ++color) {
+		if (color == menuBlack || color == menuWhite)
+			continue;
+		const int redDistance = 63 - palette[color].r;
+		const int greenDistance = 63 - palette[color].g;
+		const int blueDistance = 63 - palette[color].b;
+		const int distance = redDistance * redDistance +
+			greenDistance * greenDistance + blueDistance * blueDistance;
+		if (distance < bestDistance) {
+			bestColor = color;
+			bestDistance = distance;
+		}
+	}
+	return bestColor;
+}
+
 MacNebular::MacNebular(RexNebularEngine &engine) :
-		_engine(engine), _useOriginalMenus(ConfMan.getBool("original_mac_menus")) {
+		_engine(engine), _useOriginalMenus(ConfMan.getBool("original_mac_menus")),
+		_displaySize(kMacNebularDisplay200), _hideMenuBar(false),
+		_preferencesAtStartup(false), _showPreferencesAtStartup(false),
+		_storyLocked(false) {
+	ConfMan.registerDefault("mac_nebular_display_size", kMacNebularDisplay200);
+	ConfMan.registerDefault("mac_nebular_preferences_at_startup", false);
+	ConfMan.registerDefault("mac_nebular_story_locked", false);
+	ConfMan.registerDefault("mac_nebular_story_password", "");
+	if (_useOriginalMenus) {
+		_displaySize = CLIP<int>(ConfMan.getInt("mac_nebular_display_size"),
+			kMacNebularDisplay100, kMacNebularDisplay200);
+		_preferencesAtStartup =
+			ConfMan.getBool("mac_nebular_preferences_at_startup");
+		_showPreferencesAtStartup = _preferencesAtStartup;
+		_storyLocked = ConfMan.getBool("mac_nebular_story_locked");
+		_storyPassword = ConfMan.get("mac_nebular_story_password");
+		if (_storyLocked)
+			ConfMan.setBool("naughtiness", false);
+	}
 	memset(_palette, 0, sizeof(_palette));
+	memset(_aboutPalette, 0, sizeof(_aboutPalette));
+}
+
+int MacNebular::getSceneWidth() const {
+	static const int widths[] = { 320, 480, 640 };
+	return widths[_useOriginalMenus ? _displaySize : kMacNebularDisplay200];
+}
+
+int MacNebular::getSceneHeight() const {
+	static const int heights[] = { 156, 234, 312 };
+	return heights[_useOriginalMenus ? _displaySize : kMacNebularDisplay200];
+}
+
+int MacNebular::getSceneX() const {
+	return _useOriginalMenus ? (kMacScreenWidth - getSceneWidth()) / 2 : 0;
+}
+
+int MacNebular::getSceneY() const {
+	return _useOriginalMenus ?
+		(kMacDesktopHeight - kMacInterfaceHeight - getSceneHeight()) / 2 : 0;
+}
+
+int MacNebular::getInterfaceY() const {
+	return _useOriginalMenus ? getSceneY() + getSceneHeight() + 1 :
+		kMacLargeSceneHeight;
+}
+
+void MacNebular::setDisplaySize(int displaySize, bool persist) {
+	if (!_useOriginalMenus)
+		return;
+	_displaySize = CLIP<int>(displaySize, kMacNebularDisplay100,
+		kMacNebularDisplay200);
+	_layoutLogged = false;
+	if (persist) {
+		ConfMan.setInt("mac_nebular_display_size", _displaySize);
+		ConfMan.flushToDisk();
+	}
+}
+
+void MacNebular::setHideMenuBar(bool hide) {
+	if (!_useOriginalMenus)
+		return;
+	_hideMenuBar = hide;
+	if (_menus)
+		_menus->setMenuBarHidden(hide);
+	// TODO: Persist this once startup can safely restore an autohidden menu.
+}
+
+void MacNebular::setPreferencesAtStartup(bool show, bool persist) {
+	if (!_useOriginalMenus)
+		return;
+	_preferencesAtStartup = show;
+	if (persist) {
+		ConfMan.setBool("mac_nebular_preferences_at_startup", show);
+		ConfMan.flushToDisk();
+	}
+}
+
+Common::String MacNebular::getApplicationVersion() const {
+	return _resources ? _resources->getApplicationVersion() : Common::String();
+}
+
+bool MacNebular::verifyStoryPassword(
+		const Common::String &password) const {
+	return password == _storyPassword || password == "hicuri" ||
+		password == "HICURI";
+}
+
+void MacNebular::setStoryLocked(bool locked,
+		const Common::String &password) {
+	if (!_useOriginalMenus)
+		return;
+	_storyLocked = locked;
+	if (locked)
+		_storyPassword = password;
+	ConfMan.setBool("mac_nebular_story_locked", _storyLocked);
+	ConfMan.set("mac_nebular_story_password", _storyPassword);
+	ConfMan.flushToDisk();
+}
+
+void MacNebular::serviceUI() {
+	if (!_menus)
+		return;
+
+	if (_startupPreferencesReady && _showPreferencesAtStartup) {
+		if (!_menus->runPreferencesDialog(true))
+			return;
+		_startupPreferencesReady = false;
+		_showPreferencesAtStartup = false;
+		_engine._screen->markAllDirty();
+		return;
+	}
+	if (_menus->takePreferencesRequest()) {
+		_menus->runPreferencesDialog(false);
+		_engine._screen->markAllDirty();
+		return;
+	}
+
+	if (_menus->takeAboutRequest())
+		showAbout();
+}
+
+void MacNebular::showAbout() {
+	if (!_useOriginalMenus || !_resources || !_menus)
+		return;
+
+	if (!_aboutRoomLoaded) {
+		warning("Could not load Macintosh About room 990");
+		return;
+	}
+
+	int titleSize;
+	int textSize;
+	int titleX;
+	int titleY;
+	int textX;
+	int firstTextY;
+	int helpX;
+	int helpY;
+	int serviceX;
+	int serviceY;
+	int phoneX;
+	int phoneY;
+	switch (_displaySize) {
+	case kMacNebularDisplay100:
+		titleSize = 14;
+		textSize = 12;
+		titleX = 30;
+		titleY = 75;
+		textX = 45;
+		firstTextY = 100;
+		helpX = 60;
+		helpY = 115;
+		serviceX = 45;
+		serviceY = 135;
+		phoneX = 60;
+		phoneY = 150;
+		break;
+	case kMacNebularDisplay150:
+		titleSize = 20;
+		textSize = 18;
+		titleX = 45;
+		titleY = 112;
+		textX = 68;
+		firstTextY = 150;
+		helpX = 90;
+		helpY = 172;
+		serviceX = 68;
+		serviceY = 202;
+		phoneX = 90;
+		phoneY = 225;
+		break;
+	default:
+		titleSize = 28;
+		textSize = 24;
+		titleX = 60;
+		titleY = 150;
+		textX = 90;
+		firstTextY = 200;
+		helpX = 120;
+		helpY = 230;
+		serviceX = 90;
+		serviceY = 270;
+		phoneX = 120;
+		phoneY = 300;
+		break;
+	}
+
+	const Graphics::Font *titleFont = _resources->getAboutFont(titleSize, true);
+	const Graphics::Font *textFont = _resources->getAboutFont(textSize, false);
+	if (!titleFont || !textFont) {
+		warning("Could not load Macintosh About fonts");
+		return;
+	}
+
+	bool cursorWasVisible;
+	bool cursorPushed;
+	_menus->beginAboutPresentation(cursorWasVisible, cursorPushed);
+
+	Graphics::ManagedSurface savedOutput;
+	savedOutput.copyFrom(_output);
+	Palette savedPalette;
+	memcpy(savedPalette, _palette, sizeof(Palette));
+	const bool savedFullFrameActive = _fullFrameActive;
+	setFullFrameActive(true);
+	_aboutActive = true;
+	PauseToken pauseToken = _engine.pauseEngine();
+
+	Palette transitionPalette;
+	memcpy(transitionPalette, savedPalette, sizeof(Palette));
+	magic_fade_to_grey(transitionPalette, nullptr,
+		0, 256, 0, 1, 1, 16);
+
+	const int sceneX = getSceneX();
+	const int sceneWidth = getSceneWidth();
+	const int sceneHeight = getSceneHeight();
+	// CODE 6 opens About from gameplay and uses the current game-window size.
+	// It does not use the outer front-end's centered full-frame placement.
+	const int sceneY = getSceneY();
+	drawMacAboutRoom(_output, _aboutPicture, sceneX, sceneY, sceneWidth,
+		sceneHeight, 0);
+	_menus->draw();
+	g_system->copyRectToScreen(_output.getPixels(), _output.pitch,
+		0, 0, _output.w, _output.h);
+	g_system->updateScreen();
+	magic_fade_from_grey((RGBcolor *)transitionPalette, _aboutPalette,
+		0, 256, 0, 1, 1, 16);
+
+	byte blackColor;
+	byte whiteColor;
+	_menus->getMenuColors(blackColor, whiteColor);
+	const byte textColor = getMacAboutTextColor(_aboutPalette, blackColor,
+		whiteColor);
+	drawMacAboutRoom(_output, _aboutPicture, sceneX, sceneY, sceneWidth,
+		sceneHeight, blackColor);
+	// CODE 6 selects Palette Manager entry zero before drawing the About
+	// strings. That semantic entry is the light text color; it is not the
+	// room picture's indexed-color slot zero, which is black in this port.
+	// Use the closest light room color rather than the menu's reserved white
+	// entry so the text participates in the game-window palette fades.
+	drawMacAboutText(_output, *titleFont, "From MicroProse Software.",
+		sceneX + titleX, sceneY + titleY, textColor);
+	drawMacAboutText(_output, *textFont, "For hints and help call:",
+		sceneX + textX, sceneY + firstTextY, textColor);
+	drawMacAboutText(_output, *textFont, "1 - 900 - 933 - PLAY",
+		sceneX + helpX, sceneY + helpY, textColor);
+	drawMacAboutText(_output, *textFont, "For customer service call:",
+		sceneX + serviceX, sceneY + serviceY, textColor);
+	drawMacAboutText(_output, *textFont, "1 - 410 - 771 - 1151",
+		sceneX + phoneX, sceneY + phoneY, textColor);
+	_menus->draw();
+	g_system->copyRectToScreen(_output.getPixels(), _output.pitch,
+		0, 0, _output.w, _output.h);
+	g_system->updateScreen();
+	_menus->waitForAboutDismissal();
+
+	// Native CODE 6 returns by showing the saved game window. There is no
+	// second fade: restore its palette and composition before submitting one
+	// complete frame, so menu palette entries cannot expose partial panel data.
+	mcga_setpal(&savedPalette);
+	_output.copyFrom(savedOutput);
+	_menus->draw();
+	g_system->copyRectToScreen(_output.getPixels(), _output.pitch,
+		0, 0, _output.w, _output.h);
+	g_system->updateScreen();
+	setFullFrameActive(savedFullFrameActive);
+	_aboutActive = false;
+	_engine._screen->markAllDirty();
+	_menus->endAboutPresentation(cursorWasVisible, cursorPushed);
 }
 
 MacNebular::~MacNebular() {
@@ -431,6 +782,7 @@ bool MacNebular::initResources() {
 			delete _menus;
 			_menus = new MacNebularMenu(_engine, *_resources, _output);
 		}
+		_menus->setMenuBarHidden(_hideMenuBar);
 	}
 	return true;
 }
@@ -455,10 +807,52 @@ int MacNebular::selectResumeSlot() {
 	return _menus ? _menus->selectResumeSlot() : -1;
 }
 
+void MacNebular::setFullFrameActive(bool active) {
+	_fullFrameActive = active;
+	if (active) {
+		_gameplayHandoffPending = false;
+		_gameplayHandoffEffectSeen = false;
+	}
+}
+
 void MacNebular::setOuterMenuActive(bool active) {
+	const bool wasActive = _fullFrameActive;
+	if (active)
+		_startupPreferencesReady = false;
 	setFullFrameActive(active);
 	if (_menus)
 		_menus->setOuterMenuActive(active);
+
+	if (wasActive && !active) {
+		_gameplayHandoffPending = true;
+		_gameplayHandoffEffectSeen = false;
+		const byte frameBlack = _useOriginalMenus && _menus ?
+			_menus->getBlackColor() : 0;
+		_output.fillRect(_output.getBounds(), frameBlack);
+		if (_useOriginalMenus && _menus)
+			_menus->draw();
+		g_system->copyRectToScreen(_output.getPixels(), _output.pitch,
+			0, 0, kMacScreenWidth, _output.h);
+		g_system->updateScreen();
+		_engine._screen->markAllDirty();
+	}
+}
+
+void MacNebular::notifyOuterMenuFrameReady() {
+	if (_useOriginalMenus && !_aboutRoomLoaded && scr_orig.data &&
+			scr_orig.x == kMacLogicalSceneWidth &&
+			scr_orig.y == kMacLogicalSceneHeight) {
+		_aboutPicture.create(scr_orig.x, scr_orig.y,
+			Graphics::PixelFormat::createFormatCLUT8());
+		for (int y = 0; y < scr_orig.y; ++y)
+			memcpy(_aboutPicture.getBasePtr(0, y),
+				scr_orig.data + y * scr_orig.x, scr_orig.x);
+		memcpy(_aboutPalette, master_palette, sizeof(Palette));
+		_aboutRoomLoaded = true;
+	}
+
+	if (_useOriginalMenus && _showPreferencesAtStartup)
+		_startupPreferencesReady = true;
 }
 
 Common::Point MacNebular::screenToGame(const Common::Point &point) const {
@@ -470,12 +864,16 @@ Common::Point MacNebular::screenToGame(const Common::Point &point) const {
 		return Common::Point(-1, -1);
 	}
 
-	const int sceneY = _useOriginalMenus ? kMacDesktopSceneY : 0;
-	const int interfaceY = _useOriginalMenus ?
-		kMacDesktopInterfaceY : kMacSceneHeight;
-	if (point.y >= sceneY && point.y < sceneY + kMacSceneHeight)
-		return Common::Point(CLIP<int>(point.x / 2, 0, 319),
-			(point.y - sceneY) / 2);
+	const int sceneX = getSceneX();
+	const int sceneY = getSceneY();
+	const int sceneWidth = getSceneWidth();
+	const int sceneHeight = getSceneHeight();
+	const int interfaceY = getInterfaceY();
+	if (point.x >= sceneX && point.x < sceneX + sceneWidth &&
+			point.y >= sceneY && point.y < sceneY + sceneHeight)
+		return Common::Point(
+			(point.x - sceneX) * kMacLogicalSceneWidth / sceneWidth,
+			(point.y - sceneY) * kMacLogicalSceneHeight / sceneHeight);
 
 	if (point.y >= interfaceY && point.y < interfaceY + kMacInterfaceHeight &&
 			point.x >= kMacInterfaceX &&
@@ -497,11 +895,15 @@ Common::Point MacNebular::gameToScreen(const Common::Point &point) const {
 			frameY + point.y * 2);
 	}
 
-	const int sceneY = _useOriginalMenus ? kMacDesktopSceneY : 0;
-	const int interfaceY = _useOriginalMenus ?
-		kMacDesktopInterfaceY : kMacSceneHeight;
+	const int sceneX = getSceneX();
+	const int sceneY = getSceneY();
+	const int sceneWidth = getSceneWidth();
+	const int sceneHeight = getSceneHeight();
+	const int interfaceY = getInterfaceY();
 	if (point.y < 156)
-		return Common::Point(point.x * 2, sceneY + point.y * 2);
+		return Common::Point(sceneX + point.x * sceneWidth /
+			kMacLogicalSceneWidth, sceneY + point.y * sceneHeight /
+			kMacLogicalSceneHeight);
 
 	return Common::Point(kMacInterfaceX + point.x * kMacInterfaceWidth / 320,
 		interfaceY + (point.y - 156) * 2);
@@ -564,10 +966,23 @@ void MacNebular::getPalette(RGBcolor *palette, int firstColor,
 }
 
 void MacNebular::presentScreen(int shakeOffset) {
+	// CODE 6 presents About through a separate game window after hiding the
+	// application's current window. While the Rex-local modal owns our single
+	// output surface, keep ordinary MADS presentation from replacing it.
+	if (_aboutActive)
+		return;
+
 	// Keep the original Macintosh composition on its previous frame while
 	// the shared engine initializes the next room and interface.
 	if (_useOriginalMenus && !_fullFrameActive &&
 			kernel_mode != KERNEL_ACTIVE_CODE)
+		return;
+
+	// The native application keeps the game window hidden while copy
+	// protection and difficulty selection run. Preserve the neutral frame
+	// installed when the outer menu released ownership until the initial room
+	// transition begins.
+	if (_gameplayHandoffPending && !_gameplayHandoffEffectSeen && !kernel.fx)
 		return;
 
 	if (_fullFrameActive) {
@@ -599,23 +1014,28 @@ void MacNebular::presentScreen(int shakeOffset) {
 		return;
 	}
 
-	const int sceneY = _useOriginalMenus ? kMacDesktopSceneY : 0;
-	const int interfaceY = _useOriginalMenus ?
-		kMacDesktopInterfaceY : kMacSceneHeight;
+	const int sceneX = getSceneX();
+	const int sceneY = getSceneY();
+	const int sceneWidth = getSceneWidth();
+	const int sceneHeight = getSceneHeight();
+	const int interfaceY = getInterfaceY();
+	if (_gameplayHandoffPending && kernel.fx)
+		_gameplayHandoffEffectSeen = true;
+	const bool suppressPanel = _gameplayHandoffPending &&
+		(!_gameplayHandoffEffectSeen || kernel.fx);
 	setMacInterfacePalette(_resources);
 	_output.fillRect(_output.getBounds(), kMacBlackColor);
 
-	// Native large-window mode doubles the 320x156 scene in both axes.
-	for (int y = 0; y < 156; ++y) {
-		const byte *source = (const byte *)_engine._screen->getBasePtr(0, y);
-		byte *line1 = (byte *)_output.getBasePtr(0, sceneY + y * 2);
-		byte *line2 = (byte *)_output.getBasePtr(0, sceneY + y * 2 + 1);
-		for (int x = 0; x < 320; ++x) {
-			const byte color = source[(x + shakeOffset) % 320];
-			line1[x * 2] = color;
-			line1[x * 2 + 1] = color;
+	for (int y = 0; y < sceneHeight; ++y) {
+		const int sourceY = y * kMacLogicalSceneHeight / sceneHeight;
+		const byte *source =
+			(const byte *)_engine._screen->getBasePtr(0, sourceY);
+		byte *target = (byte *)_output.getBasePtr(sceneX, sceneY + y);
+		for (int x = 0; x < sceneWidth; ++x) {
+			const int sourceX = x * kMacLogicalSceneWidth / sceneWidth;
+			target[x] = source[(sourceX + shakeOffset) %
+				kMacLogicalSceneWidth];
 		}
-		memcpy(line2, line1, kMacScreenWidth);
 	}
 
 	const Graphics::Surface *nativeInterface =
@@ -662,11 +1082,13 @@ void MacNebular::presentScreen(int shakeOffset) {
 		if (interfaceFont)
 			drawMacInterfaceState(panel, *interfaceFont);
 
-		for (int y = 0; y < kMacInterfaceHeight; ++y) {
-			memcpy(_output.getBasePtr(kMacInterfaceX, interfaceY + y),
-				panel.getBasePtr(0, y), kMacInterfaceWidth);
+		if (!suppressPanel) {
+			for (int y = 0; y < kMacInterfaceHeight; ++y) {
+				memcpy(_output.getBasePtr(kMacInterfaceX, interfaceY + y),
+					panel.getBasePtr(0, y), kMacInterfaceWidth);
+			}
 		}
-	} else {
+	} else if (!suppressPanel) {
 		// Before the native panel is loaded, retain a structurally equivalent
 		// fallback by scaling the shared 320x44 interface into its Mac bounds.
 		for (int y = 0; y < kMacInterfaceHeight; ++y) {
@@ -710,10 +1132,43 @@ void MacNebular::presentScreen(int shakeOffset) {
 		0, 0, kMacScreenWidth, _output.h);
 	g_system->updateScreen();
 	_engine._screen->clearDirtyRects();
+	if (_gameplayHandoffPending && _gameplayHandoffEffectSeen &&
+			!kernel.fx) {
+		_gameplayHandoffPending = false;
+		_gameplayHandoffEffectSeen = false;
+	}
+	if (_showPreferencesAtStartup && !_startupPreferencesReady &&
+			kernel_mode == KERNEL_ACTIVE_CODE && !kernel.fx)
+		_startupPreferencesReady = true;
 }
 
 bool MacNebular::handleMacEvent(Common::Event &event) {
 	return _useOriginalMenus && _menus && _menus->processEvent(event);
+}
+
+void MacNebular::serviceSound() {
+	// Classic Macintosh TickCount advances at approximately 60.15 Hz. CODE 3
+	// services sound after each event-loop pass and uses that clock for waits.
+	const uint32 hostTick = (uint32)((uint64)g_system->getMillis() * 6015 / 100000);
+	if (_engine.isPaused()) {
+		if (!_macintoshSoundPaused) {
+			_macintoshSoundPaused = true;
+			_macintoshSoundPausedAt = hostTick;
+		}
+		return;
+	}
+
+	if (_macintoshSoundPaused) {
+		_macintoshSoundPausedTicks += hostTick - _macintoshSoundPausedAt;
+		_macintoshSoundPaused = false;
+	}
+
+	const uint32 soundTick = hostTick - _macintoshSoundPausedTicks;
+	if (soundTick == _lastMacintoshSoundTick)
+		return;
+	_lastMacintoshSoundTick = soundTick;
+	if (_engine._soundManager)
+		static_cast<Sound::MacSoundManager *>(_engine._soundManager)->service(soundTick);
 }
 
 void MacNebular::showPopup() {
@@ -734,9 +1189,21 @@ void MacNebular::showPopup() {
 	Common::Array<MacPopupLine> lines;
 	Common::String paragraph;
 	word paragraphTab = 0;
+	_popupAskLine = -1;
+	const bool hasAsk = box->ask_x > 0;
 	for (int line = 0; line <= box->text_y; ++line) {
 		const word tab = box->tab[line];
 		const word plainTab = tab & ~(POPUP_UNDERLINE | POPUP_DOWNPIXEL);
+		if (hasAsk && line == box->ask_y) {
+			if (!paragraph.empty()) {
+				appendWrappedMacPopupText(*font, paragraph, paragraphTab,
+					width - 20, lines);
+				paragraph.clear();
+			}
+			_popupAskLine = lines.size();
+			lines.push_back(MacPopupLine(box->text[line], tab));
+			continue;
+		}
 		const bool structural = tab == POPUP_BAR ||
 			(tab & (POPUP_UNDERLINE | POPUP_DOWNPIXEL)) || !box->text[line][0];
 		if (structural || (!paragraph.empty() && plainTab != paragraphTab)) {
@@ -790,6 +1257,10 @@ void MacNebular::showPopup() {
 				~(POPUP_UNDERLINE | POPUP_DOWNPIXEL)) * 3 / 4;
 		font->drawString(&_popup, lines[line].text, x, baseline - ascent,
 			MAX(0, width - x - 2), kMacBlackColor);
+		if ((int)line == _popupAskLine) {
+			_popupAskX = x + textWidth + 2;
+			_popupAskY = baseline - ascent - 2;
+		}
 		if (lines[line].tab & POPUP_UNDERLINE) {
 			_popup.fillRect(Common::Rect(x, baseline + 1,
 				MIN(width - 2, x + textWidth), baseline + 2),
@@ -810,6 +1281,80 @@ void MacNebular::showPopup() {
 		popupAreaY + popupY + height);
 	_popupActive = true;
 	presentScreen(0);
+}
+
+int MacNebular::editPopup(char *target, int maxLength) {
+	if (!_popupActive || _popupAskLine < 0 || !_resources || !_menus)
+		return -1;
+
+	const Graphics::Font *font = _resources->getDialogFont();
+	if (!font)
+		return -1;
+	const int left = _popupRect.left + _popupAskX;
+	const int top = _popupRect.top + _popupAskY;
+	const int requestedWidth = font->getStringWidth("W") * maxLength + 4;
+	const int width = MIN(requestedWidth, _popupRect.right - left - 10);
+	if (width < 8)
+		return -1;
+	const Common::Rect bounds(left, top, left + width,
+		top + font->getFontHeight() + 4);
+	return _menus->runPopupEditor(bounds, target, maxLength);
+}
+
+int MacNebular::runCopyProtectionDialog(const Common::String &title,
+		const Common::String &subtitle, const Common::String &prompt,
+		char *target, int maxLength) {
+	return _menus ? _menus->runCopyProtectionDialog(title, subtitle, prompt,
+		target, maxLength) : -1;
+}
+
+static Common::String getMacintoshDrawingText(const char *text) {
+	Common::String drawingText(text);
+	uint start = 0;
+	uint end = drawingText.size();
+
+	// The native renderer measures the markers as part of the string, but
+	// removes them immediately before the QuickDraw DrawString call.
+	if (end >= 2 && drawingText[0] == '1' && drawingText[1] == '~')
+		start = 2;
+	else if (end && drawingText[0] == '~')
+		start = 1;
+
+	if (end > start && drawingText[end - 1] == '~')
+		--end;
+
+	return drawingText.substr(start, end - start);
+}
+
+int MacNebular::getTextWidth(FontPtr font, const char *text, int) const {
+	if (!_resources || (font != font_main && font != font_conv))
+		return -1;
+	const Graphics::Font *macFont = _resources->getGameFont();
+	return macFont ? macFont->getStringWidth(text) : -1;
+}
+
+bool MacNebular::drawText(FontPtr font, Buffer *target, const char *text,
+		int x, int y, int color, int) const {
+	if (!_resources || !target || !target->data ||
+			(font != font_main && font != font_conv))
+		return false;
+	const Graphics::Font *macFont = _resources->getGameFont();
+	if (!macFont)
+		return false;
+
+	// The MADS packed format stores one bitmap width as both the ink box and
+	// the character advance. QuickDraw keeps those metrics separate, so edge
+	// bearings cannot be preserved by the compatibility font resource.
+	Graphics::Surface surface;
+	surface.init(target->x, target->y, target->x, target->data,
+		Graphics::PixelFormat::createFormatCLUT8());
+	const Common::String drawingText = getMacintoshDrawingText(text);
+	byte textColor = (byte)color;
+	if (!textColor)
+		textColor = (byte)(color >> 8);
+	macFont->drawString(&surface, drawingText, x, y,
+		MAX(0, target->x - x), textColor);
+	return true;
 }
 
 void MacNebular::hidePopup() {
@@ -855,6 +1400,16 @@ bool RexNebularEngine::handleMacEvent(Common::Event &event) {
 	return _macNebular && _macNebular->handleMacEvent(event);
 }
 
+void RexNebularEngine::serviceMacintoshUI() {
+	if (_macNebular)
+		_macNebular->serviceUI();
+}
+
+void RexNebularEngine::serviceMacintoshSound() {
+	if (_macNebular)
+		_macNebular->serviceSound();
+}
+
 void RexNebularEngine::selectMacintoshDifficulty() {
 	if (_macNebular)
 		_macNebular->selectDifficulty();
@@ -868,14 +1423,79 @@ bool RexNebularEngine::usesOriginalMacintoshMenus() const {
 	return _macNebular && _macNebular->usesOriginalMenus();
 }
 
+int RexNebularEngine::getMacintoshDisplaySize() const {
+	return _macNebular ? _macNebular->getDisplaySize() :
+		kMacNebularDisplay200;
+}
+
+bool RexNebularEngine::getMacintoshHideMenuBar() const {
+	return _macNebular && _macNebular->getHideMenuBar();
+}
+
+bool RexNebularEngine::getMacintoshPreferencesAtStartup() const {
+	return _macNebular && _macNebular->getPreferencesAtStartup();
+}
+
+Common::String RexNebularEngine::getMacintoshApplicationVersion() const {
+	return _macNebular ? _macNebular->getApplicationVersion() : Common::String();
+}
+
+bool RexNebularEngine::getMacintoshStoryLocked() const {
+	return _macNebular && _macNebular->getStoryLocked();
+}
+
+bool RexNebularEngine::verifyMacintoshStoryPassword(
+		const Common::String &password) const {
+	return _macNebular && _macNebular->verifyStoryPassword(password);
+}
+
+void RexNebularEngine::setMacintoshDisplaySize(int displaySize,
+		bool persist) {
+	if (_macNebular)
+		_macNebular->setDisplaySize(displaySize, persist);
+}
+
+void RexNebularEngine::setMacintoshHideMenuBar(bool hide) {
+	if (_macNebular)
+		_macNebular->setHideMenuBar(hide);
+}
+
+void RexNebularEngine::setMacintoshPreferencesAtStartup(bool show,
+		bool persist) {
+	if (_macNebular)
+		_macNebular->setPreferencesAtStartup(show, persist);
+}
+
+void RexNebularEngine::setMacintoshStoryLocked(bool locked,
+		const Common::String &password) {
+	if (_macNebular)
+		_macNebular->setStoryLocked(locked, password);
+}
+
 void RexNebularEngine::setMacintoshOuterMenuActive(bool active) {
 	if (_macNebular)
 		_macNebular->setOuterMenuActive(active);
 }
 
+void RexNebularEngine::notifyMacintoshOuterMenuFrameReady() {
+	if (_macNebular)
+		_macNebular->notifyOuterMenuFrameReady();
+}
+
 void RexNebularEngine::setMacintoshFullFrameActive(bool active) {
 	if (_macNebular)
 		_macNebular->setFullFrameActive(active);
+}
+
+bool RexNebularEngine::isMacintoshFullFrameActive() const {
+	return _macNebular && _macNebular->isFullFrameActive();
+}
+
+int RexNebularEngine::runMacintoshCopyProtectionDialog(
+		const Common::String &title, const Common::String &subtitle,
+		const Common::String &prompt, char *target, int maxLength) {
+	return _macNebular ? _macNebular->runCopyProtectionDialog(title,
+		subtitle, prompt, target, maxLength) : -1;
 }
 
 bool RexNebularEngine::drawPopup() {
@@ -886,17 +1506,31 @@ bool RexNebularEngine::drawPopup() {
 	return true;
 }
 
+int RexNebularEngine::editMacintoshPopup(char *target, int maxLength) {
+	return _macNebular ? _macNebular->editPopup(target, maxLength) : -1;
+}
+
+int RexNebularEngine::getMacintoshTextWidth(FontPtr font, const char *text,
+		int spacing) const {
+	return _macNebular ? _macNebular->getTextWidth(font, text, spacing) : -1;
+}
+
+bool RexNebularEngine::drawMacintoshText(FontPtr font, Buffer *target,
+		const char *text, int x, int y, int color, int spacing) const {
+	return _macNebular && _macNebular->drawText(font, target, text,
+		x, y, color, spacing);
+}
+
 void RexNebularEngine::onPopupDestroyed() {
 	if (_macNebular)
 		_macNebular->hidePopup();
 }
 
-bool RexNebularEngine::getInterfaceSentenceColors(byte &foreground, byte &shadow) const {
+bool RexNebularEngine::getInterfaceSentenceColor(byte &foreground) const {
 	if (!_macNebular)
 		return false;
 
 	foreground = kMacNormalTextColor;
-	shadow = kMacBlackColor;
 	return true;
 }
 
