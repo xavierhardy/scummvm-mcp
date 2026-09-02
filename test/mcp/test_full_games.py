@@ -127,8 +127,13 @@ def test_a_target_that_is_not_here_is_refused_with_the_ones_that_are(
     """
     client = _client(request, fixture)
     before = wait_until_taking_input(client, fixture, want_objects=True)
+    # What is being asked here is the *target* refusal, so the verb has to be
+    # one the game actually has: a game with no look verb refuses on the verb
+    # and never reads the target at all.
+    verbs = before.get("verbs") or ["look_at"]
+    verb = "look_at" if "look_at" in verbs else verbs[0]
     with pytest.raises(RuntimeError) as caught:
-        client.act("look_at", "no_such_thing_is_here")
+        client.act(verb, "no_such_thing_is_here")
     message = str(caught.value)
     assert "no_such_thing_is_here" in message, f"{fixture}: {message}"
     # The refusal lists the room as it was when the refusal was written, which
