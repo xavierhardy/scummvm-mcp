@@ -63,7 +63,9 @@ def test_01_the_room_is_named_by_its_own_script(playing: McpClient) -> None:
     assert room.get("name") == "bookstore", f"unexpected room name: {room}"
 
 
-def test_02_the_things_in_the_room_carry_their_authors_names(playing: McpClient) -> None:
+def test_02_the_things_in_the_room_carry_their_authors_names(
+    playing: McpClient,
+) -> None:
     names = {o["name"] for o in playing.state()["objects"]}
     # A handful that the shop demonstrably contains. Not the whole list: the
     # cast changes as the scene plays, and a test that pinned all of it would
@@ -88,7 +90,9 @@ def test_05_state_lists_the_verbs_this_game_has(playing: McpClient) -> None:
     assert playing.state()["verbs"] == VERBS
 
 
-def test_06_a_verb_the_game_does_not_have_is_refused_by_name(playing: McpClient) -> None:
+def test_06_a_verb_the_game_does_not_have_is_refused_by_name(
+    playing: McpClient,
+) -> None:
     with pytest.raises(RuntimeError) as excinfo:
         playing.act(verb="dance", target1="shop_door")
     message = str(excinfo.value)

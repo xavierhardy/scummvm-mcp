@@ -96,8 +96,9 @@ def test_the_room_names_something_to_act_on(request, fixture: str, engine: str) 
     room here means the save was captured too early, or that the bridge cannot
     read this game's room the way it reads the demo's.
     """
-    state = wait_until_taking_input(_client(request, fixture), fixture,
-                                    want_objects=True)
+    state = wait_until_taking_input(
+        _client(request, fixture), fixture, want_objects=True
+    )
     names = [obj.get("name") for obj in (state.get("objects") or [])]
     assert names, f"{fixture}: nothing in the room to act on"
     assert all(isinstance(name, str) and name for name in names), (
@@ -144,7 +145,9 @@ def test_a_target_that_is_not_here_is_refused_with_the_ones_that_are(
 
 
 @pytest.mark.parametrize("fixture,engine", FULL_GAMES, ids=[f for f, _ in FULL_GAMES])
-def test_acting_on_something_reaches_the_game(request, fixture: str, engine: str) -> None:
+def test_acting_on_something_reaches_the_game(
+    request, fixture: str, engine: str
+) -> None:
     """Look at the first thing in the room and get an answer back.
 
     What the answer *is* varies by game and is not the point: some describe the

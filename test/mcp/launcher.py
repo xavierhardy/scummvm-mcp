@@ -137,8 +137,7 @@ def has_captured_save(game_id: str) -> bool:
     if not os.path.isdir(folder):
         return False
     return any(
-        not name.startswith(".") and name != "timestamps"
-        for name in os.listdir(folder)
+        not name.startswith(".") and name != "timestamps" for name in os.listdir(folder)
     )
 
 
@@ -382,7 +381,8 @@ def save_slot_path(game_id: str, slot: int) -> str:
     if os.path.isfile(named) or not os.path.isdir(folder):
         return named
     saves = sorted(
-        name for name in os.listdir(folder)
+        name
+        for name in os.listdir(folder)
         # `timestamps` is ScummVM's own bookkeeping, not a save.
         if not name.startswith(".") and name != "timestamps"
     )

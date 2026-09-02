@@ -94,11 +94,17 @@ def capture(game_id: str, slot: int, port: int, tries: int, settle: float) -> bo
         print(f"{game_id}: no game path configured", file=sys.stderr)
         return False
 
-    scummvm = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scummvm")
+    scummvm = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "scummvm"
+    )
     # isolate_saves=False so save_state writes into the repository's own
     # save_slots/<game_id>, which is the point of running this.
     proc = launch_scummvm(
-        game_id, path, port=port, scummvm_binary=scummvm, save_slot=slot,
+        game_id,
+        path,
+        port=port,
+        scummvm_binary=scummvm,
+        save_slot=slot,
         isolate_saves=False,
     )
     try:
@@ -109,10 +115,16 @@ def capture(game_id: str, slot: int, port: int, tries: int, settle: float) -> bo
                 "save_state", {"slot": slot, "description": "past the intro"}
             )
             if result.get("saved"):
-                print(json.dumps({
-                    "game": game_id, "try": attempt, "room": state.get("room"),
-                    "in_control": _in_control(client, state),
-                }))
+                print(
+                    json.dumps(
+                        {
+                            "game": game_id,
+                            "try": attempt,
+                            "room": state.get("room"),
+                            "in_control": _in_control(client, state),
+                        }
+                    )
+                )
                 return True
             if attempt % 10 == 0:
                 print(f"  {game_id}: try {attempt}, {result.get('reason')}")
@@ -133,8 +145,9 @@ def capture(game_id: str, slot: int, port: int, tries: int, settle: float) -> bo
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("games", nargs="*", help="game ids to capture")
-    parser.add_argument("--all", action="store_true",
-                        help="every game with a configured data folder")
+    parser.add_argument(
+        "--all", action="store_true", help="every game with a configured data folder"
+    )
     parser.add_argument("--slot", type=int, default=1)
     parser.add_argument("--port", type=int, default=25999)
     parser.add_argument("--tries", type=int, default=DEFAULT_TRIES)

@@ -60,8 +60,9 @@ def _client(request, fixture: str) -> McpClient:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("fixture,engine", NEW_ENGINE_GAMES,
-                         ids=[f for f, _ in NEW_ENGINE_GAMES])
+@pytest.mark.parametrize(
+    "fixture,engine", NEW_ENGINE_GAMES, ids=[f for f, _ in NEW_ENGINE_GAMES]
+)
 def test_the_game_says_where_it_is(request, fixture: str, engine: str) -> None:
     state = wait_until_taking_input(_client(request, fixture), fixture)
     room = state.get("room")
@@ -69,8 +70,9 @@ def test_the_game_says_where_it_is(request, fixture: str, engine: str) -> None:
     assert "id" in room, f"{fixture}: the room has no id: {room}"
 
 
-@pytest.mark.parametrize("fixture,engine", NEW_ENGINE_GAMES,
-                         ids=[f for f, _ in NEW_ENGINE_GAMES])
+@pytest.mark.parametrize(
+    "fixture,engine", NEW_ENGINE_GAMES, ids=[f for f, _ in NEW_ENGINE_GAMES]
+)
 def test_the_tools_are_registered(request, fixture: str, engine: str) -> None:
     offered = {tool["name"] for tool in _client(request, fixture).list_tools()}
     assert CORE_TOOLS <= offered, f"{fixture}: missing {CORE_TOOLS - offered}"
@@ -181,7 +183,9 @@ def test_typing_reaches_the_parser(request, fixture: str) -> None:
 
 @pytest.mark.parametrize("fixture", POINTER_GAMES)
 def test_a_pointer_game_names_something_to_click(request, fixture: str) -> None:
-    state = wait_until_taking_input(_client(request, fixture), fixture, want_objects=True)
+    state = wait_until_taking_input(
+        _client(request, fixture), fixture, want_objects=True
+    )
     names = [obj.get("name") for obj in (state.get("objects") or [])]
     assert names, f"{fixture}: nothing in the room to act on"
     assert all(isinstance(name, str) and name for name in names), (
@@ -192,9 +196,13 @@ def test_a_pointer_game_names_something_to_click(request, fixture: str) -> None:
 @pytest.mark.parametrize("fixture", POINTER_GAMES)
 def test_everything_named_can_be_aimed_at(request, fixture: str) -> None:
     """A name with no coordinates behind it is a name that cannot be clicked."""
-    state = wait_until_taking_input(_client(request, fixture), fixture, want_objects=True)
-    for obj in (state.get("objects") or []):
-        assert "x" in obj and "y" in obj, f"{fixture}: {obj['name']} has nowhere to click"
+    state = wait_until_taking_input(
+        _client(request, fixture), fixture, want_objects=True
+    )
+    for obj in state.get("objects") or []:
+        assert "x" in obj and "y" in obj, (
+            f"{fixture}: {obj['name']} has nowhere to click"
+        )
 
 
 def test_simon_offers_the_whole_verb_bar(simon1_client: McpClient) -> None:
@@ -215,7 +223,15 @@ def test_kyrandia_names_the_ways_out(kyra1_client: McpClient) -> None:
     Without them a room is a dead end: there is nothing else in a Kyrandia
     scene that leaves it.
     """
-    names = [obj["name"] for obj in (wait_until_taking_input(kyra1_client, "kyra1", want_objects=True).get("objects") or [])]
+    names = [
+        obj["name"]
+        for obj in (
+            wait_until_taking_input(kyra1_client, "kyra1", want_objects=True).get(
+                "objects"
+            )
+            or []
+        )
+    ]
     exits = [name for name in names if name.startswith("exit_")]
     assert exits, f"no way out of the first scene: {names}"
     assert all(

@@ -85,8 +85,9 @@ def test_two_clients_can_hold_sessions_simultaneously(server) -> None:
     # Both should have distinct session IDs.
     assert client1._session_id is not None
     assert client2._session_id is not None
-    assert client1._session_id != client2._session_id, \
+    assert client1._session_id != client2._session_id, (
         "each client must hold a different session id"
+    )
 
     # Both should be able to call state.
     state1 = client1.state()
@@ -113,8 +114,9 @@ def test_three_clients_all_active(server) -> None:
     # Each sees the same starting room.
     states = [c.state() for c in clients]
     rooms = [s.get("room", {}).get("id") for s in states]
-    assert all(r == rooms[0] for r in rooms), \
+    assert all(r == rooms[0] for r in rooms), (
         f"all clients should see the same starting room, got {rooms}"
+    )
 
     for c in clients:
         c.close()
@@ -137,6 +139,7 @@ def test_evict_oldest_session_when_at_capacity(server) -> None:
 
     # The first client's session should now be rejected.
     import httpx
+
     try:
         clients[0].state()
         # If it doesn't raise, the session was NOT evicted — fail.

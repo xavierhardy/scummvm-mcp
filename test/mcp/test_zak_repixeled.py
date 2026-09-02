@@ -87,9 +87,7 @@ def _select(client: McpClient, verb: str, bar: dict) -> bool:
     converges rather than wanders.
     """
     known = bar.get(verb)
-    order = ([known] if known is not None else []) + [
-        b for b in range(5) if b != known
-    ]
+    order = ([known] if known is not None else []) + [b for b in range(5) if b != known]
     for button in order:
         client.call_tool("select_verb", {"button": button})
         if _verb_now(client, tries=4) == verb:

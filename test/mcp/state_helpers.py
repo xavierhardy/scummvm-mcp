@@ -132,7 +132,9 @@ READY_TIMEOUT_SECS = 90.0
 READY_POLL_SECS = 3.0
 
 
-def wait_until_taking_input(client: McpClient, fixture: str, want_objects: bool = False) -> dict:
+def wait_until_taking_input(
+    client: McpClient, fixture: str, want_objects: bool = False
+) -> dict:
     """Wait until the game is taking input, and return that state.
 
     A game still playing its opening answers every tool with "not accepting
