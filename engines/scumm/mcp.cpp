@@ -1303,7 +1303,8 @@ bool ScummMcpBridge::toolAct(const Common::JSONValue &args, Common::String &erro
 						return false;
 					}
 				} else {
-					errorOut = Common::String("act: unknown ") + param + " '" + v->asString() + "'";
+					errorOut = Common::String("act: unknown ") + param + " '" +
+					           v->asString() + "'; here: " + namesHere();
 					return false;
 				}
 			} else {
@@ -3817,6 +3818,25 @@ bool ScummMcpBridge::snmIsMaxEntity(int obj) const {
 		return true;
 	Common::String n = normalizeActionName(safeUtf8(getObjName(this, obj)));
 	return n == "max" || n == "max_the_object";
+}
+
+Common::String ScummMcpBridge::namesHere() const {
+	// What a refusal owes the caller: the names it *would* have taken. Every
+	// other bridge in this repository lists them, and without the list a
+	// wrong guess tells an agent only that it was wrong. These are the same
+	// names state publishes - both come from the entity map - minus the
+	// inventory, which is not what "here" means.
+	Common::Array<NamedEntity> entities;
+	buildEntityMap(entities);
+	Common::String list;
+	for (uint i = 0; i < entities.size(); ++i) {
+		if (entities[i].kind == NamedEntity::kInventory || entities[i].displayName.empty())
+			continue;
+		if (!list.empty())
+			list += ", ";
+		list += entities[i].displayName;
+	}
+	return list.empty() ? Common::String("nothing") : list;
 }
 
 bool ScummMcpBridge::resolveEntityByName(const Common::String &name, NamedEntity &out) const {

@@ -152,6 +152,11 @@ SLOW_BOOT_SECS = 360.0
 #: bound but nothing answers, because only a game loop answers.
 HUGE_TABLE_BOOT_SECS = 600.0
 
+#: Kyrandia's own post-intro save. The engine writes slot 0 as "New game" as
+#: soon as the intro ends, so that - not a slot this repository captured - is
+#: the checkpoint its three games start from.
+KYRA_NEW_GAME_SLOT = 0
+
 
 def _client(
     game_id: str,
@@ -688,8 +693,14 @@ def kq6_full_client() -> Iterator[McpClient]:
 
 @pytest.fixture
 def kq7_full_client() -> Iterator[McpClient]:
-    """King's Quest VII (past the opening, slot 1)."""
-    yield from _client("kq7-full", "kq7_full", checkpoint=has_captured_save("kq7-full"), connect_timeout=SLOW_BOOT_SECS)
+    """King's Quest VII (past the opening, slot 1).
+
+    The longest boot of any game here: a CD's worth of SCI32 resources read
+    before the first game cycle, which is what answers. SLOW_BOOT_SECS is not
+    enough for it on this machine.
+    """
+    yield from _client("kq7-full", "kq7_full", checkpoint=has_captured_save("kq7-full"),
+                       connect_timeout=HUGE_TABLE_BOOT_SECS)
 
 
 @pytest.fixture
@@ -786,24 +797,51 @@ def pq1_client() -> Iterator[McpClient]:
 
 @pytest.fixture
 def kyra1_client() -> Iterator[McpClient]:
-    """The Legend of Kyrandia (past the opening, slot 1)."""
-    yield from _client("kyra1", "kyra1", checkpoint=has_captured_save("kyra1"),
+    """The Legend of Kyrandia (past the opening, slot 0).
+
+    Slot 0 rather than 1 because Kyrandia writes that save itself: every
+    engine in the family calls ``saveGameStateIntern(0, "New game")`` the
+    moment the intro is over and the first scene is up (kyra_lok.cpp,
+    kyra_hof.cpp, kyra_mr.cpp). That is exactly the checkpoint these tests
+    want, so it is the one committed, and starting from it skips the intro
+    the engine would otherwise insist on replaying.
+    """
+    yield from _client("kyra1", "kyra1", save_slot=KYRA_NEW_GAME_SLOT,
+                       checkpoint=has_captured_save("kyra1"),
                        connect_timeout=SLOW_BOOT_SECS,
                        request_timeout=180.0)
 
 
 @pytest.fixture
 def kyra2_client() -> Iterator[McpClient]:
-    """Kyrandia: The Hand of Fate (past the opening, slot 1)."""
-    yield from _client("kyra2", "kyra2", checkpoint=has_captured_save("kyra2"),
+    """Kyrandia: The Hand of Fate (past the opening, slot 0).
+
+    Slot 0 rather than 1 because Kyrandia writes that save itself: every
+    engine in the family calls ``saveGameStateIntern(0, "New game")`` the
+    moment the intro is over and the first scene is up (kyra_lok.cpp,
+    kyra_hof.cpp, kyra_mr.cpp). That is exactly the checkpoint these tests
+    want, so it is the one committed, and starting from it skips the intro
+    the engine would otherwise insist on replaying.
+    """
+    yield from _client("kyra2", "kyra2", save_slot=KYRA_NEW_GAME_SLOT,
+                       checkpoint=has_captured_save("kyra2"),
                        connect_timeout=SLOW_BOOT_SECS,
                        request_timeout=180.0)
 
 
 @pytest.fixture
 def kyra3_client() -> Iterator[McpClient]:
-    """Kyrandia: Malcolm's Revenge (past the opening, slot 1)."""
-    yield from _client("kyra3", "kyra3", checkpoint=has_captured_save("kyra3"),
+    """Kyrandia: Malcolm's Revenge (past the opening, slot 0).
+
+    Slot 0 rather than 1 because Kyrandia writes that save itself: every
+    engine in the family calls ``saveGameStateIntern(0, "New game")`` the
+    moment the intro is over and the first scene is up (kyra_lok.cpp,
+    kyra_hof.cpp, kyra_mr.cpp). That is exactly the checkpoint these tests
+    want, so it is the one committed, and starting from it skips the intro
+    the engine would otherwise insist on replaying.
+    """
+    yield from _client("kyra3", "kyra3", save_slot=KYRA_NEW_GAME_SLOT,
+                       checkpoint=has_captured_save("kyra3"),
                        connect_timeout=SLOW_BOOT_SECS,
                        request_timeout=180.0)
 

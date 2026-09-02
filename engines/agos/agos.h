@@ -460,6 +460,8 @@ protected:
 	void mcpPump();
 	// Every line the game shows.
 	void mcpOnText(const Common::String &text);
+	// Cut the running cutscene short, which is what `skip` means here.
+	void mcpExitCutscene();
 	uint16 _defaultVerb;
 	bool _iOverflow;
 	bool _nameLocked;

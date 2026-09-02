@@ -29,9 +29,13 @@ knowing before spending seventeen minutes finding out:
   * AGI only permits a save while the typing prompt is showing, and King's
     Quest III keeps it hidden - so it refuses even standing in a room taking
     commands;
-  * and SCI asks ``canSaveFromGMM()`` before anything else, which is false for
+  * SCI asks ``canSaveFromGMM()`` before anything else, which is false for
     most of its games: ScummVM will not save them from outside their own menu
-    whatever state they are in.
+    whatever state they are in;
+  * and AGOS implements no ``canSaveGameStateCurrently()`` at all, so the base
+    engine's answer - no - stands for every game it runs. Simon the Sorcerer
+    can only be saved from its own menu, and does not need to be: its opening
+    is a cutscene, and ``skip`` now ends it (see AGOSEngine::mcpExitCutscene).
 
 Those games have no save here and start from scratch instead, which the
 launcher works out for itself.

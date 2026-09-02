@@ -124,7 +124,18 @@ void AgosMcpBridge::queueStep(StepKind kind, int x, int y, uint32 delayFrames) {
 // ---------------------------------------------------------------------------
 
 int AgosMcpBridge::roomNumber() const {
-	return engineReady() ? (int)_vm->_currentRoom : -1;
+	if (!engineReady())
+		return -1;
+	// The room is the item the player is inside: this engine keeps its world
+	// as a tree of items, and moving between rooms is reparenting the player.
+	// `_currentRoom` looks like the answer and is not - it is Waxworks' own
+	// bookkeeping (AGOSEngine::loadRoomItems), and stays 0 for the whole of
+	// Simon the Sorcerer - so it is only the fallback, for the games that do
+	// keep it.
+	Item *player = _vm->me();
+	if (player != nullptr && player->parent != 0)
+		return (int)player->parent;
+	return (int)_vm->_currentRoom;
 }
 
 bool AgosMcpBridge::playerHasControl() const {
@@ -492,8 +503,11 @@ bool AgosMcpBridge::toolSkip(const Common::JSONValue &, Common::String &errorOut
 		errorOut = "skip: tool is disabled (set mcp_skip_tool=true)";
 		return false;
 	}
-	// Escape cuts a cutscene short in this engine, and a click gets past the
-	// lines that wait to be dismissed.
+	// Two different waits, and skipping means getting past either: a running
+	// cutscene ends through the engine's own exit-cutscene flag, and a line
+	// sitting there to be dismissed goes away on a keypress.
+	if (_vm != nullptr)
+		_vm->mcpExitCutscene();
 	Common::KeyState escape(Common::KEYCODE_ESCAPE, 27);
 	injectKey(escape);
 	if (!isStreaming()) {

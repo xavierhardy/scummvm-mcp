@@ -28,53 +28,10 @@ it are usable, a wrong name is refused with the right ones, and an action
 reaches the game rather than hanging.
 """
 
-import time
-
 import pytest
 
 from mcp_client import McpClient
-#: How long to give a game to finish its opening before asking it anything.
-#: Only some of these could be captured past it (see make_save_states.py), so
-#: the rest arrive here mid-film and have to be waited out.
-READY_TIMEOUT_SECS = 90.0
-READY_POLL_SECS = 3.0
-
-
-def _ready(client: McpClient, fixture: str, want_objects: bool = False) -> dict:
-    """Wait until the game is taking input, and return that state.
-
-    A game still playing its opening answers every tool with "not accepting
-    input right now", and a test that asked at once would be testing the film
-    rather than the game. `want_objects` additionally waits for the room to
-    have something in it, which is what the snapshot tests need.
-
-    A game that never gets there inside the budget *skips*. That can only
-    happen to one with no captured save (see make_save_states.py) whose
-    opening is longer than this suite is willing to sit through - King's Quest
-    III and Simon the Sorcerer are the two - and it is a fact about the film
-    rather than about the bridge, so failing on it would report the wrong
-    thing.
-    """
-    deadline = time.time() + READY_TIMEOUT_SECS
-    state: dict = {}
-    while time.time() < deadline:
-        state = client.state()
-        if state.get("can_act") and (not want_objects or state.get("objects")):
-            return state
-        try:
-            client.skip()
-        except Exception:
-            # Anything at all: a refusal, or the stream outliving the client's
-            # patience. Neither says the game will not come round, and this is
-            # a wait rather than an assertion.
-            pass
-        time.sleep(READY_POLL_SECS)
-    pytest.skip(
-        f"{fixture} was still in its opening after {READY_TIMEOUT_SECS:.0f}s "
-        f"(room {(state.get('room') or {}).get('id')}, can_act "
-        f"{state.get('can_act')}) - it has no captured save to start past it"
-    )
-    return state
+from state_helpers import wait_until_taking_input
 
 #: fixture -> engine. The ids are the recorder catalogue's.
 NEW_ENGINE_GAMES = [
@@ -106,7 +63,7 @@ def _client(request, fixture: str) -> McpClient:
 @pytest.mark.parametrize("fixture,engine", NEW_ENGINE_GAMES,
                          ids=[f for f, _ in NEW_ENGINE_GAMES])
 def test_the_game_says_where_it_is(request, fixture: str, engine: str) -> None:
-    state = _ready(_client(request, fixture), fixture)
+    state = wait_until_taking_input(_client(request, fixture), fixture)
     room = state.get("room")
     assert isinstance(room, dict), f"{fixture}: state() returned no room"
     assert "id" in room, f"{fixture}: the room has no id: {room}"
@@ -131,9 +88,9 @@ def test_a_target_that_is_not_here_is_refused(request, fixture: str) -> None:
     was never going to help.
     """
     client = _client(request, fixture)
-    _ready(client, fixture)
+    wait_until_taking_input(client, fixture)
     with pytest.raises(RuntimeError) as caught:
-        client.act("no_such_thing_is_here", verb="look_at")
+        client.act("look_at", "no_such_thing_is_here")
     assert "no_such_thing_is_here" in str(caught.value), f"{fixture}: {caught.value}"
 
 
@@ -148,8 +105,8 @@ def test_a_parser_game_answers_a_word_it_does_not_know(request, fixture: str) ->
     hanging on a sentence that meant nothing to it.
     """
     client = _client(request, fixture)
-    _ready(client, fixture)
-    result = client.act("no_such_thing_is_here", verb="look_at")
+    wait_until_taking_input(client, fixture)
+    result = client.act("look_at", "no_such_thing_is_here")
     assert isinstance(result, dict), f"{fixture}: act returned {result!r}"
 
 
@@ -165,7 +122,7 @@ def test_a_parser_game_names_the_items_that_exist(request, fixture: str) -> None
     Nothing on screen is labelled, so without this an agent has nothing at all
     to refer to.
     """
-    state = _ready(_client(request, fixture), fixture)
+    state = wait_until_taking_input(_client(request, fixture), fixture)
     named = [obj.get("name") for obj in (state.get("objects") or [])]
     named += [obj.get("name") for obj in (state.get("inventory") or [])]
     assert named, f"{fixture}: the game named no items at all"
@@ -224,7 +181,7 @@ def test_typing_reaches_the_parser(request, fixture: str) -> None:
 
 @pytest.mark.parametrize("fixture", POINTER_GAMES)
 def test_a_pointer_game_names_something_to_click(request, fixture: str) -> None:
-    state = _ready(_client(request, fixture), fixture, want_objects=True)
+    state = wait_until_taking_input(_client(request, fixture), fixture, want_objects=True)
     names = [obj.get("name") for obj in (state.get("objects") or [])]
     assert names, f"{fixture}: nothing in the room to act on"
     assert all(isinstance(name, str) and name for name in names), (
@@ -235,7 +192,7 @@ def test_a_pointer_game_names_something_to_click(request, fixture: str) -> None:
 @pytest.mark.parametrize("fixture", POINTER_GAMES)
 def test_everything_named_can_be_aimed_at(request, fixture: str) -> None:
     """A name with no coordinates behind it is a name that cannot be clicked."""
-    state = _ready(_client(request, fixture), fixture, want_objects=True)
+    state = wait_until_taking_input(_client(request, fixture), fixture, want_objects=True)
     for obj in (state.get("objects") or []):
         assert "x" in obj and "y" in obj, f"{fixture}: {obj['name']} has nowhere to click"
 
@@ -246,7 +203,7 @@ def test_simon_offers_the_whole_verb_bar(simon1_client: McpClient) -> None:
     An agent that has to guess which of "get", "take" and "pick up" this game
     takes will spend its turns finding out.
     """
-    verbs = _ready(simon1_client, "simon1").get("verbs") or []
+    verbs = wait_until_taking_input(simon1_client, "simon1").get("verbs") or []
     assert len(verbs) == 12, f"the bar should have twelve buttons, got {verbs}"
     for expected in ("walk_to", "look_at", "use", "talk_to", "give"):
         assert expected in verbs, f"{expected} missing from {verbs}"
@@ -258,7 +215,7 @@ def test_kyrandia_names_the_ways_out(kyra1_client: McpClient) -> None:
     Without them a room is a dead end: there is nothing else in a Kyrandia
     scene that leaves it.
     """
-    names = [obj["name"] for obj in (_ready(kyra1_client, "kyra1", want_objects=True).get("objects") or [])]
+    names = [obj["name"] for obj in (wait_until_taking_input(kyra1_client, "kyra1", want_objects=True).get("objects") or [])]
     exits = [name for name in names if name.startswith("exit_")]
     assert exits, f"no way out of the first scene: {names}"
     assert all(
@@ -274,7 +231,7 @@ def test_sanitarium_keeps_the_editors_filler_out_of_the_room(
     They are scenery the scripts push around, and offering them to an agent is
     offering it noise to work through.
     """
-    state = _ready(sanitarium_client, "sanitarium", want_objects=True)
+    state = wait_until_taking_input(sanitarium_client, "sanitarium", want_objects=True)
     names = [obj["name"] for obj in (state.get("objects") or [])]
     assert names, "nothing named in the first room"
     for name in names:

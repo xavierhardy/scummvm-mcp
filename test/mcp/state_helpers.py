@@ -125,6 +125,52 @@ def find_object_with_verb(state: dict, verb: str) -> str | None:
     return None
 
 
+#: How long to give a game to finish its opening before asking it anything.
+#: Only some of these could be captured past it (see make_save_states.py), so
+#: the rest arrive here mid-film and have to be waited out.
+READY_TIMEOUT_SECS = 90.0
+READY_POLL_SECS = 3.0
+
+
+def wait_until_taking_input(client: McpClient, fixture: str, want_objects: bool = False) -> dict:
+    """Wait until the game is taking input, and return that state.
+
+    A game still playing its opening answers every tool with "not accepting
+    input right now", and a test that asked at once would be testing the film
+    rather than the game. `want_objects` additionally waits for the room to
+    have something in it, which is what the snapshot tests need.
+
+    A game that never gets there inside the budget *skips*: an opening longer
+    than this suite is willing to sit through is a fact about the film rather
+    than about the bridge, so failing on it would report the wrong thing. The
+    skip says what the game last answered, because that - not the length of
+    the wait - is what tells the two apart.
+    """
+    import pytest
+
+    deadline = time.time() + READY_TIMEOUT_SECS
+    state: dict = {}
+    while time.time() < deadline:
+        state = client.state()
+        if state.get("can_act") and (not want_objects or state.get("objects")):
+            return state
+        try:
+            client.skip()
+        except Exception:
+            # Anything at all: a refusal, or the stream outliving the client's
+            # patience. Neither says the game will not come round, and this is
+            # a wait rather than an assertion.
+            pass
+        time.sleep(READY_POLL_SECS)
+    pytest.skip(
+        f"{fixture} was still in its opening after {READY_TIMEOUT_SECS:.0f}s "
+        f"(room {(state.get('room') or {}).get('id')}, can_act "
+        f"{state.get('can_act')}, "
+        f"{len(state.get('objects') or [])} objects)"
+    )
+    return state
+
+
 def skip_intros(client: McpClient, max_skips: int = 20, poll_secs: float = 1.0) -> None:
     """Send repeated skip commands to advance past SMUSH/intro videos.
 

@@ -475,6 +475,17 @@ void AGOSEngine::mcpOnText(const Common::String &text) {
 		_mcpBridge->onGameText(text);
 }
 
+void AGOSEngine::mcpExitCutscene() {
+	// What pressing kActionExitCutscene does. The action cannot be injected
+	// as events: the engine latches it in `_action` on the START event and
+	// only clears it on the END, and a pair pushed together is drained in one
+	// poll - so the flag would be cleared again before processSpecialKeys
+	// ever read it, while a START pushed alone would stay latched and cut
+	// every later cutscene short too. Escape is not it either: this engine
+	// binds the action, not the key.
+	_exitCutscene = true;
+}
+
 void AGOSEngine::delay(uint amount) {
 	// The engine's whole loop is waitForInput() / handleVerbClicked() /
 	// delay(), and every blocking wait inside it goes through here as well.

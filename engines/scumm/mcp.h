@@ -487,6 +487,8 @@ protected:
 	uint32 postActionSpeechFrames() const override;
 
 	void buildEntityMap(Common::Array<NamedEntity> &entities) const;
+	// The room's names, comma-separated, for a refusal to hand back.
+	Common::String namesHere() const;
 	bool resolveEntityByName(const Common::String &name, NamedEntity &out) const;
 	bool resolveVerb(const Common::String &action, int &verbId) const;
 	// True when the verb bar carries a slot whose label matches *normalized*.

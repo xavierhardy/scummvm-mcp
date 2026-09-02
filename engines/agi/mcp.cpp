@@ -706,7 +706,35 @@ bool AgiMcpBridge::isActionDone() const {
 	// over when the interpreter is taking commands again.
 	if (_walkDirection != 0)
 		return false;
-	return playerHasControl();
+	if (playerHasControl())
+		return true;
+	// Or when the game has replied and is holding the reply up to be read. A
+	// message box is the parser's answer - "I don't know the word 'grue'" is
+	// as much of a turn as walking somewhere - and the interpreter runs no
+	// cycles inside one of these inner loops, so waiting for control to come
+	// back means waiting for a keypress nobody is going to send. The text is
+	// already captured by the time this is asked, and `skip` sends the Return
+	// that dismisses the box.
+	return interpreterStalled();
+}
+
+bool AgiMcpBridge::interpreterStalled() const {
+	// Every one of the inner loops - a message box, the inventory screen, a
+	// menu, a `have.key` wait - runs its own event loop and no interpreter
+	// cycles at all, so `pump()` is never reached and only pumpFromStall()
+	// keeps the server alive.
+	return engineReady() && _vm->_game.cycleInnerLoopActive;
+}
+
+uint32 AgiMcpBridge::wallClockCloseMs() const {
+	if (_skipStream)
+		return kSkipMs;
+	// The streaming budgets are counted in interpreter cycles, and an inner
+	// loop runs none: the frame counter stops dead where the game is waiting
+	// to be read. Real time is all that is left to judge by there, so an
+	// action that ends in a box closes on it rather than sitting out the
+	// whole timeout.
+	return interpreterStalled() ? kStalledMs : 0;
 }
 
 bool AgiMcpBridge::hasPendingQuestion() const {

@@ -136,6 +136,8 @@ protected:
 	void snapshotPreAction() override;
 	Common::JSONObject buildStateChanges() const override;
 	bool isActionDone() const override;
+	// True while the interpreter is inside one of its modal inner loops.
+	bool interpreterStalled() const;
 	bool hasPendingQuestion() const override;
 	bool streamRoomChanged() const override;
 	void pumpStreamTrack() override;
@@ -151,7 +153,7 @@ protected:
 	// exactly where a skip is sent. Real time is the only clock running there;
 	// see McpBridge::wallClockCloseMs().
 	uint32 wallClockTimeoutMs() const override { return 180000; }
-	uint32 wallClockCloseMs() const override { return _skipStream ? kSkipMs : 0; }
+	uint32 wallClockCloseMs() const override;
 	uint32 streamTimeoutAnchor() const override {
 		return _sseLastEventFrame > 0 ? _sseLastEventFrame : _sseStartFrame;
 	}
@@ -167,6 +169,10 @@ private:
 
 	// How long a skip is given when the interpreter has stopped cycling.
 	static const uint32 kSkipMs = 1500;
+	// How long an action that ends stalled in one of the interpreter's inner
+	// loops waits before closing. Long enough for the box to be drawn and
+	// its text to reach the stream, short enough not to be a pause.
+	static const uint32 kStalledMs = 900;
 	// Frames a held direction key is kept down for one walk step. AGI moves
 	// the ego while a direction is set and stops when it is cleared, so a walk
 	// is "point him that way and let go after a while" rather than a
