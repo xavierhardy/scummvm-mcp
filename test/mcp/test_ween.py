@@ -98,8 +98,10 @@ def test_05_a_line_longer_than_any_game_reads_is_refused(playing: McpClient) -> 
 def test_06_the_narration_is_captured(playing: McpClient) -> None:
     """Ween narrates its opening in text drawn to a surface, which is where
     the gob bridge listens."""
+    # Given a wide budget on purpose: the narration is paced by the game, and
+    # on a machine running several of these at once the line takes its time.
     seen: list[str] = []
-    for _ in range(8):
+    for _ in range(30):
         seen += [m["text"] for m in playing.state().get("messages", [])]
         if seen:
             break
