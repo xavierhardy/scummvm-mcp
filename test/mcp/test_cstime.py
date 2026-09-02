@@ -22,16 +22,12 @@ from mcp_client import McpClient
 
 pytestmark = [
     pytest.mark.xdist_group("cstime"),
-    # The bridge itself works: launched by hand the game starts, binds its
-    # port and answers. Started by this harness it never gets past ScummVM's
-    # own launcher, and ten minutes of waiting does not change that - so the
-    # fault is in how the process is started here rather than in the engine or
-    # the bridge, and these tests are skipped until that is found rather than
-    # left red.
-    pytest.mark.skip(
-        reason="the harness cannot start this game; run it by hand to exercise "
-        "the bridge (see the note above)"
-    ),
+    # The bridge works and the harness now starts the game (ScummVM's own
+    # "not yet fully supported" dialog, which used to block the launch before
+    # the engine existed, is answered from the ini). The game itself is what
+    # is skipped: this one is flagged unstable upstream, so what it does is
+    # not something to hold the bridge to. Drop the mark to exercise it.
+    pytest.mark.skip(reason="the game is flagged unstable by its own engine"),
 ]
 
 

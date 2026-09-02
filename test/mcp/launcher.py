@@ -101,6 +101,18 @@ def _write_ini(
                 )
             ),
         }
+    # Before it creates the engine at all, ScummVM stops on a modal dialog for
+    # a game its detection calls unsupported, and waits there to be told to go
+    # on. Headless there is nobody to tell it, so the game never starts and the
+    # port it would bind never opens. The harness always says go on.
+    if "[scummvm]" in content:
+        content = content.replace(
+            "[scummvm]\n",
+            "[scummvm]\nenable_unsupported_game_warning=false\n",
+            1,
+        )
+    else:
+        content = "[scummvm]\nenable_unsupported_game_warning=false\n\n" + content
     if ini_overrides:
         content = _apply_ini_overrides(content, ini_overrides)
     with open(ini_path, "w") as f:
