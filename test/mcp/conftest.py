@@ -196,12 +196,21 @@ def _client(
     # the whole connect budget on a handful of tries. The longer timeout is
     # for the calls made afterwards, where a single action can genuinely take
     # a while.
-    client = wait_for_mcp(
-        MCP_HOST,
-        port,
-        connect_timeout=connect_timeout,
-        timeout=MCP_CONNECT_TIMEOUT_SECS,
-    )
+    try:
+        client = wait_for_mcp(
+            MCP_HOST,
+            port,
+            connect_timeout=connect_timeout,
+            timeout=MCP_CONNECT_TIMEOUT_SECS,
+        )
+    except Exception:
+        # A game that never answers is still a running game: without this it
+        # outlives the test that launched it and spends the rest of the suite
+        # competing for the CPU the other instances need, which is what turns
+        # one game's timeout into everybody's.
+        proc.kill()
+        proc.wait(timeout=PROC_KILL_TIMEOUT_SECS)
+        raise
     if request_timeout != MCP_CONNECT_TIMEOUT_SECS:
         client.set_timeout(request_timeout)
     # Where this instance's screenshot tool writes, for tests that look there.
