@@ -36,8 +36,12 @@ BENCH="$REPO_ROOT/scummvm_bench"
 
 # The engines with an MCP bridge (engines/*/mcp.cpp). scumm-7-8 is a separate
 # configure sub-engine covering V7/V8 (FT, Dig, COMI), which the SCUMM bridge
-# supports and the integration tests exercise.
-ENGINES=(scumm scumm-7-8 sword1 sword2 sky queen gob tinsel toon)
+# supports and the integration tests exercise; sci32 likewise covers the SCI2+
+# games (SQ6, GK1 …). Keep this list in step with the configure line in
+# CLAUDE.md — a game whose engine is missing from the binary cannot skip
+# itself, it just fails to launch.
+ENGINES=(scumm scumm-7-8 sword1 sword2 sky queen gob tinsel toon
+         sci sci32 ags mohawk cstime agi kyra agos asylum)
 
 STEPS=()
 FAILED=0
@@ -88,7 +92,8 @@ uv_sync() {
 py_format() {
     cd "$BENCH" || return 1
     export UV_CONFIG_FILE="$BENCH/uv.toml"
-    uv run --no-sync ruff format .
+    uv run --no-sync ruff format . \
+        && uv run --no-sync ruff format --config "$BENCH/pyproject.toml" ../test/mcp
 }
 py_lint() {
     cd "$BENCH" || return 1
@@ -145,17 +150,22 @@ cd "$REPO_ROOT"
 
 # ----------------------------------------------- MCP server + bench tests ---
 # One xdist pool over both trees. Games with no data folder configured skip.
+# -v so every result is printed the moment the worker finishes it: a game
+# suite is minutes long, and without it a failure is only named in the summary
+# at the very end. --tb=short keeps that summary readable, -rEf repeats the
+# failed/errored ids in one block.
+PYTEST_ARGS=(-n auto -v --tb=short -rEf)
 py_tests() {
     cd "$BENCH" || return 1
     export UV_CONFIG_FILE="$BENCH/uv.toml"
-    local args=(--no-sync pytest -n auto)
+    local args=(--no-sync pytest "${PYTEST_ARGS[@]}")
     [ -n "${RUN_REAL:-}" ] && args+=(--run-real)
     uv run "${args[@]}" -o testpaths=../test/mcp
 }
 py_bench_tests() {
     cd "$BENCH" || return 1
     export UV_CONFIG_FILE="$BENCH/uv.toml"
-    local args=(--no-sync pytest -n auto)
+    local args=(--no-sync pytest "${PYTEST_ARGS[@]}")
     [ -n "${RUN_REAL:-}" ] && args+=(--run-real)
     uv run "${args[@]}" -o testpaths=tests
 }
