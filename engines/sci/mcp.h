@@ -152,9 +152,16 @@ protected:
 	uint32 absoluteTimeoutFrames() const override { return 1200; }
 	uint32 settleFrames() const override { return 8; }
 	uint32 wallClockTimeoutMs() const override { return 180000; }
-	// Only a skip: it is the one action sent into an opening, which is where
-	// the older games stop running cycles altogether.
-	uint32 wallClockCloseMs() const override { return _skipStream ? kSkipMs : 0; }
+	// A skip is the action sent into an opening, which is where the older
+	// games stop running cycles altogether, so it gets a short real-time
+	// window. Every other action gets a long one for the same reason: a title
+	// screen runs a handful of cycles a minute, so an action that looks done
+	// there can never sit out its settle window in frames, and the stream
+	// would run to the timeout above and come back as a failure rather than
+	// as the nothing that actually happened.
+	uint32 wallClockCloseMs() const override {
+		return _skipStream ? kSkipMs : kStalledCloseMs;
+	}
 	uint32 streamTimeoutAnchor() const override {
 		return _sseLastEventFrame > 0 ? _sseLastEventFrame : _sseStartFrame;
 	}
@@ -186,6 +193,11 @@ private:
 	// rate; this is deliberately longer, because a game that is not cycling
 	// is one whose reaction has not started yet.
 	static const uint32 kSkipMs = 1500;
+	// How long a settling action may wait on a frame counter that has all but
+	// stopped before it is taken to be over. Far longer than a settle window
+	// at any rate the interpreter really runs at, and short of the client's
+	// own patience.
+	static const uint32 kStalledCloseMs = 30000;
 
 	// Is the interpreter far enough along to answer questions about a room?
 	bool engineReady() const;
