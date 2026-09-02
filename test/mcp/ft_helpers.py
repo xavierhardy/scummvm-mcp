@@ -240,8 +240,12 @@ def _launch_gorge_jump(client: McpClient) -> None:
         client._client = saved_http
 
 
-def _watch_for_ending(client: McpClient, tries: int = 20):
-    """Watch rooms/messages for the demo end card or the loop-back narration."""
+def _watch_for_ending(client: McpClient, tries: int = 60):
+    """Watch rooms/messages for the demo end card or the loop-back narration.
+
+    The jump itself is a SMUSH movie played out in room 45 with input locked,
+    and it runs for well over a minute on a loaded machine before the end card
+    (room 169) loads, so the budget here is minutes rather than seconds."""
     rooms_seen: set[int] = set()
     looped = False
     for _ in range(tries):
