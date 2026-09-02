@@ -240,6 +240,12 @@ protected:
 	// The frame the timeout is measured from. By default the stream start, so
 	// background chatter cannot hold a stream open forever.
 	virtual uint32 streamTimeoutAnchor() const { return _sseStartFrame; }
+	// The moment wallClockTimeoutMs() is measured from, and the counterpart of
+	// streamTimeoutAnchor(). By default the stream start; an engine whose frame
+	// deadline follows the last sign of life can move this one there too
+	// (_sseLastEventMs), so an action that is plainly still progressing is not
+	// cut short on a slow machine while a silent one still is.
+	virtual uint32 streamTimeoutAnchorMs() const { return _sseStartMs; }
 	// How long speech may go on holding a stream open once the action itself has
 	// finished (see _sseWorkDoneFrame). A room can talk to itself forever —
 	// Zak's living-room TV prints a line every few seconds with the player in
@@ -325,6 +331,7 @@ protected:
 	uint32 _sseDoneAtFrame;
 	uint32 _sseStuckAtFrame;
 	uint32 _sseLastEventFrame;  // frame of the most recent event seen during the stream
+	uint32 _sseLastEventMs;     // when that frame was, in real time
 	// First frame on which everything the action itself had to do was finished
 	// (ego idle, sentence dispatched, input restored) — speech aside. Maintained
 	// by the engine bridge's pumpStreamTrack(); 0 while the action is still

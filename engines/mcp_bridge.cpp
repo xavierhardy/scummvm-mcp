@@ -64,6 +64,7 @@ McpBridge::McpBridge(Engine *engine, const Common::String &serverName,
 	  _sseDoneAtFrame(0),
 	  _sseStuckAtFrame(0),
 	  _sseLastEventFrame(0),
+	  _sseLastEventMs(0),
 	  _sseWorkDoneFrame(0),
 	  _ssePreRoom(0),
 	  _ssePrePosX(0),
@@ -898,6 +899,7 @@ void McpBridge::beginStream() {
 	_sseDoneAtFrame = 0;
 	_sseStuckAtFrame = 0;
 	_sseLastEventFrame = 0;
+	_sseLastEventMs = 0;
 	_sseMessages.clear();
 	_server->startStreaming();
 }
@@ -961,6 +963,12 @@ void McpBridge::pumpStream() {
 		_sseStuckAtFrame = 0;
 	}
 
+	// When the last sign of life was, in real time: the wall-clock counterpart
+	// of _sseLastEventFrame, kept here because every place that records an event
+	// records it on the frame it happens.
+	if (_sseLastEventFrame == _frameCounter && g_system)
+		_sseLastEventMs = g_system->getMillis();
+
 	// Hard timeout, measured from streamTimeoutAnchor(), plus an optional
 	// absolute ceiling and an optional wall-clock ceiling (the latter for
 	// engines whose frame counter can stop advancing entirely).
@@ -969,7 +977,7 @@ void McpBridge::pumpStream() {
 		bool absoluteTimeout = absLimit != 0 && (_frameCounter - _sseStartFrame > absLimit);
 		uint32 msLimit = wallClockTimeoutMs();
 		bool wallClockTimeout = msLimit != 0 && g_system &&
-		                        (g_system->getMillis() - _sseStartMs > msLimit);
+		                        (g_system->getMillis() - streamTimeoutAnchorMs() > msLimit);
 		if (absoluteTimeout || wallClockTimeout ||
 		    _frameCounter - streamTimeoutAnchor() > timeoutFrames()) {
 			debug(1, "mcp: stream timeout (anchor=%u, start=%u, last=%u, now=%u)",

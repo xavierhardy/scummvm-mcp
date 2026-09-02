@@ -144,6 +144,12 @@ protected:
 	uint32 streamTimeoutAnchor() const override {
 		return _sseLastEventFrame > 0 ? _sseLastEventFrame : _sseStartFrame;
 	}
+	// And the wall clock with it: what the ceiling above is really guarding
+	// against is silence, so a walk across a wide scene on a busy machine is
+	// not a timed-out action just for having taken its time.
+	uint32 streamTimeoutAnchorMs() const override {
+		return _sseLastEventMs > 0 ? _sseLastEventMs : _sseStartMs;
+	}
 
 private:
 	// Something on screen the player can point at.

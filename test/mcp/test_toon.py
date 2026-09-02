@@ -31,8 +31,12 @@ GYM_STREET = "jimex"
 WACME_ROW = "wacexdbl"
 
 
-def _wait_idle(client: McpClient, tries: int = 40) -> dict:
-    """The state once the game is accepting input again."""
+def _wait_idle(client: McpClient, tries: int = 120) -> dict:
+    """The state once the game is accepting input again.
+
+    Generous on purpose: a scene here walks the player in and often has
+    something to say first, and on a machine running several of these at once
+    that is a wait of tens of seconds."""
     for _ in range(tries):
         state = client.state()
         if state.get("can_act"):
