@@ -14,6 +14,8 @@ clicking the bar, because cycling needs no screen coordinates.
 No save support, so this is one ordered sequence on a fresh instance.
 """
 
+import time
+
 import pytest
 
 from mcp_client import McpClient
@@ -23,10 +25,13 @@ pytestmark = [pytest.mark.xdist_group("sq6")]
 VERBS = ["use", "look_at", "walk_to", "talk_to"]
 
 
-def _skip_into_the_game(client: McpClient, tries: int = 12) -> dict:
+def _skip_into_the_game(client: McpClient, tries: int = 30) -> dict:
     """Escape pauses the introduction and offers Skip / Continue / Quit; the
     first of those buttons is Skip, and the demo then plays a little more of
-    its opening before it hands over."""
+    its opening before it hands over.
+
+    The pause matters: each card takes a moment to give way, and asking again
+    immediately just spends the whole budget on the first one."""
     for _ in range(tries):
         state = client.state()
         if len(state.get("objects") or []) > 1:
@@ -37,6 +42,7 @@ def _skip_into_the_game(client: McpClient, tries: int = 12) -> dict:
             if "starting up" not in str(exc) and "nothing to skip" not in str(exc):
                 raise
         client.call_tool("mouse_click", {"x": 248, "y": 172})
+        time.sleep(2)
     raise AssertionError("the introduction never gave way to a room")
 
 
