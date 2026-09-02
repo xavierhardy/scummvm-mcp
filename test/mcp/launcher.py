@@ -160,12 +160,12 @@ def _launch_args(
         # seventeen minutes and answered "cannot be saved in the current state"
         # the whole way), and every demo here has always refused. Whether a
         # save was captured is the same question and answers itself.
-        return [scummvm_binary, "-c", ini_path, game_id]
-    if game_id == "sword2-demo":
-        # Starts from scratch like the demos above, but this engine offers to
-        # restore whenever a save exists — including the autosave it writes
-        # itself — and that dialog would block a headless run forever. An
-        # isolated (empty) save folder keeps every launch on the same path.
+        #
+        # The isolated (empty) save folder still goes on the line: without it
+        # the game writes into — and reads — whatever save folder this machine
+        # has, and an engine that offers to restore whenever a save exists
+        # (Broken Sword 2, which writes its own autosave) then stops on that
+        # dialog before its first game cycle and blocks a headless run forever.
         return [scummvm_binary, "-c", ini_path, f"--savepath={save_path}", game_id]
     return [
         scummvm_binary,
