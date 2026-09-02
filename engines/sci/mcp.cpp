@@ -480,11 +480,6 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 		errorOut = "act: a string 'target1' is required";
 		return false;
 	}
-	if (!playerHasControl()) {
-		errorOut = "act: the game is not accepting input right now";
-		return false;
-	}
-
 	Common::String verb = "use";
 	if (args.asObject().contains("verb") && args.asObject()["verb"]->isString())
 		verb = MCP::McpBridge::normalizeActionName(args.asObject()["verb"]->asString());
@@ -517,6 +512,16 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 				"looks at it.", verb.c_str());
 			return false;
 		}
+	}
+
+	// Asked *after* the name and the verb have been checked, deliberately. A
+	// name this room does not have, or a verb this game never offers, is wrong
+	// whatever the game happens to be doing, and saying so is the only way a
+	// caller learns it; answering "not accepting input" instead sends it away
+	// to wait for a moment that would not have helped.
+	if (!playerHasControl()) {
+		errorOut = "act: the game is not accepting input right now";
+		return false;
 	}
 
 	_skipStream = false;

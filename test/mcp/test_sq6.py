@@ -46,6 +46,20 @@ def _skip_into_the_game(client: McpClient, tries: int = 30) -> dict:
     raise AssertionError("the introduction never gave way to a room")
 
 
+def _wait_for_control(client: McpClient, tries: int = 60) -> dict:
+    """The state once the game hands control back.
+
+    The demo keeps playing after the room appears - the ego walks in on its
+    own, and while it does the game is not accepting input. Under load that
+    walk is a long wait, so anything that acts waits it out first."""
+    for _ in range(tries):
+        state = client.state()
+        if state.get("can_act"):
+            return state
+        time.sleep(1)
+    raise AssertionError("the demo never handed control over")
+
+
 @pytest.fixture(scope="session")
 def playing(sq6_client: McpClient) -> McpClient:
     _skip_into_the_game(sq6_client)
@@ -89,5 +103,6 @@ def test_05_a_verb_from_another_game_is_refused(playing: McpClient) -> None:
 def test_06_a_stream_opens_and_closes(playing: McpClient) -> None:
     """A walk is the cheapest streaming call; what matters is that it returns
     rather than hanging on a cycle that never advances."""
+    _wait_for_control(playing)
     result = playing.walk(320, 300)
     assert "room" in result, result
