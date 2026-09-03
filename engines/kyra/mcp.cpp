@@ -29,6 +29,7 @@
 
 #include "common/events.h"
 #include "common/system.h"
+#include "common/util.h"
 
 namespace Kyra {
 
@@ -286,13 +287,49 @@ void KyraMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		Target target;
 		target.name = kyraExitName(i);
 		target.label = Common::String::format("to scene %d", exits[i]);
-		// The coordinate the scene carries is where the character stands at
-		// this edge - which is where a player clicks to leave by it, and where
-		// acting on the exit walks him. Aiming past it was tried and is worse:
-		// a point outside the walkable area is a click the game ignores
-		// entirely, and the action then waits on a walk that never starts.
-		target.x = exitX[i];
-		target.y = exitY[i];
+		// Where to click to leave, which is not where the scene's own
+		// coordinate points. That one is where the character *stands* at
+		// this edge, and clicking it is an ordinary walk: measured, an
+		// agent standing exactly on it and acting on the exit went
+		// nowhere, twice, in two different games.
+		//
+		// Both generations decide a click is an exit by which band of the
+		// picture it lands in, before anything else is considered - the
+		// edge bands in KyraEngine_LoK::processInput and the identical
+		// ones in KyraEngine_HoF::updateMouse - so the click has to land
+		// in the band. The scene's coordinate still chooses where along
+		// the edge, kept inside the other axis's bounds so that a corner
+		// is read as the direction it was meant for.
+		const bool lok = isFirstGame();
+		// LoK: x < 12 west, x >= 308 east, y >= 136 south, y < 12 north,
+		// and the whole test wants y <= 158. v2: x <= 6, x >= 312,
+		// y >= 135, y <= 6, under y <= 145.
+		const int westX  = lok ? 10 : 4;
+		const int eastX  = lok ? 310 : 314;
+		const int northY = lok ? 10 : 4;
+		const int southY = lok ? 140 : 140;
+		const int lowX   = lok ? 12 : 7;
+		const int highX  = lok ? 307 : 311;
+		const int lowY   = lok ? 12 : 7;
+		const int highY  = lok ? 135 : 134;
+		switch (i) {
+		case 0: // north
+			target.x = CLIP(exitX[i], lowX, highX);
+			target.y = northY;
+			break;
+		case 1: // east
+			target.x = eastX;
+			target.y = CLIP(exitY[i], lowY, highY);
+			break;
+		case 2: // south
+			target.x = CLIP(exitX[i], lowX, highX);
+			target.y = southY;
+			break;
+		default: // west
+			target.x = westX;
+			target.y = CLIP(exitY[i], lowY, highY);
+			break;
+		}
 		target.isExit = true;
 		out.push_back(target);
 	}
