@@ -727,8 +727,8 @@
       {
         "name": "choose_kids",
         "type": "streaming",
-        "games": "Maniac Mansion (title screen)",
-        "description": "Pick the three heroes on the title screen and start the game. Dave always leads the rescue, so name the two kids who join him (naming Dave as the third is accepted); the cast is dave, syd, michael, wendy, bernard, razor and jeff. Each portrait is clicked in turn and identified by the line the game prints for it, so the order the portraits are in does not matter, then START is pressed. Only valid while state reports kid_selection_pending. Blocks until the game has begun (by default escaping through the intro until the player has control) and returns state changes, with the team in 'kids'.",
+        "games": "Maniac Mansion (title screen), Maniac Mansion Deluxe (opening screen)",
+        "description": "Pick the three heroes on the opening screen and start the game. Dave always leads the rescue, so name the two kids who join him (naming Dave as the third is accepted); the cast is dave, syd, michael, wendy, bernard, razor and jeff. A portrait is identified by the line the game writes for it when it is clicked, so the order the portraits are in does not matter, then START is pressed. The original clicks every portrait to learn the row and clicks the unwanted ones off again; the AGS remake reads the row from the game's own character table and clicks only the two that were asked for, checking each click's line against it. Valid for as long as state reports kid_selection_pending, which stays true until the team is picked — including while the AGS remake is playing the demo it starts after a minute alone on that screen, which the call escapes out of before picking. Blocks until the game has begun (by default escaping through the intro until the player has control) and returns state changes, with the team in 'kids'.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -756,8 +756,8 @@
       {
         "name": "switch_character",
         "type": "streaming",
-        "games": "Maniac Mansion",
-        "description": "Switch the player-controlled kid (the F1–F3 keys). state lists the available names in 'available_characters' and the current one in 'controlling'. Only allowed during normal gameplay. Blocks until the switch settles, then returns state changes (room_changed/position reflect the newly controlled kid).",
+        "games": "Maniac Mansion, Maniac Mansion Deluxe",
+        "description": "Switch the player-controlled kid — the F1–F3 keys in the original, the two portrait buttons at the right-hand end of the verb bar in the AGS remake, which show the two kids who are not being controlled and so change with every press. state lists the available names in 'available_characters' and the current one in 'controlling'. Only allowed during normal gameplay. Blocks until the switch settles, then returns state changes (room_changed/position reflect the newly controlled kid).",
         "inputSchema": {
           "type": "object",
           "properties": {

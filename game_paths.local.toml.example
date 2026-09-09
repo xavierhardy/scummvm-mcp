@@ -63,6 +63,7 @@ ween-demo = "~/games/ween-dos-demo2-uk"                   # WEEN_DEMO_PATH
 # --- AGS (Adventure Game Studio) -----------------------------------------
 # Two shapes of the same engine: repixeled puts its verbs on a SCUMM-style
 # bar of GUI buttons, the Sea Monster demo uses the engine's cursor modes.
+maniac-deluxe = "~/games/ags/maniacmansiondeluxe"          # MANIAC_DELUXE_PATH
 zak-repixeled = "~/games/ags/zakrepixeled"                # ZAK_REPIXELED_PATH
 zak-seamonster = "~/games/ags/zakseamonster-demo"         # ZAK_SEAMONSTER_PATH
 

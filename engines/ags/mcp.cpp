@@ -21,6 +21,7 @@
 
 
 #include "ags/mcp.h"
+#include "ags/mcp_maniac.h"
 #include "ags/mcp_names.h"
 
 #include "ags/ags.h"
@@ -76,7 +77,14 @@ static Common::JSONValue *objectArraySchema(Common::JSONObject &props) {
 }
 
 AgsMcpBridge *AgsMcpBridge::create(::AGS::AGSEngine *vm) {
-	AgsMcpBridge *bridge = new AgsMcpBridge(vm);
+	// Maniac Mansion Deluxe opens on a screen no other AGS game here has: a
+	// row of portraits and a START button, with the game waiting to be told
+	// who is going in. Nothing about that is describable in a room snapshot -
+	// the portraits are unnamed hotspots - so the game gets a bridge of its
+	// own. Every other AGS game gets the ordinary one, unchanged.
+	AgsMcpBridge *bridge = (vm->getGameId() == "maniacmansiondeluxe")
+	                       ? new AgsMcpBridgeManiacDeluxe(vm)
+	                       : new AgsMcpBridge(vm);
 	bridge->init();
 	return bridge;
 }
@@ -562,6 +570,7 @@ Common::JSONValue *AgsMcpBridge::toolState(const Common::JSONValue &, Common::St
 	_messages.clear();
 	out.setVal("messages", new Common::JSONValue(messages));
 
+	augmentState(out);
 	return new Common::JSONValue(out);
 }
 
@@ -1036,6 +1045,7 @@ Common::JSONObject AgsMcpBridge::buildStateChanges() const {
 	out.setVal("inventory_lost", new Common::JSONValue(lost));
 
 	out.setVal("can_act", mcpJsonBool(playerHasControl()));
+	augmentStateChanges(out);
 	return out;
 }
 

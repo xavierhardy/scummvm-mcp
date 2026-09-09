@@ -79,6 +79,12 @@ protected:
 	Common::String debugToolDescription() const override;
 	Common::JSONValue *buildDebugSchema() const override;
 	void augmentStateSchema(Common::JSONObject &outputProps) override;
+	// What a game-specific leaf adds to the snapshot and to a streamed result.
+	// Empty here: an ordinary AGS game is described by its room alone, and
+	// only a game with something of its own to say (Maniac Mansion Deluxe's
+	// title screen and its team of kids) has anything to put here.
+	virtual void augmentState(Common::JSONObject &out) { (void)out; }
+	virtual void augmentStateChanges(Common::JSONObject &changes) const { (void)changes; }
 	// select_verb, for the games whose verbs are buttons rather than cursors.
 	void registerGameTools() override;
 	Common::JSONValue *dispatchGameTool(const Common::String &name,
@@ -129,7 +135,7 @@ protected:
 		return _sseLastEventFrame > 0 ? _sseLastEventFrame : _sseStartFrame;
 	}
 
-private:
+protected:
 	// Something in the room an agent can name.
 	struct Target {
 		Common::String name;
@@ -152,7 +158,7 @@ private:
 	// Where the player character stands.
 	bool playerPosition(int &x, int &y) const;
 	// Is the player character walking, or is the game otherwise busy?
-	bool playerHasControl() const;
+	virtual bool playerHasControl() const;
 
 	// Everything in the room an agent could act on, names disambiguated.
 	void collectTargets(Common::Array<Target> &out) const;

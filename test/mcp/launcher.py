@@ -299,6 +299,7 @@ _GAME_PATH_ENV = {
     "gob2-demo": "GOB2_DEMO_PATH",
     "gob3-demo": "GOB3_DEMO_PATH",
     "ween-demo": "WEEN_DEMO_PATH",
+    "maniac-deluxe": "MANIAC_DELUXE_PATH",
     "zak-repixeled": "ZAK_REPIXELED_PATH",
     "zak-seamonster": "ZAK_SEAMONSTER_PATH",
     "cstime-demo": "CSTIME_DEMO_PATH",

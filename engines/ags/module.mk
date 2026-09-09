@@ -2,6 +2,7 @@ MODULE := engines/ags
 
 MODULE_OBJS = \
 	mcp.o \
+	mcp_maniac.o \
 	mcp_names.o \
 	ags.o \
 	dialogs.o \

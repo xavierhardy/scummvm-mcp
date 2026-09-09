@@ -135,6 +135,7 @@ _FIXTURE_INDEX = {
     "kyra3": 77,
     "simon1": 78,
     "sanitarium": 79,
+    "maniac_deluxe": 80,
 }
 
 
@@ -515,6 +516,16 @@ def cstime_client() -> Iterator[McpClient]:
     A pointer game with no verbs at all: a scene is a picture with regions
     marked on it, and clicking one is the whole vocabulary. No save support."""
     yield from _client("cstime-demo", "cstime", connect_timeout=HUGE_TABLE_BOOT_SECS)
+
+
+@pytest.fixture(scope="session")
+def maniac_deluxe_client() -> Iterator[McpClient]:
+    """Maniac Mansion Deluxe (AGS engine, opening kid selection).
+
+    Started fresh on the opening screen, where the three heroes are still to be
+    picked, so there is nothing to load: the tests run as one ordered sequence
+    on a single instance (like maniac_full, whose screen this one mirrors)."""
+    yield from _client("maniac-deluxe", "maniac_deluxe", connect_timeout=SLOW_BOOT_SECS)
 
 
 @pytest.fixture(scope="session")
