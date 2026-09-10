@@ -81,6 +81,12 @@ protected:
 	void augmentChangesSchema(Common::JSONObject &props) override;
 	void augmentStateChanges(Common::JSONObject &changes) const override;
 	void snapshotPreAction() override;
+	// The verb bar. Nine buttons in three rows, drawn with the verb words
+	// painted into the sprites, so the game labels nothing and the base class
+	// has no name for any of them.
+	void nameVerbButtons(Common::Array<Verb> &buttons) const override;
+	void addGameVerbs(Common::Array<Verb> &verbs) const override;
+	Common::String selectedVerb() const override;
 	bool pumpStreamGameEarly() override;
 	// The game hides its whole interface whenever it is telling the story -
 	// the opening screen, the intro, and every cutscene in between - and puts
@@ -159,6 +165,10 @@ private:
 	// Whether the verb bar is on screen, which is the game's own statement
 	// that it is the player's turn.
 	bool interfaceUp() const;
+	// The nine verb buttons, in the order they are drawn: left to right, top
+	// row first. Fewer than nine means this is not the verb bar.
+	void collectVerbGrid(Common::Array<uint> &order,
+	                     const Common::Array<Verb> &buttons) const;
 
 	void failCall(const Common::String &what, const Common::String &reason);
 	bool toolChooseKids(const Common::JSONValue &args, Common::String &errorOut);

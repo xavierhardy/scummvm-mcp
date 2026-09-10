@@ -417,6 +417,120 @@ Common::String AgsMcpBridgeManiacDeluxe::controllingKid() const {
 	return Common::String();
 }
 
+// ---------------------------------------------------------------------------
+// The verb bar
+// ---------------------------------------------------------------------------
+//
+// Nine verbs in three rows of three, and the game paints the words into the
+// button sprites rather than putting them on the buttons as text - so every
+// one of them is nameless as far as the engine is concerned, and the base
+// class can only offer the vocabulary it guesses at.
+//
+// They are named here by where they are drawn. The grid is the 1987 game's,
+// unchanged - this is a remake of it, and the row of verbs is the thing it
+// reproduces most exactly - so left to right and top down it reads Give,
+// Pick up, Use / Open, Look at, Push / Close, Talk to, Pull. Reading them off
+// the layout rather than off the control numbers means a release that
+// reordered its GUI is still read correctly, which is the same bargain the
+// kid selection makes.
+//
+// Nothing says which verb is chosen: the bar lights a verb while it is
+// carrying it out and goes dark again after. So `act` presses the button it
+// wants before every action rather than asking whether it has to, which is a
+// press a player would make anyway.
+static const char *const kManiacVerbGrid[] = {
+	"give",  "pick_up", "use",
+	"open",  "look_at", "push",
+	"close", "talk_to", "pull"
+};
+
+void AgsMcpBridgeManiacDeluxe::collectVerbGrid(Common::Array<uint> &order,
+                                               const Common::Array<Verb> &buttons) const {
+	order.clear();
+	const uint wanted = ARRAYSIZE(kManiacVerbGrid);
+	if (buttons.size() < wanted)
+		return;
+	// collectVerbButtons hands over every button on the bar, and the grid is
+	// only part of it: the inventory's arrows and the two portraits that hand
+	// control to the other kids are on there too. The grid is the left-hand
+	// end of the bar, so the nine left-most buttons are the nine verbs - and
+	// they are only the verbs if they really are a grid, three columns by
+	// three rows.
+	Common::Array<uint> byX;
+	for (uint i = 0; i < buttons.size(); i++)
+		byX.push_back(i);
+	for (uint i = 1; i < byX.size(); i++) {
+		for (uint j = i; j > 0 && buttons[byX[j - 1]].x > buttons[byX[j]].x; j--) {
+			const uint swap = byX[j - 1];
+			byX[j - 1] = byX[j];
+			byX[j] = swap;
+		}
+	}
+	Common::Array<uint> grid;
+	for (uint i = 0; i < wanted; i++)
+		grid.push_back(byX[i]);
+	// Three columns and three rows, and nothing else sharing them.
+	Common::Array<int> columns, rows;
+	for (uint i = 0; i < grid.size(); i++) {
+		bool haveX = false, haveY = false;
+		for (uint c = 0; c < columns.size(); c++)
+			haveX = haveX || columns[c] == buttons[grid[i]].x;
+		for (uint r = 0; r < rows.size(); r++)
+			haveY = haveY || rows[r] == buttons[grid[i]].y;
+		if (!haveX)
+			columns.push_back(buttons[grid[i]].x);
+		if (!haveY)
+			rows.push_back(buttons[grid[i]].y);
+	}
+	if (columns.size() != 3 || rows.size() != 3)
+		return;
+	// Left to right, top row first, which is the order the verbs read in.
+	for (uint i = 1; i < grid.size(); i++) {
+		for (uint j = i; j > 0; j--) {
+			const Verb &a = buttons[grid[j - 1]], &b = buttons[grid[j]];
+			if (!(a.y > b.y || (a.y == b.y && a.x > b.x)))
+				break;
+			const uint swap = grid[j - 1];
+			grid[j - 1] = grid[j];
+			grid[j] = swap;
+		}
+	}
+	order = grid;
+}
+
+void AgsMcpBridgeManiacDeluxe::nameVerbButtons(Common::Array<Verb> &buttons) const {
+	Common::Array<uint> order;
+	collectVerbGrid(order, buttons);
+	for (uint i = 0; i < order.size(); i++)
+		buttons[order[i]].name = kManiacVerbGrid[i];
+}
+
+void AgsMcpBridgeManiacDeluxe::addGameVerbs(Common::Array<Verb> &verbs) const {
+	// There is no Walk to on the bar: walking is what a click on the floor
+	// does whatever verb is chosen, exactly as it is in the game this remakes.
+	for (uint i = 0; i < verbs.size(); i++) {
+		if (verbs[i].name == "walk_to")
+			return;
+	}
+	Verb walk;
+	walk.name = "walk_to";
+	walk.mode = -1;
+	walk.guiId = walk.controlId = -1;
+	walk.x = walk.y = 0;
+	verbs.push_back(walk);
+}
+
+Common::String AgsMcpBridgeManiacDeluxe::selectedVerb() const {
+	// Nothing to read. The bar lights the verb it is carrying out while it is
+	// carrying it out and goes dark again after - measured by pressing every
+	// one of the nine and looking, with the pointer moved away each time - so
+	// there is no moment at which the interface states which verb the next
+	// click would use. `act` presses the button it wants every time rather
+	// than asking, which is a press a player would make anyway, and `state`
+	// says nothing about a current verb rather than something untrue.
+	return Common::String();
+}
+
 bool AgsMcpBridgeManiacDeluxe::interfaceUp() const {
 	Common::Array<ScreenPoint> buttons;
 	collectSwitchButtons(buttons);

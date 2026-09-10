@@ -36,7 +36,9 @@
 #include "ags/shared/ac/game_setup_struct.h"
 #include "ags/shared/game/room_struct.h"
 #include "ags/shared/gfx/bitmap.h"
+#include "ags/engine/ac/character_extras.h"
 #include "ags/shared/gui/gui_button.h"
+#include "ags/shared/gui/gui_inv.h"
 #include "ags/shared/gui/gui_label.h"
 #include "ags/shared/gui/gui_main.h"
 #include "ags/shared/gui/gui_object.h"
@@ -105,6 +107,15 @@ AgsMcpBridge::AgsMcpBridge(::AGS::AGSEngine *vm) :
 	_pendingLegs(0),
 	_pendingCamX(0),
 	_pendingCamY(0),
+	_pendingItem(-1),
+	_pendingPressIndex(0),
+	_pendingPressHovered(false),
+	_pendingAimed(false),
+	_pendingWait(kPointFrames),
+	_pendingPress(false),
+	_pendingPressX(0),
+	_pendingPressY(0),
+	_pendingPressFrame(0),
 	_skipStream(false),
 	_sseTrackRoom(-1),
 	_sseTrackPosX(-1),
@@ -136,7 +147,16 @@ bool AgsMcpBridge::playerPosition(int &x, int &y) const {
 }
 
 bool AgsMcpBridge::playerHasControl() const {
-	if (!engineReady() || _pendingClick)
+	if (!engineReady() || _pendingClick || _pendingPress)
+		return false;
+	// A line being read is not the player's turn either. The engine puts a
+	// blocking overlay up for speech and for Display(), and while one is on
+	// screen a click dismisses the line rather than doing anything - so an
+	// action that returned here would have its next click swallowed, which is
+	// exactly how a walk after reading a sign went nowhere twice in a row.
+	// Waiting for it also puts the lines in the action's own stream, which is
+	// where an agent reads them.
+	if (_GP(play).text_overlay_on != 0)
 		return false;
 	// `walking` is non-zero for as long as the character is on its way
 	// somewhere; the engine blocks input for the whole of that.
@@ -182,7 +202,18 @@ void AgsMcpBridge::collectTargets(Common::Array<Target> &out) const {
 			Common::String(room.Objects[i].ScriptName.GetCStr()));
 		if (agsIsPlaceholderName(name, (int)i))
 			continue;
-		publish(name, "object", (int)i, _G(objs)[i].x, _G(objs)[i].y);
+		// An object's own x and y are the bottom-left corner of the sprite it
+		// is drawn with, and a click there lands on the corner - which on a
+		// thing lying flat, like Maniac Mansion Deluxe's door mat, is off the
+		// end of it and does nothing at all. The middle of the sprite is what
+		// a player aims at, so that is what is published and clicked.
+		int ox = _G(objs)[i].x, oy = _G(objs)[i].y;
+		const int sprite = _G(objs)[i].num;
+		if (sprite >= 0 && (uint)sprite < _GP(game).SpriteInfos.size()) {
+			ox += game_to_data_coord(_GP(game).SpriteInfos[sprite].Width) / 2;
+			oy -= game_to_data_coord(_GP(game).SpriteInfos[sprite].Height) / 2;
+		}
+		publish(name, "object", (int)i, ox, oy);
 	}
 
 	// Hotspots. Index 0 is the "nothing here" hotspot every AGS room has, and
@@ -283,6 +314,45 @@ bool AgsMcpBridge::resolveTarget(const Common::String &name, Target &out,
 	return false;
 }
 
+// The inventory window is a grid of cells, and which item is in which cell is
+// the engine's own ordering of what the character carries - `invorder`, the
+// same list the window draws from. Picking the cell out is what a player does
+// when they take a thing in hand before using it on something.
+bool AgsMcpBridge::inventoryItemPoint(int itemId, int &x, int &y) const {
+	if (!engineReady() || _G(guis) == nullptr)
+		return false;
+	for (uint g = 0; g < _GP(guis).size(); g++) {
+		const AGS::Shared::GUIMain &gui = _GP(guis)[g];
+		if (!gui.IsDisplayed())
+			continue;
+		for (int32_t ci = 0; ci < gui.GetControlCount(); ci++) {
+			if (gui.GetControlType(ci) != AGS::Shared::kGUIInvWindow)
+				continue;
+			const AGS::Shared::GUIInvWindow *inv =
+				dynamic_cast<const AGS::Shared::GUIInvWindow *>(gui.GetControl(ci));
+			if (inv == nullptr || !inv->IsVisible())
+				continue;
+			const int who = inv->GetCharacterId();
+			if (who < 0 || who >= _GP(game).numcharacters)
+				continue;
+			const CharacterExtras &extra = _GP(charextra)[who];
+			const int columns = MAX(1, (int)inv->ColCount);
+			const int rows = MAX(1, (int)inv->RowCount);
+			for (int slot = 0; slot < extra.invorder_count; slot++) {
+				if (extra.invorder[slot] != itemId)
+					continue;
+				const int cell = slot - inv->TopItem;
+				if (cell < 0 || cell >= columns * rows)
+					return false;   // showing, but scrolled off this page
+				x = gui.X + inv->X + (cell % columns) * inv->ItemWidth + inv->ItemWidth / 2;
+				y = gui.Y + inv->Y + (cell / columns) * inv->ItemHeight + inv->ItemHeight / 2;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 void AgsMcpBridge::collectInventory(Common::Array<Common::String> &names,
                                     Common::Array<int> &ids) const {
 	if (!engineReady())
@@ -316,8 +386,8 @@ static const struct { const char *label; const char *verb; } kButtonVerbs[] = {
 	{ "pull",     "pull" },
 	{ "talk",     "talk_to" },
 	{ "talk_to",  "talk_to" },
-	{ "pick_up",  "take" },
-	{ "take",     "take" },
+	{ "pick_up",  "pick_up" },
+	{ "take",     "pick_up" },
 	{ "give",     "give" },
 	{ "turn_on",  "turn_on" },
 	{ "turn_off", "turn_off" },
@@ -413,6 +483,11 @@ void AgsMcpBridge::collectVerbButtons(Common::Array<Verb> &verbs) const {
 			}
 		}
 	}
+
+	// A game that drew its verb words into the button sprites labelled
+	// nothing, and only something that knows this particular interface can
+	// say which button is which.
+	nameVerbButtons(verbs);
 }
 
 void AgsMcpBridge::collectVerbs(Common::Array<Verb> &verbs) const {
@@ -440,12 +515,16 @@ void AgsMcpBridge::collectVerbs(Common::Array<Verb> &verbs) const {
 			if (!already)
 				verbs.push_back(buttons[b]);
 		}
-		if (!verbs.empty())
+		if (!verbs.empty()) {
+			// Whatever this game can do that is not one of its buttons -
+			// walking, on a bar that has no walk button.
+			addGameVerbs(verbs);
 			return;
+		}
 		// Nothing named itself. Offer the standard bar vocabulary; a verb the
 		// game does not have simply cannot be reached, and act() says so.
 		static const char *const kBarVerbs[] = {
-			"walk_to", "look_at", "use", "talk_to", "take", "give", nullptr
+			"walk_to", "look_at", "use", "talk_to", "pick_up", "give", nullptr
 		};
 		for (int i = 0; kBarVerbs[i] != nullptr; i++) {
 			Verb verb;
@@ -474,6 +553,10 @@ void AgsMcpBridge::collectVerbs(Common::Array<Verb> &verbs) const {
 		verb.x = verb.y = 0;
 		verbs.push_back(verb);
 	}
+}
+
+Common::String AgsMcpBridge::selectedVerb() const {
+	return currentVerbFromLabel();
 }
 
 bool AgsMcpBridge::findVerb(const Common::String &verb, Verb &out) const {
@@ -566,7 +649,7 @@ Common::JSONValue *AgsMcpBridge::toolState(const Common::JSONValue &, Common::St
 	for (uint i = 0; i < verbList_.size(); i++)
 		verbs.push_back(mcpJsonString(verbList_[i].name));
 	out.setVal("verbs", new Common::JSONValue(verbs));
-	const Common::String showing = currentVerbFromLabel();
+	const Common::String showing = selectedVerb();
 	if (!showing.empty())
 		out.setVal("current_verb", mcpJsonString(showing));
 
@@ -622,8 +705,12 @@ bool AgsMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	}
 
 	// Using an inventory item on something is the same click with the item
-	// held: the engine reads activeinv when the mode is MODE_USE.
-	if (chosen.mode == MODE_USE && args.asObject().contains("target2") &&
+	// held: the engine reads activeinv when the mode is MODE_USE, and a game
+	// that runs its own verb bar reads it from the same place - putting the
+	// item in hand is what clicking it in the inventory window does.
+	const bool useVerb = chosen.mode == MODE_USE ||
+	                     chosen.name == "use" || chosen.name == "use_inv";
+	if (useVerb && args.asObject().contains("target2") &&
 	    args.asObject()["target2"]->isString()) {
 		Common::Array<Common::String> itemNames;
 		Common::Array<int> itemIds;
@@ -642,6 +729,9 @@ bool AgsMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 			return false;
 		}
 		_G(playerchar)->activeinv = found;
+		_pendingItem = chosen.mode < 0 ? found : -1;
+	} else {
+		_pendingItem = -1;
 	}
 
 	_skipStream = false;
@@ -772,6 +862,22 @@ Common::JSONValue *AgsMcpBridge::toolDebug(const Common::JSONValue &, Common::St
 		b.setVal("y", mcpJsonInt(buttons[i].y));
 		if (!buttons[i].name.empty())
 			b.setVal("verb", mcpJsonString(buttons[i].name));
+		// The sprite the button is wearing now, and the one it wears at rest.
+		// A game that draws its own verb words on its buttons says which verb
+		// is selected by swapping one for the other, and that swap is the only
+		// statement of it there is.
+		{
+			const AGS::Shared::GUIMain &gui = _GP(guis)[buttons[i].guiId];
+			const AGS::Shared::GUIButton *button = buttons[i].controlId >= 0 ?
+				dynamic_cast<const AGS::Shared::GUIButton *>(gui.GetControl(buttons[i].controlId)) :
+				nullptr;
+			if (button != nullptr) {
+				b.setVal("image", mcpJsonInt(button->GetCurrentImage()));
+				b.setVal("normal_image", mcpJsonInt(button->GetNormalImage()));
+				b.setVal("pushed_image", mcpJsonInt(button->GetPushedImage()));
+				b.setVal("over_image", mcpJsonInt(button->GetMouseOverImage()));
+			}
+		}
 		bar.push_back(new Common::JSONValue(b));
 	}
 	out.setVal("verb_buttons", new Common::JSONValue(bar));
@@ -880,7 +986,9 @@ Common::JSONValue *AgsMcpBridge::dispatchGameTool(const Common::String &name,
 		return nullptr;
 	}
 
-	injectMouseClick(buttons[pick].x, buttons[pick].y, "left", false);
+	int bx = buttons[pick].x, by = buttons[pick].y;
+	guiToWindow(bx, by);
+	pressControl(bx, by);
 
 	Common::JSONObject out;
 	out.setVal("button", mcpJsonInt(pick));
@@ -982,6 +1090,28 @@ bool AgsMcpBridge::aimAt(int roomX, int roomY, int &screenX, int &screenY) const
 	return inFrame;
 }
 
+void AgsMcpBridge::guiToWindow(int &x, int &y) const {
+	if (!engineReady())
+		return;
+	x = _GP(GameScaling).X.ScalePt(x + _GP(play).GetMainViewport().Left);
+	y = _GP(GameScaling).Y.ScalePt(y + _GP(play).GetMainViewport().Top);
+}
+
+void AgsMcpBridge::pressControl(int x, int y) {
+	moveCursorTo(x, y);
+	_pendingPress = true;
+	_pendingPressX = x;
+	_pendingPressY = y;
+	_pendingPressFrame = _frameCounter;
+}
+
+void AgsMcpBridge::pumpPendingPress() {
+	if (!_pendingPress || (_frameCounter - _pendingPressFrame) < kPointFrames)
+		return;
+	_pendingPress = false;
+	injectMouseClick(_pendingPressX, _pendingPressY, "left", false);
+}
+
 void AgsMcpBridge::pointAndClick(int x, int y, const Verb &verb) {
 	// The verb first, because the game resolves a click against whatever the
 	// verb is at the moment the button goes down. A cursor mode can be set
@@ -993,29 +1123,73 @@ void AgsMcpBridge::pointAndClick(int x, int y, const Verb &verb) {
 	// last wrote on its status line, and the only way to change that is to
 	// press a button and give the game real time to notice - which is what
 	// select_verb is for, and why act() does not try to do it here.
-	if (verb.mode >= 0)
+	_pendingPresses.clear();
+	_pendingPressIndex = 0;
+	_pendingPressHovered = false;
+	if (verb.mode >= 0) {
 		set_cursor_mode(verb.mode);
+	} else if (verb.controlId >= 0 && !verb.name.empty()) {
+		// A bar's verb is whatever the game's own script last chose, and the
+		// only way to choose another is the press a player makes. It goes out
+		// first, with frames of its own, because the game reads the click on
+		// the target against the verb it had when the button went down.
+		Press press;
+		press.x = verb.x;
+		press.y = verb.y;
+		guiToWindow(press.x, press.y);
+		_pendingPresses.push_back(press);
+		// And the thing in hand, on the game's own terms: a bar game does not
+		// read the engine's held item, it reads whatever its script last saw
+		// clicked in the inventory window. So it is clicked, the way a player
+		// clicks it, between choosing the verb and pointing at the target.
+		int ix = 0, iy = 0;
+		if (_pendingItem >= 0 && inventoryItemPoint(_pendingItem, ix, iy)) {
+			Press item;
+			item.x = ix;
+			item.y = iy;
+			guiToWindow(item.x, item.y);
+			_pendingPresses.push_back(item);
+		}
+	}
+	_pendingItem = -1;
 	_pendingClick = true;
 	_pendingX = x;
 	_pendingY = y;
 	_pendingMode = verb.mode;
 	_pendingRoom = roomNumber();
 	_pendingLegs = 0;
+	_pendingAimed = false;
 	cameraAt(_pendingCamX, _pendingCamY);
 	_pendingFrame = _frameCounter;
-	// Put the pointer where the click is going now, so the game has seen it
-	// arrive by the time the button goes down.
-	int screenX = 0, screenY = 0;
-	aimAt(x, y, screenX, screenY);
-	moveCursorTo(screenX, screenY);
+	_pendingWait = kPointFrames;
 }
 
 void AgsMcpBridge::pumpPendingClick() {
 	if (!_pendingClick)
 		return;
-	const uint32 wait = _pendingLegs == 0 ? kPointFrames : kLegFrames;
-	if ((_frameCounter - _pendingFrame) < wait)
+	if ((_frameCounter - _pendingFrame) < _pendingWait)
 		return;
+	// The interface first: the verb, then the thing in hand. Each is aimed at
+	// on one loop and pressed on a later one, and the pointer is left on it
+	// afterwards - a hand does not leave in the same instant it presses, and
+	// leaving at once was measured to lose the verb entirely: the walk
+	// happened and nothing was looked at.
+	if (_pendingPressIndex < _pendingPresses.size()) {
+		const Press &press = _pendingPresses[_pendingPressIndex];
+		if (!_pendingPressHovered) {
+			_pendingPressHovered = true;
+			moveCursorTo(press.x, press.y);
+			_pendingFrame = _frameCounter;
+			_pendingWait = kHoverFrames;
+			return;
+		}
+		injectMouseClick(press.x, press.y, "left", false);
+		_pendingPressHovered = false;
+		_pendingPressIndex++;
+		_pendingFrame = _frameCounter;
+		_pendingWait = kVerbFrames;
+		return;
+	}
 	// A leg of the walk is still under way. Where to aim next depends on where
 	// the camera ends up, so there is nothing to decide until it has stopped.
 	// The character's own walk flag is what says so, and not playerHasControl:
@@ -1038,6 +1212,15 @@ void AgsMcpBridge::pumpPendingClick() {
 	const bool stalled = _pendingLegs > 0 && camX == _pendingCamX && camY == _pendingCamY;
 
 	if (inFrame || stalled || _pendingLegs >= kMaxWalkLegs) {
+		// Aim first and click on a later loop: what a click means is decided
+		// against whatever the game last saw under the cursor.
+		if (!_pendingAimed) {
+			_pendingAimed = true;
+			moveCursorTo(screenX, screenY);
+			_pendingFrame = _frameCounter;
+			_pendingWait = kHoverFrames;
+			return;
+		}
 		_pendingClick = false;
 		// The verb, put back: the legs were walked with the walk cursor.
 		if (_pendingMode >= 0 && _pendingLegs > 0)
@@ -1054,7 +1237,9 @@ void AgsMcpBridge::pumpPendingClick() {
 	_pendingCamX = camX;
 	_pendingCamY = camY;
 	_pendingLegs++;
+	_pendingAimed = false;
 	_pendingFrame = _frameCounter;
+	_pendingWait = kLegFrames;
 	moveCursorTo(screenX, screenY);
 	injectMouseClick(screenX, screenY, "left", false);
 }
@@ -1097,6 +1282,7 @@ int AgsMcpBridge::currentRoomForMessages() const {
 // ---------------------------------------------------------------------------
 
 void AgsMcpBridge::pumpGame() {
+	pumpPendingPress();
 	pumpPendingClick();
 }
 

@@ -139,7 +139,7 @@ def test_04_the_three_kinds_are_told_apart(playing: McpClient) -> None:
 
 def test_05_state_lists_the_bars_verbs(playing: McpClient) -> None:
     verbs = playing.state()["verbs"]
-    for expected in ("look_at", "use", "take", "talk_to"):
+    for expected in ("look_at", "use", "pick_up", "talk_to"):
         assert expected in verbs, verbs
 
 

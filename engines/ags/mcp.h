@@ -152,6 +152,17 @@ protected:
 	static const uint32 kPointFrames = 2;
 	// Frames a skip is given to let one keypress land.
 	static const uint32 kSkipFrames = 15;
+	// Frames between pressing a verb bar's button and the click on the target.
+	// It covers two things at once: the game reading its own bar and changing
+	// the verb, and the pointer being seen to arrive on the target afterwards.
+	// A second, measured against Maniac Mansion Deluxe by doing the same two
+	// clicks by hand and shortening the gap until the verb stopped taking.
+	static const uint32 kVerbFrames = 40;
+	// Frames the pointer rests on the target before the click that acts on it.
+	// A game reads what is under the cursor on its own loop, and a click that
+	// arrives in the same breath as the move is read against wherever the
+	// cursor was before. Measured the same way as kVerbFrames.
+	static const uint32 kHoverFrames = 24;
 	// Frames a leg of a walk across a scrolling room is given before where to
 	// aim next is worked out again. The walk itself is waited for; this is
 	// only so the click has left and the character has started moving before
@@ -183,6 +194,10 @@ protected:
 	// Resolve a name to something in the room.
 	bool resolveTarget(const Common::String &name, Target &out,
 	                   Common::String &errorOut) const;
+	// Where the inventory window draws the item with this id, in the game's
+	// own screen coordinates. False when no inventory window is on screen, or
+	// the item is not one of the cells it is showing.
+	bool inventoryItemPoint(int itemId, int &x, int &y) const;
 	// The inventory the player is carrying, as names.
 	void collectInventory(Common::Array<Common::String> &names,
 	                      Common::Array<int> &ids) const;
@@ -195,6 +210,18 @@ protected:
 		int controlId;   // the button in it, or -1
 		int x, y;        // where to click that button, in screen coordinates
 	};
+
+	// Naming the buttons a game left unlabelled, and any verb it has that is
+	// not a button at all. Both are empty here: an ordinary AGS game either
+	// labels its bar or has no bar, and only a leaf that knows the game's own
+	// interface (Maniac Mansion Deluxe draws its verb words into the button
+	// sprites) has anything to say.
+	virtual void nameVerbButtons(Common::Array<Verb> &buttons) const { (void)buttons; }
+	virtual void addGameVerbs(Common::Array<Verb> &verbs) const { (void)verbs; }
+	// The verb the game has selected, whatever it keeps that in. The default
+	// reads the status line a bar game writes it on; a game that writes it
+	// nowhere an outsider can read has to say so itself.
+	virtual Common::String selectedVerb() const;
 
 	// The verbs this game offers.
 	//
@@ -223,6 +250,17 @@ protected:
 	// has seen the pointer arrive, having first selected *verb* - by setting
 	// the cursor mode, or by clicking the verb bar's button.
 	void pointAndClick(int x, int y, const Verb &verb);
+	// Press a control on the game's own interface: put the pointer on it, and
+	// click it a frame later. A GUI button is hit-tested against where the
+	// game *last saw* the pointer, so a click that arrives in the same breath
+	// as the move that put it there lands on whatever was under the pointer
+	// before - which is how a verb button pressed by warping onto it and
+	// clicking did nothing at all.
+	void pressControl(int x, int y);
+	void pumpPendingPress();
+	// A point on the game's own screen - where a GUI control is - turned into
+	// the window coordinate a click is placed at.
+	void guiToWindow(int &x, int &y) const;
 	void pumpPendingClick();
 	void moveCursorTo(int x, int y);
 
@@ -268,6 +306,30 @@ protected:
 	// Legs walked so far, and where the camera was when the last one went out.
 	int _pendingLegs;
 	int _pendingCamX, _pendingCamY;
+	// The presses that have to land before the click on the target, in order:
+	// a verb bar's button, and the inventory item an action is using. Each
+	// needs frames of its own - the game reads its own interface on a later
+	// loop, and only then is the verb, or the thing in hand, what the action
+	// asked for.
+	struct Press {
+		int x, y;   // window coordinates
+	};
+	// The inventory item the action in flight is using, between toolAct
+	// deciding on it and pointAndClick queueing the click on it.
+	int _pendingItem;
+	Common::Array<Press> _pendingPresses;
+	uint _pendingPressIndex;
+	bool _pendingPressHovered;
+	// Whether the pointer has been put on the target and left there long
+	// enough for the game to have noticed it.
+	bool _pendingAimed;
+	// Frames the stage in flight is given before the next one goes out.
+	uint32 _pendingWait;
+	// A press on the game's own interface, waiting on the pointer having been
+	// seen to arrive.
+	bool _pendingPress;
+	int _pendingPressX, _pendingPressY;
+	uint32 _pendingPressFrame;
 
 
 	// What the stream in flight is.

@@ -31,6 +31,12 @@ import pytest
 
 from utils import McpClient, object_names
 
+
+def inventory_names(state: dict) -> set:
+    """The names of the things being carried."""
+    return {item["name"] for item in state.get("inventory", [])}
+
+
 pytestmark = [pytest.mark.xdist_group("maniac_deluxe")]
 
 KIDS = ["bernard", "razor"]
@@ -53,6 +59,13 @@ NEAR_ENOUGH = 24
 
 DOOR_MAT = "door_mat"
 FRONT_DOOR = "front_door_v"
+KEY = "key"
+
+#: Inside: the hall the front door opens into, the left-hand of its three
+#: doors, and the kitchen behind it.
+HALL = 3
+HALL_LEFT_DOOR = "door_v_2"
+KITCHEN = 25
 
 #: The opening screen's room, and how long to wait for the game to wander out
 #: of it on its own - it takes about a minute.
@@ -202,7 +215,43 @@ def test_08_maniac_deluxe_a_half_written_walk_to_point_is_not_used(
     )
 
 
-def test_09_maniac_deluxe_switch_character_rejects_a_stranger(
+def test_09_maniac_deluxe_gets_into_the_mansion(
+    maniac_deluxe_client: McpClient,
+) -> None:
+    """The opening of the game, played through: the key under the mat, the
+    front door it unlocks, and the kitchen beyond the hall.
+
+    Every verb the bar has is a button with the word painted into its sprite,
+    so nothing on it is labelled and nothing says which one is chosen; `act`
+    presses the one it wants before each action. This is the test that says
+    those presses land on the verb they are named for - a run of the game with
+    the wrong button under `pull` gets no key and goes no further.
+    """
+    state = maniac_deluxe_client.state()
+    assert state["room"]["id"] == FRONT_GARDEN, f"not in the garden: {state}"
+
+    maniac_deluxe_client.act("walk_to", DOOR_MAT)
+    maniac_deluxe_client.act("pull", DOOR_MAT)
+    names = object_names(maniac_deluxe_client.state())
+    assert KEY in names, f"pulling the mat uncovered no key: {sorted(names)}"
+
+    result = maniac_deluxe_client.act("pick_up", KEY)
+    assert KEY in inventory_names(maniac_deluxe_client.state()), (
+        f"the key was not picked up: {result}"
+    )
+
+    maniac_deluxe_client.act("use", FRONT_DOOR, KEY)
+    result = maniac_deluxe_client.act("walk_to", FRONT_DOOR)
+    assert result["room"]["id"] == HALL, f"the front door did not open: {result}"
+
+    maniac_deluxe_client.act("open", HALL_LEFT_DOOR)
+    result = maniac_deluxe_client.act("walk_to", HALL_LEFT_DOOR)
+    assert result["room"]["id"] == KITCHEN, f"never reached the kitchen: {result}"
+    names = object_names(maniac_deluxe_client.state())
+    assert "refrigerator_v" in names, f"this is not the kitchen: {sorted(names)}"
+
+
+def test_10_maniac_deluxe_switch_character_rejects_a_stranger(
     maniac_deluxe_client: McpClient,
 ) -> None:
     """A kid who was never picked is not on the team and cannot be switched to."""
