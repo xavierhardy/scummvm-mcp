@@ -735,8 +735,36 @@ bool AgsMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 		return false;
 	}
 
+	Common::String want1 = args.asObject()["target1"]->asString();
+	Common::String want2;
+	if (args.asObject().contains("target2") && args.asObject()["target2"]->isString())
+		want2 = args.asObject()["target2"]->asString();
+
+	// "Use the key on the door" is as natural to write the other way round,
+	// and an agent that carried the key wrote it that way: target1 the thing
+	// in hand, target2 the thing in the room. Nothing is lost by reading it -
+	// the two are told apart by where they are, not by which slot they came
+	// in - and refusing it costs an agent the only key it had.
+	if (!want2.empty()) {
+		Common::Array<Common::String> itemNames;
+		Common::Array<int> itemIds;
+		collectInventory(itemNames, itemIds);
+		bool held1 = false, held2 = false;
+		const Common::String folded1 = MCP::McpBridge::normalizeActionName(want1);
+		const Common::String folded2 = MCP::McpBridge::normalizeActionName(want2);
+		for (uint i = 0; i < itemNames.size(); i++) {
+			const Common::String folded = MCP::McpBridge::normalizeActionName(itemNames[i]);
+			held1 = held1 || folded == folded1;
+			held2 = held2 || folded == folded2;
+		}
+		Target here;
+		Common::String ignored;
+		if (held1 && !held2 && resolveTarget(want2, here, ignored))
+			SWAP(want1, want2);
+	}
+
 	Target target;
-	if (!resolveTarget(args.asObject()["target1"]->asString(), target, errorOut)) {
+	if (!resolveTarget(want1, target, errorOut)) {
 		errorOut = Common::String("act: ") + errorOut;
 		return false;
 	}
@@ -747,13 +775,11 @@ bool AgsMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	// item in hand is what clicking it in the inventory window does.
 	const bool useVerb = chosen.mode == MODE_USE ||
 	                     chosen.name == "use" || chosen.name == "use_inv";
-	if (useVerb && args.asObject().contains("target2") &&
-	    args.asObject()["target2"]->isString()) {
+	if (useVerb && !want2.empty()) {
 		Common::Array<Common::String> itemNames;
 		Common::Array<int> itemIds;
 		collectInventory(itemNames, itemIds);
-		const Common::String wanted =
-			MCP::McpBridge::normalizeActionName(args.asObject()["target2"]->asString());
+		const Common::String wanted = MCP::McpBridge::normalizeActionName(want2);
 		int found = -1;
 		for (uint i = 0; i < itemNames.size(); i++) {
 			if (MCP::McpBridge::normalizeActionName(itemNames[i]) == wanted)
@@ -761,8 +787,7 @@ bool AgsMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 		}
 		if (found < 0) {
 			errorOut = Common::String::format(
-				"act: '%s' is not something being carried",
-				args.asObject()["target2"]->asString().c_str());
+				"act: '%s' is not something being carried", want2.c_str());
 			return false;
 		}
 		_G(playerchar)->activeinv = found;

@@ -244,7 +244,11 @@ def test_09_maniac_deluxe_gets_into_the_mansion(
         f"the key was not picked up: {result}"
     )
 
-    maniac_deluxe_client.act("use", FRONT_DOOR, KEY)
+    # Written the way an agent that had just picked the key up wrote it: the
+    # thing in hand first, the thing in the room second. The two are told
+    # apart by where they are rather than by which slot they arrived in, so
+    # this is read as "use the key on the door" and not refused.
+    maniac_deluxe_client.act("use", KEY, FRONT_DOOR)
     result = maniac_deluxe_client.act("walk_to", FRONT_DOOR)
     assert result["room"]["id"] == HALL, f"the front door did not open: {result}"
 
