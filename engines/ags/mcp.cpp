@@ -243,6 +243,43 @@ void AgsMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		publish(name, "hotspot", (int)i, hx, hy);
 	}
 
+	// The ways out. AGS has no doorway object: a room is left by walking off
+	// one of its four edges, and the room's script says what happens when you
+	// do. Nothing on screen marks them, so an agent reading `state` sees a
+	// room with no way out of it and guesses at coordinates - which is how a
+	// run of Maniac Mansion Deluxe spent every one of its moves in the first
+	// room, walking to the sign and back.
+	//
+	// An edge is only offered when the room has a handler for it; an edge
+	// nobody wired up leads nowhere. The point to click is on the far side of
+	// the edge at the height the character is standing at, which is where a
+	// player clicks to leave and, unlike a point picked off the edge itself,
+	// is inside the walkable strip.
+	if (room.EventHandlers) {
+		static const char *const kEdgeNames[] = {
+			"exit_left", "exit_right", "exit_down", "exit_up"
+		};
+		int px = 0, py = 0;
+		if (playerPosition(px, py)) {
+			const int step = 8;
+			for (int e = 0; e < 4; e++) {
+				if ((uint)e >= room.EventHandlers->ScriptFuncNames.size() ||
+				    room.EventHandlers->ScriptFuncNames[e].IsEmpty())
+					continue;
+				int ex = px, ey = py;
+				switch (e) {
+				case 0: ex = room.Edges.Left - step; break;
+				case 1: ex = room.Edges.Right + step; break;
+				case 2: ey = room.Edges.Bottom + step; break;
+				default: ey = room.Edges.Top - step; break;
+				}
+				ex = CLIP(ex, 0, (int)room.Width - 1);
+				ey = CLIP(ey, 0, (int)room.Height - 1);
+				publish(kEdgeNames[e], "exit", e, ex, ey);
+			}
+		}
+	}
+
 	// Characters standing in this room, the player aside.
 	for (int i = 0; i < _GP(game).numcharacters; i++) {
 		const CharacterInfo &who = _GP(game).chars[i];
@@ -801,6 +838,25 @@ Common::JSONValue *AgsMcpBridge::toolDebug(const Common::JSONValue &, Common::St
 	engine.setVal("inventory_items", mcpJsonInt(engineReady() ? _GP(game).numinvitems : 0));
 	engine.setVal("hotspots", mcpJsonInt(engineReady() ? (int)_GP(thisroom).HotspotCount : 0));
 	engine.setVal("room_objects", mcpJsonInt(engineReady() ? (int)_GP(thisroom).Objects.size() : 0));
+	if (engineReady()) {
+		// The room's own script hooks, which is where a way out of it lives
+		// when the room has one - and the four edges the engine fires them on.
+		Common::JSONArray handlers;
+		if (_GP(thisroom).EventHandlers) {
+			for (uint i = 0; i < _GP(thisroom).EventHandlers->ScriptFuncNames.size(); i++)
+				handlers.push_back(mcpJsonString(
+					_GP(thisroom).EventHandlers->ScriptFuncNames[i].GetCStr()));
+		}
+		engine.setVal("room_events", new Common::JSONValue(handlers));
+		Common::JSONObject edges;
+		edges.setVal("left", mcpJsonInt(_GP(thisroom).Edges.Left));
+		edges.setVal("right", mcpJsonInt(_GP(thisroom).Edges.Right));
+		edges.setVal("top", mcpJsonInt(_GP(thisroom).Edges.Top));
+		edges.setVal("bottom", mcpJsonInt(_GP(thisroom).Edges.Bottom));
+		edges.setVal("width", mcpJsonInt((int)_GP(thisroom).Width));
+		edges.setVal("height", mcpJsonInt((int)_GP(thisroom).Height));
+		engine.setVal("edges", new Common::JSONValue(edges));
+	}
 	out.setVal("engine", new Common::JSONValue(engine));
 
 	Common::JSONObject player;
@@ -1409,12 +1465,15 @@ Common::String AgsMcpBridge::actToolDescription() const {
 // cannot read off `state`: the way out is listed there as an ordinary thing
 // with an ordinary name, and nothing marks it as a way out.
 Common::String AgsMcpBridge::exitNote() const {
-	return "The way out of a room is one of the things in it, named like any "
-	       "other - a door, a gate, a path, a staircase - and walking to it is "
-	       "how you leave: act(verb='walk_to', target1='front_door'). Nothing "
-	       "in state() marks which things those are, so try the ones that "
-	       "sound like a way through. walk() to a point works the same way, "
-	       "and reaches the parts of a room nothing is named in.";
+	return "To leave a room, walk to the way out: act(verb='walk_to', "
+	       "target1=<name>). state() names two kinds. Anything with kind "
+	       "'exit' is an edge of the picture the room leads off - exit_left, "
+	       "exit_right, exit_up, exit_down - and walking to it goes that way. "
+	       "The rest are things in the room that happen to be doorways - a "
+	       "door, a gate, a staircase - which nothing marks, so try the ones "
+	       "that sound like a way through, opening them first if they are "
+	       "shut. walk() to a point works the same way and reaches the parts "
+	       "of a room nothing is named in.";
 }
 
 Common::String AgsMcpBridge::walkToolDescription() const {
@@ -1456,7 +1515,8 @@ void AgsMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 	obj.setVal("name", Networking::mcpProp("string",  "Name to use in act()."));
 	obj.setVal("kind", Networking::mcpProp("string",
 	    "'object' for something the room draws, 'hotspot' for a part of the "
-	    "scenery, 'character' for someone standing in it."));
+	    "scenery, 'character' for someone standing in it, 'exit' for a way out "
+	    "of the room."));
 	obj.setVal("x",    Networking::mcpProp("integer", "Where it is, in room coordinates."));
 	obj.setVal("y",    Networking::mcpProp("integer", "Where it is, in room coordinates."));
 	outputProps.setVal("objects", objectArraySchema(obj));
