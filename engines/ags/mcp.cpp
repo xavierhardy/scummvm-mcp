@@ -1225,27 +1225,6 @@ void AgsMcpBridge::pumpPendingClick() {
 		return;
 	if ((_frameCounter - _pendingFrame) < _pendingWait)
 		return;
-	// The interface first: the verb, then the thing in hand. Each is aimed at
-	// on one loop and pressed on a later one, and the pointer is left on it
-	// afterwards - a hand does not leave in the same instant it presses, and
-	// leaving at once was measured to lose the verb entirely: the walk
-	// happened and nothing was looked at.
-	if (_pendingPressIndex < _pendingPresses.size()) {
-		const Press &press = _pendingPresses[_pendingPressIndex];
-		if (!_pendingPressHovered) {
-			_pendingPressHovered = true;
-			moveCursorTo(press.x, press.y);
-			_pendingFrame = _frameCounter;
-			_pendingWait = kHoverFrames;
-			return;
-		}
-		injectMouseClick(press.x, press.y, "left", false);
-		_pendingPressHovered = false;
-		_pendingPressIndex++;
-		_pendingFrame = _frameCounter;
-		_pendingWait = kVerbFrames;
-		return;
-	}
 	// A leg of the walk is still under way. Where to aim next depends on where
 	// the camera ends up, so there is nothing to decide until it has stopped.
 	// The character's own walk flag is what says so, and not playerHasControl:
@@ -1268,6 +1247,35 @@ void AgsMcpBridge::pumpPendingClick() {
 	const bool stalled = _pendingLegs > 0 && camX == _pendingCamX && camY == _pendingCamY;
 
 	if (inFrame || stalled || _pendingLegs >= kMaxWalkLegs) {
+		// The target is in frame, so the interface can be set up for the click
+		// that is about to land on it: the verb, then the thing in hand. Each
+		// is aimed at on one loop and pressed on a later one, and the pointer
+		// is left on it afterwards - a hand does not leave in the same instant
+		// it presses, and leaving at once was measured to lose the verb
+		// entirely: the walk happened and nothing was looked at.
+		//
+		// This is after the legs, not before, and that order matters on a
+		// game whose verb is a button: a leg is a click like any other, and a
+		// leg walked with Pull already chosen pulls whatever the edge of the
+		// picture happens to hold. Measured - an agent pulled the door mat
+		// from two screens away, and the first leg spent the verb on the
+		// grass. A player walks over first and chooses the verb there.
+		if (_pendingPressIndex < _pendingPresses.size()) {
+			const Press &press = _pendingPresses[_pendingPressIndex];
+			if (!_pendingPressHovered) {
+				_pendingPressHovered = true;
+				moveCursorTo(press.x, press.y);
+				_pendingFrame = _frameCounter;
+				_pendingWait = kHoverFrames;
+				return;
+			}
+			injectMouseClick(press.x, press.y, "left", false);
+			_pendingPressHovered = false;
+			_pendingPressIndex++;
+			_pendingFrame = _frameCounter;
+			_pendingWait = kVerbFrames;
+			return;
+		}
 		// Aim first and click on a later loop: what a click means is decided
 		// against whatever the game last saw under the cursor.
 		if (!_pendingAimed) {

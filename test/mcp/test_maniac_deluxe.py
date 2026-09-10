@@ -230,7 +230,11 @@ def test_09_maniac_deluxe_gets_into_the_mansion(
     state = maniac_deluxe_client.state()
     assert state["room"]["id"] == FRONT_GARDEN, f"not in the garden: {state}"
 
-    maniac_deluxe_client.act("walk_to", DOOR_MAT)
+    # Back to the street end, so the mat is two screens away and out of frame
+    # again: the walk to it and the verb are one call, and in that order. A
+    # verb chosen before the walk is spent on the first leg of it - the grass
+    # at the edge of the picture - and the mat is never touched.
+    maniac_deluxe_client.act("walk_to", "address_sign")
     maniac_deluxe_client.act("pull", DOOR_MAT)
     names = object_names(maniac_deluxe_client.state())
     assert KEY in names, f"pulling the mat uncovered no key: {sorted(names)}"
