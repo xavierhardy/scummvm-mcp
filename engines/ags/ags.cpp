@@ -104,9 +104,31 @@ bool AGSEngine::mcpEnabled() const {
 	return _mcpBridge != nullptr && _mcpBridge->isEnabled();
 }
 
+// Loops between two servicings of the MCP server while a cutscene is being
+// skipped. Fast enough that a stream is still answered promptly - a skip is
+// over in a second or two - and rare enough that the skip is not what pays
+// for it.
+static const uint kMcpFastForwardPumpEvery = 64;
+
 void AGSEngine::mcpPump() {
 	if (_mcpBridge == nullptr || _mcpInPump)
 		return;
+	// A cutscene being skipped runs the game with the picture turned off and
+	// as fast as the machine will go - hundreds of loops a second, each of
+	// them nearly free. Servicing the server on every one of those is not
+	// free: a socket poll, and whatever the bridge looks at to decide the
+	// action is done. Measured on Maniac Mansion Deluxe's opening, that cost
+	// fifty times more than the game did and turned a skipped intro into a
+	// forty-five second wait for one. Nothing an agent asks can be answered
+	// while the game is not accepting input anyway, so during a skip the
+	// server is serviced often enough to keep a stream alive and no oftener.
+	if (AGS3::g_globals != nullptr && AGS3::g_globals->_play != nullptr &&
+	    _GP(play).fast_forward) {
+		if ((++_mcpFastForwardTick % kMcpFastForwardPumpEvery) != 0)
+			return;
+	} else {
+		_mcpFastForwardTick = 0;
+	}
 	_mcpInPump = true;
 	_mcpBridge->pump();
 	_mcpInPump = false;

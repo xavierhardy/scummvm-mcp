@@ -27,9 +27,12 @@
 #include "ags/ags.h"
 #include "ags/globals.h"
 #include "ags/shared/ac/character_info.h"
+#include "ags/engine/ac/draw.h"
+#include "ags/engine/ac/game_state.h"
 #include "ags/engine/ac/mouse.h"
 #include "ags/engine/ac/room_object.h"
 #include "ags/engine/ac/runtime_defines.h"
+#include "ags/engine/game/viewport.h"
 #include "ags/shared/ac/game_setup_struct.h"
 #include "ags/shared/game/room_struct.h"
 #include "ags/shared/gfx/bitmap.h"
@@ -40,6 +43,7 @@
 
 #include "common/events.h"
 #include "common/system.h"
+#include "common/util.h"
 
 namespace AGS3 {
 
@@ -96,6 +100,11 @@ AgsMcpBridge::AgsMcpBridge(::AGS::AGSEngine *vm) :
 	_pendingX(0),
 	_pendingY(0),
 	_pendingFrame(0),
+	_pendingMode(-1),
+	_pendingRoom(-1),
+	_pendingLegs(0),
+	_pendingCamX(0),
+	_pendingCamY(0),
 	_skipStream(false),
 	_sseTrackRoom(-1),
 	_sseTrackPosX(-1),
@@ -190,8 +199,15 @@ void AgsMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		// hotspot and is where a player is meant to stand. Most hotspots
 		// never get one, and then the mask is asked where the shape actually
 		// is.
+		//
+		// Both halves have to be set for it to be one. A point with a zero in
+		// it is the editor's own "nothing here", and Maniac Mansion Deluxe's
+		// front garden has two hotspots carrying half a point each - the front
+		// door's reads (0, 64), which walks to the left-hand edge of a room
+		// three screens wide and leaves the door untouched. The mask knows
+		// where the door is.
 		int hx = room.Hotspots[i].WalkTo.X, hy = room.Hotspots[i].WalkTo.Y;
-		if ((hx <= 0 && hy <= 0) && !hotspotPoint((int)i, hx, hy))
+		if ((hx <= 0 || hy <= 0) && !hotspotPoint((int)i, hx, hy))
 			continue;
 		publish(name, "hotspot", (int)i, hx, hy);
 	}
@@ -918,6 +934,54 @@ void AgsMcpBridge::injectMouseClick(int x, int y, const Common::String &button, 
 	}
 }
 
+// Where the camera has the room framed. The bridge only ever asks about
+// viewport zero, which is the one a game that never touched the viewport API
+// has - and none of the games here has.
+void AgsMcpBridge::cameraAt(int &x, int &y) const {
+	x = y = 0;
+	if (!engineReady())
+		return;
+	const PViewport view = _GP(play).GetRoomViewport(0);
+	if (!view)
+		return;
+	const PCamera cam = view->GetCamera();
+	if (!cam)
+		return;
+	x = cam->GetRect().Left;
+	y = cam->GetRect().Top;
+}
+
+bool AgsMcpBridge::aimAt(int roomX, int roomY, int &screenX, int &screenY) const {
+	// Without a room on screen there is no camera to ask, and the numbers are
+	// the best answer there is.
+	screenX = roomX;
+	screenY = roomY;
+	if (!engineReady())
+		return true;
+	const PViewport view = _GP(play).GetRoomViewport(0);
+	if (!view)
+		return true;
+	// Everything the bridge publishes is in the coordinates the *game data*
+	// is written in, which on a high-resolution game are half the engine's
+	// own. The viewport speaks the engine's.
+	const VpPoint pt = view->RoomToScreen(data_to_game_coord(roomX),
+	                                      data_to_game_coord(roomY), false);
+	if (pt.second < 0)
+		return true;
+	const Rect &frame = view->GetRect();
+	int x = pt.first.X, y = pt.first.Y;
+	const bool inFrame = frame.IsInside(x, y);
+	if (!inFrame) {
+		x = CLIP(x, frame.Left + kEdgeMargin, frame.Right - kEdgeMargin);
+		y = CLIP(y, frame.Top + kEdgeMargin, frame.Bottom - kEdgeMargin);
+	}
+	// And from the game's screen to the window the player clicks in, which is
+	// the inverse of the walk every real click makes (Mouse::WindowToGame).
+	screenX = _GP(GameScaling).X.ScalePt(x + _GP(play).GetMainViewport().Left);
+	screenY = _GP(GameScaling).Y.ScalePt(y + _GP(play).GetMainViewport().Top);
+	return inFrame;
+}
+
 void AgsMcpBridge::pointAndClick(int x, int y, const Verb &verb) {
 	// The verb first, because the game resolves a click against whatever the
 	// verb is at the moment the button goes down. A cursor mode can be set
@@ -931,19 +995,68 @@ void AgsMcpBridge::pointAndClick(int x, int y, const Verb &verb) {
 	// select_verb is for, and why act() does not try to do it here.
 	if (verb.mode >= 0)
 		set_cursor_mode(verb.mode);
-	moveCursorTo(x, y);
 	_pendingClick = true;
 	_pendingX = x;
 	_pendingY = y;
+	_pendingMode = verb.mode;
+	_pendingRoom = roomNumber();
+	_pendingLegs = 0;
+	cameraAt(_pendingCamX, _pendingCamY);
 	_pendingFrame = _frameCounter;
+	// Put the pointer where the click is going now, so the game has seen it
+	// arrive by the time the button goes down.
+	int screenX = 0, screenY = 0;
+	aimAt(x, y, screenX, screenY);
+	moveCursorTo(screenX, screenY);
 }
 
 void AgsMcpBridge::pumpPendingClick() {
-	if (!_pendingClick || (_frameCounter - _pendingFrame) < kPointFrames)
+	if (!_pendingClick)
 		return;
+	const uint32 wait = _pendingLegs == 0 ? kPointFrames : kLegFrames;
+	if ((_frameCounter - _pendingFrame) < wait)
+		return;
+	// A leg of the walk is still under way. Where to aim next depends on where
+	// the camera ends up, so there is nothing to decide until it has stopped.
+	// The character's own walk flag is what says so, and not playerHasControl:
+	// that one answers false for as long as a click is pending, which is the
+	// whole of this.
+	if (_pendingLegs > 0 && engineReady() && _G(playerchar)->walking != 0)
+		return;
+	// A leg walked out of the room. Whatever was aimed at is not here any more.
+	if (roomNumber() != _pendingRoom) {
+		_pendingClick = false;
+		return;
+	}
 
-	_pendingClick = false;
-	injectMouseClick(_pendingX, _pendingY, "left", false);
+	int screenX = 0, screenY = 0;
+	const bool inFrame = aimAt(_pendingX, _pendingY, screenX, screenY);
+	int camX = 0, camY = 0;
+	cameraAt(camX, camY);
+	// Out of frame, but the last leg moved the camera no closer: the room is
+	// not going to scroll any further and this is as near as the click gets.
+	const bool stalled = _pendingLegs > 0 && camX == _pendingCamX && camY == _pendingCamY;
+
+	if (inFrame || stalled || _pendingLegs >= kMaxWalkLegs) {
+		_pendingClick = false;
+		// The verb, put back: the legs were walked with the walk cursor.
+		if (_pendingMode >= 0 && _pendingLegs > 0)
+			set_cursor_mode(_pendingMode);
+		moveCursorTo(screenX, screenY);
+		injectMouseClick(screenX, screenY, "left", false);
+		return;
+	}
+
+	// One leg towards it, walked rather than acted: an action fired halfway
+	// there would land on whatever the pointer happened to be over.
+	if (_pendingMode >= 0)
+		set_cursor_mode(MODE_WALK);
+	_pendingCamX = camX;
+	_pendingCamY = camY;
+	_pendingLegs++;
+	_pendingFrame = _frameCounter;
+	moveCursorTo(screenX, screenY);
+	injectMouseClick(screenX, screenY, "left", false);
 }
 
 // ---------------------------------------------------------------------------
@@ -1097,19 +1210,35 @@ Common::String AgsMcpBridge::actToolDescription() const {
 		       "currently selected - state() reports it as current_verb, and "
 		       "select_verb changes it. The verb given here is checked against "
 		       "that one rather than setting it, because on this game a verb is "
-		       "a button that has to be pressed and noticed. " +
-		       streamingToolNote();
+		       "a button that has to be pressed and noticed. " + exitNote() +
+		       " " + streamingToolNote();
 	}
 	return "Act on something state() named. The verb is one of the ones "
 	       "state() lists; target1 is the name from state(). To use a carried "
 	       "thing on something, pass verb='use_inv' with the carried thing as "
-	       "target2. " + streamingToolNote();
+	       "target2. " + exitNote() + " " + streamingToolNote();
+}
+
+// How to leave a room, which is the one thing about an AGS game an agent
+// cannot read off `state`: the way out is listed there as an ordinary thing
+// with an ordinary name, and nothing marks it as a way out.
+Common::String AgsMcpBridge::exitNote() const {
+	return "The way out of a room is one of the things in it, named like any "
+	       "other - a door, a gate, a path, a staircase - and walking to it is "
+	       "how you leave: act(verb='walk_to', target1='front_door'). Nothing "
+	       "in state() marks which things those are, so try the ones that "
+	       "sound like a way through. walk() to a point works the same way, "
+	       "and reaches the parts of a room nothing is named in.";
 }
 
 Common::String AgsMcpBridge::walkToolDescription() const {
-	return "Go to a point, in the coordinates state() reports positions in. "
-	       "Somewhere the character cannot reach leaves it where it is. " +
-	       streamingToolNote();
+	return "Go to a point, in the coordinates state() reports positions in - "
+	       "the same ones it gives for everything in the room, so a thing's "
+	       "own x and y are somewhere to walk to. A room can be several "
+	       "screens wide: a point the picture is not showing yet is walked to "
+	       "in stages, so somewhere off the edge of the screen is still "
+	       "somewhere to go. " + exitNote() + " Somewhere the character cannot "
+	       "reach leaves it where it is. " + streamingToolNote();
 }
 
 Common::String AgsMcpBridge::skipToolDescription() const {

@@ -80,6 +80,9 @@ public:
 	bool _forceTextAA;
 	::AGS3::AgsMcpBridge *_mcpBridge = nullptr;
 	bool _mcpInPump = false;
+	// Loops counted while the game is fast-forwarding through a cutscene, so
+	// the MCP server can be serviced on a few of them rather than all.
+	uint _mcpFastForwardTick = 0;
 protected:
 	// Engine APIs
 	Common::Error run() override;

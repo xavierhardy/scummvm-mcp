@@ -75,6 +75,9 @@ protected:
 	Common::String stateToolDescription() const override;
 	Common::String actToolDescription() const override;
 	Common::String walkToolDescription() const override;
+	// The sentence that tells an agent a doorway is a thing to walk to, shared
+	// by the act and walk descriptions.
+	Common::String exitNote() const;
 	Common::String skipToolDescription() const override;
 	Common::String debugToolDescription() const override;
 	Common::JSONValue *buildDebugSchema() const override;
@@ -149,6 +152,18 @@ protected:
 	static const uint32 kPointFrames = 2;
 	// Frames a skip is given to let one keypress land.
 	static const uint32 kSkipFrames = 15;
+	// Frames a leg of a walk across a scrolling room is given before where to
+	// aim next is worked out again. The walk itself is waited for; this is
+	// only so the click has left and the character has started moving before
+	// "is it still walking?" is believed.
+	static const uint32 kLegFrames = 10;
+	// How many legs one walk may take. A room is a handful of screens wide at
+	// the very most, and each leg covers half a screen.
+	static const int kMaxWalkLegs = 12;
+	// How far inside the picture a leg is aimed. The outermost column of a
+	// room is where a great many AGS games put the walk to the next one, and
+	// a step on the way somewhere is not meant to leave the room.
+	static const int kEdgeMargin = 6;
 
 
 	// Is a room loaded and the engine far enough along to be asked?
@@ -211,13 +226,48 @@ protected:
 	void pumpPendingClick();
 	void moveCursorTo(int x, int y);
 
+	// Where a click has to land to reach a point in the room, and whether the
+	// picture is showing that point at all.
+	//
+	// Everything the bridge names is placed in room coordinates - the ones
+	// `state` reports - and a click is placed on the screen. In a room no
+	// bigger than the picture the two are the same number, which is why this
+	// went unnoticed for as long as it did. A room wider than the picture
+	// scrolls with the character, and there the two are the camera's position
+	// apart: aiming a click at a room coordinate then lands somewhere else
+	// entirely, and in Maniac Mansion Deluxe's front garden - three screens
+	// wide - walking to the door mat landed on the edge of the picture, which
+	// is that room's way back out to the street.
+	//
+	// When the point is out of frame there is no place on screen to click for
+	// it at all, and the answer is the edge of the picture in its direction:
+	// a step towards it, which scrolls the camera on and brings it nearer.
+	// The caller repeats until this says the point is in frame.
+	bool aimAt(int roomX, int roomY, int &screenX, int &screenY) const;
+	// Where the camera is in the room, for telling a leg that got somewhere
+	// from one that did not.
+	void cameraAt(int &x, int &y) const;
+
 	::AGS::AGSEngine *_vm;
 
-	// The click waiting on the pointer having been noticed, and the verb
-	// button that has to be pressed before it.
+	// The click waiting on the pointer having been noticed. Its position is in
+	// *room* coordinates: where on screen that is depends on where the camera
+	// is standing when the click finally goes out, and on a scrolling room the
+	// walk itself moves the camera - so it is worked out at the last moment,
+	// every time, rather than once here.
 	bool _pendingClick;
 	int _pendingX, _pendingY;
 	uint32 _pendingFrame;
+	// The cursor mode the click is meant to carry, or -1 on a game whose verb
+	// is a button rather than a cursor. Legs on the way there are walked, not
+	// acted with, so the mode is put back only for the click that arrives.
+	int _pendingMode;
+	// The room the walk started in: leaving it abandons whatever was aimed at,
+	// because it is not here any more.
+	int _pendingRoom;
+	// Legs walked so far, and where the camera was when the last one went out.
+	int _pendingLegs;
+	int _pendingCamX, _pendingCamY;
 
 
 	// What the stream in flight is.

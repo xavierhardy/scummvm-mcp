@@ -20,7 +20,9 @@ kid_selection_pending flag, and goes on doing so once the game has wandered off
 into its own demo -> choose_kids escapes back to the screen, names the two kids
 joining Dave, clicks their portraits, presses START and escapes through the
 intro -> the game is running outside the mansion with the chosen team on
-screen, and control can be handed round the three of them.
+screen, and control can be handed round the three of them -> out of the gate
+and the length of the front garden, which is three pictures wide and is where
+a room bigger than its picture is proved to be walkable end to end.
 """
 
 import time
@@ -35,6 +37,22 @@ KIDS = ["bernard", "razor"]
 
 #: Outside the mansion: where the intro leaves the team.
 FRONT_GATE = 1
+
+#: The front garden, which is three pictures wide and is entered at the street
+#: end - the far end from the house.
+FRONT_GARDEN = 2
+
+#: The gate's own way into the garden: its left-hand edge.
+GATE_TO_GARDEN = (5, 140)
+
+#: What the picture shows of a room at once, in room coordinates.
+SCREEN_WIDTH = 320
+
+#: How near a walk has to land to count as having arrived.
+NEAR_ENOUGH = 24
+
+DOOR_MAT = "door_mat"
+FRONT_DOOR = "front_door_v"
 
 #: The opening screen's room, and how long to wait for the game to wander out
 #: of it on its own - it takes about a minute.
@@ -127,7 +145,64 @@ def test_06_maniac_deluxe_switch_character(maniac_deluxe_client: McpClient) -> N
         assert maniac_deluxe_client.state().get("controlling") == kid
 
 
-def test_07_maniac_deluxe_switch_character_rejects_a_stranger(
+def test_07_maniac_deluxe_walks_the_length_of_a_scrolling_room(
+    maniac_deluxe_client: McpClient,
+) -> None:
+    """A thing at the far end of a room three screens wide is still walked to.
+
+    The front garden is 960 pixels of room behind a 320-pixel picture, and the
+    team comes into it at the street end, with the door mat two screens away.
+    Everything ``state`` names is named in room coordinates, and a click lands
+    on the screen: aimed at the mat's own x of 336 while the camera stands at
+    640, the click used to land on the right-hand edge of the picture - which
+    is this room's way back out to the street, and so walking to the door mat
+    walked out of the room instead. The walk is made in stages now, one per
+    screenful, until the mat is in frame.
+    """
+    state = maniac_deluxe_client.state()
+    assert state["room"]["id"] == FRONT_GATE, f"not at the gate: {state}"
+    # Out of the gate and into the garden, which is entered at its far end.
+    result = maniac_deluxe_client.walk(*GATE_TO_GARDEN)
+    assert result["room"]["id"] == FRONT_GARDEN, f"never left the gate: {result}"
+
+    state = maniac_deluxe_client.state()
+    mat = next((o for o in state["objects"] if o["name"] == DOOR_MAT), None)
+    assert mat is not None, f"no door mat in the garden: {object_names(state)}"
+    assert state["position"]["x"] - mat["x"] > SCREEN_WIDTH, (
+        f"the mat is meant to start off screen: {state['position']} vs {mat}"
+    )
+
+    result = maniac_deluxe_client.act("walk_to", DOOR_MAT)
+    assert result["room"]["id"] == FRONT_GARDEN, (
+        f"walking to the door mat left the garden: {result}"
+    )
+    assert abs(result["position"]["x"] - mat["x"]) <= NEAR_ENOUGH, (
+        f"not at the door mat: {result['position']} vs {mat}"
+    )
+
+
+def test_08_maniac_deluxe_a_half_written_walk_to_point_is_not_used(
+    maniac_deluxe_client: McpClient,
+) -> None:
+    """The front door is where the door is, not at the room's left-hand edge.
+
+    Its hotspot carries a WalkTo point of (0, 64) - half a point, which is the
+    editor's way of having none - and taking that literally sent the walk to
+    the far edge of a room three screens wide. A hotspot needs both halves of
+    the point before it is believed; otherwise its shape in the room's mask
+    says where it is.
+    """
+    state = maniac_deluxe_client.state()
+    door = next((o for o in state["objects"] if o["name"] == FRONT_DOOR), None)
+    assert door is not None, f"no front door in the garden: {object_names(state)}"
+    mat = next((o for o in state["objects"] if o["name"] == DOOR_MAT), None)
+    assert mat is not None, f"no door mat in the garden: {object_names(state)}"
+    assert abs(door["x"] - mat["x"]) <= SCREEN_WIDTH, (
+        f"the door is not by its own mat: {door} vs {mat}"
+    )
+
+
+def test_09_maniac_deluxe_switch_character_rejects_a_stranger(
     maniac_deluxe_client: McpClient,
 ) -> None:
     """A kid who was never picked is not on the team and cannot be switched to."""

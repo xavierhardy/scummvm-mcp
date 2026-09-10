@@ -50,8 +50,13 @@ static const uint32 kLabelFrames  = 60;   // longest wait for a portrait's line
 static const uint32 kClickFrames  = 12;   // between a click and reading its effect
 static const uint32 kStartFrames  = 240;  // START -> the game leaves the title screen
 static const uint32 kIntroFrames  = 7200; // ceiling on sitting through the opening
-static const uint32 kEscapeGap    = 40;
-static const int    kMaxEscapes   = 24;
+// The opening is not one cutscene but several - four rooms, and a run of
+// scenes inside them - and each takes an escape of its own, so they are sent
+// one after another until the game hands control over. A dozen does it. The
+// budget is a stop for a game that is not listening, not a pace; what the
+// escaping is actually waiting for is the verb bar coming back.
+static const uint32 kEscapeGap    = 8;
+static const int    kMaxEscapes   = 60;
 // Aborting the demo the game plays itself is not the same as skipping through
 // a cutscene, and wants a slower hand. An escape sent while a scene of the
 // demo is still playing skips that scene rather than the demo, so a rapid
@@ -674,11 +679,11 @@ bool AgsMcpBridgeManiacDeluxe::pumpStreamGameEarly() {
 		break;
 
 	case kSkipIntro:
-		// Escape out of the opening scene, exactly as the skip tool does,
-		// until the game puts its verb bar back - which is the game itself
-		// saying the story is over and the player is in charge. Giving up on
-		// the ceiling is not a failure: the game is running, it is just still
-		// telling its story.
+		// Escape out of the opening, one press after another as fast as the
+		// game reads them, until it puts its verb bar back - which is the game
+		// itself saying the story is over and the player is in charge. Giving
+		// up on the ceiling is not a failure: the game is running, it is just
+		// still telling its story.
 		if (interfaceUp())
 			_phase = kIdle;
 		else if (_frameCounter - _phaseFrame >= kIntroFrames)
