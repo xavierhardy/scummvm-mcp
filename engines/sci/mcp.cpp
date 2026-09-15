@@ -77,6 +77,8 @@ SciMcpBridge::SciMcpBridge(SciEngine *vm) :
 	_pendingY(0),
 	_pendingFrame(0),
 	_clickSentFrame(0),
+	_lastRoom(-1),
+	_roomFrame(0),
 	_skipStream(false),
 	_ssePreScore(-1),
 	_sseTrackRoom(-1),
@@ -193,6 +195,11 @@ bool SciMcpBridge::playerHasControl() const {
 	if (onTitleCard() || inConversation())
 		return false;
 	return userInputOn() || _vm->mcpCursorView() == kGabrielKnightArrowView;
+}
+
+bool SciMcpBridge::busyCursor() const {
+	const int view = _vm->mcpCursorView();
+	return view == kGabrielKnightWaitView || view == kGabrielKnightWaitView2;
 }
 
 bool SciMcpBridge::inConversation() const {
@@ -508,6 +515,131 @@ void SciMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		target.name = sciDisambiguate(name, occurrence);
 		out.push_back(target);
 	}
+
+	if (isGabrielKnight()) {
+		// Most of what Gabriel Knight lets a player click is never drawn: the
+		// telescopes on the overlook, the railing, the ways off each edge.
+		// Those are Features, in the game's features set, and the exits of
+		// the rooms that leave by an area rather than a door are in a set of
+		// their own. Without them the overlook was a room with nothing in it
+		// and no way out, and the run stood there.
+		collectSetMembers(global(kGabrielKnightFeatures), roomOffsetX, roomOffsetY, seen, out);
+		collectSetMembers(global(kGabrielKnightExits), roomOffsetX, roomOffsetY, seen, out);
+	}
+}
+
+reg_t SciMcpBridge::setElements(reg_t set) const {
+	EngineState *s = _vm->getEngineState();
+	if (s == nullptr || s->_segMan == nullptr || set.getSegment() == 0 || !s->_segMan->isObject(set))
+		return NULL_REG;
+	const Object *object = s->_segMan->getObject(set);
+	if (object == nullptr || object->locateVarSelector(s->_segMan, SELECTOR(elements)) < 0)
+		return NULL_REG;
+	const reg_t list = readSelector(s->_segMan, set, SELECTOR(elements));
+	if (list.isNull() || s->_segMan->getSegmentType(list.getSegment()) != SEG_TYPE_LISTS)
+		return NULL_REG;
+	return list;
+}
+
+void SciMcpBridge::collectSetMembers(reg_t set, int offsetX, int offsetY,
+                                     Common::Array<Common::String> &seen,
+                                     Common::Array<Target> &out) const {
+	EngineState *s = _vm->getEngineState();
+	const reg_t listReg = setElements(set);
+	if (listReg.isNull())
+		return;
+	List *list = s->_segMan->lookupList(listReg);
+	if (list == nullptr)
+		return;
+	reg_t nodeReg = list->first;
+	for (int guard = 0; guard < 512 && !nodeReg.isNull(); guard++) {
+		if (s->_segMan->getSegmentType(nodeReg.getSegment()) != SEG_TYPE_NODES)
+			break;
+		const Node *node = s->_segMan->lookupNode(nodeReg, false);
+		if (node == nullptr)
+			break;
+		const reg_t object = node->value;
+		nodeReg = node->succ;
+		if (!s->_segMan->isObject(object))
+			continue;
+		bool already = false;
+		for (uint i = 0; i < out.size(); i++)
+			already = already || out[i].object == object;
+		if (already)
+			continue;
+
+		Common::String script = objectName(object);
+		// The game's own convention for a hotspot is a leading x before the
+		// thing's name - "xcoatRack", "xdoorMat" - which names nothing.
+		if (script.size() > 1 && script[0] == 'x' && script[1] >= 'a' && script[1] <= 'z')
+			script = Common::String(script.c_str() + 1);
+		if (sciIsInternalName(script))
+			continue;
+		const Common::String name = sciObjectName(script);
+		if (name.empty())
+			continue;
+
+		Target target;
+		target.object = object;
+		target.bounds = Common::Rect(selector(object, SELECTOR(nsLeft), 0),
+		                             selector(object, SELECTOR(nsTop), 0),
+		                             selector(object, SELECTOR(nsRight), 0),
+		                             selector(object, SELECTOR(nsBottom), 0));
+		if (target.bounds.isValidRect() && !target.bounds.isEmpty()) {
+			target.x = (target.bounds.left + target.bounds.right) / 2;
+			target.y = (target.bounds.top + target.bounds.bottom) / 2;
+		} else {
+			// No rectangle: the point the feature answers at is its own x/y.
+			target.x = selector(object, SELECTOR(x), -1);
+			target.y = selector(object, SELECTOR(y), -1);
+			if (target.x <= 0 && target.y <= 0)
+				continue;
+		}
+		if (target.x < 0 || target.y < 0)
+			continue;
+		target.x += offsetX;
+		target.y += offsetY;
+
+		uint occurrence = 0;
+		for (uint i = 0; i < seen.size(); i++) {
+			if (seen[i] == name)
+				occurrence++;
+		}
+		seen.push_back(name);
+		target.name = sciDisambiguate(name, occurrence);
+		out.push_back(target);
+	}
+}
+
+void SciMcpBridge::collectInventory(Common::Array<Common::String> &out) const {
+	// Gabriel Knight's inventory holds every item in the game; what Gabriel
+	// has is what names him as its owner.
+	EngineState *s = _vm->getEngineState();
+	const reg_t listReg = setElements(global(kGabrielKnightInventory));
+	const reg_t ego = global(kGlobalVarEgo);
+	if (!isGabrielKnight() || listReg.isNull() || ego.isNull())
+		return;
+	List *list = s->_segMan->lookupList(listReg);
+	reg_t nodeReg = list != nullptr ? list->first : NULL_REG;
+	for (int guard = 0; guard < 512 && !nodeReg.isNull(); guard++) {
+		if (s->_segMan->getSegmentType(nodeReg.getSegment()) != SEG_TYPE_NODES)
+			break;
+		const Node *node = s->_segMan->lookupNode(nodeReg, false);
+		if (node == nullptr)
+			break;
+		const reg_t item = node->value;
+		nodeReg = node->succ;
+		if (!s->_segMan->isObject(item))
+			continue;
+		const Object *object = s->_segMan->getObject(item);
+		if (object == nullptr || object->locateVarSelector(s->_segMan, SELECTOR(owner)) < 0)
+			continue;
+		if (readSelector(s->_segMan, item, SELECTOR(owner)) != ego)
+			continue;
+		const Common::String name = sciObjectName(objectName(item));
+		if (!name.empty())
+			out.push_back(name);
+	}
 }
 
 bool SciMcpBridge::resolveTarget(const Common::String &name, Target &out,
@@ -619,6 +751,15 @@ Common::JSONValue *SciMcpBridge::toolState(const Common::JSONValue &, Common::St
 	_messages.clear();
 	out.setVal("messages", new Common::JSONValue(messages));
 
+	if (isGabrielKnight()) {
+		Common::Array<Common::String> carried;
+		collectInventory(carried);
+		Common::JSONArray inventory;
+		for (uint i = 0; i < carried.size(); i++)
+			inventory.push_back(mcpJsonString(carried[i]));
+		out.setVal("inventory", new Common::JSONValue(inventory));
+	}
+
 	addQuestion(out);
 	return new Common::JSONValue(out);
 }
@@ -690,6 +831,12 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 		errorOut = "act: the game is not accepting input right now";
 		return false;
 	}
+
+	// A city map has no verb cursor to reach: it shows the plain arrow and a
+	// click on a place goes there. Cycling for a verb there spent two dozen
+	// right-clicks on the map and then clicked anyway.
+	if (isGabrielKnight() && _vm->mcpCursorView() == kGabrielKnightArrowView)
+		entry = nullptr;
 
 	_skipStream = false;
 	pointAndClick(target.x, target.y, right, entry);
@@ -1051,6 +1198,13 @@ void SciMcpBridge::pumpPendingClick() {
 
 	if ((_frameCounter - _pendingFrame) < kPointFrames)
 		return;
+	// A room that has only just come up drops what is sent into it - the city
+	// map dropped a click sent the moment it arrived, and the action came back
+	// having done nothing. While it is busy the game says so with the cursor
+	// it shows, which is the hourglass.
+	if (isGabrielKnight() &&
+	    ((_frameCounter - _roomFrame) < kGabrielKnightRoomSettleFrames || busyCursor()))
+		return;
 	_pendingClick = false;
 	_clickSentFrame = _frameCounter;
 	injectMouseClick(_pendingX, _pendingY, _pendingRight ? "right" : "left", false);
@@ -1115,6 +1269,14 @@ int SciMcpBridge::currentRoomForMessages() const {
 // ---------------------------------------------------------------------------
 
 void SciMcpBridge::pumpGame() {
+	// When the room last changed, so a click is not sent into a room that has
+	// only just come up: the city map dropped one sent on arrival, and the
+	// action came back having done nothing at all.
+	const int room = roomNumber();
+	if (room != _lastRoom) {
+		_lastRoom = room;
+		_roomFrame = _frameCounter;
+	}
 	pumpPendingClick();
 }
 

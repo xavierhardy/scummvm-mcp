@@ -230,11 +230,16 @@ private:
 	bool onTitleCard() const;
 	// Gabriel Knight's conversation screen, portraits and topics.
 	bool inConversation() const;
+	// The hourglass Gabriel Knight shows while it is busy.
+	bool busyCursor() const;
 	// The room this action moved to has put its own things up.
 	bool roomSettled() const;
 	static const uint32 kGabrielKnightRoomFrames = 400;
 	// The cursor a city map shows while it waits for a click.
 	static const int kGabrielKnightArrowView = 999;
+	// The two it shows while a room is loading or a scene is playing.
+	static const int kGabrielKnightWaitView = 996;
+	static const int kGabrielKnightWaitView2 = 997;
 	// The game's own User object says input and controls are on.
 	bool userInputOn() const;
 	// Script coordinates, which is what state() reports, to the pixels the
@@ -259,6 +264,20 @@ private:
 	reg_t castList() const;
 	// Everything in the cast an agent could act on, names disambiguated.
 	void collectTargets(Common::Array<Target> &out) const;
+	// The list inside a Set object, or a null reference when it is not one.
+	reg_t setElements(reg_t set) const;
+	// The members of a set of Features, named and placed, that are not already
+	// in *out*.
+	void collectSetMembers(reg_t set, int offsetX, int offsetY,
+	                       Common::Array<Common::String> &seen,
+	                       Common::Array<Target> &out) const;
+	// What the player character is carrying, by name.
+	void collectInventory(Common::Array<Common::String> &out) const;
+	// Gabriel Knight's own globals: its Features, its area exits, and its
+	// inventory - read off the running game, not documented anywhere.
+	static const int kGabrielKnightInventory = 9;
+	static const int kGabrielKnightFeatures = 32;
+	static const int kGabrielKnightExits = 206;
 	// Resolve a name (or a numeric index into the snapshot) to a target.
 	bool resolveTarget(const Common::String &name, Target &out, Common::String &errorOut) const;
 
@@ -300,7 +319,12 @@ private:
 	// When the last queued click went out, so an action is not read as done
 	// before the game has had the cycles to react to it.
 	uint32 _clickSentFrame;
-	static const uint32 kGabrielKnightReactFrames = 30;
+	// The room the game was in when it was last pumped, and when it arrived.
+	int _lastRoom;
+	uint32 _roomFrame;
+	// Cycles a new room is given before a click is sent into it.
+	static const uint32 kGabrielKnightRoomSettleFrames = 200;
+	static const uint32 kGabrielKnightReactFrames = 60;
 
 	// What the stream in flight is: an action to see through, or a single
 	// Escape whose effect is reported after a short fixed window.

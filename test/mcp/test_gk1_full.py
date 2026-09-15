@@ -9,6 +9,8 @@ agent does on Day 1: take things off the counter, ask Grace about something
 and hear the answer, leave, and go somewhere on the map.
 """
 
+import time
+
 import pytest
 
 from mcp_client import McpClient
@@ -23,6 +25,21 @@ CITY_MAP = 200
 
 def _names(state: dict) -> list[str]:
     return [entry["name"] for entry in state.get("objects") or []]
+
+
+def _travel(client: McpClient, place: str, tries: int = 4) -> dict:
+    """Click a place on the city map, and give the map a moment if it was busy.
+
+    The map takes its clicks through a loop of its own and drops one that
+    arrives while it is still coming up; a player who clicked too early clicks
+    again, and so does this.
+    """
+    for _ in range(tries):
+        result = client.act("use", place)
+        if result.get("room", {}).get("changed"):
+            return result
+        time.sleep(2)
+    raise AssertionError(f"the map never went to {place}: {result}")
 
 
 def _choice(state: dict, label: str) -> int:
@@ -54,6 +71,28 @@ def test_02_taking_something_off_the_counter(gk1_full_walk_client: McpClient) ->
     result = gk1_full_walk_client.act("take", "magnifying_glass")
     assert "magnifying_glass" in (result.get("objects_gone") or []), result
     assert (result.get("score") or {}).get("to", 0) > 0, result
+    # What he is carrying is what names him as its owner.
+    assert "mag_glass" in (gk1_full_walk_client.state().get("inventory") or []) or (
+        "magnifying_glass" in (gk1_full_walk_client.state().get("inventory") or [])
+    ), gk1_full_walk_client.state().get("inventory")
+
+
+def test_02b_the_things_that_are_never_drawn_are_there_too(
+    gk1_full_walk_client: McpClient,
+) -> None:
+    """Most of what this game lets a player click is a hotspot, not a picture.
+
+    The shop's door mat, its ladder, its phone: none of them is drawn as a
+    thing of its own, so a snapshot of what the interpreter draws left them
+    out - and the overlook, which is nothing but hotspots, came back as an
+    empty room with no way out.
+    """
+    names = _names(gk1_full_walk_client.state())
+    for expected in ("door_mat", "ladder", "phone"):
+        assert expected in names, names
+    looked = gk1_full_walk_client.act("look_at", "door_mat")
+    said = " ".join(n.get("text", "") for n in gk1_full_walk_client.last_notifications)
+    assert "door" in said.lower(), (looked, said)
 
 
 def test_03_asking_grace_about_herself(gk1_full_walk_client: McpClient) -> None:
@@ -86,7 +125,16 @@ def test_04_out_of_the_shop_and_across_the_map(gk1_full_walk_client: McpClient) 
     assert "jack_square" in (out.get("objects_appeared") or []), out
     assert out.get("can_act"), out
 
-    there = gk1_full_walk_client.act("use", "jack_square")
+    over = _travel(gk1_full_walk_client, "jack_over")
+    # The overlook: four telescopes, a railing and three ways off it, none of
+    # them drawn. The way back is one of those ways.
+    overlook = _names(gk1_full_walk_client.state())
+    for expected in ("binoc1", "railing", "south_exit"):
+        assert expected in overlook, (over, overlook)
+    back = gk1_full_walk_client.act("walk_to", "south_exit")
+    assert back["room"]["id"] == CITY_MAP, (over, back)
+
+    there = _travel(gk1_full_walk_client, "jack_square")
     # The square has more than one way in, and which one the map drops Gabriel
     # at is the game's choice; what matters is that he is somewhere with
     # things in it, and no longer on the map.
