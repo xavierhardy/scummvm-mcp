@@ -239,6 +239,10 @@ private:
 	// The room's things as last seen, so a room still being built reads as
 	// activity rather than as settled.
 	Common::String _sseTrackThings;
+	// When the room last changed, and how long a new room may take to put up
+	// its boxes before it is taken to have none.
+	uint32 _sseTrackRoomFrame = 0;
+	static const uint32 kRoomFillFrames = 100;
 };
 
 } // End of namespace AGOS

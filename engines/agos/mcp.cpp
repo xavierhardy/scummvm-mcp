@@ -1104,6 +1104,7 @@ void AgosMcpBridge::snapshotPreAction() {
 	_sseTrackRoom = _ssePreRoom;
 	_sseTrackSteps = _steps.size();
 	_sseTrackThings.clear();
+	_sseTrackRoomFrame = _frameCounter;
 	for (uint i = 0; isSimon1() && i < _ssePreTargets.size(); i++)
 		_sseTrackThings += _ssePreTargets[i] + ",";
 }
@@ -1180,7 +1181,16 @@ bool AgosMcpBridge::isActionDone() const {
 	// stopped to ask for something: an answer, a second thing, the panel.
 	if (choicePending() || filePanelOpen() || secondTargetPending())
 		return true;
-	return _vm->_mcpWaitingForInput && _vm->_mouseHideCount == 0 && !_vm->getBitFlag(11);
+	if (!_vm->_mcpWaitingForInput || _vm->_mouseHideCount != 0 || _vm->getBitFlag(11))
+		return false;
+	// A new room takes input before it has put up its boxes, and while
+	// recording that gap outlasted the settle: every room change came back
+	// with nothing appeared. So a new room with nothing in it yet is not done,
+	// for as long as a room could reasonably take to fill.
+	if (roomNumber() != _ssePreRoom && _sseTrackThings.empty() &&
+	    _frameCounter - _sseTrackRoomFrame < kRoomFillFrames)
+		return false;
+	return true;
 }
 
 bool AgosMcpBridge::hasPendingQuestion() const {
@@ -1211,6 +1221,8 @@ void AgosMcpBridge::pumpStreamTrack() {
 			things += targets[i].name + ",";
 	}
 	if (room != _sseTrackRoom || _steps.size() != _sseTrackSteps || things != _sseTrackThings) {
+		if (room != _sseTrackRoom)
+			_sseTrackRoomFrame = _frameCounter;
 		_sseTrackRoom = room;
 		_sseTrackSteps = _steps.size();
 		_sseTrackThings = things;
