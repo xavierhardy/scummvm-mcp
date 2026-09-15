@@ -130,6 +130,11 @@ def find_object_with_verb(state: dict, verb: str) -> str | None:
 #: the rest arrive here mid-film and have to be waited out.
 READY_TIMEOUT_SECS = 90.0
 READY_POLL_SECS = 3.0
+#: The openings that are longer than that, and how long each really is.
+#: Gabriel Knight's runs a logo, a title card and a scene outside the shop and
+#: inside it before Gabriel is the player's - about a hundred seconds headless,
+#: none of which Escape shortens.
+READY_TIMEOUT_OVERRIDES: dict[str, float] = {"gk1_full": 240.0}
 
 
 def wait_until_taking_input(
@@ -150,7 +155,8 @@ def wait_until_taking_input(
     """
     import pytest
 
-    deadline = time.time() + READY_TIMEOUT_SECS
+    budget = READY_TIMEOUT_OVERRIDES.get(fixture, READY_TIMEOUT_SECS)
+    deadline = time.time() + budget
     state: dict = {}
     while time.time() < deadline:
         state = client.state()
@@ -165,7 +171,7 @@ def wait_until_taking_input(
             pass
         time.sleep(READY_POLL_SECS)
     pytest.skip(
-        f"{fixture} was still in its opening after {READY_TIMEOUT_SECS:.0f}s "
+        f"{fixture} was still in its opening after {budget:.0f}s "
         f"(room {(state.get('room') or {}).get('id')}, can_act "
         f"{state.get('can_act')}, "
         f"{len(state.get('objects') or [])} objects)"

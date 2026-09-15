@@ -31,6 +31,12 @@
 #include "sci/engine/selector.h"
 #include "sci/engine/state.h"
 #include "sci/engine/vm.h"
+#include "sci/graphics/screen.h"
+#ifdef ENABLE_SCI32
+#include "sci/graphics/frameout.h"
+#include "sci/graphics/plane32.h"
+#include "sci/graphics/screen_item32.h"
+#endif
 
 #include "common/events.h"
 #include "common/system.h"
@@ -70,6 +76,7 @@ SciMcpBridge::SciMcpBridge(SciEngine *vm) :
 	_pendingX(0),
 	_pendingY(0),
 	_pendingFrame(0),
+	_clickSentFrame(0),
 	_skipStream(false),
 	_ssePreScore(-1),
 	_sseTrackRoom(-1),
@@ -147,7 +154,13 @@ bool SciMcpBridge::egoPosition(int &x, int &y) const {
 		return false;
 	x = selector(ego, SELECTOR(x), -1);
 	y = selector(ego, SELECTOR(y), -1);
-	return x >= 0 && y >= 0;
+	if (x < 0 || y < 0)
+		return false;
+	int dx = 0, dy = 0;
+	roomOffset(dx, dy);
+	x += dx;
+	y += dy;
+	return true;
 }
 
 bool SciMcpBridge::egoMoving() const {
@@ -164,7 +177,133 @@ bool SciMcpBridge::egoMoving() const {
 }
 
 bool SciMcpBridge::playerHasControl() const {
-	return engineReady() && !egoMoving() && !_pendingClick;
+	if (!engineReady() || egoMoving() || _pendingClick)
+		return false;
+	if (!isGabrielKnight())
+		return true;
+	// Gabriel Knight opens on a logo, a title card of buttons and a minute of
+	// scripted scene, and every one of them looked playable here: nothing is
+	// walking, and each has things on screen to name. What the game itself
+	// says is whether its User object has input and controls switched on -
+	// off throughout a scene. The title card has input on for its buttons,
+	// and is the one screen that is not the game. The city maps take their
+	// clicks through a loop of their own with the User object's input off,
+	// and say so the way they say it to a player: the plain arrow, where a
+	// scene shows the hourglass.
+	if (onTitleCard() || inConversation())
+		return false;
+	return userInputOn() || _vm->mcpCursorView() == kGabrielKnightArrowView;
+}
+
+bool SciMcpBridge::inConversation() const {
+	// The screen of portraits and topics. Input is on there for the whole of
+	// it, lines being spoken included, so it never says when an answer is
+	// over: that is when the topics are back, or the screen has gone.
+	return isGabrielKnight() && roomName() == "interrogation";
+}
+
+bool SciMcpBridge::onTitleCard() const {
+	Target play;
+	Common::String unused;
+	return isGabrielKnight() && resolveTarget("play_butt", play, unused);
+}
+
+bool SciMcpBridge::usesDialogQuestions() const {
+	// Gabriel Knight's conversations are a list of topics to pick from.
+	return isGabrielKnight();
+}
+
+bool SciMcpBridge::isGabrielKnight() const {
+	// The full game only. The demo is a different interpreter (SCI1.1): it
+	// draws at the scripts' own size, has no title card or conversation
+	// screen, and plays as it always did.
+	return Common::String(_vm->getGameIdStr()) == "gk1";
+}
+
+bool SciMcpBridge::userInputOn() const {
+	EngineState *s = _vm->getEngineState();
+	const reg_t user = global(kGlobalVarUser);
+	if (s == nullptr || s->_segMan == nullptr || s->_segMan->getObject(user) == nullptr)
+		return true;
+	// The same two selectors GuestAdditions::userHasControl() reads to decide
+	// whether the game may be saved from the launcher.
+	const int input = selector(user, SELECTOR(input), selector(user, SELECTOR(canInput), 1));
+	const int controls = selector(user, SELECTOR(controls), 1);
+	return input != 0 && controls != 0;
+}
+
+void SciMcpBridge::roomOffset(int &dx, int &dy) const {
+	dx = dy = 0;
+#ifdef ENABLE_SCI32
+	// Gabriel Knight draws its rooms on a plane below the band the icon bar
+	// drops into, and everything in a room - the player, the things, the
+	// hotspots - is placed relative to that plane. A click aimed at those
+	// coordinates as if they were the screen's landed a line too high: "look
+	// at the newspaper" read the description of the shop. The room's plane is
+	// the one the player character is drawn on.
+	if (!isGabrielKnight() || getSciVersion() < SCI_VERSION_2 || _vm->_gfxFrameout == nullptr)
+		return;
+	const reg_t ego = global(kGlobalVarEgo);
+	if (ego.isNull())
+		return;
+	const PlaneList &planes = _vm->_gfxFrameout->getPlanes();
+	for (uint i = 0; i < planes.size(); i++) {
+		if (planes[i] == nullptr || planes[i]->_screenItemList.findByObject(ego) == nullptr)
+			continue;
+		dx = planes[i]->_gameRect.left;
+		dy = planes[i]->_gameRect.top;
+		return;
+	}
+#endif
+}
+
+bool SciMcpBridge::drawnCentre(reg_t object, int &x, int &y) const {
+#ifdef ENABLE_SCI32
+	// Gabriel Knight's things carry no on-screen rectangle of their own, and
+	// their x/y is an anchor, not what is drawn: the title card's words sit a
+	// line below their buttons' anchors, so a click aimed at PLAY landed on
+	// RESTORE and opened a dialog nothing headless can close. What the
+	// interpreter knows exactly is where it drew each of them - the screen
+	// item's rectangle - so aim at the middle of that, in script coordinates.
+	if (!isGabrielKnight() || getSciVersion() < SCI_VERSION_2 || _vm->_gfxFrameout == nullptr)
+		return false;
+	const GfxFrameout *frameout = _vm->_gfxFrameout;
+	if (frameout->getScreenWidth() <= 0 || frameout->getScreenHeight() <= 0)
+		return false;
+	const PlaneList &planes = frameout->getPlanes();
+	for (uint i = 0; i < planes.size(); i++) {
+		if (planes[i] == nullptr)
+			continue;
+		const ScreenItem *item = planes[i]->_screenItemList.findByObject(object);
+		if (item == nullptr || item->_deleted || !item->_screenRect.isValidRect() ||
+		    item->_screenRect.isEmpty())
+			continue;
+		const int cx = (item->_screenRect.left + item->_screenRect.right) / 2;
+		const int cy = (item->_screenRect.top + item->_screenRect.bottom) / 2;
+		x = cx * frameout->getScriptWidth() / frameout->getScreenWidth();
+		y = cy * frameout->getScriptHeight() / frameout->getScreenHeight();
+		return true;
+	}
+#endif
+	return false;
+}
+
+void SciMcpBridge::toScreen(int &x, int &y) const {
+#ifdef ENABLE_SCI32
+	// The SCI32 games take the pointer in screen pixels and hand it to their
+	// scripts scaled to script coordinates (EventManager::getScummVMEvent),
+	// while everything the bridge reports is in script coordinates. Where the
+	// two differ - Gabriel Knight scripts at 320x200 on a 640x480 screen -
+	// a click sent unscaled landed up and to the left of what it was aimed at:
+	// on the title card, nowhere near PLAY.
+	if (getSciVersion() >= SCI_VERSION_2 && _vm->_gfxFrameout != nullptr) {
+		const GfxFrameout *frameout = _vm->_gfxFrameout;
+		if (frameout->getScriptWidth() > 0 && frameout->getScriptHeight() > 0) {
+			x = x * frameout->getScreenWidth() / frameout->getScriptWidth();
+			y = y * frameout->getScreenHeight() / frameout->getScriptHeight();
+		}
+	}
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +427,11 @@ const SciMcpBridge::VerbCursor *SciMcpBridge::verbEntry(const Common::String &ve
 	if (verbs == nullptr)
 		return nullptr;
 	for (uint i = 0; i < count; i++) {
-		if (verb == verbs[i].verb)
+		// Both sides folded the same way: the caller's word has been through
+		// normalizeActionName(), which reads "take" as "pick_up", and a table
+		// entry compared as written refused the verb it lists.
+		if (verb == verbs[i].verb ||
+		    verb == MCP::McpBridge::normalizeActionName(verbs[i].verb))
 			return &verbs[i];
 	}
 	return nullptr;
@@ -306,6 +449,8 @@ void SciMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		return;
 
 	Common::Array<Common::String> seen;
+	int roomOffsetX = 0, roomOffsetY = 0;
+	roomOffset(roomOffsetX, roomOffsetY);
 	reg_t nodeReg = cast->first;
 	// The cast is a linked list the interpreter walks every cycle; walking it
 	// with a bound rather than to its end keeps a corrupt list from hanging
@@ -340,9 +485,16 @@ void SciMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		// its feet. Clicking there is clicking the floor in front of it, so
 		// aim at the middle of what is drawn whenever the game says what that
 		// is.
-		if (target.bounds.isValidRect() && !target.bounds.isEmpty()) {
+		if (isGabrielKnight() && drawnCentre(object, target.x, target.y)) {
+			// Where it was drawn, which is already in whole-screen terms.
+		} else if (target.bounds.isValidRect() && !target.bounds.isEmpty()) {
 			target.x = (target.bounds.left + target.bounds.right) / 2;
 			target.y = (target.bounds.top + target.bounds.bottom) / 2;
+			target.x += roomOffsetX;
+			target.y += roomOffsetY;
+		} else {
+			target.x += roomOffsetX;
+			target.y += roomOffsetY;
 		}
 		if (target.x < 0 || target.y < 0)
 			continue;
@@ -467,6 +619,7 @@ Common::JSONValue *SciMcpBridge::toolState(const Common::JSONValue &, Common::St
 	_messages.clear();
 	out.setVal("messages", new Common::JSONValue(messages));
 
+	addQuestion(out);
 	return new Common::JSONValue(out);
 }
 
@@ -479,6 +632,14 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	    !args.asObject()["target1"]->isString()) {
 		errorOut = "act: a string 'target1' is required";
 		return false;
+	}
+	{
+		Common::Array<Choice> waiting;
+		collectChoices(waiting);
+		if (!waiting.empty()) {
+			errorOut = "act: a question is waiting - pick a topic with answer(id), see state.question";
+			return false;
+		}
 	}
 	Common::String verb = "use";
 	if (args.asObject().contains("verb") && args.asObject()["verb"]->isString())
@@ -520,6 +681,12 @@ bool SciMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	// caller learns it; answering "not accepting input" instead sends it away
 	// to wait for a moment that would not have helped.
 	if (!playerHasControl()) {
+		Common::Array<Choice> waiting;
+		collectChoices(waiting);
+		if (!waiting.empty()) {
+			errorOut = "act: a question is waiting - pick a topic with answer(id), see state.question";
+			return false;
+		}
 		errorOut = "act: the game is not accepting input right now";
 		return false;
 	}
@@ -540,6 +707,14 @@ bool SciMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &error
 		errorOut = "walk: integer 'x' and 'y' are required";
 		return false;
 	}
+	{
+		Common::Array<Choice> waiting;
+		collectChoices(waiting);
+		if (!waiting.empty()) {
+			errorOut = "walk: a question is waiting - pick a topic with answer(id), see state.question";
+			return false;
+		}
+	}
 	if (!playerHasControl()) {
 		errorOut = "walk: the game is not accepting input right now";
 		return false;
@@ -553,17 +728,103 @@ bool SciMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &error
 	return true;
 }
 
-bool SciMcpBridge::toolAnswer(const Common::JSONValue &, Common::String &errorOut) {
-	// Registered only when the game asks questions; nothing here does yet.
-	errorOut = "answer: this game does not put a list of things to say to the "
-	           "player";
-	return false;
+bool SciMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &errorOut) {
+	if (isStreaming()) {
+		errorOut = "answer: another action is already in progress";
+		return false;
+	}
+	Common::Array<Choice> choices;
+	collectChoices(choices);
+	if (choices.empty()) {
+		errorOut = "answer: no question is waiting";
+		return false;
+	}
+	if (!args.isObject() || !args.asObject().contains("id") || !args.asObject()["id"]->isIntegerNumber()) {
+		errorOut = "answer: an integer 'id' is required";
+		return false;
+	}
+	const int id = (int)args.asObject()["id"]->asIntegerNumber();
+	if (id < 1 || id > (int)choices.size()) {
+		errorOut = Common::String::format("answer: id must be between 1 and %u", choices.size());
+		return false;
+	}
+	// A topic is answered by clicking it, whatever the cursor is showing.
+	_skipStream = false;
+	pointAndClick(choices[id - 1].x, choices[id - 1].y, false, nullptr);
+	beginStream();
+	return true;
+}
+
+void SciMcpBridge::collectChoices(Common::Array<Choice> &out) const {
+#ifdef ENABLE_SCI32
+	// Gabriel Knight's conversations are a screen of topics - "Ask About:"
+	// and a button per subject, the last of them Exit - each a TellerButton
+	// drawn with its words. They are read off the screen items, in the order
+	// they are drawn from the top, and clicked where they are drawn.
+	if (!isGabrielKnight() || getSciVersion() < SCI_VERSION_2 || _vm->_gfxFrameout == nullptr)
+		return;
+	EngineState *s = _vm->getEngineState();
+	if (s == nullptr || s->_segMan == nullptr)
+		return;
+	const GfxFrameout *frameout = _vm->_gfxFrameout;
+	if (frameout->getScreenWidth() <= 0 || frameout->getScreenHeight() <= 0)
+		return;
+	const PlaneList &planes = frameout->getPlanes();
+	for (uint i = 0; i < planes.size(); i++) {
+		if (planes[i] == nullptr)
+			continue;
+		const ScreenItemList &list = planes[i]->_screenItemList;
+		for (uint j = 0; j < list.size(); j++) {
+			const ScreenItem *item = list[j];
+			if (item == nullptr || item->_deleted || item->_screenRect.isEmpty())
+				continue;
+			if (objectName(item->_object) != "TellerButton")
+				continue;
+			const Object *obj = s->_segMan->getObject(item->_object);
+			if (obj == nullptr || obj->locateVarSelector(s->_segMan, SELECTOR(text)) < 0)
+				continue;
+			const reg_t textReg = readSelector(s->_segMan, item->_object, SELECTOR(text));
+			if (textReg.isNull() || !s->_segMan->isValidAddr(textReg, SEG_TYPE_ARRAY))
+				continue;
+			Choice choice;
+			choice.label = MCP::mcpCleanGameText(s->_segMan->getString(textReg));
+			if (choice.label.empty())
+				continue;
+			const int cx = (item->_screenRect.left + item->_screenRect.right) / 2;
+			const int cy = (item->_screenRect.top + item->_screenRect.bottom) / 2;
+			choice.x = cx * frameout->getScriptWidth() / frameout->getScreenWidth();
+			choice.y = cy * frameout->getScriptHeight() / frameout->getScreenHeight();
+			choice.top = item->_screenRect.top;
+			uint at = 0;
+			while (at < out.size() && out[at].top < choice.top)
+				at++;
+			out.insert_at(at, choice);
+		}
+	}
+#endif
 }
 
 bool SciMcpBridge::toolSkip(const Common::JSONValue &, Common::String &errorOut) {
 	if (!_skipToolEnabled) {
 		errorOut = "skip: tool is disabled (set mcp_skip_tool=true)";
 		return false;
+	}
+	// Gabriel Knight's title card is buttons, and no key leaves it: PLAY is
+	// what a player presses to get past it. Only once the card has been drawn,
+	// though - before that the button's anchor is all there is to aim at, and
+	// the anchor is on RESTORE, whose dialog stops a headless game for good.
+	// Until then the skip sends nothing at all.
+	Target play;
+	Common::String unused;
+	if (onTitleCard() && resolveTarget("play_butt", play, unused)) {
+		int x = play.x, y = play.y;
+		if (!isStreaming() && !_pendingClick && drawnCentre(play.object, x, y))
+			pointAndClick(x, y, false, nullptr);
+		if (!isStreaming()) {
+			_skipStream = true;
+			beginStream();
+		}
+		return true;
 	}
 	// Escape is what a player presses to cut a sequence short, so that is what
 	// this sends: one press, and what it did is reported after a short window
@@ -637,7 +898,63 @@ Common::JSONValue *SciMcpBridge::toolDebug(const Common::JSONValue &args, Common
 	engine.setVal("cursor_view", mcpJsonInt(_vm->mcpCursorView()));
 	engine.setVal("cursor_loop", mcpJsonInt(_vm->mcpCursorLoop()));
 	engine.setVal("cursor_cel", mcpJsonInt(_vm->mcpCursorCel()));
+	if (g_system != nullptr) {
+		engine.setVal("backend_width", mcpJsonInt(g_system->getWidth()));
+		engine.setVal("backend_height", mcpJsonInt(g_system->getHeight()));
+	}
+	if (_vm->_gfxScreen != nullptr) {
+		engine.setVal("script_width", mcpJsonInt(_vm->_gfxScreen->getScriptWidth()));
+		engine.setVal("script_height", mcpJsonInt(_vm->_gfxScreen->getScriptHeight()));
+		engine.setVal("display_width", mcpJsonInt(_vm->_gfxScreen->getDisplayWidth()));
+		engine.setVal("display_height", mcpJsonInt(_vm->_gfxScreen->getDisplayHeight()));
+	}
+	{
+		// Whether the game itself has the player's input switched on: its User
+		// object's input (or canInput) and controls selectors.
+		EngineState *s = _vm->getEngineState();
+		const reg_t user = global(kGlobalVarUser);
+		if (s != nullptr && s->_segMan != nullptr && s->_segMan->getObject(user) != nullptr) {
+			engine.setVal("user_input", mcpJsonInt(selector(user, SELECTOR(input), selector(user, SELECTOR(canInput), -1))));
+			engine.setVal("user_controls", mcpJsonInt(selector(user, SELECTOR(controls), -1)));
+		}
+	}
 	out.setVal("engine", new Common::JSONValue(engine));
+
+#ifdef ENABLE_SCI32
+	// Every screen item the interpreter is drawing, with the object behind it,
+	// for the screens that are not rooms (a conversation's list of topics).
+	if (getSciVersion() >= SCI_VERSION_2 && _vm->_gfxFrameout != nullptr) {
+		EngineState *s = _vm->getEngineState();
+		Common::JSONArray items;
+		const PlaneList &planes = _vm->_gfxFrameout->getPlanes();
+		for (uint i = 0; i < planes.size(); i++) {
+			if (planes[i] == nullptr)
+				continue;
+			const ScreenItemList &list = planes[i]->_screenItemList;
+			for (uint j = 0; j < list.size(); j++) {
+				const ScreenItem *item = list[j];
+				if (item == nullptr)
+					continue;
+				Common::JSONObject e;
+				e.setVal("plane", mcpJsonString(objectName(planes[i]->_object)));
+				e.setVal("object", mcpJsonString(objectName(item->_object)));
+				e.setVal("left", mcpJsonInt(item->_screenRect.left));
+				e.setVal("top", mcpJsonInt(item->_screenRect.top));
+				e.setVal("right", mcpJsonInt(item->_screenRect.right));
+				e.setVal("bottom", mcpJsonInt(item->_screenRect.bottom));
+				e.setVal("deleted", mcpJsonInt(item->_deleted));
+				if (s != nullptr && s->_segMan != nullptr && s->_segMan->isObject(item->_object) &&
+				    s->_segMan->getObject(item->_object)->locateVarSelector(s->_segMan, SELECTOR(text)) >= 0) {
+					const reg_t textReg = readSelector(s->_segMan, item->_object, SELECTOR(text));
+					if (!textReg.isNull() && s->_segMan->isValidAddr(textReg, SEG_TYPE_ARRAY))
+						e.setVal("text", mcpJsonString(s->_segMan->getString(textReg)));
+				}
+				items.push_back(new Common::JSONValue(e));
+			}
+		}
+		out.setVal("screen_items", new Common::JSONValue(items));
+	}
+#endif
 
 	return new Common::JSONValue(out);
 }
@@ -682,6 +999,7 @@ void SciMcpBridge::injectMouseClick(int x, int y, const Common::String &button, 
 }
 
 void SciMcpBridge::pointAndClick(int x, int y, bool rightButton, const VerbCursor *verb) {
+	toScreen(x, y);
 	// Point first, click after: the game hit-tests a click against where the
 	// pointer already is, so arriving and pressing in the same cycle resolves
 	// the press against wherever the pointer was before.
@@ -719,7 +1037,11 @@ void SciMcpBridge::pumpPendingClick() {
 			_pendingFrame = _frameCounter;
 			return;
 		}
-		if ((_frameCounter - _cycleFrame) >= kCycleFrames) {
+		// Gabriel Knight shows the new cursor a few cycles after the press, and
+		// a press sent before it did was one press too many: the cursor ran
+		// past "take" and the magnifying glass was looked at instead.
+		const uint32 cycleFrames = isGabrielKnight() ? kGabrielKnightCycleFrames : kCycleFrames;
+		if ((_frameCounter - _cycleFrame) >= cycleFrames) {
 			injectMouseClick(_pendingX, _pendingY, "right", false);
 			_cyclesSent++;
 			_cycleFrame = _frameCounter;
@@ -730,6 +1052,7 @@ void SciMcpBridge::pumpPendingClick() {
 	if ((_frameCounter - _pendingFrame) < kPointFrames)
 		return;
 	_pendingClick = false;
+	_clickSentFrame = _frameCounter;
 	injectMouseClick(_pendingX, _pendingY, _pendingRight ? "right" : "left", false);
 }
 
@@ -740,6 +1063,24 @@ void SciMcpBridge::pumpPendingClick() {
 void SciMcpBridge::onGameText(const Common::String &text, int talkerId) {
 	if (!isEnabled() || text.empty())
 		return;
+	// A conversation screen writes its own header and every topic each time
+	// it is drawn, and as messages they buried what was said: "More Messages"
+	// six times over. They are the question, which state() carries.
+	if (isGabrielKnight() && talkerId < 0) {
+		const Common::String cleaned = MCP::mcpCleanGameText(text);
+		if (cleaned == "Ask About:")
+			return;
+		// The topics are written before they can be read back as buttons;
+		// on that screen anything said aloud is in quotes, and a topic never is.
+		if (roomName() == "interrogation" && !cleaned.contains('"'))
+			return;
+		Common::Array<Choice> choices;
+		collectChoices(choices);
+		for (uint i = 0; i < choices.size(); i++) {
+			if (choices[i].label == cleaned)
+				return;
+		}
+	}
 	int slot = -1;
 	for (uint i = 0; i < _messageActors.size(); i++) {
 		if (_messageActors[i] == talkerId) {
@@ -844,7 +1185,25 @@ Common::JSONObject SciMcpBridge::buildStateChanges() const {
 	out.setVal("objects_gone", new Common::JSONValue(gone));
 
 	out.setVal("can_act", mcpJsonBool(playerHasControl()));
+	addQuestion(out);
 	return out;
+}
+
+void SciMcpBridge::addQuestion(Common::JSONObject &out) const {
+	Common::Array<Choice> choices;
+	collectChoices(choices);
+	if (choices.empty())
+		return;
+	Common::JSONArray list;
+	for (uint i = 0; i < choices.size(); i++) {
+		Common::JSONObject choice;
+		choice.setVal("id", mcpJsonInt((int)i + 1));
+		choice.setVal("label", mcpJsonString(choices[i].label));
+		list.push_back(new Common::JSONValue(choice));
+	}
+	Common::JSONObject question;
+	question.setVal("choices", new Common::JSONValue(list));
+	out.setVal("question", new Common::JSONValue(question));
 }
 
 bool SciMcpBridge::isActionDone() const {
@@ -861,15 +1220,65 @@ bool SciMcpBridge::isActionDone() const {
 			return true;
 		return g_system != nullptr && (g_system->getMillis() - _sseStartMs) >= kSkipMs;
 	}
-	return !_pendingClick && playerHasControl();
+	if (_pendingClick)
+		return false;
+	// Gabriel Knight takes a few cycles to answer a click - to turn input off
+	// and start Gabriel walking or talking - and until it has, it looks exactly
+	// as idle as it did before. Read that early, every result described the
+	// action before it: the line about the newspaper came back from taking
+	// the magnifying glass. So a click is given time to be taken first.
+	if (isGabrielKnight() && (_frameCounter - _clickSentFrame) < kGabrielKnightReactFrames)
+		return false;
+	// A conversation's topics are the game waiting for the player too, though
+	// Gabriel is nowhere on that screen - and an action that ended on them is
+	// over, not stuck: "ask about" and every answer came back as timeouts.
+	if (hasPendingQuestion())
+		return true;
+	if (inConversation())
+		return false;
+	// A new room whose things have not arrived yet is not somewhere to act,
+	// for as long as a room could reasonably take to fill.
+	if (isGabrielKnight() && roomNumber() != _ssePreRoom && !roomSettled() &&
+	    (_frameCounter - _sseStartFrame) < kGabrielKnightRoomFrames)
+		return false;
+	return playerHasControl();
 }
 
 bool SciMcpBridge::hasPendingQuestion() const {
-	return false;
+	if (!isGabrielKnight() || _pendingClick)
+		return false;
+	// Not in the cycles straight after a click: the topics answered are still
+	// on screen for a moment, and an answer read then would come back as the
+	// same question it was meant to leave.
+	if ((_frameCounter - _clickSentFrame) < kGabrielKnightReactFrames)
+		return false;
+	Common::Array<Choice> choices;
+	collectChoices(choices);
+	return !choices.empty();
 }
 
 bool SciMcpBridge::streamRoomChanged() const {
-	return roomNumber() != _ssePreRoom;
+	if (roomNumber() == _ssePreRoom)
+		return false;
+	// Gabriel Knight changes its room number before it has changed the room:
+	// opening the shop door came back naming the city map's number over the
+	// shop's name and every thing still in the shop, and the next action aimed
+	// at the map was refused. The room has changed once what is in it has.
+	if (isGabrielKnight())
+		return roomSettled();
+	return true;
+}
+
+bool SciMcpBridge::roomSettled() const {
+	Common::Array<Target> targets;
+	collectTargets(targets);
+	if (targets.size() != _ssePreTargets.size())
+		return !targets.empty() && playerHasControl();
+	for (uint i = 0; i < targets.size(); i++) {
+		if (targets[i].name != _ssePreTargets[i])
+			return playerHasControl();
+	}
+	return false;
 }
 
 void SciMcpBridge::pumpStreamTrack() {
@@ -984,6 +1393,16 @@ void SciMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
 
 	props.setVal("can_act", Networking::mcpProp("boolean",
 	    "Whether the game is ready for another action now."));
+
+	// Sent whenever the score moved, and refused by any client that checks
+	// the result against a schema that never said so.
+	Common::JSONObject scoreProps;
+	scoreProps.setVal("from", Networking::mcpProp("integer", "The score before the action."));
+	scoreProps.setVal("to", Networking::mcpProp("integer", "The score after it."));
+	Common::JSONObject scored;
+	scored.setVal("type", Networking::mcpJsonString("object"));
+	scored.setVal("properties", new Common::JSONValue(scoreProps));
+	props.setVal("score", new Common::JSONValue(scored));
 
 
 	Common::JSONObject appeared;

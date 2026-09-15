@@ -136,6 +136,8 @@ _FIXTURE_INDEX = {
     "simon1": 78,
     "sanitarium": 79,
     "maniac_deluxe": 80,
+    # test_gk1_full.py's one walkthrough, alive for its whole module.
+    "gk1_full_walk": 81,
 }
 
 
@@ -718,6 +720,22 @@ def gk1_full_client() -> Iterator[McpClient]:
         "gk1_full",
         checkpoint=has_captured_save("gk1-full"),
         connect_timeout=SLOW_BOOT_SECS,
+        request_timeout=180.0,
+    )
+
+
+@pytest.fixture(scope="session")
+def gk1_full_walk_client() -> Iterator[McpClient]:
+    """Gabriel Knight, one instance for the whole of test_gk1_full.py.
+
+    It cannot be saved in its opening, so there is no slot to start each test
+    from: the walkthrough is one ordered sequence from a fresh start.
+    """
+    yield from _client(
+        "gk1-full",
+        "gk1_full_walk",
+        connect_timeout=SLOW_BOOT_SECS,
+        request_timeout=180.0,
     )
 
 

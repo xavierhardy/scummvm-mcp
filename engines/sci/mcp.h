@@ -104,10 +104,10 @@ protected:
 	void augmentStateSchema(Common::JSONObject &outputProps) override;
 	void augmentChangesSchema(Common::JSONObject &props) override;
 
-	// Neither game puts a list of things to say to the player: a conversation
-	// here is watched, not chosen from. So `answer` is never registered, and
-	// nothing an agent reads mentions it.
-	bool usesDialogQuestions() const override { return false; }
+	// Gabriel Knight's conversations are a screen of topics to pick from, and
+	// `answer` is how one is picked; the other games put no such list, so it
+	// is registered for that game alone.
+	bool usesDialogQuestions() const override;
 
 	// The early SCI games read a typed sentence rather than a click. Which
 	// those are is the engine's to say - hasParser() - but it cannot be asked
@@ -148,8 +148,11 @@ protected:
 	// the bridge is pumped once per cycle, so a frame here is a game cycle.
 	uint32 minStreamFrames() const override { return 4; }
 	uint32 stuckFrames(bool hadActivity) const override { return hadActivity ? 60 : 12; }
-	uint32 timeoutFrames() const override { return 400; }
-	uint32 absoluteTimeoutFrames() const override { return 1200; }
+	uint32 timeoutFrames() const override { return isGabrielKnight() ? 2000 : 400; }
+	// Gabriel Knight runs twice the cycles the others do, and walks, talks and
+	// changes rooms inside a single action: opening the shop door ran past
+	// 1200 cycles and came back as a timeout with the map already up.
+	uint32 absoluteTimeoutFrames() const override { return isGabrielKnight() ? 6000 : 1200; }
 	uint32 settleFrames() const override { return 8; }
 	uint32 wallClockTimeoutMs() const override { return 180000; }
 	// A skip is the action sent into an opening, which is where the older
@@ -169,6 +172,15 @@ protected:
 private:
 	// Something in the room an agent can name: a cast member with a script
 	// name that is not one of the interpreter's own bookkeeping objects.
+	// One topic of a conversation, where it is drawn and what it says.
+	struct Choice {
+		Common::String label;
+		int x, y;      // where to click, in script coordinates
+		int top;       // screen row, for ordering
+	};
+	void collectChoices(Common::Array<Choice> &out) const;
+	void addQuestion(Common::JSONObject &out) const;
+
 	struct Target {
 		Common::String name;
 		reg_t object;
@@ -182,6 +194,7 @@ private:
 	// Frames between two presses of the button that cycles the verb, so each
 	// one has been taken before the next is sent.
 	static const uint32 kCycleFrames = 3;
+	static const uint32 kGabrielKnightCycleFrames = 10;
 	// Presses allowed before the bridge gives up on reaching a verb. The
 	// cycle is short; anything past a couple of times round it is a game that
 	// is not letting the verb change at all.
@@ -212,6 +225,27 @@ private:
 	bool egoMoving() const;
 	// Does the game have input turned on for the player right now?
 	bool playerHasControl() const;
+	bool isGabrielKnight() const;
+	// Gabriel Knight's title card: buttons, and not the game.
+	bool onTitleCard() const;
+	// Gabriel Knight's conversation screen, portraits and topics.
+	bool inConversation() const;
+	// The room this action moved to has put its own things up.
+	bool roomSettled() const;
+	static const uint32 kGabrielKnightRoomFrames = 400;
+	// The cursor a city map shows while it waits for a click.
+	static const int kGabrielKnightArrowView = 999;
+	// The game's own User object says input and controls are on.
+	bool userInputOn() const;
+	// Script coordinates, which is what state() reports, to the pixels the
+	// pointer is placed in.
+	void toScreen(int &x, int &y) const;
+	// Where *object* is drawn, when the interpreter drew it and the object
+	// itself says nothing about its extent. Leaves x/y alone otherwise.
+	bool drawnCentre(reg_t object, int &x, int &y) const;
+	// Where the room's own coordinates start on the screen, in script
+	// coordinates; zero where they are the screen's.
+	void roomOffset(int &dx, int &dy) const;
 
 	// A global variable, as the interpreter holds it.
 	reg_t global(int index) const;
@@ -263,6 +297,10 @@ private:
 	bool _pendingRight;
 	int _pendingX, _pendingY;
 	uint32 _pendingFrame;
+	// When the last queued click went out, so an action is not read as done
+	// before the game has had the cycles to react to it.
+	uint32 _clickSentFrame;
+	static const uint32 kGabrielKnightReactFrames = 30;
 
 	// What the stream in flight is: an action to see through, or a single
 	// Escape whose effect is reported after a short fixed window.
