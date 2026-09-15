@@ -33,6 +33,7 @@ namespace AGOS {
 class AGOSEngine;
 struct HitArea;
 struct Item;
+struct WindowBlock;
 
 // MCP bridge for the AGOS engine (Simon the Sorcerer).
 //
@@ -69,6 +70,12 @@ public:
 
 	// Every line the game shows: the sentence bar, spoken lines, subtitles.
 	void onGameText(const Common::String &text);
+	// Text written into a window, one character at a time, and a window
+	// wiped. Kept per line so a conversation choice can be read back.
+	void onWindowChar(WindowBlock *window, byte c);
+	void onWindowClear(WindowBlock *window);
+	// A line spoken on screen (Simon the Sorcerer's subtitles).
+	void onSpeech(const Common::String &text);
 
 protected:
 	// --- Tools --------------------------------------------------------------
@@ -85,7 +92,9 @@ protected:
 	Common::String debugToolDescription() const override;
 
 	bool usesTypedInput() const override { return false; }
-	bool usesDialogQuestions() const override { return false; }
+	// Simon the Sorcerer puts numbered choices to the player; nothing else
+	// this bridge has been taught does.
+	bool usesDialogQuestions() const override;
 
 	Common::JSONValue *buildDebugSchema() const override;
 	void augmentStateSchema(Common::JSONObject &outputProps) override;
@@ -128,6 +137,21 @@ private:
 		Common::String label;   // the words the game itself shows for it
 		int x, y;               // where to click, in game coordinates
 		uint16 hitAreaId;
+		bool carried;           // in the inventory rather than the room
+		bool onScreen;          // has a box to click right now
+	};
+
+	// One line of a conversation choice: the box to click and what it says.
+	struct Choice {
+		int x, y;
+		Common::String text;
+	};
+
+	// A line of text in a window, as written so far.
+	struct WindowLine {
+		WindowBlock *window;
+		int y;
+		Common::String text;
 	};
 
 	// A queued step of synthetic input, played out one frame at a time so the
@@ -142,6 +166,10 @@ private:
 		StepKind kind;
 		int x, y;
 		uint32 notBeforeFrame;
+		// When set, (x, y) is looked up when the step is played rather than
+		// when it was queued: a carried item can be scrolled out of the
+		// inventory strip, and by then the room may have moved on.
+		Common::String target;
 	};
 
 	static const uint32 kFrameMs = 40;
@@ -152,6 +180,18 @@ private:
 
 	bool engineReady() const;
 	bool playerHasControl() const;
+	bool isSimon1() const;
+
+	// Simon the Sorcerer's in-between states. Each is a loop of the engine's
+	// own that is not waitForInput(), so each needs saying in its own words.
+	bool verbBarShowing() const;
+	bool filePanelOpen() const;        // the postcard's save/load panel
+	bool secondTargetPending() const;  // "Use X with" waiting for the thing
+	bool choicePending() const;        // a numbered choice waiting for an answer
+	void collectChoices(Common::Array<Choice> &out) const;
+	const HitArea *liveBox(uint16 id) const;
+	const HitArea *inventoryArrow(bool down) const;
+	bool isInterfaceBox(const HitArea &area) const;
 	int roomNumber() const;
 
 	// The words the game shows for an item, or an empty string when it has
@@ -172,6 +212,12 @@ private:
 	bool verbButtonPosition(int index, int &x, int &y) const;
 
 	void queueStep(StepKind kind, int x, int y, uint32 delayFrames);
+	void queueTargetClick(const Common::String &target, uint32 delayFrames);
+	void queueClick(int x, int y, uint32 delayFrames);
+	// Where a step aimed at a name should go now. False, with a scroll of the
+	// inventory queued instead, while the item is off the strip.
+	bool resolveStepTarget(Step &step);
+	void addChangesExtras(Common::JSONObject &out) const;
 
 	AGOSEngine *_vm;
 
@@ -180,6 +226,9 @@ private:
 	uint32 _lastFrameMs;
 
 	Common::Array<Step> _steps;
+	uint _scrollTries;
+
+	Common::Array<WindowLine> _windowLines;
 
 	// Pre-action snapshot, for the changes an action reports.
 	int _ssePreRoom;
@@ -187,6 +236,9 @@ private:
 	Common::Array<Common::String> _ssePreInventory;
 	int _sseTrackRoom;
 	uint _sseTrackSteps;
+	// The room's things as last seen, so a room still being built reads as
+	// activity rather than as settled.
+	Common::String _sseTrackThings;
 };
 
 } // End of namespace AGOS

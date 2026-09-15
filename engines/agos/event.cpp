@@ -475,6 +475,21 @@ void AGOSEngine::mcpOnText(const Common::String &text) {
 		_mcpBridge->onGameText(text);
 }
 
+void AGOSEngine::mcpOnWindowChar(WindowBlock *window, byte c) {
+	if (_mcpBridge)
+		_mcpBridge->onWindowChar(window, c);
+}
+
+void AGOSEngine::mcpOnWindowClear(WindowBlock *window) {
+	if (_mcpBridge)
+		_mcpBridge->onWindowClear(window);
+}
+
+void AGOSEngine::mcpOnSpeech(const char *text) {
+	if (_mcpBridge)
+		_mcpBridge->onSpeech(Common::String(text));
+}
+
 void AGOSEngine::mcpExitCutscene() {
 	// What pressing kActionExitCutscene does. The action cannot be injected
 	// as events: the engine latches it in `_action` on the START event and

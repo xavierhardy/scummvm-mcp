@@ -149,6 +149,7 @@ void AGOSEngine::closeWindow(uint a) {
 }
 
 void AGOSEngine::clearWindow(WindowBlock *window) {
+	mcpOnWindowClear(window);
 	clearHiResTextLayer();
 	if (window->flags & 0x10)
 		restoreWindow(window);

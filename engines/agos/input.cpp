@@ -59,6 +59,7 @@ void AGOSEngine::setup_cond_c_helper() {
 	HitArea *last;
 
 	_noRightClick = true;
+	_mcpWaitingForClick = true;
 
 	if (getGameType() == GType_WW)
 		clearMenuStrip();
@@ -157,6 +158,7 @@ void AGOSEngine::setup_cond_c_helper() {
 	}
 
 out_of_here:
+	_mcpWaitingForClick = false;
 	_lastHitArea3 = nullptr;
 	_lastHitArea = nullptr;
 	_lastNameOn = nullptr;

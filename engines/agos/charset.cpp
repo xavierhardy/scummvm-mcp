@@ -331,6 +331,7 @@ void AGOSEngine::windowPutChar(WindowBlock *window, byte c, byte b) {
 			windowDrawChar(window, (window->width + window->x - window->textColumn) * 8, window->textRow * 8 + window->y, c);
 			window->textLength++;
 		} else {
+			mcpOnWindowChar(window, c);
 			windowDrawChar(window, window->x * 8 + window->textColumn * textColumnWidth, window->textRow * 8 + window->y, c);
 			window->textLength++;
 			window->textColumnOffset += width;

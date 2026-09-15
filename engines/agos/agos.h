@@ -456,10 +456,22 @@ protected:
 	// implements no canSaveGameStateCurrently() of its own, so there is
 	// nothing else to ask.
 	bool _mcpWaitingForInput = false;
+	// True while setup_cond_c_helper() waits for a click on a thing: the second
+	// object of "Use X with", or one of the lines of a conversation choice.
+	// That loop is not waitForInput(), so the flag above is false throughout.
+	bool _mcpWaitingForClick = false;
+	// True while Simon the Sorcerer's quit confirmation waits for Y or N.
+	bool _mcpAskingYesNo = false;
 	// From delay(), which every loop in this engine goes through.
 	void mcpPump();
 	// Every line the game shows.
 	void mcpOnText(const Common::String &text);
+	// A character written into a text window, and a window wiped clean, so
+	// the bridge can read back what a line says (a conversation choice).
+	void mcpOnWindowChar(WindowBlock *window, byte c);
+	void mcpOnWindowClear(WindowBlock *window);
+	// A line spoken on screen: Simon's subtitles.
+	void mcpOnSpeech(const char *text);
 	// Cut the running cutscene short, which is what `skip` means here.
 	void mcpExitCutscene();
 	uint16 _defaultVerb;

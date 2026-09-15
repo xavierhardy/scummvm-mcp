@@ -312,6 +312,7 @@ void AGOSEngine_Simon1::os1_pauseGame() {
 	Common::Keymapper *keymapper = AGOSEngine::getEventManager()->getKeymapper();
 	keymapper->getKeymap("game-Yes/No")->setEnabled(true);
 
+	_mcpAskingYesNo = true;
 	while (!shouldQuit()) {
 		delay(1);
 		if (_keyPressed.keycode == keyYes || _action == kActionKeyYes)
@@ -319,6 +320,7 @@ void AGOSEngine_Simon1::os1_pauseGame() {
 		else if (_keyPressed.keycode == keyNo || _action == kActionKeyNo)
 			break;
 	}
+	_mcpAskingYesNo = false;
 
 	_action = kActionNone;
 	keymapper->getKeymap("game-Yes/No")->setEnabled(false);
@@ -374,6 +376,8 @@ void AGOSEngine_Simon1::os1_screenTextMsg() {
 			tl->width = 96;
 	}
 
+	if (stringPtr != nullptr && stringPtr[0] != 0)
+		mcpOnSpeech((const char *)stringPtr);
 	if (stringPtr != nullptr && stringPtr[0] != 0 && (speechId == 0 || _subtitles))
 		printScreenText(vgaSpriteId, color, (const char *)stringPtr, tl->x, tl->y, tl->width);
 

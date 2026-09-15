@@ -26,6 +26,7 @@
 #include "agos/intern.h"
 
 #include "common/events.h"
+#include "common/localization.h"
 #include "common/system.h"
 
 namespace AGOS {
@@ -50,6 +51,7 @@ AgosMcpBridge::AgosMcpBridge(AGOSEngine *vm) :
 	_inPump(false),
 	_skipStream(false),
 	_lastFrameMs(0),
+	_scrollTries(0),
 	_ssePreRoom(-1),
 	_sseTrackRoom(-1),
 	_sseTrackSteps(0) {
@@ -92,9 +94,11 @@ void AgosMcpBridge::pumpGame() {
 	// that should precede it has been taken.
 	if (_steps.empty())
 		return;
-	Step &step = _steps[0];
-	if (_frameCounter < step.notBeforeFrame)
+	if (_frameCounter < _steps[0].notBeforeFrame)
 		return;
+	if (!_steps[0].target.empty() && _steps[0].kind != kStepSettle && !resolveStepTarget(_steps[0]))
+		return;
+	Step &step = _steps[0];
 	switch (step.kind) {
 	case kStepHover:
 		injectMouseMove(step.x, step.y);
@@ -117,6 +121,66 @@ void AgosMcpBridge::queueStep(StepKind kind, int x, int y, uint32 delayFrames) {
 	step.y = y;
 	step.notBeforeFrame = _frameCounter + delayFrames;
 	_steps.push_back(step);
+}
+
+void AgosMcpBridge::queueClick(int x, int y, uint32 delayFrames) {
+	queueStep(kStepHover, x, y, delayFrames);
+	queueStep(kStepClick, x, y, kStepFrames);
+}
+
+void AgosMcpBridge::queueTargetClick(const Common::String &target, uint32 delayFrames) {
+	queueStep(kStepHover, 0, 0, delayFrames);
+	_steps.back().target = target;
+	queueStep(kStepClick, 0, 0, kStepFrames);
+	_steps.back().target = target;
+}
+
+bool AgosMcpBridge::resolveStepTarget(Step &step) {
+	Target target;
+	Common::String error;
+	if (!resolveTarget(step.target, target, error)) {
+		// Gone while the action was being played out - taken, used up, or the
+		// room changed under it. Nothing sensible is left to click.
+		onSystemLine(error);
+		_steps.clear();
+		_scrollTries = 0;
+		return false;
+	}
+	if (target.onScreen) {
+		step.x = target.x;
+		step.y = target.y;
+		_scrollTries = 0;
+		return true;
+	}
+	// Carried, but scrolled off the inventory strip. A player pages the strip
+	// with its arrows until the item shows; so does this, down first and then
+	// back up, and gives up once both ways have been tried.
+	const HitArea *arrow = nullptr;
+	if (_scrollTries < 8)
+		arrow = inventoryArrow(true);
+	if (arrow == nullptr && _scrollTries < 16)
+		arrow = inventoryArrow(false);
+	if (arrow == nullptr) {
+		onSystemLine(Common::String::format(
+			"%s is carried but could not be brought onto the inventory strip",
+			target.name.c_str()));
+		_steps.clear();
+		_scrollTries = 0;
+		return false;
+	}
+	_scrollTries++;
+	const int ax = arrow->x + arrow->width / 2;
+	const int ay = arrow->y + arrow->height / 2;
+	Step hover;
+	hover.kind = kStepHover;
+	hover.x = ax;
+	hover.y = ay;
+	hover.notBeforeFrame = _frameCounter;
+	Step click = hover;
+	click.kind = kStepClick;
+	_steps.insert_at(0, click);
+	_steps.insert_at(0, hover);
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +208,119 @@ bool AgosMcpBridge::playerHasControl() const {
 	// waitForInput(), which is where its whole loop sits between actions -
 	// being inside that is exactly what "the game is waiting for the player"
 	// means, and it is false for the whole of a cutscene.
-	return engineReady() && _vm->_mcpWaitingForInput;
+	if (!engineReady())
+		return false;
+	if (!isSimon1())
+		return _vm->_mcpWaitingForInput;
+	// Simon the Sorcerer also takes a click while "Use X with" waits for its
+	// thing, and takes none while the pointer is hidden - a scene playing out
+	// inside waitForInput() - or while the postcard's panel is up.
+	if (_vm->_mouseHideCount != 0 || filePanelOpen())
+		return false;
+	return _vm->_mcpWaitingForInput || secondTargetPending();
+}
+
+bool AgosMcpBridge::isSimon1() const {
+	return _vm != nullptr && _vm->getGameType() == GType_SIMON1;
+}
+
+bool AgosMcpBridge::usesDialogQuestions() const {
+	return isSimon1();
+}
+
+const HitArea *AgosMcpBridge::liveBox(uint16 id) const {
+	if (!engineReady())
+		return nullptr;
+	for (uint i = 0; i < ARRAYSIZE(_vm->_hitAreas); i++) {
+		const HitArea &area = _vm->_hitAreas[i];
+		if (area.id != id || !(area.flags & kBFBoxInUse) || (area.flags & kBFBoxDead))
+			continue;
+		if (area.width == 0 || area.height == 0)
+			continue;
+		return &area;
+	}
+	return nullptr;
+}
+
+const HitArea *AgosMcpBridge::inventoryArrow(bool down) const {
+	return liveBox(down ? 0x7FFC : 0x7FFB);
+}
+
+bool AgosMcpBridge::verbBarShowing() const {
+	// The bar is boxes 101 to 112; "Walk to" is always among them.
+	return liveBox(101) != nullptr;
+}
+
+bool AgosMcpBridge::filePanelOpen() const {
+	// The postcard is the game's own menu: a card of Load, Save, Quit and
+	// Continue (boxes 201 to 204), Load and Save open the file panel
+	// (AGOSEngine_Simon1::userGame, whose way out is box 205), and Quit asks
+	// "ARE YOU SURE ? Y/N". None of them is the game, and a click meant for
+	// the room lands on one of their words instead.
+	return isSimon1() && engineReady() &&
+	       (liveBox(204) != nullptr || liveBox(205) != nullptr || _vm->_mcpAskingYesNo);
+}
+
+bool AgosMcpBridge::secondTargetPending() const {
+	return isSimon1() && engineReady() && _vm->_mcpWaitingForClick &&
+	       _vm->_mouseHideCount == 0 && verbBarShowing() && !filePanelOpen() && !choicePending();
+}
+
+bool AgosMcpBridge::choicePending() const {
+	if (!isSimon1() || !engineReady() || !_vm->_mcpWaitingForClick || verbBarShowing())
+		return false;
+	Common::Array<Choice> choices;
+	collectChoices(choices);
+	return !choices.empty();
+}
+
+bool AgosMcpBridge::isInterfaceBox(const HitArea &area) const {
+	// The verb bar, the inventory strip and its arrows, the save/load panel
+	// and the [ OK ] of a message window: all things a player clicks, none of
+	// them things in the room.
+	const uint16 id = area.id;
+	return (id >= 101 && id <= 112) || (id >= 200 && id <= 213) ||
+	       id == 0x7FFB || id == 0x7FFC || id == 0x7FFD || id == 0x7FFF;
+}
+
+void AgosMcpBridge::collectChoices(Common::Array<Choice> &out) const {
+	if (!isSimon1() || !engineReady())
+		return;
+	// A choice is a box across the text window with an item behind it and no
+	// name of its own; what it says is whatever was written on its line.
+	for (uint i = 0; i < ARRAYSIZE(_vm->_hitAreas); i++) {
+		const HitArea &area = _vm->_hitAreas[i];
+		if (!(area.flags & kBFBoxInUse) || (area.flags & kBFBoxDead))
+			continue;
+		// One line of text tall: the window's own backdrop is a box with an
+		// item behind it too, and spans every line at once.
+		if (area.itemPtr == nullptr || area.width < 100 || area.height == 0 || area.height > 12)
+			continue;
+		if (isInterfaceBox(area) || !itemLabel(area.itemPtr).empty())
+			continue;
+		Common::String text;
+		for (uint j = 0; j < _windowLines.size(); j++) {
+			if (_windowLines[j].y >= (int)area.y && _windowLines[j].y < (int)(area.y + area.height))
+				text = _windowLines[j].text;
+		}
+		// The game numbers its lines itself ("1Yes please."); the id an
+		// answer takes is the position, so the digit goes.
+		uint start = 0;
+		while (start < text.size() && (Common::isDigit(text[start]) || text[start] == ' ' || text[start] == '.'))
+			start++;
+		text = Common::String(text.c_str() + start);
+		text.trim();
+		if (text.empty())
+			continue;
+		Choice choice;
+		choice.x = area.x + area.width / 2;
+		choice.y = area.y + area.height / 2;
+		choice.text = text;
+		uint at = 0;
+		while (at < out.size() && out[at].y < choice.y)
+			at++;
+		out.insert_at(at, choice);
+	}
 }
 
 Common::String AgosMcpBridge::itemLabel(const Item *item) const {
@@ -171,11 +347,30 @@ void AgosMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		// rather than a thing in the room.
 		if (area.flags & kBFBoxDead)
 			continue;
-		if (area.itemPtr == nullptr)
-			continue;
 		if (area.width == 0 || area.height == 0)
 			continue;
-		const Common::String label = itemLabel(area.itemPtr);
+		Common::String label;
+		if (isSimon1()) {
+			if (!(area.flags & kBFBoxInUse) || isInterfaceBox(area))
+				continue;
+			// Scenery - the door, the fireplace - is a text box: no item behind
+			// it, and its name is a short string the flags point at, which is
+			// what displayName() prints for it.
+			if (area.flags & kBFTextBox) {
+				const uint index = area.flags / 256;
+				if (index < _vm->_numTextBoxes) {
+					const byte *text = _vm->getStringPtrByID(_vm->_shortText[index]);
+					if (text != nullptr)
+						label = Common::String((const char *)text);
+				}
+			} else if (area.itemPtr != nullptr) {
+				label = itemLabel(area.itemPtr);
+			}
+		} else {
+			if (area.itemPtr == nullptr)
+				continue;
+			label = itemLabel(area.itemPtr);
+		}
 		Common::String name = agosObjectName(label);
 		if (name.empty())
 			continue;
@@ -192,6 +387,8 @@ void AgosMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		target.x = area.x + area.width / 2;
 		target.y = area.y + area.height / 2;
 		target.hitAreaId = area.id;
+		target.carried = false;
+		target.onScreen = true;
 		out.push_back(target);
 	}
 }
@@ -223,6 +420,21 @@ void AgosMcpBridge::collectInventory(Common::Array<Target> &out) const {
 		entry.label = label;
 		entry.x = entry.y = 0;
 		entry.hitAreaId = 0;
+		entry.carried = true;
+		entry.onScreen = false;
+		// Simon the Sorcerer draws what is carried as icons along the strip,
+		// each a box of its own; one that is scrolled away has none.
+		for (uint i = 0; isSimon1() && i < ARRAYSIZE(_vm->_hitAreas); i++) {
+			const HitArea &area = _vm->_hitAreas[i];
+			if (area.id != 0x7FFD || area.itemPtr != held || (area.flags & kBFBoxDead) ||
+			    !(area.flags & kBFBoxInUse))
+				continue;
+			entry.x = area.x + area.width / 2;
+			entry.y = area.y + area.height / 2;
+			entry.hitAreaId = area.id;
+			entry.onScreen = true;
+			break;
+		}
 		out.push_back(entry);
 	}
 }
@@ -255,6 +467,23 @@ bool AgosMcpBridge::resolveTarget(const Common::String &name, Target &out,
 bool AgosMcpBridge::verbButtonPosition(int index, int &x, int &y) const {
 	if (!engineReady() || index < 0)
 		return false;
+	// Simon the Sorcerer's bar is boxes 101 to 112 in the order the verbs are
+	// written, and that id is how the engine itself recognises a click on it
+	// (input.cpp). Their `verb` is script data rather than a place on the bar,
+	// so matching on it alone found no button on the Amiga release, and every
+	// act() was refused as "the verb bar is not showing" while can_act was true.
+	if (_vm->getGameType() == GType_SIMON1) {
+		for (uint i = 0; i < ARRAYSIZE(_vm->_hitAreas); i++) {
+			const HitArea &area = _vm->_hitAreas[i];
+			if (area.id != (uint16)(101 + index))
+				continue;
+			if ((area.flags & kBFBoxDead) || area.width == 0 || area.height == 0)
+				continue;
+			x = area.x + area.width / 2;
+			y = area.y + area.height / 2;
+			return true;
+		}
+	}
 	// The bar is hit areas like everything else, and each carries the verb it
 	// stands for. Finding the button by what it does - rather than by where it
 	// is - means a game that lays its bar out differently still works.
@@ -316,7 +545,48 @@ int AgosMcpBridge::currentRoomForMessages() const {
 void AgosMcpBridge::onGameText(const Common::String &text) {
 	if (!isEnabled() || text.empty())
 		return;
+	// In Simon the Sorcerer this is only ever the name under the pointer,
+	// which state() already carries as a label; as a message it drowned out
+	// what was actually said, one "Magnet" per hover.
+	if (isSimon1())
+		return;
 	onSystemLine(text);
+}
+
+void AgosMcpBridge::onSpeech(const Common::String &text) {
+	if (!isEnabled() || !isSimon1() || text.empty())
+		return;
+	onDialogPrompt(text);
+}
+
+void AgosMcpBridge::onWindowChar(WindowBlock *window, byte c) {
+	if (!isEnabled() || !isSimon1() || window == nullptr || c < 32)
+		return;
+	const int y = window->y + window->textRow * 8;
+	for (uint i = 0; i < _windowLines.size(); i++) {
+		WindowLine &line = _windowLines[i];
+		if (line.window != window || line.y != y)
+			continue;
+		// A line written from its first column again is a new line.
+		if (window->textLength == 0)
+			line.text.clear();
+		line.text += (char)c;
+		return;
+	}
+	WindowLine line;
+	line.window = window;
+	line.y = y;
+	line.text += (char)c;
+	if (_windowLines.size() >= 32)
+		_windowLines.remove_at(0);
+	_windowLines.push_back(line);
+}
+
+void AgosMcpBridge::onWindowClear(WindowBlock *window) {
+	for (uint i = _windowLines.size(); i > 0; i--) {
+		if (_windowLines[i - 1].window == window)
+			_windowLines.remove_at(i - 1);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -380,7 +650,30 @@ Common::JSONValue *AgosMcpBridge::toolState(const Common::JSONValue &, Common::S
 	_messages.clear();
 	out.setVal("messages", new Common::JSONValue(messages));
 
+	addChangesExtras(out);
 	return new Common::JSONValue(out);
+}
+
+void AgosMcpBridge::addChangesExtras(Common::JSONObject &out) const {
+	if (!isSimon1())
+		return;
+	Common::Array<Choice> choices;
+	if (choicePending())
+		collectChoices(choices);
+	if (!choices.empty()) {
+		Common::JSONArray list;
+		for (uint i = 0; i < choices.size(); i++) {
+			Common::JSONObject choice;
+			choice.setVal("id", mcpJsonInt((int)i + 1));
+			choice.setVal("label", mcpJsonString(choices[i].text));
+			list.push_back(new Common::JSONValue(choice));
+		}
+		Common::JSONObject question;
+		question.setVal("choices", new Common::JSONValue(list));
+		out.setVal("question", new Common::JSONValue(question));
+	}
+	out.setVal("menu_open", mcpJsonBool(filePanelOpen()));
+	out.setVal("awaiting_second_target", mcpJsonBool(secondTargetPending()));
 }
 
 bool AgosMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorOut) {
@@ -398,9 +691,44 @@ bool AgosMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 		return false;
 	}
 
+	if (isSimon1()) {
+		if (filePanelOpen()) {
+			errorOut = _skipToolEnabled
+			    ? "act: a menu is open (Load, Save, Quit, Continue) - call skip to close it and go back to the game"
+			    : "act: a menu is open (Load, Save, Quit, Continue)";
+			return false;
+		}
+		if (choicePending()) {
+			errorOut = "act: a question is waiting - answer it with answer(id), see state.question";
+			return false;
+		}
+	}
+
 	Common::String verb = "look_at";
 	if (args.asObject().contains("verb") && args.asObject()["verb"]->isString())
 		verb = MCP::McpBridge::normalizeActionName(args.asObject()["verb"]->asString());
+
+	Common::String secondName;
+	if (args.asObject().contains("target2") && args.asObject()["target2"]->isString())
+		secondName = args.asObject()["target2"]->asString();
+
+	if (secondTargetPending()) {
+		// "Use X with" is on the sentence line and the game wants the thing.
+		// Whatever verb came with it, the click it is waiting for is on a thing,
+		// and target2 is the second of a pair given in full.
+		const Common::String name = secondName.empty() ? args.asObject()["target1"]->asString() : secondName;
+		Target thing;
+		if (!resolveTarget(name, thing, errorOut)) {
+			errorOut = Common::String("act: ") + errorOut;
+			return false;
+		}
+		_steps.clear();
+		queueTargetClick(name, 0);
+		queueStep(kStepSettle, 0, 0, kStepFrames);
+		_skipStream = false;
+		beginStream();
+		return true;
+	}
 
 	const int index = agosVerbIndex(verb);
 	if (index < 0) {
@@ -417,6 +745,11 @@ bool AgosMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 
 	Target target;
 	if (!resolveTarget(args.asObject()["target1"]->asString(), target, errorOut)) {
+		errorOut = Common::String("act: ") + errorOut;
+		return false;
+	}
+	Target second;
+	if (isSimon1() && !secondName.empty() && !resolveTarget(secondName, second, errorOut)) {
 		errorOut = Common::String("act: ") + errorOut;
 		return false;
 	}
@@ -445,8 +778,18 @@ bool AgosMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 	_steps.clear();
 	queueStep(kStepHover, verbX, verbY, 0);
 	queueStep(kStepClick, verbX, verbY, kStepFrames);
-	queueStep(kStepHover, target.x, target.y, kStepFrames);
-	queueStep(kStepClick, target.x, target.y, kStepFrames);
+	if (isSimon1()) {
+		// Aimed by name, so a carried item is found on the strip - scrolled
+		// to if need be - when its turn comes. "Use" and "Give" then wait for
+		// a second thing ("Use magnet with"), and a target2 is that click;
+		// without one the action ends with the game still asking for it.
+		queueTargetClick(target.name, kStepFrames);
+		if (!secondName.empty())
+			queueTargetClick(second.name, kStepFrames * 2);
+	} else {
+		queueStep(kStepHover, target.x, target.y, kStepFrames);
+		queueStep(kStepClick, target.x, target.y, kStepFrames);
+	}
 	queueStep(kStepSettle, 0, 0, kStepFrames);
 
 	_skipStream = false;
@@ -454,9 +797,38 @@ bool AgosMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 	return true;
 }
 
-bool AgosMcpBridge::toolAnswer(const Common::JSONValue &, Common::String &errorOut) {
-	errorOut = "answer: this game never puts a numbered choice to the player";
-	return false;
+bool AgosMcpBridge::toolAnswer(const Common::JSONValue &args, Common::String &errorOut) {
+	if (!isSimon1()) {
+		errorOut = "answer: this game never puts a numbered choice to the player";
+		return false;
+	}
+	if (isStreaming()) {
+		errorOut = "answer: another action is already in progress";
+		return false;
+	}
+	Common::Array<Choice> choices;
+	if (choicePending())
+		collectChoices(choices);
+	if (choices.empty()) {
+		errorOut = "answer: no question is waiting";
+		return false;
+	}
+	if (!args.isObject() || !args.asObject().contains("id") || !args.asObject()["id"]->isIntegerNumber()) {
+		errorOut = "answer: an integer 'id' is required";
+		return false;
+	}
+	const int id = (int)args.asObject()["id"]->asIntegerNumber();
+	if (id < 1 || id > (int)choices.size()) {
+		errorOut = Common::String::format("answer: id must be between 1 and %u", choices.size());
+		return false;
+	}
+	// A player answers by clicking the line.
+	_steps.clear();
+	queueClick(choices[id - 1].x, choices[id - 1].y, 0);
+	queueStep(kStepSettle, 0, 0, kStepFrames);
+	_skipStream = false;
+	beginStream();
+	return true;
 }
 
 bool AgosMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &errorOut) {
@@ -471,6 +843,16 @@ bool AgosMcpBridge::toolWalk(const Common::JSONValue &args, Common::String &erro
 	if (!args.isObject() || !args.asObject().contains("x") || !args.asObject().contains("y") ||
 	    !args.asObject()["x"]->isIntegerNumber() || !args.asObject()["y"]->isIntegerNumber()) {
 		errorOut = "walk: integer 'x' and 'y' are required";
+		return false;
+	}
+	if (isSimon1() && filePanelOpen()) {
+		errorOut = _skipToolEnabled
+			    ? "walk: a menu is open (Load, Save, Quit, Continue) - call skip to close it and go back to the game"
+			    : "walk: a menu is open (Load, Save, Quit, Continue)";
+		return false;
+	}
+	if (isSimon1() && choicePending()) {
+		errorOut = "walk: a question is waiting - answer it with answer(id), see state.question";
 		return false;
 	}
 	if (!playerHasControl()) {
@@ -503,6 +885,30 @@ bool AgosMcpBridge::toolSkip(const Common::JSONValue &, Common::String &errorOut
 		errorOut = "skip: tool is disabled (set mcp_skip_tool=true)";
 		return false;
 	}
+	// The postcard's menu takes no key: its way out is a word a player clicks -
+	// Continue on the card, the exit on the file panel. Only the quit question
+	// is a key, and the answer that goes back to the game is N.
+	if (isSimon1() && !isStreaming() && filePanelOpen()) {
+		if (_vm->_mcpAskingYesNo) {
+			Common::KeyCode keyYes, keyNo;
+			Common::getLanguageYesNo(_vm->_language, keyYes, keyNo);
+			injectKey(Common::KeyState(keyNo));
+			_skipStream = true;
+			beginStream();
+			return true;
+		}
+		const HitArea *exit = liveBox(205);
+		if (exit == nullptr)
+			exit = liveBox(204);
+		if (exit != nullptr) {
+			_steps.clear();
+			queueClick(exit->x + exit->width / 2, exit->y + exit->height / 2, 0);
+			queueStep(kStepSettle, 0, 0, kStepFrames);
+			_skipStream = false;
+			beginStream();
+			return true;
+		}
+	}
 	// Two different waits, and skipping means getting past either: a running
 	// cutscene ends through the engine's own exit-cutscene flag, and a line
 	// sitting there to be dismissed goes away on a keypress.
@@ -529,6 +935,36 @@ Common::JSONValue *AgosMcpBridge::toolDebug(const Common::JSONValue &, Common::S
 	Common::Array<Target> targets;
 	collectTargets(targets);
 	out.setVal("clickable", mcpJsonInt((int)targets.size()));
+	out.setVal("mouse_hidden", mcpJsonInt(_vm->_mouseHideCount));
+	out.setVal("walking", mcpJsonBool(_vm->getBitFlag(11)));
+	// Every live hit area, so what state() leaves out can be seen for what it is.
+	Common::JSONArray areas;
+	for (uint i = 0; i < ARRAYSIZE(_vm->_hitAreas); i++) {
+		const HitArea &area = _vm->_hitAreas[i];
+		if (!(area.flags & kBFBoxInUse))
+			continue;
+		Common::JSONObject a;
+		a.setVal("id", mcpJsonInt(area.id));
+		a.setVal("x", mcpJsonInt(area.x));
+		a.setVal("y", mcpJsonInt(area.y));
+		a.setVal("w", mcpJsonInt(area.width));
+		a.setVal("h", mcpJsonInt(area.height));
+		a.setVal("flags", mcpJsonInt(area.flags));
+		a.setVal("verb", mcpJsonInt(area.verb));
+		a.setVal("label", mcpJsonString(itemLabel(area.itemPtr)));
+		// Not itemPtrToID(): the verb bar's boxes point at dummy items outside
+		// the table, and it answers those by stopping in the debugger.
+		int itemId = -1;
+		for (uint32 j = 0; area.itemPtr != nullptr && j < _vm->_itemArraySize; j++) {
+			if (_vm->_itemArrayPtr[j] == area.itemPtr) {
+				itemId = (int)j;
+				break;
+			}
+		}
+		a.setVal("item", mcpJsonInt(itemId));
+		areas.push_back(new Common::JSONValue(a));
+	}
+	out.setVal("hit_areas", new Common::JSONValue(areas));
 	return new Common::JSONValue(out);
 }
 
@@ -592,6 +1028,13 @@ void AgosMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 	    "The twelve verbs on the bar, which are the verbs act() takes."));
 	outputProps.setVal("objects", agosObjectArraySchema(true));
 	outputProps.setVal("inventory", agosObjectArraySchema(false));
+	if (isSimon1()) {
+		outputProps.setVal("menu_open", Networking::mcpProp("boolean",
+		    _skipToolEnabled ? "A menu (Load, Save, Quit, Continue) is over the game; skip closes it."
+		                     : "A menu (Load, Save, Quit, Continue) is over the game."));
+		outputProps.setVal("awaiting_second_target", Networking::mcpProp("boolean",
+		    "\"Use X with\" or \"Give X to\" is waiting for its second thing; act() on it."));
+	}
 }
 
 void AgosMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
@@ -617,6 +1060,13 @@ void AgosMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
 	    "Items picked up while the action ran."));
 	props.setVal("items_lost", Networking::mcpProp("array",
 	    "Items put down or given away while the action ran."));
+	if (isSimon1()) {
+		props.setVal("menu_open", Networking::mcpProp("boolean",
+		    _skipToolEnabled ? "A menu (Load, Save, Quit, Continue) is over the game; skip closes it."
+		                     : "A menu (Load, Save, Quit, Continue) is over the game."));
+		props.setVal("awaiting_second_target", Networking::mcpProp("boolean",
+		    "\"Use X with\" or \"Give X to\" is waiting for its second thing; act() on it."));
+	}
 }
 
 void AgosMcpBridge::augmentActSchema(Common::JSONObject &props) {
@@ -653,6 +1103,9 @@ void AgosMcpBridge::snapshotPreAction() {
 		_ssePreInventory.push_back(carried[i].name);
 	_sseTrackRoom = _ssePreRoom;
 	_sseTrackSteps = _steps.size();
+	_sseTrackThings.clear();
+	for (uint i = 0; isSimon1() && i < _ssePreTargets.size(); i++)
+		_sseTrackThings += _ssePreTargets[i] + ",";
 }
 
 static void agosDiffNames(const Common::Array<Common::String> &before,
@@ -704,6 +1157,7 @@ Common::JSONObject AgosMcpBridge::buildStateChanges() const {
 	out.setVal("items_lost", new Common::JSONValue(lost));
 
 	out.setVal("can_act", mcpJsonBool(playerHasControl()));
+	addChangesExtras(out);
 	return out;
 }
 
@@ -715,22 +1169,51 @@ bool AgosMcpBridge::isActionDone() const {
 	}
 	// Not until every queued click has been played out, and then not until the
 	// game is taking input again.
-	return _steps.empty() && playerHasControl();
+	if (!_steps.empty())
+		return false;
+	if (!isSimon1())
+		return playerHasControl();
+	// Simon the Sorcerer stays inside waitForInput() while he walks over to
+	// what was clicked, so "taking input" came back true the moment the click
+	// landed and the result was read before the magnet had moved. Done is
+	// when he has stopped and the pointer is back - or when the game has
+	// stopped to ask for something: an answer, a second thing, the panel.
+	if (choicePending() || filePanelOpen() || secondTargetPending())
+		return true;
+	return _vm->_mcpWaitingForInput && _vm->_mouseHideCount == 0 && !_vm->getBitFlag(11);
 }
 
 bool AgosMcpBridge::hasPendingQuestion() const {
-	return false;
+	return choicePending();
 }
 
 bool AgosMcpBridge::streamRoomChanged() const {
-	return roomNumber() != _ssePreRoom;
+	if (roomNumber() == _ssePreRoom)
+		return false;
+	// Simon the Sorcerer builds the new room's boxes a few at a time after the
+	// player has been moved into it - and after it is taking input again - so
+	// a result read at the move named nothing there and half of the old room
+	// as gone. Reading hit areas mid-change is harmless in this engine, so the
+	// room change is left to the ordinary settle, which pumpStreamTrack()
+	// keeps extending while the list of things is still changing.
+	if (isSimon1())
+		return false;
+	return true;
 }
 
 void AgosMcpBridge::pumpStreamTrack() {
 	const int room = roomNumber();
-	if (room != _sseTrackRoom || _steps.size() != _sseTrackSteps) {
+	Common::String things;
+	if (isSimon1()) {
+		Common::Array<Target> targets;
+		collectTargets(targets);
+		for (uint i = 0; i < targets.size(); i++)
+			things += targets[i].name + ",";
+	}
+	if (room != _sseTrackRoom || _steps.size() != _sseTrackSteps || things != _sseTrackThings) {
 		_sseTrackRoom = room;
 		_sseTrackSteps = _steps.size();
+		_sseTrackThings = things;
 		_sseLastEventFrame = _frameCounter;
 	}
 }
