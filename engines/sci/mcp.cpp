@@ -653,6 +653,20 @@ bool SciMcpBridge::resolveTarget(const Common::String &name, Target &out,
 			return true;
 		}
 	}
+	// A name that is not in the room may be something being carried, and an
+	// agent told only "nothing here is called that" asks again the same way:
+	// on run 611 a pane spent four minutes acting on the magnifying glass it
+	// had just picked up.
+	Common::Array<Common::String> carried;
+	collectInventory(carried);
+	for (uint i = 0; i < carried.size(); i++) {
+		if (MCP::McpBridge::normalizeActionName(carried[i]) != wanted)
+			continue;
+		errorOut = Common::String::format(
+			"'%s' is being carried, not in the room. The things in a room are "
+			"what act() takes.", name.c_str());
+		return false;
+	}
 	Common::String known;
 	for (uint i = 0; i < targets.size(); i++) {
 		if (!known.empty())
