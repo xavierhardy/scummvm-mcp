@@ -141,6 +141,14 @@ void Font::read(Common::SeekableReadStream &stream) {
 
 			numCharacters = 115;
 		}
+
+		if (g_nancy->getGameType() >= kGameTypeNancy15) {
+			// Nancy15 added two more characters. Their glyphs are only present in a
+			// few of the fonts, and it is not yet known which characters they are
+			stream.skip(4);
+
+			numCharacters = 117;
+		}
 	}
 
 	_characterRects.resize(numCharacters);
@@ -379,9 +387,11 @@ Common::Rect Font::getCharacterSourceRect(char chr) const {
 			case '\xef':
 				offset = _iWithDiaeresisOffset;
 				break;
+			case '\x80':
+				offset = _euroOffset;
+				break;
 			// TODO: _uppercaseAWithDotOffset
 			// TODO: _aWithDotOffset
-			// TODO: _euroOffset
 			// TODO: _oeLigatureOffset
 			default:
 				offset = -1;

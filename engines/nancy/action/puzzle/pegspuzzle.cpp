@@ -76,25 +76,7 @@ void PegsPuzzle::readData(Common::SeekableReadStream &stream) {
 	// A count-prefixed array of fixed 23-byte hotspot records:
 	// {rect, u16 cursorType, u16 sceneID, u16 frameID, byte}. The sample carries one - the
 	// "give up / exit" hotspot (leave the puzzle unsolved), with the exit cursor type.
-	int16 numZones = stream.readSint16LE();
-	for (int16 i = 0; i < numZones; ++i) {
-		Common::Rect r;
-		readRect(stream, r);
-		uint16 cursorType = stream.readUint16LE();
-		uint16 sceneID = stream.readUint16LE();
-		int16 exitFlagLabel = stream.readSint16LE();
-		byte exitFlagValue = stream.readByte();
-
-		if (i == 0) {
-			_exitHotspot = r;
-			_exitCursorType = cursorType;
-			_exitScene.sceneID = sceneID;
-			// The field after the scene id is a flag label (set on give-up), not a frame.
-			_exitScene.frameID = 0;
-			_exitFlag.label = exitFlagLabel;
-			_exitFlag.flag = exitFlagValue;
-		}
-	}
+	readExitHotspot(stream, _exitHotspot, _exitCursorType, _exitScene, _exitFlag);
 
 	// Five random-sound blocks: [0] peg select, [1] jump, [2] selection pulse, [3] win, [4] lose.
 	_sounds.resize(5);
@@ -157,6 +139,7 @@ void PegsPuzzle::init() {
 
 	redraw();
 	registerGraphics();
+	_carriedObject.registerGraphics();
 }
 
 bool PegsPuzzle::validCell(int col, int row) const {
@@ -249,10 +232,22 @@ void PegsPuzzle::doJump(int fromCol, int fromRow, int destCol, int destRow) {
 	_board[cellIndex(destCol, destRow)] = kPeg;
 }
 
-Common::Point PegsPuzzle::cursorToViewport(const Common::Point &mousePos) const {
-	Common::Rect screenPt(mousePos.x, mousePos.y, mousePos.x + 1, mousePos.y + 1);
-	Common::Rect vpPt = NancySceneState.getViewport().convertScreenToViewport(screenPt);
-	return Common::Point(vpPt.left, vpPt.top);
+// Lifts the peg at the given cell onto the cursor, or sets the carried one down
+// for a column of -1.
+void PegsPuzzle::carryPeg(int col, int row, NancyInput &input) {
+	_carriedCol = col;
+	_carriedRow = row;
+
+	if (_carriedCol >= 0 && _image.getBounds().contains(_pegSrc)) {
+		_carriedObject._drawSurface.create(_image, _pegSrc);
+		_carriedObject.setTransparent(true);
+		_carriedObject.setVisible(true);
+		_carriedObject.pickUp();
+		_carriedObject.handleInput(input);
+	} else {
+		_carriedObject.setVisible(false);
+		_carriedObject.putDown();
+	}
 }
 
 void PegsPuzzle::setDataCursor(uint16 cursorType, bool hotspotVariant) const {
@@ -281,13 +276,6 @@ void PegsPuzzle::redraw() {
 			const Common::Rect &dest = _destRects[idx];
 			_drawSurface.blitFrom(_image, _pegSrc, Common::Point(dest.left, dest.top));
 		}
-	}
-
-	// The dragged piece, following the cursor.
-	if (carrying) {
-		int w = _pegSrc.right - _pegSrc.left;
-		int h = _pegSrc.bottom - _pegSrc.top;
-		_drawSurface.blitFrom(_image, _pegSrc, Common::Point(_dragPos.x - w / 2, _dragPos.y - h / 2));
 	}
 
 	_needsRedraw = true;
@@ -371,10 +359,7 @@ void PegsPuzzle::handleInput(NancyInput &input) {
 	// -- Carrying a peg: it follows the cursor; drop it on a reachable hole to jump. --
 	if (_carriedCol >= 0) {
 		setDataCursor(_dragCursorType);
-
-		// The dragged piece tracks the cursor (viewport space).
-		_dragPos = cursorToViewport(input.mousePos);
-		redraw();
+		_carriedObject.handleInput(input);
 
 		if (click) {
 			int col, row;
@@ -385,7 +370,7 @@ void PegsPuzzle::handleInput(NancyInput &input) {
 
 			// The peg is always set down, whether it jumped or not. Chaining another jump
 			// is simply picking the landed peg up again.
-			_carriedCol = _carriedRow = -1;
+			carryPeg(-1, -1, input);
 			redraw();
 		}
 
@@ -399,11 +384,7 @@ void PegsPuzzle::handleInput(NancyInput &input) {
 		if (_board[cellIndex(col, row)] == kPeg && cellHasAnyMove(col, row)) {
 			setDataCursor(_hoverCursorType);
 			if (click) {
-				_carriedCol = col;
-				_carriedRow = row;
-				// Seed the drag position before the first draw, otherwise the piece would
-				// briefly appear at the previous drag's position.
-				_dragPos = cursorToViewport(input.mousePos);
+				carryPeg(col, row, input);
 				playSoundBlock(_sounds[0]);
 				redraw();
 			}

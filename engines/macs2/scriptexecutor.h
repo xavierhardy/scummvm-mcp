@@ -509,10 +509,6 @@ public:
 	uint16 _pickupActorObjectID = 0;
 	uint16 _pickupTargetObjectID = 0;
 
-	bool _isRunningScript = false;
-	// Mutex indicating if the A3D2 function is active
-	bool _isSkipping = false;
-
 	Macs2::Macs2Engine *_engine;
 
 	// Button 8 skip from handleInput (1008:e8bf)
@@ -611,7 +607,7 @@ public:
 	// g_wScriptErrorCode (1020:0f86): non-zero halts opcode dispatch (1008:db56).
 	uint16 _scriptErrorCode = 0;
 	Character *getOrCreateCharacter(uint16 objectID);
-	void saveWalkRuntime(const Character *c, GameObject *o);
+	void saveWalkRuntime(const Character *c, GameObject *o) const;
 	void restoreWalkRuntime(Character *c, const GameObject *o);
 	void clearStoredWalkRuntime(GameObject *o);
 	void seedMoveToPositionState(GameObject *object, Character *c, const Common::Point &target, uint16 targetVerticalOffset);

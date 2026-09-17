@@ -77,25 +77,7 @@ void StepObjectsPuzzle::readData(Common::SeekableReadStream &stream) {
 		object.startCol = stream.readUint16LE();
 	}
 
-	int16 numZones = stream.readSint16LE();
-	for (int16 i = 0; i < numZones; ++i) {
-		Common::Rect zone;
-		readRect(stream, zone);
-		uint16 cursorType = stream.readUint16LE();
-		uint16 sceneID = stream.readUint16LE();
-		int16 exitFlagLabel = stream.readSint16LE();
-		byte exitFlagValue = stream.readByte();
-
-		if (i == 0) {
-			_exitHotspot = zone;
-			_exitCursorType = cursorType;
-			_exitScene.sceneID = sceneID;
-			// The field after the scene id is a flag label (set on give-up), not a frame.
-			_exitScene.frameID = 0;
-			_exitFlag.label = exitFlagLabel;
-			_exitFlag.flag = exitFlagValue;
-		}
-	}
+	readExitHotspot(stream, _exitHotspot, _exitCursorType, _exitScene, _exitFlag);
 
 	_sounds.resize(kNumSounds);
 	for (uint i = 0; i < kNumSounds; ++i) {
@@ -120,6 +102,7 @@ void StepObjectsPuzzle::init() {
 
 	redraw();
 	registerGraphics();
+	_carriedObject.registerGraphics();
 }
 
 Common::Rect StepObjectsPuzzle::getCellRect(const StepObject &object, int row, int col) const {
@@ -183,7 +166,7 @@ bool StepObjectsPuzzle::isSolutionMatched() const {
 void StepObjectsPuzzle::resetBoard() {
 	_trail.clear();
 	_playerSteps.clear();
-	_carriedID = -1;
+	putDownCarried();
 
 	for (uint i = 0; i < _objects.size(); ++i) {
 		_objects[i].row = _objects[i].startRow;
@@ -209,7 +192,15 @@ void StepObjectsPuzzle::pickUp(uint objectID) {
 	_trail.push_back(step);
 
 	_carriedID = objectID;
-	_carriedRect = getCellRect(object, object.row, object.col);
+
+	// The sprite starts out on the cell it was picked up from, until the cursor moves it
+	_carriedObject._drawSurface.create(object.srcRect.width(), object.srcRect.height(),
+		g_nancy->_graphics->getTransparentPixelFormat());
+	_carriedObject._drawSurface.clear(0);
+	drawSprite(_carriedObject._drawSurface, object.srcRect, Common::Point(), 255);
+	_carriedObject.moveTo(getCellRect(object, object.row, object.col));
+	_carriedObject.setVisible(true);
+	_carriedObject.pickUp();
 
 	beginStepSound(kSoundPickUp, false);
 }
@@ -248,13 +239,19 @@ void StepObjectsPuzzle::drop(int row, int col) {
 		}
 	}
 
-	_carriedID = -1;
+	putDownCarried();
 	_lastStepCorrect = correct;
 	beginStepSound(kSoundStep, true);
 	redraw();
 }
 
-void StepObjectsPuzzle::drawSprite(const Common::Rect &srcRect, const Common::Point &destPos, byte alpha) {
+void StepObjectsPuzzle::putDownCarried() {
+	_carriedID = -1;
+	_carriedObject.setVisible(false);
+	_carriedObject.putDown();
+}
+
+void StepObjectsPuzzle::drawSprite(Graphics::ManagedSurface &dest, const Common::Rect &srcRect, const Common::Point &destPos, byte alpha) {
 	if (srcRect.isEmpty() || !_image.getBounds().contains(srcRect)) {
 		return;
 	}
@@ -265,13 +262,13 @@ void StepObjectsPuzzle::drawSprite(const Common::Rect &srcRect, const Common::Po
 
 	for (int y = 0; y < srcRect.height(); ++y) {
 		int destY = destPos.y + y;
-		if (destY < 0 || destY >= _drawSurface.h) {
+		if (destY < 0 || destY >= dest.h) {
 			continue;
 		}
 
 		for (int x = 0; x < srcRect.width(); ++x) {
 			int destX = destPos.x + x;
-			if (destX < 0 || destX >= _drawSurface.w) {
+			if (destX < 0 || destX >= dest.w) {
 				continue;
 			}
 
@@ -283,7 +280,7 @@ void StepObjectsPuzzle::drawSprite(const Common::Rect &srcRect, const Common::Po
 				continue;
 			}
 
-			_drawSurface.setPixel(destX, destY, _drawSurface.format.ARGBToColor(a * alpha / 255, r, g, b));
+			dest.setPixel(destX, destY, dest.format.ARGBToColor(a * alpha / 255, r, g, b));
 		}
 	}
 }
@@ -301,9 +298,9 @@ void StepObjectsPuzzle::redraw() {
 		Common::Rect cell = getCellRect(object, step.row, step.col);
 
 		if (object.footprintSrcRect.isEmpty()) {
-			drawSprite(object.srcRect, Common::Point(cell.left, cell.top), kFootprintAlpha);
+			drawSprite(_drawSurface, object.srcRect, Common::Point(cell.left, cell.top), kFootprintAlpha);
 		} else {
-			drawSprite(object.footprintSrcRect, Common::Point(cell.left, cell.top), 255);
+			drawSprite(_drawSurface, object.footprintSrcRect, Common::Point(cell.left, cell.top), 255);
 		}
 	}
 
@@ -314,11 +311,7 @@ void StepObjectsPuzzle::redraw() {
 
 		const StepObject &object = _objects[i];
 		Common::Rect cell = getCellRect(object, object.row, object.col);
-		drawSprite(object.srcRect, Common::Point(cell.left, cell.top), 255);
-	}
-
-	if (_carriedID >= 0) {
-		drawSprite(_objects[_carriedID].srcRect, Common::Point(_carriedRect.left, _carriedRect.top), 255);
+		drawSprite(_drawSurface, object.srcRect, Common::Point(cell.left, cell.top), 255);
 	}
 
 	_needsRedraw = true;
@@ -418,17 +411,7 @@ void StepObjectsPuzzle::handleInput(NancyInput &input) {
 	if (_carriedID >= 0) {
 		const StepObject &object = _objects[_carriedID];
 		setDataCursor(_cursorType);
-
-		// The carried sprite is centered on the cursor and kept inside the viewport
-		Common::Rect vpBounds = NancySceneState.getViewport().getBounds();
-		Common::Rect screenPt(input.mousePos.x, input.mousePos.y, input.mousePos.x + 1, input.mousePos.y + 1);
-		Common::Rect vpPt = NancySceneState.getViewport().convertScreenToViewport(screenPt);
-		int16 w = object.srcRect.width();
-		int16 h = object.srcRect.height();
-		int16 left = CLIP<int16>(vpPt.left - w / 2, vpBounds.left, vpBounds.right - w);
-		int16 top = CLIP<int16>(vpPt.top - h / 2, vpBounds.top, vpBounds.bottom - h);
-		_carriedRect = Common::Rect(left, top, left + w, top + h);
-		redraw();
+		_carriedObject.handleInput(input);
 
 		if (click) {
 			int row, col;

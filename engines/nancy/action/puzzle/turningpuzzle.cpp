@@ -176,25 +176,7 @@ void TurningPuzzle::readDataNancy13(Common::SeekableReadStream &stream) {
 
 	// A count-prefixed array of 23-byte hotspot records (as in PegsPuzzle);
 	// the first one is the "give up" hotspot.
-	int16 numZones = stream.readSint16LE();
-	for (int16 i = 0; i < numZones; ++i) {
-		Common::Rect r;
-		readRect(stream, r);
-		uint16 cursorType = stream.readUint16LE();
-		uint16 sceneID = stream.readUint16LE();
-		int16 exitFlagLabel = stream.readSint16LE();
-		byte exitFlagValue = stream.readByte();
-
-		if (i == 0) {
-			_exitHotspot = r;
-			_exitCursorType = cursorType;
-			_exitScene._sceneChange.sceneID = sceneID;
-			// The field after the scene id is a flag label (set on give-up), not a frame.
-			_exitScene._sceneChange.frameID = 0;
-			_exitScene._flag.label = exitFlagLabel;
-			_exitScene._flag.flag = exitFlagValue;
-		}
-	}
+	readExitHotspot(stream, _exitHotspot, _exitCursorType, _exitScene._sceneChange, _exitScene._flag);
 
 	uint16 numTypes = stream.readUint16LE();
 	_pieceTypes.resize(numTypes);
@@ -420,7 +402,7 @@ void TurningPuzzle::execute() {
 				_solveState = kWaitForAnimation;
 			} else {
 				_solveState = kWaitForSound;
-				NancySceneState.setEventFlag(_solveScene._flag);
+				_shouldSetSolveFlag = true;
 			}
 			_objectCurrentlyTurning = -1;
 			_turnFrameID = 0;
@@ -440,7 +422,7 @@ void TurningPuzzle::execute() {
 			} else if (g_nancy->getTotalPlayTime() > _solveSoundDelayTime) {
 				g_nancy->_sound->loadSound(_solveSound);
 				g_nancy->_sound->playSound(_solveSound);
-				NancySceneState.setEventFlag(_solveScene._flag);
+				_shouldSetSolveFlag = true;
 				_solveState = kWaitForSound;
 			}
 
@@ -454,8 +436,11 @@ void TurningPuzzle::execute() {
 				return;
 			}
 
-			if (g_nancy->getGameType() >= kGameTypeNancy13) {
-				// The solve scene and its event flag both come from the header.
+			// Nancy13 takes the solve scene and its event flag from the header. In every case
+			// the flag is only set here: setting it as soon as the puzzle is solved can
+			// invalidate this record's own dependencies, which stops it from being executed
+			// again before it ever reaches this point.
+			if (g_nancy->getGameType() >= kGameTypeNancy13 || _shouldSetSolveFlag) {
 				_solveScene.execute();
 			} else {
 				NancySceneState.changeScene(_solveScene._sceneChange);
