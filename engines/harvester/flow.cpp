@@ -56,7 +56,7 @@ namespace {
 static const char *const kQuickTipsPath = "ADJHEAD.RCS";
 static const char *const kMenuPath = "MENU.INI";
 static const char *const kMenuSectionName = "menu";
-static const char *const kDemoMenuItems[] = {
+static const char *const kBuiltInMenuItems[] = {
 	"NEW GAME",
 	"SAVE GAME",
 	"LOAD GAME",
@@ -1401,7 +1401,8 @@ static void renderQuickTipsScreen(HarvesterEngine &engine, const RoomSceneResour
 
 Flow::Flow(HarvesterEngine &engine)
 	: _engine(engine), _mousePos(320, 200), _dialogue(engine, _mousePos), _inventory(engine),
-	  _menu(engine, _mousePos, _menuItems), _room(engine, _mousePos, _inventory) {
+	  _menu(engine, _mousePos, _menuItems), _cheats(engine),
+	  _room(engine, _mousePos, _inventory, _cheats) {
 }
 
 bool Flow::load() {
@@ -1517,16 +1518,11 @@ bool Flow::loadMenuItems() {
 
 	Common::Array<byte> data;
 	if (!_engine.getResources()->loadFile(kMenuPath, data)) {
-		if (_engine.isDemo()) {
-			for (const char *item : kDemoMenuItems)
-				_menuItems.push_back(item);
-			debugC(1, kDebugGeneral,
-				"Harvester: using %u built-in DOS demo menu items",
-				(uint)_menuItems.size());
-			return true;
-		}
-
-		warning("Harvester: unable to load startup menu '%s'", kMenuPath);
+		for (const char *item : kBuiltInMenuItems)
+			_menuItems.push_back(item);
+		debugC(2, kDebugGeneral,
+			"Harvester: using %u built-in startup menu items because '%s' is unavailable",
+			(uint)_menuItems.size(), kMenuPath);
 		return true;
 	}
 
@@ -2022,6 +2018,7 @@ void Flow::prepareForNewGame() {
 	_engine.clearCurrentSaveRoomState();
 	if (_engine.getScript())
 		_engine.getScript()->resetRuntimeState();
+	_cheats.reset();
 	resetRoomNpcDialogueState();
 }
 
@@ -2271,6 +2268,12 @@ bool Flow::populateRoomSceneEntities(RoomSetupState &state,
 			npc.deathDamageType != 0 &&
 			npc.runtimeState >= 0;
 		entity->setHitTestMode(isCorpse ? kRuntimeEntityHitTestNone : kRuntimeEntityHitTestOpaquePixels);
+		// Native spawn positions frame 0 before selecting ambient or corpse frame banks.
+		if (!applyRoomActorPlacementInternal(state, *entity,
+				npc.posX, npc.posY, (float)npc.posZ, nullptr, false)) {
+			debug(1, "Harvester: unable to apply room npc placement for '%s'",
+				npc.npcName.c_str());
+		}
 		if (isCorpse) {
 			const int corpseFrame = MIN(entity->getLastFrame(), npc.runtimeState);
 			entity->setAnimationFrameRange(corpseFrame, corpseFrame, false);
@@ -2282,12 +2285,6 @@ bool Flow::populateRoomSceneEntities(RoomSetupState &state,
 			entity->setAnimationFrameRange(0, MIN(entity->getLastFrame(), kRoomNpcAmbientLastFrame), true);
 			if (npc.frameDelay > 0)
 				entity->setAnimationRate(npc.frameDelay);
-		}
-		// Native room NPCs come from spawn_abm_entity_base, which leaves the depth-scale flag cleared.
-		if (!applyRoomActorPlacementInternal(state, *entity,
-				npc.posX, npc.posY, (float)npc.posZ, nullptr, false)) {
-			debug(1, "Harvester: unable to apply room npc placement for '%s'",
-				npc.npcName.c_str());
 		}
 		entityManager->reinsertSceneEntity(entity);
 		debugC(1, kDebugRoom,

@@ -409,6 +409,17 @@ const ADGameDescription gameDescriptions[] = {
 	},
 
 	{"dracula1",
+		"Retail version",
+		AD_ENTRY3s("Install/script.pak", "6998262fcce9cb5d3cc8a555f8ee024a", 265,
+				   "Install/InsertCD.vr", "f13b71b0b788be8d2157b9d5082cec87", 52394,
+				   "Interface.vr", "195a7b2b6185245b64145f3e43e4f508", 90805),
+		Common::ES_ESP,
+		Common::kPlatformWindows,
+		ADGF_DROPPLATFORM | ADGF_TESTING,
+		GUIO1(GUIO_NONE)
+	},
+
+	{"dracula1",
 		"GOG release",
 		AD_ENTRY2s("script.lst", "78060b78cf403ddb7e22903ba7b269d6", 548,
 				   "Interface.vr", "47099471f31f794be8a7e5a3c382bf62", 104304),
@@ -651,6 +662,17 @@ const ADGameDescription gameDescriptions[] = {
 		Common::RU_RUS,
 		Common::kPlatformWindows,
 		ADGF_DROPPLATFORM | ADGF_CD | PHOENIXVR_V2 | ADGF_UNSTABLE,
+		GUIO1(GUIO_NONE)
+	},
+	{"pharaoncurse",
+		"Demo",
+		AD_ENTRY2s(
+			"script.lst", "5a80c5ba5d3223dd14553964e96f1613", 45038,
+			"L0P01R01S00.vr", "e20f37ea406b2ad7baac42f45d1bd6af", 16245
+		),
+		Common::EN_ANY,
+		Common::kPlatformWindows,
+		ADGF_DROPPLATFORM | ADGF_DEMO | PHOENIXVR_V2 | ADGF_UNSTABLE,
 		GUIO1(GUIO_NONE)
 	},
 

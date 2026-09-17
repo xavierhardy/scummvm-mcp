@@ -42,7 +42,10 @@
 #include "macs2/amiga_archive.h"
 #include "macs2/events.h"
 #include "macs2/macs2_constants.h"
+#include "macs2/pathfinding.h"
 #include "macs2/scriptexecutor.h"
+#include "macs2/sprite.h"
+#include "macs2/text.h"
 
 namespace Macs2 {
 
@@ -96,22 +99,7 @@ public:
 };
 
 struct Macs2GameDescription;
-
-// enum class CursorMode { Talk = 0, Look = 1, Touch = 2, Walk = 3};
 class Music;
-
-struct Sprite {
-	uint16 _width = 0;
-	uint16 _height = 0;
-	Common::Array<uint8> _data;
-};
-
-struct GlyphData : public Sprite {
-	char _ascii = 0;
-
-	void readFromeFile(Common::File &file);
-	void readFromMemory(Common::SeekableReadStream *stream);
-};
 
 struct AnimFrame : public Sprite {
 	int16 _offsetX = 0;
@@ -210,21 +198,39 @@ struct AnimBlobView {
 
 	explicit AnimBlobView(const Common::Array<uint8> &blob) : _blob(blob) {}
 
-	bool isValid() const { return _blob.size() >= 14; } // header(12) + at least 2 bytes frame count
+	bool isValid() const {
+		return _blob.size() >= 14;
+	}
 
-	// Header fields
-	uint16 sequencePosition() const { return READ_LE_UINT16(&_blob[0x02]); }
-	uint16 repeatCounter() const { return READ_LE_UINT16(&_blob[0x04]); }
-	uint16 loopStartPosition() const { return READ_LE_UINT16(&_blob[0x06]); }
-	uint16 delayCounter() const { return READ_LE_UINT16(&_blob[0x08]); }
-	uint16 sequenceLength() const { return READ_LE_UINT16(&_blob[0x0A]) + 1; }
+	uint16 sequencePosition() const {
+		return READ_LE_UINT16(&_blob[0x02]);
+	}
 
-	// Derived offsets
-	uint32 frameDataOffset() const { return 0x0B + sequenceLength(); }
+	uint16 repeatCounter() const {
+		return READ_LE_UINT16(&_blob[0x04]);
+	}
+
+	uint16 loopStartPosition() const {
+		return READ_LE_UINT16(&_blob[0x06]);
+	}
+
+	uint16 delayCounter() const {
+		return READ_LE_UINT16(&_blob[0x08]);
+	}
+
+	uint16 sequenceLength() const {
+		return READ_LE_UINT16(&_blob[0x0A]) + 1;
+	}
+
+	uint32 frameDataOffset() const {
+		return 0x0B + sequenceLength();
+	}
+
 	uint16 frameCount() const {
-		uint32 off = frameDataOffset();
-		if (off + 2 > _blob.size())
+		const uint32 off = frameDataOffset();
+		if (off + 2 > _blob.size()) {
 			return 0;
+		}
 		return READ_LE_UINT16(&_blob[off]);
 	}
 
@@ -241,16 +247,18 @@ struct AnimBlobView {
 	bool getFrameInfo(uint16 index, FrameInfo &out) const {
 		uint32 pos = frameDataOffset() + 2; // skip frame count word
 		for (uint16 i = 0; i <= index; i++) {
-			if (pos + 10 > _blob.size())
+			if (pos + 10 > _blob.size()) {
 				return false;
-			int16 ox = (int16)READ_LE_UINT16(&_blob[pos]);
-			int16 oy = (int16)READ_LE_UINT16(&_blob[pos + 2]);
-			uint16 unk = READ_LE_UINT16(&_blob[pos + 4]);
-			uint16 w = READ_LE_UINT16(&_blob[pos + 6]);
-			uint16 h = READ_LE_UINT16(&_blob[pos + 8]);
+			}
+			const int16 ox = (int16)READ_LE_UINT16(&_blob[pos]);
+			const int16 oy = (int16)READ_LE_UINT16(&_blob[pos + 2]);
+			const uint16 unk = READ_LE_UINT16(&_blob[pos + 4]);
+			const uint16 w = READ_LE_UINT16(&_blob[pos + 6]);
+			const uint16 h = READ_LE_UINT16(&_blob[pos + 8]);
 			pos += 10;
-			if (w == 0 || h == 0 || pos + (uint32)w * h > _blob.size())
+			if (w == 0 || h == 0 || pos + (uint32)w * h > _blob.size()) {
 				return false;
+			}
 			if (i == index) {
 				out = {ox, oy, unk, w, h, &_blob[pos]};
 				return true;
@@ -260,24 +268,6 @@ struct AnimBlobView {
 		return false;
 	}
 };
-
-struct PathfindingPoint {
-	uint8 _index;
-	Common::Point _position;
-	Common::Array<uint8> _adjacentPoints;
-};
-
-struct PathfindingAreaOverride {
-	bool _active;
-	uint16 _index;
-	uint16 _overrideValue;
-};
-
-// Area override table at scene+0x4EA8 (indexed by pathfinding value 0xC8..0xEF)
-// Set by opcode 0x4D, read by getAreaAtPoint (1008:101d)
-#define AREA_OVERRIDE_MIN 200
-#define AREA_OVERRIDE_MAX 239
-#define AREA_OVERRIDE_COUNT (AREA_OVERRIDE_MAX - AREA_OVERRIDE_MIN + 1)
 
 class Macs2Engine : public Engine, public Events {
 private:
@@ -308,7 +298,7 @@ public:
 		V2  // AHFFMACS0200
 	};
 	McsFileVersion detectMcsFileVersion(Common::SeekableReadStream &stream) const;
-	/** Load AHFFMACS0100 layout (loadResourceFile @ 1008:2e8d). */
+	/** Load AHFFMACS0100 layout */
 	void loadResourceFileV1();
 	/** Load AHFFMACS0200 layout */
 	void loadResourceFileV2();
@@ -326,30 +316,20 @@ public:
 	 * seed them from MXIN chrome (copper base16 layout).
 	 */
 	void installAmigaPortraitPalette(bool copyFromPlayfield);
-	/**
-	 * Build _panelRemapTable from luminance buckets (Ghidra fill_ui_panel_darken_remap
-	 * @ 002221fe). Outputs into private UI bank 0xF0.. so playfield/intro colors
-	 * at MXIN darken indices are never overwritten.
-	 */
 	void buildAmigaPanelRemapTable();
 	bool loadAmigaCursorResource(uint16 resourceId, AnimFrame &out);
-	/** Load FF_0000 MXFF into `_glyphs` (Ghidra drawText / g_pFont1Data). */
 	bool loadAmigaMxffFont();
-	/** Opcode 0x38 overlay font: FF_* from DataA, else copy the main MXFF glyphs. */
 	bool loadAmigaOverlayFont(uint8 resourceIndex);
-	/** Load one FF_* MXFF into `_overlayGlyphs`. Returns false if missing/undecodable. */
 	bool loadAmigaOverlayFontResource(uint16 ffId);
 	/**
 	 * Amiga: load native MM_* MXMM package by resource id (not script scene id).
-	 * Script-visible scene ids are resourceId+1 (Ghidra FUN_002215fa / load_scene_mxmm).
+	 * Script-visible scene ids are resourceId+1.
 	 * Also extracts trailer script/strings into _amigaPendingScene* for changeScene.
 	 * Palette indices 0..31 stay Amiga COLOR registers for OO sprite compatibility.
 	 */
 	bool loadAmigaSceneBackground(uint32 sceneResourceId);
 
-	// We also need some data from the executable, specifically embedded
-	// Adlib data
-	void readExecutable();
+	void initInventoryIconIndices();
 
 	// Assumes that the stream is at the location of the number of background animations
 	void readBackgroundAnimations(Common::SeekableReadStream *stream);
@@ -366,14 +346,6 @@ public:
 	Script::ScriptExecutor *_scriptExecutor = nullptr;
 	Graphics::ManagedSurface _sceneBackground;
 	Graphics::ManagedSurface _hotspotMap;
-
-	// File offset to the map mode image for the current scene (scene table entry +8).
-	// When 0, the map mode is unavailable for this scene.
-	uint32 _mapImageFileOffset = 0;
-
-	// Per-depth sub-scene file offsets for map mode preview (binary: scene+0x5DD7+depth*4).
-	// File position where the sub-scene offset table starts (after map depth map).
-	int64 _mapSubSceneTableFilePos = 0;
 
 	// This is the depth map
 	Graphics::ManagedSurface _depthMap;
@@ -392,41 +364,11 @@ public:
 	Common::Array<Common::String> _debugOutput;
 	Common::Array<Common::String> _textLog;
 
-	// Note: This is used both for pathfinding as well as for area IDs
-	Graphics::ManagedSurface _pathfindingMap;
+	Pathfinding _pathfinding;
 
-	Common::Array<PathfindingAreaOverride> _pathfindingOverrides;
-	// Area override table at scene+value*5+0x4EA8 (for getAreaAtPoint)
-	uint16 _areaOverrides[AREA_OVERRIDE_COUNT] = {0};
-	Common::Array<PathfindingPoint> _pathfindingPoints;
-	Common::Array<Common::Point> _path;
-
-	bool getPathfindingOverride(uint16 index, uint16 &result);
-	void setPathfindingOverride(uint16 index, uint16 overrideValue);
-
-	// Walkability threshold 0xC8 uses signed 16-bit comparison in the binary (JL/JGE).
-	// Values with (int16)value < 0xC8 are walkable heights; e.g. -2 (0xFFFE) is walkable.
-	static inline bool isWalkabilityBlocking(uint16 value) {
-		return (int16)value >= 0xC8;
-	}
-	static inline bool isWalkabilityWalkable(uint16 value) {
-		return (int16)value < 0xC8;
-	}
-
-	// This one implements the lookup relative to es:[di+4EA8h] vs. the other one at es:[di+4EA5h] and es:[di+4EA6h]
-	uint16 getPathfindingOverride2(uint16 index);
-	void removePathfindingOverride(uint16 index);
-
-	uint16 getWalkabilityAt(int16 y, int16 x);
 	/** Sync depth map with the current background animation frame (v1 gate fix). */
 	void updateBackgroundAnimationDepthMap(size_t animIndex);
 	void updateAllBackgroundAnimationDepthMaps();
-	bool isPathWalkable(int16 y1, int16 x1, int16 y2, int16 x2);
-	void snapToWalkablePosition(int16 *pTargetY, int16 *pTargetX, int16 charY, int16 charX);
-	int getPathfindingNodeCount() const { return (int)_numPathfindingPoints; }
-	int euclideanDistance(const Common::Point &a, const Common::Point &b);
-	int walkableDistance(int nodeA, int nodeB);
-	int computeMinCostToReachable(int nodeIndex, int prevNode, uint16 actorIndex, const bool *reachable, int nodeCount, const Common::Point &finalDest);
 
 	// This is the override list living at [5BD1]
 	// Savegames sync 16 words into indices 1..16 (array size 0x11 during sync).
@@ -437,13 +379,7 @@ public:
 	/** Per-cursor hotspot from native HUD button metadata (v2); (0,0) = use center. */
 	Common::Point _cursorHotspots[33];
 
-	GlyphData _glyphs[256];
-	GlyphData _panelGlyphs[256]; // Font 2: clean sans-serif font used by save/load panel
-	GlyphData _overlayGlyphs[256];
-	uint16 numOverlayGlyphs = 0;
-	uint16 maxOverlayGlyphHeight = 0;
-	uint16 numPanelGlyphs = 0;
-	uint16 maxPanelGlyphHeight = 0;
+	Text _text;
 	bool loadOverlayFont(uint8 resourceIndex, uint16 executingObjectID);
 	/**
 	 * Resolve scene/object resource table entry to an absolute MCS file offset.
@@ -474,12 +410,13 @@ public:
 	};
 	struct DeltaSfxEvent {
 		uint16 frameIndex = 0;
-		Common::String fileName;
 		bool duckMusic = false;
+		Common::String fileName;
 	};
 	struct DeltaAnimState {
 		bool loaded = false;
 		bool playing = false;
+		bool applyPaletteOnStart = false;
 		uint16 frameCount = 0;
 		uint16 startFrame = 0;
 		uint16 endFrame = 0;
@@ -491,7 +428,6 @@ public:
 		uint16 clipMaX = 0;
 		uint16 clipMaY = 0;
 		Graphics::Palette palette{Graphics::PALETTE_COUNT};
-		bool applyPaletteOnStart = false;
 		Common::Array<DeltaFrame> frames;
 		Common::Array<DeltaSfxEvent> sfxEvents;
 		void clear(int screenW, int screenH) {
@@ -517,14 +453,8 @@ public:
 	bool tickDeltaPlayback();
 	void applyDeltaFrameToBackground(const DeltaFrame &frame);
 	void playDeltaFrameSfx(uint16 displayFrame);
-	// Font glyph count (79 glyphs in the resource file's font data)
-	uint16 _numGlyphs = 79;
-	uint16 _maxGlyphHeight;
-
 	AnimFrame _animFrames[6];
 	// 6 flag/decoration animation frames at fixed file offset 0x6A5941, each followed by 6 padding bytes
-
-	bool findGlyph(char c, GlyphData &out) const;
 
 	// Character shading remap (loadResourceFile @ 1008:2e8d -> scene+0x53D3).
 	// Indexed as (color - 0xC0) * 0x20 + shadowIntensity (drawSpriteTransparent @ 1010:0ed1).
@@ -534,7 +464,7 @@ public:
 
 	// Map scene offsets from resource file (scene+0x5DDB, 256 entries x 4 bytes).
 	// Each entry is a file offset to a scene preview image for map mode.
-	uint32 _mapSceneOffsets[256] = {0};
+	uint32 _helpOffsets[256] = {0};
 
 	Common::Array<BackgroundAnimation> _backgroundAnimations;
 	Common::Array<BackgroundAnimationBlob> _backgroundAnimationsBlobs;
@@ -544,8 +474,6 @@ public:
 	/** Absolute file offset of the 0x3000-byte scene/object directory. */
 	uint32 _mcsDirectoryOffset = kMcsV1DirectoryOffset;
 
-	/** Amiga MXFF line pitch: measureTextWidth @ 00224420 uses (font[+8] - 1). */
-	uint16 amigaTextLinePitch = 0;
 	/** True after loadAmigaSceneBackground installed copper colors in 0..31. */
 	bool _amigaNativePlayfieldPalette = false;
 	Common::Array<byte> _amigaLineCopperPal;
@@ -599,7 +527,6 @@ public:
 
 	Common::Array<uint16> _hotspotColorTable;
 
-	uint16 _numPathfindingPoints;
 	uint16 _walkDepthThresholdY;
 	uint16 _walkDepthScaleFactor;
 	uint16 _walkBaseSpeedPct;
@@ -683,7 +610,7 @@ public:
 	// full backbuffer each frame via ManagedSurface. Kept only for save/load compatibility.
 	bool _clipRectDirty = false;
 
-	uint16 getHotspotAtPoint(const Common::Point &p);
+	uint16 getHotspotAtPoint(const Common::Point &p) const;
 
 	Common::Array<uint16> inventoryIconIndices;
 	Common::Array<uint16> containerInventoryIconIndices;
@@ -732,13 +659,6 @@ public:
 	// Schedules a run of the script the next time the executor is ticked
 	void scheduleRun(bool initScene = false);
 
-	uint16 getWalkabilityAt(const Common::Point &p);
-
-	int measureString(const Common::String &s);
-
-	int measureStrings(const Common::StringArray &sa);
-	int measureStringsVertically(const Common::StringArray &sa);
-
 	Common::StringArray decodeStrings(Common::MemoryReadStream *stream, int offset, int numStrings, int sceneId = 0, int objectId = 0);
 
 	// --- Translation support ---
@@ -763,7 +683,7 @@ public:
 
 	bool isDemo() const { return getFeatures() & ADGF_DEMO; }
 
-	/** AHFFMACS0200 dialect (directory at 0x212) vs AHFFMACS0100 (0x10). */
+	bool isV1() const { return _mcsFileVersion == McsFileVersion::V1; }
 	bool isV2() const { return _mcsFileVersion == McsFileVersion::V2; }
 
 	/** MCS directory base. */
@@ -811,15 +731,15 @@ public:
 	uint16 ticksPerGameFrame() const { return isV2() ? 1 : 2; }
 
 	/** ReadyObject anim slots (1-based inclusive max). */
-	uint16 maxAnimSlots() const { return isV2() ? 0x26 : 0x15; }
+	uint16 maxAnimSlots() const { return isV2() ? 38 : 21; }
 	/** Orientations that map to anim slots 1..N (inclusive). */
-	uint16 maxOrientations() const { return isV2() ? 0x25 : 0x14; }
+	uint16 maxOrientations() const { return maxAnimSlots() - 1; }
 	/** Overload / special-anim slot index. */
 	uint16 overloadAnimSlot() const { return maxAnimSlots(); }
 	static uint16 specialAnimSlotToAnimSlot(uint16 specialSlot);
 	/** Scene hotspot override table entries (1-based inclusive max). */
 	/** Hotspot remap table indices (1-based). DOS scene+0x5BD1: 16; V2 ActModule+0x6161: 32. */
-	uint16 maxHotspots() const { return isV2() ? 0x20 : 0x10; }
+	uint16 maxHotspots() const { return isV2() ? 32 : 16; }
 	/** Per-object resource offset table entries. */
 	uint maxObjectResources() const { return 32; }
 	/** Anim slot used for the current orientation (overload-direction rule). */
@@ -833,13 +753,13 @@ public:
 	int16 scaleScriptCoord(int16 coord) const { return isV2() ? (int16)(coord * 2) : coord; }
 
 	/** Dialogue / text-box chrome (DOS l0037_B368 / B462). */
-	int dialogPadW() const { return isAmiga() ? 0x08 : 0x12; }
-	int dialogPadH() const { return isAmiga() ? 0x08 : 0x10; }
-	int dialogTextInset() const { return isAmiga() ? 0x04 : 0x09; }
+	int dialogPadW() const { return isAmiga() ? 8 : 18; }
+	int dialogPadH() const { return isAmiga() ? 8 : 16; }
+	int dialogTextInset() const { return isAmiga() ? 4 : 9; }
 	int dialogLineGap() const { return 2; }
-	int portraitBorderPad() const { return isAmiga() ? 2 : 0x0D; }
+	int portraitBorderPad() const { return isAmiga() ? 2 : 13; }
 	int portraitContentInset() const { return isAmiga() ? 1 : 7; }
-	int portraitTextGap() const { return isAmiga() ? 0x0A : 0x12; }
+	int portraitTextGap() const { return isAmiga() ? 10 : 18; }
 	/**
 	 * Per-line step for dialogue layout.
 	 * DOS: maxGlyphHeight + dialogLineGap(). Amiga: absolute MXFF pitch
@@ -847,8 +767,8 @@ public:
 	 */
 	int dialogLineHeight() const {
 		if (isAmiga())
-			return amigaTextLinePitch ? (int)amigaTextLinePitch : (int)_maxGlyphHeight;
-		return (int)_maxGlyphHeight + dialogLineGap();
+			return _text.amigaTextLinePitch ? (int)_text.amigaTextLinePitch : (int)_text._maxGlyphHeight;
+		return (int)_text._maxGlyphHeight + dialogLineGap();
 	}
 
 	/** Depth-map compare Y for sprite occlusion (halved on v2 full-res depth). */
@@ -897,6 +817,8 @@ public:
 	 * Produces binary-compatible saves with the original DOS game.
 	 */
 	Common::Error syncGame(Common::Serializer &s);
+	Common::Error syncGameV1(Common::Serializer &s);
+	Common::Error syncGameV2(Common::Serializer &s);
 
 	Common::Error saveGameStream(Common::WriteStream *stream, bool isAutosave = false) override {
 		Common::Serializer s(nullptr, stream);
@@ -948,8 +870,6 @@ public:
 };
 
 extern Macs2Engine *g_engine;
-#define SHOULD_QUIT ::Macs2::g_engine->shouldQuit()
-Common::String getObjectHotspotName(uint16 objectIndex);
 /** Display name for a hit id: 0x400+object or 0x800+scene hotspot. */
 Common::String lookupInteractionDisplayName(uint16 interactionId);
 

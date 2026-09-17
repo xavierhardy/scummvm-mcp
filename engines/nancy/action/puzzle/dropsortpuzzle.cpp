@@ -113,25 +113,7 @@ void DropSortPuzzle::readData(Common::SeekableReadStream &stream) {
 	_loseSound.readData(stream);
 
 	// Count-prefixed 23-byte hotspot records; the first is the "give up / exit" hotspot.
-	int16 numZones = stream.readSint16LE();
-	for (int16 i = 0; i < numZones; ++i) {
-		Common::Rect r;
-		readRect(stream, r);
-		uint16 cursorType = stream.readUint16LE();
-		uint16 sceneID = stream.readUint16LE();
-		int16 exitFlagLabel = stream.readSint16LE();
-		byte exitFlagValue = stream.readByte();
-
-		if (i == 0) {
-			_exitHotspot = r;
-			_exitCursorType = cursorType;
-			_exitScene.sceneID = sceneID;
-			// The field after the scene id is a flag label (set on give-up), not a frame.
-			_exitScene.frameID = 0;
-			_exitFlag.label = exitFlagLabel;
-			_exitFlag.flag = exitFlagValue;
-		}
-	}
+	readExitHotspot(stream, _exitHotspot, _exitCursorType, _exitScene, _exitFlag);
 }
 
 void DropSortPuzzle::init() {
@@ -176,6 +158,7 @@ void DropSortPuzzle::init() {
 
 	redraw();
 	registerGraphics();
+	_carriedObject.registerGraphics();
 }
 
 Common::Point DropSortPuzzle::beltPosition(float progress) const {
@@ -213,10 +196,21 @@ int DropSortPuzzle::binAtCursor(const Common::Point &mousePos) const {
 	return -1;
 }
 
-Common::Point DropSortPuzzle::cursorToViewport(const Common::Point &mousePos) const {
-	Common::Rect screenPt(mousePos.x, mousePos.y, mousePos.x + 1, mousePos.y + 1);
-	Common::Rect vpPt = NancySceneState.getViewport().convertScreenToViewport(screenPt);
-	return Common::Point(vpPt.left, vpPt.top);
+// Puts a candy on the cursor, or takes the carried one off it for a type of kNoItem.
+void DropSortPuzzle::carryItem(int16 type, NancyInput &input) {
+	_carriedType = type;
+
+	if (_carriedType != kNoItem && _carriedType < (int16)_itemSrcRects.size() &&
+			_image.getBounds().contains(_itemSrcRects[_carriedType])) {
+		_carriedObject._drawSurface.create(_image, _itemSrcRects[_carriedType]);
+		_carriedObject.setTransparent(true);
+		_carriedObject.setVisible(true);
+		_carriedObject.pickUp();
+		_carriedObject.handleInput(input);
+	} else {
+		_carriedObject.setVisible(false);
+		_carriedObject.putDown();
+	}
 }
 
 void DropSortPuzzle::applyDrop(int binIndex, int16 type) {
@@ -268,14 +262,6 @@ void DropSortPuzzle::redraw() {
 	for (int i = 0; i < _strikes && i < (int)_strikeDestRects.size() && i < (int)_strikeSrcRects.size(); ++i) {
 		_drawSurface.blitFrom(_image, _strikeSrcRects[i],
 			Common::Point(_strikeDestRects[i].left, _strikeDestRects[i].top));
-	}
-
-	// The candy currently being carried, following the cursor.
-	if (_carriedType != kNoItem) {
-		const Common::Rect &src = _itemSrcRects[_carriedType];
-		int w = src.width();
-		int h = src.height();
-		_drawSurface.blitFrom(_image, src, Common::Point(_dragPos.x - w / 2, _dragPos.y - h / 2));
 	}
 
 	drawCounter();
@@ -388,7 +374,7 @@ void DropSortPuzzle::execute() {
 			}
 
 			// The belt and candies move every frame, so keep the overlay in sync.
-			if (moviesUpdated || !_items.empty() || _carriedType != kNoItem) {
+			if (moviesUpdated || !_items.empty()) {
 				redraw();
 			}
 
@@ -443,14 +429,13 @@ void DropSortPuzzle::handleInput(NancyInput &input) {
 	if (_carriedType != kNoItem) {
 		// Raw Nancy13 cursor type ids from the AR data, applied via the "set from script" path.
 		g_nancy->_cursor->setCursorType((CursorManager::CursorType)_dragCursorType, true);
-		_dragPos = cursorToViewport(input.mousePos);
-		redraw();
+		_carriedObject.handleInput(input);
 
 		if (click) {
 			int bin = binAtCursor(input.mousePos);
 			if (bin >= 0) {
 				applyDrop(bin, _carriedType);
-				_carriedType = kNoItem;
+				carryItem(kNoItem, input);
 				redraw();
 			}
 		}
@@ -464,9 +449,8 @@ void DropSortPuzzle::handleInput(NancyInput &input) {
 	if (item >= 0) {
 		g_nancy->_cursor->setCursorType((CursorManager::CursorType)_hoverCursorType, true);
 		if (click) {
-			_carriedType = _items[item].type;
+			carryItem(_items[item].type, input);
 			_items.remove_at(item);
-			_dragPos = cursorToViewport(input.mousePos);
 			playSoundBlock(_pickupSound);
 			redraw();
 		}

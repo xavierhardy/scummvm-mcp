@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/endian.h"
 #include "common/util.h"
 #include "macs2/gameobjects.h"
 #include "macs2/macs2.h"
@@ -26,7 +27,49 @@
 
 namespace Macs2 {
 
+static void packPathBlock(const Character *chr, byte pathBlock[32], uint16 &pathIndex, uint16 &pathLength) {
+	memset(pathBlock, 0, 32);
+	pathIndex = 0;
+	pathLength = 0;
+	if (chr == nullptr)
+		return;
+
+	pathLength = (uint16)MIN<uint>(chr->_path.size(), kPathNodeSlots);
+	for (uint16 i = 0; i < pathLength; i++)
+		WRITE_LE_UINT16(&pathBlock[i * 2], chr->_path[i]);
+
+	if (pathLength == 0)
+		pathIndex = (uint16)chr->_currentPathIndex;
+	else
+		pathIndex = (uint16)(chr->_currentPathIndex + 1);
+}
+
+static void unpackPathBlock(Character *chr, const byte pathBlock[32], uint16 pathIndex, uint16 pathLength) {
+	chr->_path.clear();
+	if (pathLength > kPathNodeSlots)
+		pathLength = kPathNodeSlots;
+	for (uint16 i = 0; i < pathLength; i++)
+		chr->_path.push_back(READ_LE_UINT16(&pathBlock[i * 2]));
+
+	if (pathLength == 0)
+		chr->_currentPathIndex = (int16)pathIndex;
+	else
+		chr->_currentPathIndex = (int16)pathIndex - 1;
+}
+
 Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
+	if (isV2()) {
+		return syncGameV2(s);
+	}
+	return syncGameV1(s);
+}
+
+Common::Error Macs2Engine::syncGameV2(Common::Serializer &s) {
+	// TODO: not yet implemented
+	return Common::kUnknownError;
+}
+
+Common::Error Macs2Engine::syncGameV1(Common::Serializer &s) {
 	const byte SAVE_MAGIC[12] = {'A', 'H', 'F', 'F', 'M', 'S', 'G', 'M', '0', '1', '0', '0'};
 	View1 *view1 = (View1 *)findView("View1");
 	if (view1 == nullptr)
@@ -41,10 +84,10 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 	if (s.isSaving()) {
 		byte magic[12];
 		memcpy(magic, SAVE_MAGIC, sizeof(SAVE_MAGIC));
-		s.syncBytes(magic, 12);
+		s.syncBytes(magic, sizeof(magic));
 	} else {
 		byte magic[12];
-		s.syncBytes(magic, 12);
+		s.syncBytes(magic, sizeof(magic));
 		if (memcmp(magic, SAVE_MAGIC, sizeof(SAVE_MAGIC)) != 0)
 			return Common::kReadingFailed;
 	}
@@ -55,7 +98,7 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 		slotName[0] = 20;
 		memcpy(slotName + 1, defName, sizeof(defName));
 	}
-	s.syncBytes(slotName, 21);
+	s.syncBytes(slotName, sizeof(slotName));
 
 	uint16 actorIndex = (uint16)Scenes::instance()._currentActorIndex;
 	uint16 sceneIndex = (uint16)Scenes::instance()._currentSceneIndex;
@@ -152,7 +195,7 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 	s.syncAsUint16LE(activeInventoryItemId);
 	if (s.isLoading()) {
 		if (activeInventoryItemId >= 0x401 && activeInventoryItemId <= 0x600) {
-			uint16 idx = activeInventoryItemId - 0x400;
+			const uint16 idx = activeInventoryItemId - 0x400;
 			if (idx <= GameObjects::instance()._objects.size()) {
 				GameObject *obj = GameObjects::instance()._objects[idx - 1];
 				view1->_activeInventoryItem = obj;
@@ -259,25 +302,23 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 		}
 	}
 
-	// --- Scene data: pathfinding overrides [+0x528D]: 200 bytes ---
-	// 40 entries x 5 bytes each (1 byte active + 2 bytes value + 2 bytes remap)
-	// indexed by pathfinding value 0xC8..0xEF
+	// Scene data: pathfinding overrides [+0x528D]: 200 bytes ---
 	if (s.isLoading())
-		_pathfindingOverrides.clear();
-	for (int i = 0; i < ARRAYSIZE(_areaOverrides); i++) {
+		_pathfinding._walkOverrides.clear();
+	for (int i = 0; i < ARRAYSIZE(_pathfinding._areaOverrides); i++) {
 		uint8 active = 0;
 		uint16 overrideValue = 0;
 		uint16 remap = 0;
 		if (s.isSaving()) {
 			uint16 idx = AREA_OVERRIDE_MIN + i;
-			for (const auto &ov : _pathfindingOverrides) {
+			for (const auto &ov : _pathfinding._walkOverrides) {
 				if (ov._index == idx && ov._active) {
 					active = 1;
 					overrideValue = ov._overrideValue;
 					break;
 				}
 			}
-			remap = _areaOverrides[i];
+			remap = _pathfinding._areaOverrides[i];
 		}
 		s.syncAsByte(active);
 		s.syncAsUint16LE(overrideValue);
@@ -288,13 +329,13 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 				ov._active = true;
 				ov._index = AREA_OVERRIDE_MIN + i;
 				ov._overrideValue = overrideValue;
-				_pathfindingOverrides.push_back(ov);
+				_pathfinding._walkOverrides.push_back(ov);
 			}
-			_areaOverrides[i] = remap;
+			_pathfinding._areaOverrides[i] = remap;
 		}
 	}
 
-	// --- Scene data: hotspot overrides
+	// Scene data: hotspot overrides
 	if (s.isLoading()) {
 		_hotspotOverrides.clear();
 		_hotspotOverrides.resize(17, 0xFFFF);
@@ -316,20 +357,7 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 		s.syncAsUint32LE(_sceneTimerParams[i]);
 	}
 
-	// --- Animation blob sequence positions (one uint16 per background anim) ---
-	//
-	// Binary save (1008:6859): for each bg anim (1..count) writes
-	//   getAnimBlobSequencePos(blob) = blob[+2] = the blob header's current sequence
-	//   position word.
-	// Binary load (1008:747e): reads the value V, then calls
-	//   advanceAnimFrame(save=1, mode=V+100, blob), i.e. jumps the blob to
-	//   sequence position V (mode 100+N). This both restores the saved position
-	//   AND re-parses the sequence so the blob header is fully consistent -
-	//   exactly what scriptChangeAnimation does.
-	//
-	// The count is iStack_199 = sceneData+0x50F5, which equals
-	// _backgroundAnimationsBlobs.size() after changeScene() above.
-	uint16 numSpecialAnims = (uint16)_backgroundAnimationsBlobs.size();
+	const uint16 numSpecialAnims = (uint16)_backgroundAnimationsBlobs.size();
 	for (uint16 i = 0; i < numSpecialAnims; i++) {
 		BackgroundAnimationBlob &blob = _backgroundAnimationsBlobs[i];
 		uint16 seqPos = 0;
@@ -347,8 +375,9 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 				// command byte). Force it back to exactly V so the field round-trips
 				// losslessly and byte-matches what the original wrote (the original
 				// stores its live running position, not a re-derived one).
-				if (blob._blob.size() >= 4)
+				if (blob._blob.size() >= 4) {
 					WRITE_LE_UINT16(&blob._blob[2], seqPos);
+				}
 			}
 		}
 	}
@@ -369,7 +398,7 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 	s.syncAsUint16LE(_scriptExecutor->_activeMusicSlot);
 
 	// --- Music slot buffers (slots 1-2): size (2 bytes) + data each ---
-	for (int slot = 0; slot < 2; slot++) {
+	for (int slot = 0; slot < ARRAYSIZE(_scriptExecutor->_musicSlots); slot++) {
 		uint16 musicSize = 0;
 		if (s.isSaving())
 			musicSize = (uint16)_scriptExecutor->_musicSlots[slot].size();
@@ -447,8 +476,9 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 		// Find the Character for this object (exists after changeScene on load too)
 		Character *chr = nullptr;
 		for (uint ci = 0; ci < view1->_characters.size(); ci++) {
-			if (view1->_characters[ci] && view1->_characters[ci]->_gameObject == obj) {
-				chr = view1->_characters[ci];
+			Character *c = view1->_characters[ci];
+			if (c && c->_gameObject == obj) {
+				chr = c;
 				break;
 			}
 		}
@@ -484,23 +514,15 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 		}
 
 		byte pathBlock[32] = {0};
-		if (s.isSaving() && chr)
-			memcpy(pathBlock, chr->_pathBlockRaw, 32);
+		uint16 pathIndex = 0;
+		uint16 pathLength = 0;
+		if (s.isSaving())
+			packPathBlock(chr, pathBlock, pathIndex, pathLength);
 		s.syncBytes(pathBlock, 32);
-
-		uint16 pathIndex = chr ? (uint16)chr->_currentPathIndex : 0;
 		s.syncAsUint16LE(pathIndex);
-
-		uint16 pathLength = chr ? (uint16)chr->_path.size() : 0;
 		s.syncAsUint16LE(pathLength);
-
-		if (s.isLoading()) {
-			memcpy(chr->_pathBlockRaw, pathBlock, 32);
-			chr->_path.clear();
-			for (uint16 pi = 0; pi < pathLength && pi < 32; pi++)
-				chr->_path.push_back(pathBlock[pi]);
-			chr->_currentPathIndex = (int)pathIndex;
-		}
+		if (s.isLoading() && chr)
+			unpackPathBlock(chr, pathBlock, pathIndex, pathLength);
 
 		uint16 stepAccum = chr ? (uint16)chr->_stepError : 0;
 		s.syncAsUint16LE(stepAccum);
@@ -567,10 +589,10 @@ Common::Error Macs2Engine::syncGame(Common::Serializer &s) {
 			chr->_pickupFrameCounter = pickupFrameCounter;
 		s.syncAsUint16LE(obj->_pickupFrameStart);
 		s.syncAsUint16LE(obj->_pickupFrameEnd);
-		uint16 prevOrientation = chr ? chr->_previousOrientation : 0;
+		uint16 prevOrientation = chr ? chr->_previousOrientation : OrientationNone;
 		s.syncAsUint16LE(prevOrientation);
 		if (s.isLoading())
-			chr->_previousOrientation = (uint8)prevOrientation;
+			chr->_previousOrientation = (ObjectOrientation)prevOrientation;
 
 		s.syncAsUint16LE(obj->_overloadAnimTriggerDirection);
 
