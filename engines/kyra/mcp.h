@@ -151,7 +151,8 @@ private:
 		kTargetItem,       // lying in the room
 		kTargetCharacter,  // somebody standing in it
 		kTargetExit,       // a way out
-		kTargetCarried     // in a box, or in the hand
+		kTargetCarried,    // in a box, or in the hand
+		kTargetObject      // part of the picture the room's script answers a click on
 	};
 
 	// Something an agent can name.
@@ -171,7 +172,8 @@ private:
 		kStepStowHand,   // whatever is in the hand goes into a free box
 		kStepHoldItem,   // the given item comes out of its box into the hand
 		kStepClickAt,    // click a point of the room
-		kStepClickBox    // click the box holding the given item
+		kStepClickBox,   // click the box holding the given item
+		kStepPickUp      // click the given item lying at x, y, clear of whoever stands on it
 	};
 	struct Step {
 		StepKind kind;
@@ -223,6 +225,9 @@ private:
 	// Resolve a name against the room, then against what is carried.
 	bool resolveTarget(const Common::String &name, Target &out) const;
 	Common::String namesHere() const;
+	// The later games: the things in the picture a click does something to,
+	// found by asking the room's own click script (see the definition).
+	void collectHotspots(const Common::Array<Target> &known, Common::Array<Target> &out) const;
 
 	// --- The inventory boxes ---------------------------------------------
 	int boxCount() const;              // boxes on screen at once
@@ -237,6 +242,9 @@ private:
 
 	// --- The step machine ----------------------------------------------------
 	void queueStep(StepKind kind, int itemId = -1, int slot = -1, int x = 0, int y = 0);
+	// Where a click picks up the item lying near x, y rather than landing on
+	// the character standing over it; false when every such point is covered.
+	bool itemClickClearOfCharacter(int itemId, int x, int y, int &clickX, int &clickY) const;
 	// The box holding the item: the one it was in if it still is, else any.
 	int slotFor(int itemId, int slot) const;
 	void runSteps();
@@ -280,6 +288,14 @@ private:
 	// Progress tracking for the stream deadline.
 	int _sseTrackRoom, _sseTrackX, _sseTrackY, _sseTrackHand;
 	uint _sseTrackSteps;
+
+	// The hotspots last found, for the room they were found in. Worked out
+	// again when the room changes and after every action, which is what can
+	// move, add or remove one; kept meanwhile, since an action in progress is
+	// no time to be running the room's script.
+	mutable Common::Array<Target> _hotspots;
+	mutable int _hotspotRoom;
+	mutable bool _hotspotsStale;
 };
 
 } // End of namespace Kyra

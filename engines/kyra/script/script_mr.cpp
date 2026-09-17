@@ -1146,8 +1146,9 @@ int KyraEngine_MR::o3d_delay(EMCState *script) {
 
 typedef Common::Functor1Mem<EMCState *, int, KyraEngine_MR> OpcodeV3;
 #define SetOpcodeTable(x) table = &x;
-#define Opcode(x) table->push_back(new OpcodeV3(this, &KyraEngine_MR::x))
-#define OpcodeUnImpl() table->push_back(new OpcodeV3(this, 0))
+// An expression, not a statement: the table setup picks between two with ?:.
+#define Opcode(x) (table->push_back(new OpcodeV3(this, &KyraEngine_MR::x)), table == &_opcodes ? _opcodeNames.push_back(#x) : (void)0)
+#define OpcodeUnImpl() (table->push_back(new OpcodeV3(this, 0)), table == &_opcodes ? _opcodeNames.push_back("") : (void)0)
 void KyraEngine_MR::setupOpcodeTable() {
 	Common::Array<const Opcode *> *table = nullptr;
 

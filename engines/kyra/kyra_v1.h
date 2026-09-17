@@ -285,6 +285,10 @@ protected:
 	// opcode
 	virtual void setupOpcodeTable() = 0;
 	Common::Array<const Opcode *> _opcodes;
+	// The name each entry of _opcodes was registered under, index for index,
+	// where the engine records one (Hand of Fate and Malcolm's Revenge). Read
+	// by the MCP bridge to tell a script's queries from its actions.
+	Common::Array<const char *> _opcodeNames;
 
 	int o1_queryGameFlag(EMCState *script);
 	int o1_setGameFlag(EMCState *script);

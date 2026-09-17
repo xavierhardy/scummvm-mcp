@@ -28,6 +28,7 @@
 #include "kyra/engine/kyra_hof.h"
 #include "kyra/engine/kyra_mr.h"
 #include "kyra/graphics/screen.h"
+#include "kyra/script/script.h"
 #include "kyra/gui/gui.h"
 
 #include "common/endian.h"
@@ -75,7 +76,9 @@ KyraMcpBridge::KyraMcpBridge(KyraEngine_v1 *vm) :
 	_ssePreX(0), _ssePreY(0),
 	_ssePreHand(-1),
 	_sseTrackRoom(-1), _sseTrackX(0), _sseTrackY(0), _sseTrackHand(-1),
-	_sseTrackSteps(0) {
+	_sseTrackSteps(0),
+	_hotspotRoom(-1),
+	_hotspotsStale(true) {
 }
 
 KyraMcpBridge::~KyraMcpBridge() {
@@ -303,8 +306,10 @@ void KyraMcpBridge::collectTargets(Common::Array<Target> &out) const {
 		target.itemId = item;
 		target.x = x;
 		// An item's coordinate is where it stands on the floor; the click
-		// that picks it up lands on the item itself, just above.
-		target.y = MAX(y - 4, 0);
+		// that picks it up lands on the item itself, just above. The later
+		// games take a click from 3 pixels above the floor point plus the
+		// item's height, which for something flat - a nail - is nothing.
+		target.y = MAX(y - (isFirstGame() ? 4 : 2), 0);
 		target.held = false;
 		target.slot = -1;
 		out.push_back(target);
@@ -447,7 +452,247 @@ void KyraMcpBridge::collectTargets(Common::Array<Target> &out) const {
 			target.y = (v2->_specialExitTable[5 + i] + v2->_specialExitTable[15 + i]) / 2;
 			out.push_back(target);
 		}
+		const Common::Array<Target> known = out;
+		collectHotspots(known, out);
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Hotspots
+// ---------------------------------------------------------------------------
+//
+// The later two games keep no list of the things in a picture. A click is
+// handed to the room's script (function 1, with the point in regs 1 and 2 and
+// the item in hand in reg 4), and the script's own comparisons decide whether
+// it landed on the cauldron, the bookshelf or the person by the door. So the
+// only faithful list is the script's: run that function for points across
+// the picture, and see where it would do something.
+//
+// Nothing it would do is done. The run uses a copy of the room's script data
+// whose system calls go through a table of stand-ins: a call that only reads
+// the game - a flag, a position, an item count, whether a point is in a
+// rectangle - is passed to the engine, and the first call that would act ends
+// the run and marks the point a hit. Each hotspot is then the set of points
+// that stopped at the same instruction of the script, which is what makes it
+// one thing rather than several things next to each other.
+
+namespace {
+
+struct KyraProbeResult {
+	bool hit;
+	uint32 site;
+};
+
+// Queries by name. Every such call in both games is named for what it reads.
+bool kyraOpcodeReadsOnly(const char *name) {
+	if (name == nullptr || *name == '\0')
+		return true; // unimplemented: the engine does nothing with it either
+	const char *verb = strchr(name, '_');
+	verb = verb ? verb + 1 : name;
+	static const char *const prefixes[] = { "get", "query", "count", "check", "is" };
+	for (uint i = 0; i < ARRAYSIZE(prefixes); i++) {
+		if (strncmp(verb, prefixes[i], strlen(prefixes[i])) == 0)
+			return true;
+	}
+	return false;
+}
+
+// The staging before a click does anything: turning to face it, walking up to
+// it, a pause, the pointer, a sound. A room's click handler starts with these
+// for nearly everything it answers, so they are stepped over - not run, and
+// not taken as the answer - and what follows them tells the things apart.
+bool kyraOpcodeStagesOnly(const char *name) {
+	if (name == nullptr || *name == '\0')
+		return false;
+	const char *verb = strchr(name, '_');
+	verb = verb ? verb + 1 : name;
+	static const char *const staging[] = {
+		"refreshCharacter", "setCharacterFacing", "setCharacterFacingOverwrite",
+		"setCharacterFacingRefresh", "moveCharacter", "delay", "delaySecs", "update",
+		"hideMouse", "showMouse", "setMousePos", "setCharacterFrame",
+		"setCharacterAnimFrame", "setCharacterAnimFrameFromFacing",
+		"playSoundEffect", "playCompleteSoundEffect"
+	};
+	for (uint i = 0; i < ARRAYSIZE(staging); i++) {
+		if (strcmp(verb, staging[i]) == 0)
+			return true;
+	}
+	return false;
+}
+
+class KyraProbeOpcode : public Opcode {
+public:
+	KyraProbeOpcode(const Opcode *real, bool readsOnly, bool stagesOnly, KyraProbeResult *result) :
+		_real(real), _readsOnly(readsOnly), _stagesOnly(stagesOnly), _result(result) {}
+
+	bool isValid() const override { return true; }
+
+	int operator()(EMCState *script) const override {
+		if (_readsOnly)
+			return (_real != nullptr && _real->isValid()) ? (*_real)(script) : 0;
+		if (_stagesOnly)
+			return 0;
+		_result->hit = true;
+		_result->site = (uint32)((const byte *)script->ip - (const byte *)script->dataPtr->data);
+		script->ip = nullptr;
+		return 0;
+	}
+
+private:
+	const Opcode *_real;
+	bool _readsOnly;
+	bool _stagesOnly;
+	KyraProbeResult *_result;
+};
+
+} // End of anonymous namespace
+
+// A grid this fine finds anything a player could reasonably click on, and
+// is a few thousand short script runs - far less than a frame's work.
+static const int kHotspotStep = 5;
+// Instructions one probe may run before it is abandoned, against a script
+// that loops waiting for something the probe will never do.
+static const uint kHotspotMaxInstructions = 4000;
+// A site answering more of the picture than this is the room's catch-all -
+// a remark about the scenery wherever it is clicked - not a thing in it.
+static const uint kHotspotMaxShare = 40; // percent
+
+void KyraMcpBridge::collectHotspots(const Common::Array<Target> &known, Common::Array<Target> &out) const {
+	if (isFirstGame())
+		return;
+	const int room = roomNumber();
+	const bool quiet = playerHasControl() && _steps.empty() && !_pendingClick;
+	if (room != _hotspotRoom || (_hotspotsStale && quiet)) {
+		if (!quiet) {
+			// A new room still arriving: nothing is known about it yet.
+			if (room != _hotspotRoom)
+				_hotspots.clear();
+		} else {
+			_hotspots.clear();
+			_hotspotRoom = room;
+			_hotspotsStale = false;
+
+			KyraEngine_v2 *v2 = static_cast<KyraEngine_v2 *>(_vm);
+			const Common::Array<const Opcode *> &real = v2->_opcodes;
+			const Common::Array<const char *> &names = v2->_opcodeNames;
+			if (v2->_sceneScriptData.data == nullptr || names.size() != real.size())
+				return;
+
+			KyraProbeResult result;
+			Common::Array<const Opcode *> table;
+			table.reserve(real.size());
+			for (uint i = 0; i < real.size(); i++)
+				table.push_back(new KyraProbeOpcode(real[i], kyraOpcodeReadsOnly(names[i]), kyraOpcodeStagesOnly(names[i]), &result));
+			EMCData data = v2->_sceneScriptData;
+			data.sysFuncs = &table;
+
+			struct Site {
+				uint32 offset;
+				int count;
+				long sumX, sumY;
+				int bestX, bestY;
+				long bestDist;
+			};
+			Common::Array<Site> sites;
+			// Below this the picture ends and the interface begins.
+			const int bottom = isThirdGame()
+				? static_cast<const KyraEngine_MR *>(_vm)->_interfaceCommandLineY1 - 1
+				: 143;
+			uint points = 0;
+			for (int y = kHotspotStep / 2; y <= bottom; y += kHotspotStep) {
+				for (int x = kHotspotStep / 2; x < 320; x += kHotspotStep) {
+					EMCState state;
+					v2->_emc->init(&state, &data);
+					state.regs[1] = x;
+					state.regs[2] = y;
+					state.regs[3] = 0;
+					state.regs[4] = -1;
+					result.hit = false;
+					points++;
+					if (!v2->_emc->start(&state, 1))
+						break;
+					uint budget = kHotspotMaxInstructions;
+					while (budget-- > 0 && v2->_emc->isValid(&state))
+						v2->_emc->run(&state);
+					if (!result.hit)
+						continue;
+					uint s = 0;
+					while (s < sites.size() && sites[s].offset != result.site)
+						s++;
+					if (s == sites.size()) {
+						Site fresh = { result.site, 0, 0, 0, x, y, 0x7FFFFFFF };
+						sites.push_back(fresh);
+					}
+					sites[s].count++;
+					sites[s].sumX += x;
+					sites[s].sumY += y;
+				}
+			}
+			// Where to click is a point that did hit, nearest the middle of
+			// the ones that did: a ring's centre may not be on the ring.
+			for (int y = kHotspotStep / 2; y <= bottom && !sites.empty(); y += kHotspotStep) {
+				for (int x = kHotspotStep / 2; x < 320; x += kHotspotStep) {
+					EMCState state;
+					v2->_emc->init(&state, &data);
+					state.regs[1] = x;
+					state.regs[2] = y;
+					state.regs[3] = 0;
+					state.regs[4] = -1;
+					result.hit = false;
+					if (!v2->_emc->start(&state, 1))
+						break;
+					uint budget = kHotspotMaxInstructions;
+					while (budget-- > 0 && v2->_emc->isValid(&state))
+						v2->_emc->run(&state);
+					if (!result.hit)
+						continue;
+					for (uint s = 0; s < sites.size(); s++) {
+						if (sites[s].offset != result.site)
+							continue;
+						const long cx = sites[s].sumX / sites[s].count;
+						const long cy = sites[s].sumY / sites[s].count;
+						const long d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+						if (d < sites[s].bestDist) {
+							sites[s].bestDist = d;
+							sites[s].bestX = x;
+							sites[s].bestY = y;
+						}
+					}
+				}
+			}
+			for (uint i = 0; i < table.size(); i++)
+				delete table[i];
+
+			for (uint s = 0; s < sites.size(); s++) {
+				if (points > 0 && (uint)sites[s].count * 100 > points * kHotspotMaxShare)
+					continue;
+				// Something already listed - an item, a way out - is not
+				// listed a second time under a made-up name.
+				bool duplicate = false;
+				for (uint k = 0; k < known.size() && !duplicate; k++) {
+					const int dx = known[k].x - sites[s].bestX;
+					const int dy = known[k].y - sites[s].bestY;
+					duplicate = dx * dx + dy * dy <= 10 * 10;
+				}
+				if (duplicate)
+					continue;
+				Target target;
+				// Named for the instruction that answers it, so the name stays
+				// the same for as long as the thing does, whatever else in the
+				// room comes and goes.
+				target.name = Common::String::format("object_%u", (uint)sites[s].offset);
+				target.kind = kTargetObject;
+				target.itemId = -1;
+				target.x = sites[s].bestX;
+				target.y = sites[s].bestY;
+				target.held = false;
+				target.slot = -1;
+				_hotspots.push_back(target);
+			}
+		}
+	}
+	for (uint i = 0; i < _hotspots.size(); i++)
+		out.push_back(_hotspots[i]);
 }
 
 void KyraMcpBridge::collectInventory(Common::Array<Target> &out) const {
@@ -595,6 +840,38 @@ int KyraMcpBridge::slotFor(int itemId, int slot) const {
 	return findItemSlot(itemId);
 }
 
+bool KyraMcpBridge::itemClickClearOfCharacter(int itemId, int x, int y, int &clickX, int &clickY) const {
+	KyraEngine_v2 *v2 = static_cast<KyraEngine_v2 *>(_vm);
+	// Nearest the listed point first: that is where the item is drawn.
+	long best = -1;
+	for (int py = y + 4; py >= y - 48; py--) {
+		for (int px = x - 12; px <= x + 12; px++) {
+			if (px < 0 || px > 319 || py < 0 || py > 199)
+				continue;
+			int index;
+			bool onCharacter;
+			if (isThirdGame()) {
+				KyraEngine_MR *mr = static_cast<KyraEngine_MR *>(_vm);
+				index = mr->checkItemCollision(px, py);
+				onCharacter = mr->checkCharCollision(px, py);
+			} else {
+				KyraEngine_HoF *hof = static_cast<KyraEngine_HoF *>(_vm);
+				index = hof->checkItemCollision(px, py);
+				onCharacter = hof->checkCharCollision(px, py);
+			}
+			if (index < 0 || onCharacter || v2->_itemList[index].id != itemId)
+				continue;
+			const long d = (long)(px - x) * (px - x) + (long)(py - y) * (py - y);
+			if (best < 0 || d < best) {
+				best = d;
+				clickX = px;
+				clickY = py;
+			}
+		}
+	}
+	return best >= 0;
+}
+
 void KyraMcpBridge::queueStep(StepKind kind, int itemId, int slot, int x, int y) {
 	Step step;
 	step.kind = kind;
@@ -732,6 +1009,28 @@ void KyraMcpBridge::runSteps() {
 		return;
 	}
 
+	case kStepPickUp: {
+		// The later games ask the character before the items: a click on an
+		// item the character stands over is a click on the character. The
+		// character is where it was left after dropping something, so that
+		// is exactly where it stands.
+		int clickX = step.x, clickY = step.y;
+		if (itemClickClearOfCharacter(step.itemId, step.x, step.y, clickX, clickY)) {
+			step.kind = kStepClickAt;
+			step.x = clickX;
+			step.y = clickY;
+			step.attempts = 0;
+			return;
+		}
+		if (++step.attempts > kMaxStepAttempts) {
+			abandonSteps("the character stands over that item and would not step off it");
+			return;
+		}
+		// A few paces along the floor, towards the middle of the room.
+		pointAndClick(CLIP<int>(step.x + (step.x < 160 ? 48 : -48), 16, 303), step.y);
+		return;
+	}
+
 	case kStepClickAt:
 		// Kyrandia 3's boxes cover the bottom of the picture while they are
 		// shown, and a click there goes to them; moving the pointer up puts
@@ -859,6 +1158,7 @@ static const char *kyraKindName(int kind) {
 	case 0:  return "item";
 	case 1:  return "character";
 	case 2:  return "exit";
+	case 4:  return "object";
 	default: return "carried";
 	}
 }
@@ -916,6 +1216,13 @@ Common::JSONValue *KyraMcpBridge::toolState(const Common::JSONValue &, Common::S
 		entry.setVal("y", mcpJsonInt(targets[i].y));
 		if (targets[i].kind == kTargetExit)
 			entry.setVal("pathway", mcpJsonBool(true));
+		// What act() does with it: every thing can be clicked, and an item
+		// lying in the room can also be put straight into a box.
+		Common::JSONArray compatible;
+		if (targets[i].kind == kTargetItem)
+			compatible.push_back(mcpJsonString("pick_up"));
+		compatible.push_back(mcpJsonString("use"));
+		entry.setVal("compatible_verbs", new Common::JSONValue(compatible));
 		if (!targets[i].label.empty())
 			entry.setVal("label", mcpJsonString(targets[i].label));
 		objects.push_back(new Common::JSONValue(entry));
@@ -929,6 +1236,9 @@ Common::JSONValue *KyraMcpBridge::toolState(const Common::JSONValue &, Common::S
 		Common::JSONObject entry;
 		entry.setVal("name", mcpJsonString(carried[i].name));
 		entry.setVal("id", mcpJsonInt(carried[i].itemId));
+		Common::JSONArray compatible;
+		compatible.push_back(mcpJsonString("use"));
+		entry.setVal("compatible_verbs", new Common::JSONValue(compatible));
 		if (!carried[i].label.empty())
 			entry.setVal("label", mcpJsonString(carried[i].label));
 		if (carried[i].held) {
@@ -1120,7 +1430,10 @@ bool KyraMcpBridge::toolAct(const Common::JSONValue &args, Common::String &error
 
 	if (verb == "pick_up") {
 		queueStep(kStepStowHand);
-		queueStep(kStepClickAt, -1, -1, first.x, first.y);
+		if (isFirstGame())
+			queueStep(kStepClickAt, -1, -1, first.x, first.y);
+		else
+			queueStep(kStepPickUp, first.itemId, -1, first.x, first.y);
 		queueStep(kStepStowHand);
 	} else if (!withItem) {
 		queueStep(kStepStowHand);
@@ -1235,8 +1548,10 @@ Common::String KyraMcpBridge::stateToolDescription() const {
 	Common::String desc =
 	    "The room as it is now: its id (and its name, once the game has "
 	    "printed it), where the hero stands, everything in it that can be "
-	    "clicked - items lying there, people, and the ways out (marked "
-	    "'pathway') - what is carried in the inventory boxes (and in the "
+	    "clicked - items lying there, people, the ways out (marked "
+	    "'pathway') and, in the later two games, the parts of the picture "
+	    "the room answers a click on (kind 'object'), each with the verbs "
+	    "act() takes for it in compatible_verbs - what is carried in the inventory boxes (and in the "
 	    "hand, marked 'held'), how many boxes are free, and every line said "
 	    "or printed since the last read (reading them clears them). While "
 	    "can_act is false the game is busy with something of its own: an "
@@ -1306,7 +1621,13 @@ void KyraMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 
 	Common::JSONObject obj;
 	obj.setVal("name", mcpProp("string", "Name to use in act()."));
-	obj.setVal("kind", mcpProp("string", "'item', 'character' or 'exit'."));
+	obj.setVal("kind", mcpProp("string",
+	    "'item', 'character', 'exit', or 'object': a part of the picture the "
+	    "room answers a click on, named by the game's script rather than by "
+	    "the game (Hand of Fate and Malcolm's Revenge)."));
+	obj.setVal("compatible_verbs", mcpProp("array",
+	    "The verbs act() takes for it: 'use' for everything, and 'pick_up' "
+	    "too for an item lying in the room."));
 	obj.setVal("label", mcpProp("string", "What the game itself calls it, where it does."));
 	obj.setVal("x", mcpProp("integer", "Where it is, in game coordinates."));
 	obj.setVal("y", mcpProp("integer", "Where it is, in game coordinates."));
@@ -1318,6 +1639,8 @@ void KyraMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 	item.setVal("id", mcpProp("integer", "The game's number for the item."));
 	item.setVal("label", mcpProp("string", "What the game itself calls it."));
 	item.setVal("held", mcpProp("boolean", "Present when it is in the hand rather than a box."));
+	item.setVal("compatible_verbs", mcpProp("array",
+	    "The verbs act() takes for it: 'use', on its own or with target2."));
 	outputProps.setVal("inventory", kyraArraySchema(item));
 }
 
@@ -1356,6 +1679,10 @@ Common::JSONValue *KyraMcpBridge::buildDebugSchema() const {
 // ---------------------------------------------------------------------------
 
 void KyraMcpBridge::snapshotPreAction() {
+	// Whatever this action does may add, move or remove a hotspot; the list
+	// is worked out again once the game is back in the player's hands. The
+	// snapshot below still sees the list as it stood before.
+	_hotspotsStale = true;
 	_ssePreRoom = roomNumber();
 	heroPosition(_ssePreX, _ssePreY);
 	_ssePreHand = handItem();

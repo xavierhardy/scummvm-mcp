@@ -1490,8 +1490,9 @@ int KyraEngine_HoF::t2_playSoundEffect(const TIM *tim, const uint16 *param) {
 
 typedef Common::Functor1Mem<EMCState *, int, KyraEngine_HoF> OpcodeV2;
 #define SetOpcodeTable(x) table = &x;
-#define Opcode(x) table->push_back(new OpcodeV2(this, &KyraEngine_HoF::x))
-#define OpcodeUnImpl() table->push_back(new OpcodeV2(this, 0))
+// An expression, not a statement: the table setup picks between two with ?:.
+#define Opcode(x) (table->push_back(new OpcodeV2(this, &KyraEngine_HoF::x)), table == &_opcodes ? _opcodeNames.push_back(#x) : (void)0)
+#define OpcodeUnImpl() (table->push_back(new OpcodeV2(this, 0)), table == &_opcodes ? _opcodeNames.push_back("") : (void)0)
 
 typedef Common::Functor2Mem<const TIM *, const uint16 *, int, KyraEngine_HoF> TIMOpcodeV2;
 #define OpcodeTim(x) _timOpcodes.push_back(new TIMOpcodeV2(this, &KyraEngine_HoF::x))
