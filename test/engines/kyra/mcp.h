@@ -61,6 +61,18 @@ public:
 		TS_ASSERT_EQUALS(Kyra::kyraExitName(-1), "");
 	}
 
+	// --- Speakers -----------------------------------------------------------
+	// The later games name whoever speaks only by their talking head's file.
+	void test_a_talker_is_named_after_its_file_without_the_extension() {
+		TS_ASSERT_EQUALS(Kyra::kyraTalkerName("GUNTHER.EMC"), "gunther");
+		TS_ASSERT_EQUALS(Kyra::kyraTalkerName("FAU2"), "fau2");
+	}
+
+	void test_a_talker_with_no_file_has_no_name() {
+		TS_ASSERT_EQUALS(Kyra::kyraTalkerName(""), "");
+		TS_ASSERT_EQUALS(Kyra::kyraTalkerName(".EMC"), "");
+	}
+
 	// --- Empty slots --------------------------------------------------------
 	// Both generations keep fixed-length item tables. The first spells an
 	// empty slot -1 and the later two spell it 0xFFFF; either way there is

@@ -52,6 +52,11 @@ Common::String kyraDisambiguate(const Common::String &name, uint occurrence);
 // north, east, south, west.
 Common::String kyraExitName(int direction);
 
+// Name for somebody who speaks, from the animation file their talking head is
+// drawn from in the later two games ("GUNTHER.EMC" -> "gunther"). The
+// extension goes, and the rest is folded the way an item name is.
+Common::String kyraTalkerName(const Common::String &fileName);
+
 // True when an item slot holds nothing. Kyrandia's scene and inventory tables
 // are fixed-length arrays with -1 (and, in the later games, 0xFFFF) meaning
 // "empty", and an agent offered an empty slot as a target is being offered

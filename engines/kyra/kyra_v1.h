@@ -334,8 +334,11 @@ protected:
 	// From delay(), which is where every blocking wait in this engine ends up.
 	// Does not advance the frame counter.
 	void mcpPumpTransport();
-	// Every line the game prints.
+	// Every line the game prints under the picture.
 	void mcpOnText(const Common::String &text);
+	// Every line somebody says: 0 is the hero, -1 a scene's own talking
+	// string, anything else whoever the game's own table has at that index.
+	void mcpOnSpeech(int speaker, const Common::String &text);
 
 	virtual void setHandItem(Item item) = 0;
 	virtual void removeHandItem() = 0;

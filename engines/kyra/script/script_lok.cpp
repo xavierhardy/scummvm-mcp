@@ -601,6 +601,8 @@ int KyraEngine_LoK::o1_customPrintTalkString(EMCState *script) {
 		}
 
 		resetSkipFlag();
+		// A line said by whoever the scene has talking, subtitles or not.
+		mcpOnSpeech(-1, stackPosString(1));
 		if (textEnabled()) {
 			// WORKAROUND: This string appears only in the talkie versions. The engine would need to remove it via
 			// o1_restoreCustomPrintBackground(), but it doesn't happen. Most of the text gets cleared when the
@@ -612,6 +614,8 @@ int KyraEngine_LoK::o1_customPrintTalkString(EMCState *script) {
 	} else {
 		debugC(3, kDebugLevelScriptFuncs, "KyraEngine_LoK::o1_customPrintTalkString(%p) ('%s', %d, %d, %d)", (const void *)script, stackPosString(0), stackPos(1), stackPos(2), stackPos(3) & 0xFF);
 		resetSkipFlag();
+		// A line said by whoever the scene has talking.
+		mcpOnSpeech(-1, stackPosString(0));
 		_text->printTalkTextMessage(stackPosString(0), stackPos(1), stackPos(2), stackPos(3) & 0xFF, 0, 2);
 	}
 	_screen->updateScreen();

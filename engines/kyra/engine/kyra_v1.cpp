@@ -569,6 +569,11 @@ void KyraEngine_v1::mcpOnText(const Common::String &text) {
 		_mcpBridge->onGameText(text);
 }
 
+void KyraEngine_v1::mcpOnSpeech(int speaker, const Common::String &text) {
+	if (_mcpBridge)
+		_mcpBridge->onGameSpeech(speaker, text);
+}
+
 void KyraEngine_v1::delay(uint32 amount, bool update, bool isMainLoop) {
 	// Every blocking wait in this engine comes through here - a cutscene, a
 	// spoken line, a fade - and the game loop is not reached again until it

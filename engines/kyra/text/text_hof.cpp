@@ -226,6 +226,9 @@ void KyraEngine_HoF::objectChat(const Common::String &str, int object, int vocHi
 }
 
 void KyraEngine_HoF::objectChatInit(const Common::String &str0, int object, int vocHigh, int vocLow) {
+	// Every spoken line goes through here, a remark and a conversation alike.
+	mcpOnSpeech(object, str0);
+
 	Common::String str = _text->preprocessString(str0.c_str());
 	int lineNum = _text->buildMessageSubstrings(str.c_str());
 

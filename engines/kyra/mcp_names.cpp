@@ -89,6 +89,14 @@ Common::String kyraExitName(int direction) {
 	}
 }
 
+Common::String kyraTalkerName(const Common::String &fileName) {
+	Common::String base = fileName;
+	const size_t dot = base.findFirstOf('.');
+	if (dot != Common::String::npos)
+		base.erase(dot);
+	return kyraItemName(base);
+}
+
 bool kyraIsEmptyItem(int itemId) {
 	// -1 in the first game's signed table, 0xFFFF in the later games'
 	// unsigned one; both mean the slot is empty.

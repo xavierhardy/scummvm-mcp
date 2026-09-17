@@ -40,6 +40,9 @@ class TextDisplayer_MR;
 struct Button;
 
 class KyraEngine_MR : public KyraEngine_v2 {
+// The MCP bridge reads the inventory buttons, the talk objects and the item
+// names, which are protected. It only ever reads them.
+friend class KyraMcpBridge;
 friend class TextDisplayer_MR;
 friend class GUI_MR;
 public:

@@ -129,6 +129,9 @@ def _check_tools(tools: list[dict]) -> None:
         "dw1_client",
         "toon_client",
         "simon1_client",
+        "kyra1_client",
+        "kyra2_client",
+        "kyra3_client",
     ],
 )
 def test_tool_table_keeps_its_promises(fixture_name: str, request) -> None:

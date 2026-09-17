@@ -863,6 +863,8 @@ void KyraEngine_HoF::showMessageFromCCode(int id, int16 palIndex, int) {
 
 void KyraEngine_HoF::showMessage(const Common::String &string, int16 palIndex) {
 	_shownMessage = string;
+	// The line under the picture.
+	mcpOnText(string);
 	int y = (_flags.lang == Common::ZH_TWN) ? 186 : 190;
 	_screen->fillRect(0, y, 319, 199, 0xCF);
 

@@ -266,6 +266,9 @@ void KyraEngine_MR::objectChat(const char *str, int object, int vocHigh, int voc
 }
 
 void KyraEngine_MR::objectChatInit(const char *str, int object, int vocHigh, int vocLow) {
+	// Every spoken line goes through here, a remark and a conversation alike.
+	mcpOnSpeech(object, str);
+
 	str = _text->preprocessString(str);
 	int lineNum = _text->buildMessageSubstrings(str);
 

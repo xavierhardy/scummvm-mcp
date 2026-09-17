@@ -71,7 +71,7 @@ split accordingly:
 | Engine | Games | Shape |
 |--------|-------|-------|
 | agi | `kq2`, `kq3`, `pq1` | A parser game. Nothing on screen is labelled and nothing is clicked — the player types. `state` names the items from the OBJECT file, the `vocabulary` tool lists every word the parser knows, and `act` composes a sentence and types it. |
-| kyra | `kyra1`, `kyra2`, `kyra3` | A pointer game with no verb bar: the left button does whatever the thing is for and the right button looks at it. Names come from the item table, and the four compass exits are named by the bridge because the engine never named them. |
+| kyra | `kyra1`, `kyra2`, `kyra3` | A single-button pointer game: `use` clicks a thing, `pick_up` puts an item lying in the room into an inventory box, and `use` with a carried `target1` and a `target2` uses one on the other. Every action is replayed as real clicks (hand → box → target → box). Names come from each game's item-name table; the compass exits and doorways are named by the bridge. `test_kyra.py` covers the boxes, the minute-long speech on leaving Brandon's house (no timeout, readable from `state` after a client gives up, skippable) and a walk through several rooms. |
 | agos | `simon1` | A bar of twelve verbs, and every clickable thing carries the name the game writes along the bottom of the screen — the one engine here where an agent reads the same words the player does. |
 | asylum | `sanitarium` | No verbs at all: the cursor changes shape to say what a click would do. Objects carry the names their authors typed in the editor, filtered — the game ships hundreds called `0` or `xxx`. |
 

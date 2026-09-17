@@ -262,6 +262,9 @@ void KyraEngine_LoK::characterSays(int vocFile, const char *chatStr, int16 charN
 
 	snd_voiceWaitForFinish(true);
 
+	// Every spoken line, whether or not subtitles are on.
+	mcpOnSpeech(charNum, chatStr);
+
 	convoInitialized = initCharacterChat(charNum);
 	chatPartnerNum = getChatPartnerNum();
 
@@ -334,6 +337,9 @@ void KyraEngine_LoK::characterSays(int vocFile, const char *chatStr, int16 charN
 }
 
 void KyraEngine_LoK::drawSentenceCommand(const char *sentence, int color) {
+	// The line under the picture: a room's name, "Garnet taken.", and so on.
+	mcpOnText(sentence);
+
 	int boxY1 = 143;
 	int boxY2 = 152;
 	int col2 = _flags.platform == Common::kPlatformAmiga ? 19 : 12;

@@ -42,6 +42,9 @@ class SeqPlayer_HOF;
 struct TIM;
 
 class KyraEngine_HoF : public KyraEngine_v2 {
+// The MCP bridge reads the inventory buttons, the talk objects and the item
+// names, which are protected. It only ever reads them.
+friend class KyraMcpBridge;
 friend class Debugger_HoF;
 friend class TextDisplayer_HoF;
 friend class GUI_HoF;

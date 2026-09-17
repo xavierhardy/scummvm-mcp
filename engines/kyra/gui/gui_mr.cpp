@@ -104,6 +104,9 @@ int KyraEngine_MR::callbackButton3(Button *button) {
 
 void KyraEngine_MR::showMessage(const char *string, uint8 c0, uint8 c1) {
 	_shownMessage = string;
+	// The line under the picture.
+	if (string)
+		mcpOnText(string);
 
 	restoreCommandLine();
 	_restoreCommandLine = false;
