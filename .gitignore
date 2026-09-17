@@ -349,3 +349,6 @@ scummvm.ini
 /test/mcp/save_slots/timestamps
 /test/mcp/save_slots/**/timestamps
 *.c99
+
+core.*
+%(logfile)s
