@@ -53,12 +53,13 @@
 #include "engines/nancy/action/puzzle/dotconnectpuzzle.h"
 #include "engines/nancy/action/puzzle/drivingpuzzle.h"
 #include "engines/nancy/action/puzzle/dropsortpuzzle.h"
-//#include "engines/nancy/action/puzzle/escapegridpuzzle.h"
+#include "engines/nancy/action/puzzle/escapegridpuzzle.h"
 #include "engines/nancy/action/puzzle/gridmappuzzle.h"
-//#include "engines/nancy/action/puzzle/magicboxpuzzle.h"
+#include "engines/nancy/action/puzzle/magicboxpuzzle.h"
 #include "engines/nancy/action/puzzle/matchpuzzle.h"
 #include "engines/nancy/action/puzzle/hamradiopuzzle.h"
 #include "engines/nancy/action/puzzle/hangmanpuzzle.h"
+#include "engines/nancy/action/puzzle/lettergridpuzzle.h"
 #include "engines/nancy/action/puzzle/leverpuzzle.h"
 #include "engines/nancy/action/puzzle/magnetmazepuzzle.h"
 #include "engines/nancy/action/puzzle/mazechasepuzzle.h"
@@ -69,6 +70,7 @@
 #include "engines/nancy/action/puzzle/mirrorlightpuzzle.h"
 #include "engines/nancy/action/puzzle/mouselightpuzzle.h"
 #include "engines/nancy/action/puzzle/multibuildpuzzle.h"
+#include "engines/nancy/action/puzzle/necklacepuzzle.h"
 #include "engines/nancy/action/puzzle/onebuildpuzzle.h"
 #include "engines/nancy/action/puzzle/orderingpuzzle.h"
 #include "engines/nancy/action/puzzle/overridelockpuzzle.h"
@@ -98,7 +100,7 @@
 #include "engines/nancy/action/puzzle/turningpuzzle.h"
 #include "engines/nancy/action/puzzle/twodialpuzzle.h"
 #include "engines/nancy/action/puzzle/typingquizpuzzle.h"
-//#include "engines/nancy/action/puzzle/weightsortpuzzle.h"
+#include "engines/nancy/action/puzzle/weightsortpuzzle.h"
 #include "engines/nancy/action/puzzle/whalesurvivorpuzzle.h"
 #include "engines/nancy/action/puzzle/wordfindpuzzle.h"
 
@@ -471,7 +473,7 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		if (g_nancy->getGameType() <= kGameTypeNancy13)
 			return new PlaySoundTerse();
 		else
-			return new GridMapPuzzle();	// Moved from 244
+			return new LetterGridPuzzle();
 	case 160:
 		if (g_nancy->getGameType() <= kGameTypeNancy11)
 			return new HintSystem();
@@ -535,14 +537,11 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 		return new DecoderPuzzle();
 	// -- Nancy15 new puzzles (types 183-185) --
 	case 183:
-		//return new MagicBoxPuzzle();
-		return nullptr;	// TODO
+		return new MagicBoxPuzzle();
 	case 184:
-		//return new EscapeGridPuzzle();
-		return nullptr;	// TODO
+		return new EscapeGridPuzzle();
 	case 185:
-		// return new WeightSortPuzzle();
-		return nullptr;	// TODO
+		return new WeightSortPuzzle();
 	case 200:
 		return new SoundEqualizerPuzzle();
 	case 201:
@@ -627,7 +626,10 @@ ActionRecord *ActionManager::createActionRecord(uint16 type, Common::SeekableRea
 	case 242:
 		return new MagnetMazePuzzle();
 	case 243:
-		return new BeadPuzzle();
+		if (g_nancy->getGameType() <= kGameTypeNancy14)
+			return new BeadPuzzle();
+		else
+			return new NecklacePuzzle();
 	case 244:
 		return new GridMapPuzzle();
 	// -- Nancy 11 and up --

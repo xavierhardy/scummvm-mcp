@@ -15,8 +15,15 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
    - Unterstützung für Mortadelo y Filemón: Mamelucos a la Romana hinzugefügt.
    - Unterstützung für Dracula: Resurrection hinzugefügt.
    - Unterstützung für Dracula 2: The Last Sanctuary hinzugefügt.
+   - Unterstützung für Amerzone: The Explorer's Legacy hinzugefügt.
+   - Unterstützung für The Cameron Files: The Secret at Loch Ness hinzugefügt.
+   - Unterstützung für The Messenger / Louvre: The Final Curse hinzugefügt.
    - Unterstützung für Nancy Drew: The Secret of Shadow Ranch hinzugefügt.
    - Unterstützung für Nancy Drew: Curse of Blackmoor Manor hinzugefügt.
+   - Unterstützung für Nancy Drew: Secret of the Old Clock hinzugefügt.
+   - Unterstützung für Nancy Drew: Last Train to Blue Moon Canyon hinzugefügt.
+   - Unterstützung für Nancy Drew: Danger by Design hinzugefügt.
+   - Unterstützung für Nancy Drew: The Creature of Kapu Cave hinzugefügt.
    - Unterstützung für Chamber of the Sci-Mutant Priestess hinzugefügt.
    - Unterstützung für Star Wars: Rebel Assault hinzugefügt.
    - Unterstützung für Star Wars: Rebel Assault II: The Hidden Empire hinzugefügt.
@@ -39,6 +46,8 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
    - Unterstützung für Rhiannon: Curse of the Four Branches hinzugefügt.
    - Unterstützung für Shadows on the Vatican series hinzugefügt.
    - Unterstützung für mehr als 140 weitere Wintermute-Spiele hinzugefügt.
+   - Unterstützung für Der Schatz im Silbersee hinzugefügt.
+   - Unterstützung für The Fool's Errand hinzugefügt.
 
  Allgemein:
    - Zur Verbesserung der Perforamcen wurden die Audio-Mixer und -Konverter optimiert.
@@ -106,6 +115,8 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
 
  SCUMM:
    - Cursor-Skalierung in frühen Windows HE-Spielen korrigiert.
+   - In C64-Spielen kann jetzt das PAL-Timing für die SID-Emulation genutzt werden.
+     Dadurch wird die Musik langsamer abgespielt, was dem Spiel-Erlebnis für viele nicht-US-Spieler entspricht.
 
  Sherlock:
    - Abweichung in der Darstellung der Bewegungen in Rose Tattoo korrigiert.
@@ -117,6 +128,9 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
    - Unterstützung für MIDI und MT-32 hinzugefügt.
    - Verbesserte Wiedergabe von Sound Blaster-Samples.
    - Sound wird jetzt korrekt pausiert, wenn das Spiel selbst pausiert wird.
+
+ V-Cruise:
+   - Fehler behoben, durch den einige zeitgesteuerte Puzzles nach einem Neustart von ScummVM nicht mehr korrekt funktioniert haben.
 
  Voyeur:
    - Die Bewegung aus der Ego-Perspektive beim Anblick der Villa entspricht jetzt dem Original.
