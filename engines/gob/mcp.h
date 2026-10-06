@@ -265,6 +265,18 @@ private:
 	// nothing were being probed.
 	void releaseProbe();
 
+	// Ween's copy-protection screen: the eight cards, ordered by the digit
+	// that picks each, when they are what the screen is waiting on.
+	bool protectionCards(Common::Array<Hotspots::McpDesc> &cards) const;
+	// Answer that screen the way a player with the manual would: find the
+	// card that is right (only its handler marks the answer as right, so the
+	// bridge runs each one out of sight and sees which does) and type its
+	// digit. Does nothing when the game's copy_protection option is on.
+	void answerProtection();
+	// Did a probe change any script variable but VAR(17), the last-hovered
+	// id every handler call writes?
+	bool probeChangedVariables() const;
+
 	// Push a full click (hover, press, release) at game coordinates.
 	void queueClick(int gameX, int gameY, bool right);
 
@@ -335,8 +347,10 @@ private:
 	// (see the cursor-mode block in the cpp).
 	bool usesCharacterTeam() const;
 	// Ween stops on a copy-protection screen before it will start: it shows a
-	// row of coloured cards and waits for the number of one to be typed. An
-	// agent that can only point at things cannot get past it.
+	// row of coloured cards and waits for the number of one to be typed. The
+	// bridge answers it itself (see answerProtection()) unless the game's
+	// copy_protection option asks for it to be kept; then it is the agent's to
+	// type, as it is in the game's notepad.
 	bool usesTypedInput() const override;
 	static const int kTeamSize = 3;
 	// Stable name for team member *index*, after the ability the game gives it.
@@ -458,6 +472,8 @@ private:
 		int8 cursorAnimLow[40], cursorAnimHigh[40], cursorAnimDelays[40];
 	};
 	ProbeSnapshot _probeSnapshot;
+	// The copy-protection screen currently up has been answered.
+	bool _protectionAnswered;
 	void takeProbeSnapshot();
 	void restoreProbeSnapshot();
 	Common::Array<DrawnText> _probeTexts;

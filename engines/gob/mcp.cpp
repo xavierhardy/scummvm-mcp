@@ -112,6 +112,7 @@ GobMcpBridge::GobMcpBridge(GobEngine *vm)
 	  _probeActive(false),
 	  _probing(false),
 	  _probeWaited(false),
+	  _protectionAnswered(false),
 	  _probeStartMs(0),
 	  _probeCheckFrame(0),
 	  _lastStepFrame(0),
@@ -189,6 +190,8 @@ void GobMcpBridge::onInputPoll(uint8 handleMouse) {
 		return;
 	}
 	_lastAnyPollFrame = _frameCounter;
+	if (usesTypedInput())
+		answerProtection();
 	if (handleMouse) {
 		_lastInputPollFrame = _frameCounter;
 		probeNames();
@@ -686,6 +689,116 @@ void GobMcpBridge::probeNames() {
 		_probeSnapshot.varData.clear();
 	}
 	_probeActive = false;
+}
+
+// ---------------------------------------------------------------------------
+// Copy protection (Ween)
+// ---------------------------------------------------------------------------
+
+// Before it starts, Ween shows a code — a letter and a number — and a row of
+// eight coloured cards, and waits for the digit of the card the manual's table
+// gives for that code. Each card is a hotspot keyed '1'..'8' whose handler
+// marks the answer as right when it is the right card, and does nothing
+// otherwise; two wrong answers end the game. ScummVM's own engine skips the
+// equivalent screens of other gob games unless copy_protection is set, but not
+// this one, and an agent has no manual. So the bridge answers it: it runs the
+// eight handlers out of sight with everything put back after each, keeps the
+// one card whose handler changed anything, and types that card's digit — the
+// key a player would press. Nothing is assumed about which variables the
+// script uses, so it holds for every release that has the screen.
+
+bool GobMcpBridge::protectionCards(Common::Array<Hotspots::McpDesc> &cards) const {
+	cards.clear();
+	Common::Array<Hotspots::McpDesc> spots;
+	collectHotspots(spots);
+	cards.resize(8);
+	uint found = 0;
+	for (uint i = 0; i < spots.size(); i++) {
+		const Hotspots::McpDesc &d = spots[i];
+		if (d.key < '1' || d.key > '8')
+			continue;
+		if (d.type != (uint16)Hotspots::kTypeClick || !d.hasLeave || d.hasEnter)
+			return false;
+		Hotspots::McpDesc &slot = cards[d.key - '1'];
+		if (slot.key != 0)
+			return false; // two cards for one digit: some other screen
+		slot = d;
+		found++;
+	}
+	if (found != 8 || spots.size() != 8) {
+		cards.clear();
+		return false;
+	}
+	return true;
+}
+
+bool GobMcpBridge::probeChangedVariables() const {
+	const ProbeSnapshot &snap = _probeSnapshot;
+	const Variables *vars = _vm->_inter->_variables;
+	if (vars != snap.vars || vars->getSize() != snap.varData.size())
+		return true; // switched to other variables: something certainly happened
+	const byte *now = vars->getAddressOff8(0);
+	for (uint32 i = 0; i < snap.varData.size(); i++) {
+		if (i / 4 == 17)
+			continue;
+		if (now[i] != snap.varData[i])
+			return true;
+	}
+	return false;
+}
+
+void GobMcpBridge::answerProtection() {
+	if (_probeActive || _inPump || !engineReady() || _vm->_copyProtection)
+		return;
+	Common::Array<Hotspots::McpDesc> cards;
+	if (!protectionCards(cards)) {
+		_protectionAnswered = false;
+		return;
+	}
+	if (_protectionAnswered)
+		return; // the digit is on its way; the screen takes it on its next poll
+
+	_probeActive = true;
+	_probing = true;
+	_inPump = true;
+	takeProbeSnapshot();
+	Hotspots *hotspots = _vm->_game->_hotspots;
+	hotspots->mcpProbeBegin();
+	int right = -1;
+	uint hits = 0;
+	for (uint i = 0; i < cards.size() && _probing; i++) {
+		const Hotspots::McpDesc &d = cards[i];
+		_probeStartMs = g_system->getMillis();
+		hotspots->mcpProbe(d.index, d.id, (d.left + d.right) / 2, (d.top + d.bottom) / 2);
+		if (probeChangedVariables()) {
+			right = i;
+			hits++;
+		}
+		// Each card is tried against the screen as it was, not as the one
+		// before left it.
+		ProbeSnapshot &snap = _probeSnapshot;
+		if (_vm->_inter->_variables == snap.vars && snap.vars->getSize() == snap.varData.size())
+			snap.vars->copyFrom(0, snap.varData.data(), snap.varData.size());
+	}
+	hotspots->mcpProbeEnd();
+	if (_probing) {
+		restoreProbeSnapshot();
+		releaseProbe();
+	} else {
+		_probeSnapshot.surfaces.clear();
+		_probeSnapshot.varData.clear();
+	}
+	_probeActive = false;
+
+	if (hits != 1) {
+		// Not the screen this was written for; leave it to the agent.
+		debug(1, "mcp: copy protection: %u cards answered, not typing any", hits);
+		_protectionAnswered = true;
+		return;
+	}
+	debug(1, "mcp: copy protection: typing card %d", right + 1);
+	injectKey(Common::KeyState((Common::KeyCode)(Common::KEYCODE_1 + right), '1' + right));
+	_protectionAnswered = true;
 }
 
 // ---------------------------------------------------------------------------

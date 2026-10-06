@@ -9,11 +9,12 @@ Util::delay. For the whole of Ween's opening the server used to stop
 answering, and a skip issued inside it could not even end itself, because the
 budget that closes a stream is only ever checked from a pump.
 
-The second is typing. This demo will not start until a number is typed: it
-opens on a copy-protection screen - a row of coloured cards, four spaces
-waiting for the number of the colour that belongs in each - and an agent that
-can only point at things is stuck there forever. `type_text` is what gets past
-it, and this is the only game instrumented here that registers the tool.
+The second is the copy-protection screen. The demo will not start until it is
+answered: a code is shown with a row of coloured cards, and the right card is
+the one the manual's table gives for the code. An agent has no manual, so the
+bridge answers it itself - and this checks that the opening runs straight
+into the game. (With the game's copy_protection option on, the screen is left
+alone; test_ween_protected.py covers that.)
 
 No save support, so this is one ordered sequence on a fresh instance.
 """
@@ -25,6 +26,9 @@ import pytest
 from mcp_client import McpClient
 
 pytestmark = [pytest.mark.xdist_group("ween")]
+
+#: The demo's screens up to and including the copy-protection one.
+_OPENING = {"intro", "intro0"}
 
 
 @pytest.fixture(scope="session")
@@ -51,36 +55,39 @@ def test_02_a_skip_returns_rather_than_hanging(playing: McpClient) -> None:
     assert isinstance(result, dict), result
 
 
-def _at_the_protection_screen(client: McpClient, tries: int = 10) -> dict:
-    """Skip the opening until the screen with the coloured cards is up."""
-    for _ in range(tries):
-        state = client.state()
-        if len(state.get("objects") or []) >= 8:
-            return state
+def test_03_the_narration_is_captured(playing: McpClient) -> None:
+    """Ween narrates its opening in text drawn to a surface, which is where
+    the gob bridge listens."""
+    # Given a wide budget on purpose: the narration is paced by the game, and
+    # on a machine running several of these at once the line takes its time.
+    seen: list[str] = []
+    for _ in range(30):
+        seen += [m["text"] for m in playing.state().get("messages", [])]
+        if seen:
+            break
+        time.sleep(2)
+    assert seen, "the opening said nothing at all"
+
+
+def test_04_the_opening_runs_into_the_game_with_nothing_typed(
+    playing: McpClient,
+) -> None:
+    """The copy-protection screen comes and goes by itself: skipping through
+    the opening is all it takes to reach the game."""
+    rooms: list[str] = []
+    for _ in range(20):
+        room = playing.state()["room"]["name"]
+        if not rooms or rooms[-1] != room:
+            rooms.append(room)
+        if room not in _OPENING:
+            return
         try:
-            client.skip()
+            playing.skip()
         except RuntimeError as exc:
             if "nothing to skip" not in str(exc):
                 raise
         time.sleep(2)
-    raise AssertionError("the opening never reached the copy-protection screen")
-
-
-def test_03_the_opening_gives_way_to_the_screen_that_wants_typing(
-    playing: McpClient,
-) -> None:
-    state = _at_the_protection_screen(playing)
-    # Eight cards, one per colour. They are hotspots with no label: this
-    # screen paints no hover text, and a number is what it wants anyway.
-    assert len(state["objects"]) >= 8, state
-
-
-def test_04_typing_reaches_the_game(playing: McpClient) -> None:
-    """The tool exists for exactly this screen. What it answers is what it
-    typed; that the game took it is visible in the answer boxes filling in."""
-    _at_the_protection_screen(playing)
-    result = playing.call_tool("type_text", {"text": "1"})
-    assert result == {"text": "1", "enter": True}, result
+    raise AssertionError(f"the opening never gave way to the game: {rooms}")
 
 
 def test_05_a_line_longer_than_any_game_reads_is_refused(playing: McpClient) -> None:
@@ -93,17 +100,3 @@ def test_05_a_line_longer_than_any_game_reads_is_refused(playing: McpClient) -> 
     result = playing.call_tool("type_text", {"text": "x" * 500})
     assert "error" in result, result
     assert "256" in result["error"], result
-
-
-def test_06_the_narration_is_captured(playing: McpClient) -> None:
-    """Ween narrates its opening in text drawn to a surface, which is where
-    the gob bridge listens."""
-    # Given a wide budget on purpose: the narration is paced by the game, and
-    # on a machine running several of these at once the line takes its time.
-    seen: list[str] = []
-    for _ in range(30):
-        seen += [m["text"] for m in playing.state().get("messages", [])]
-        if seen:
-            break
-        time.sleep(2)
-    assert seen, "the opening said nothing at all"

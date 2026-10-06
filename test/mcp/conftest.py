@@ -138,6 +138,8 @@ _FIXTURE_INDEX = {
     "maniac_deluxe": 80,
     # test_gk1_full.py's one walkthrough, alive for its whole module.
     "gk1_full_walk": 81,
+    # Ween with its copy protection asked for, so the screen stays up.
+    "ween_protected": 82,
 }
 
 
@@ -509,6 +511,17 @@ def ween_client() -> Iterator[McpClient]:
     Opens with minutes of video, so its tests skip their way in and give the
     opening a generous number of goes."""
     yield from _client("ween-demo", "ween")
+
+
+@pytest.fixture(scope="session")
+def ween_protected_client() -> Iterator[McpClient]:
+    """The Ween demo with the game's copy_protection option on.
+
+    By default the bridge answers the copy-protection screen itself; with the
+    option on it is left alone, and getting past it is the agent's to type."""
+    yield from _client(
+        "ween-demo", "ween_protected", ini_overrides={"copy_protection": "true"}
+    )
 
 
 @pytest.fixture(scope="session")

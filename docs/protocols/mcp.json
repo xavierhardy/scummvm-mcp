@@ -1117,6 +1117,10 @@
       "skip": "The game has no save states; skip breaks the intro videos one at a time. Once the game is interactive skip is rejected with \"nothing to skip\", which is the done signal for an intro-skip loop.",
       "debug": "The debug tool (mcp_debug) has sections system / hotspots / text_items / vars, plus screenshot / mouse_move / mouse_click / keystroke."
     },
+    "ween": {
+      "scope": "Ween: The Prophecy (gob engine). Otherwise played like woodruff.",
+      "copyProtection": "The game opens on a copy-protection screen: a code (a letter and a number) and a row of eight coloured cards, waiting for the digit of the card the manual's table gives for the code; two wrong answers end the game. The bridge answers it itself: each card's handler marks the answer right only when it is the right card, so it runs the eight out of sight (variables, screen and cursor put back after each), and types the digit of the one that did. With the game's copy_protection option set to true the screen is left alone, and type_text is how to answer it."
+    },
     "gobliiins": {
       "scope": "Gobliiins (gob engine) — the games driven by a team of three characters.",
       "interface": "No verb bar, no hover text and no per-object click zone: the whole picture is one zone, and what a click does is decided by the cursor, which the player cycles with the other mouse button through three settings — go to the spot, use the controlling character's own ability there, or take what is there. The bridge reports the game's own tables instead of the screen's click zones (the three characters and the scene objects) and replays exactly that input for every action: it cycles the cursor to what the verb means, moves it onto the point, lets the game register it, then clicks.",
