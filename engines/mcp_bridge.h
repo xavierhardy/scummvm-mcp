@@ -89,6 +89,7 @@ public:
 	                            const Common::JSONValue &args,
 	                            Common::String &errorOut) override;
 	void pumpStream() override;
+	void onStreamAbandoned() override;
 
 protected:
 	// A line of game text captured from the engine, queued until the next

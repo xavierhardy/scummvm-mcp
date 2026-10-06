@@ -672,6 +672,8 @@ void McpServer::pump() {
 			_sseActive = false;
 			_sseClientId = -1;
 			delete _ssePendingId; _ssePendingId = nullptr;
+			if (_handler)
+				_handler->onStreamAbandoned();
 		} else {
 			_activeFd = sseClient->fd;
 			_activeClientId = sseClient->clientId;

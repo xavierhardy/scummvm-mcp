@@ -110,15 +110,25 @@ void McpBridge::init() {
 void McpBridge::pump() {
 	if (!_enabled || !_server) return;
 	++_frameCounter;
-	// If the SSE client vanished mid-action the server abandons the stream
-	// without telling us; drop our half too or every later action is rejected
-	// with "another action is already in progress".
+	// Safety net for onStreamAbandoned(): our half of a stream the server no
+	// longer has must not outlive it.
 	if (_streaming && !_server->isStreaming()) {
 		debug(1, "mcp: stream abandoned by client, resetting");
 		_streaming = false;
 	}
 	pumpGame();
 	_server->pump();
+}
+
+void McpBridge::onStreamAbandoned() {
+	// The client of the action in flight is gone. Drop our half of the stream
+	// now: the server can hand us the caller's next request in this very pump,
+	// and while _streaming is set every engine rejects it with "another action
+	// is already in progress".
+	if (_streaming) {
+		debug(1, "mcp: stream abandoned by client, resetting");
+		_streaming = false;
+	}
 }
 
 void McpBridge::pumpTransportOnly() {

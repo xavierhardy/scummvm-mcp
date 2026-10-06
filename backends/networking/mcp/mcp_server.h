@@ -47,6 +47,12 @@ public:
 		// The handler should poll engine state and eventually call
 		// McpServer::endStream() to conclude the call.
 		virtual void pumpStream() = 0;
+
+		// Invoked when the client of the stream in flight is found gone and
+		// the server drops the stream. Called before any further request is
+		// dispatched, so the handler can stop treating the action as running
+		// before the next call arrives.
+		virtual void onStreamAbandoned() {}
 	};
 
 	struct ToolSpec {
