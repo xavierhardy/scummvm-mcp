@@ -215,7 +215,11 @@ private:
 	// Is the interpreter far enough along to answer questions about a room?
 	bool engineReady() const;
 	// The room the game is in, as its own number and as its object's name.
+	// roomNumber() is the room the game has been asked to go to, which it
+	// sets before it has left the old one; shownRoomNumber() is the room
+	// whose object and cast are the ones on hand, the room state reports.
 	int roomNumber() const;
+	int shownRoomNumber() const;
 	Common::String roomName() const;
 	// The score the game keeps, or -1 when it keeps none.
 	int score() const;

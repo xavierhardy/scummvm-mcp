@@ -137,6 +137,15 @@ int SciMcpBridge::roomNumber() const {
 	return s != nullptr ? (int)s->currentRoomNumber() : 0;
 }
 
+int SciMcpBridge::shownRoomNumber() const {
+	// curRoomNum, which the game sets in the same breath as the room object
+	// and its cast. A game that leaves it empty gets the requested number.
+	const reg_t current = global(kGlobalVarCurrentRoomNo);
+	if (current.getSegment() == 0 && current.getOffset() != 0)
+		return (int16)current.getOffset();
+	return roomNumber();
+}
+
 Common::String SciMcpBridge::roomName() const {
 	return sciRoomName(objectName(global(kGlobalVarCurrentRoom)));
 }
@@ -703,8 +712,12 @@ Common::JSONValue *SciMcpBridge::callTool(const Common::String &name,
 Common::JSONValue *SciMcpBridge::toolState(const Common::JSONValue &, Common::String &) {
 	Common::JSONObject out;
 
+	// The room whose name and things are about to be reported. The number a
+	// room change sets first would pair the next room's id with the last
+	// room's name and cast for as long as the change takes - a fade, in
+	// Gabriel Knight, which under load is several seconds.
 	Common::JSONObject room;
-	room.setVal("id", mcpJsonInt(roomNumber()));
+	room.setVal("id", mcpJsonInt(shownRoomNumber()));
 	const Common::String name = roomName();
 	if (!name.empty())
 		room.setVal("name", mcpJsonString(name));
