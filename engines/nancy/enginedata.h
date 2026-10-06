@@ -55,6 +55,20 @@ struct BSUM : public EngineData {
 	uint16 startTimeHours;
 	uint16 startTimeMinutes;
 
+	// Nancy11-13: on the day after the game starts, once the clock reaches
+	// lateNightHour, lateNightFlag gets raised
+	uint16 lateNightHour = 0;
+	int16 lateNightFlag = kEvNoEvent;
+
+	// Nancy14-15 end of day. Once the clock reaches endOfDayHour, endOfDayFlag
+	// is raised so the scripts can send the player to bed. Writing to the value
+	// at dayValueIndex puts the player to sleep: the next day starts at
+	// wakeUpHour, and the new day number gets copied into that value.
+	byte dayValueIndex = 0;
+	int16 endOfDayFlag = kEvNoEvent;
+	uint16 endOfDayHour = 0;
+	uint16 wakeUpHour = 0;
+
 	// More Nancy Drew! scene
 	SceneChangeDescription adScene;
 
@@ -90,6 +104,11 @@ struct BSUM : public EngineData {
 	byte overrideMovementTimeDeltas;
 	uint16 slowMovementTimeDelta;
 	uint16 fastMovementTimeDelta;
+
+	// Nancy9-11: timer dependencies with a seconds value of kTimerDurationIndexBase
+	// or above take their seconds from this table instead. Nancy12+ timer
+	// triggers (AR 104) use it for seconds values above kTimerDurationIndexBase
+	Common::Array<uint16> timerDurations;
 };
 
 // Contains rects defining the in-game viewport
@@ -129,6 +148,7 @@ struct INV : public EngineData {
 	};
 
 	INV(Common::SeekableReadStream *chunkStream);
+	void readNancy15(Common::SeekableReadStream &stream);
 
 	Common::Rect scrollbarSrcBounds;
 	Common::Point scrollbarDefaultPos;
@@ -240,6 +260,7 @@ struct CRED : public EngineData {
 
 	Common::Path imageName;
 	Common::Array<Common::Path> textNames;
+	Common::String textKey;
 	Common::Rect textScreenPosition;
 	uint16 updateTime;
 	uint16 pixelsToScroll;
@@ -525,10 +546,11 @@ enum TaskButton {
 	kTaskButtonInventory = 1,
 	kTaskButtonNotebook = 2,
 	kTaskButtonCellphone = 3,
-	// Nancy12 only: a non-clickable coin purse that shows Nancy's money on
-	// hover, inserted before HELP. HELP is therefore always the last taskbar
-	// button (index 4 in games without the coin purse, index 5 in Nancy12) and
-	// has no fixed constant.
+	// Nancy12, Nancy14 and Nancy15: a non-clickable coin purse (a wallet for
+	// the Hardy boys) that shows the played character's money on hover,
+	// inserted before HELP. HELP is therefore always the last taskbar button
+	// (index 4 in games without the coin purse, index 5 in the others) and has
+	// no fixed constant.
 	kTaskButtonCoinPurse = 4
 };
 
@@ -872,6 +894,10 @@ struct UIRC : public EngineData {
 // Renders a UI resource's value the way the games' UI does: a currency symbol
 // followed by the value, split into whole units and decimals as the record asks.
 Common::String formatUIResourceValue(const UIRC::ItemRecord &item, int32 value);
+
+// True in the games that keep the played character's money in UI resource 0 and
+// show it on the taskbar's coin purse (a wallet for the Hardy boys).
+bool hasMoneyResource();
 
 // Music mix table. Introduced in Nancy 13. Each record maps a short location
 // code (e.g. "BRI", "CAM", "TUT") to the set of music / ambience tracks that

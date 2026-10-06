@@ -112,6 +112,7 @@ public:
 	void init() override;
 	void onPause(bool pause) override;
 	void registerGraphics() override;
+	void updateGraphics() override;
 
 	void readData(Common::SeekableReadStream &stream) override;
 	void execute() override;
@@ -119,8 +120,8 @@ public:
 	bool getIsFinished() const { return _isFinished; }
 
 	// Enhancement: jump a cinematic straight to its end, as if it had finished
-	// playing on its own. Only movies that hide the player cursor are skipped;
-	// the rest are background animations the player isn't waiting on.
+	// playing on its own. Only cinematics are skipped; background animations
+	// the player isn't waiting on keep playing.
 	void skip();
 
 	Common::Path _videoName;
@@ -182,6 +183,10 @@ public:
 	MovieType _movieType;
 
 	bool isRandom() const { return _movieType == kRandomMovie; }
+
+	// Whether skip() applies: a movie the player is waiting through, either
+	// because it hides the cursor or because it covers the whole viewport.
+	bool isSkippable();
 
 	// Random-movie state (only populated for kRandomMovie).
 	// "RandomMovie" picks any sequence; otherwise it names the starting one.
@@ -354,6 +359,14 @@ protected:
 	// or hide it when the record doesn't describe one for that frame.
 	void updateMask(int viewportFrame);
 
+	// Place and show the movie for the current background frame, or hide it
+	// when the record doesn't describe one for that frame.
+	void updateViewportFrame();
+
+	// Crop the last decoded frame with the given video description and move
+	// the movie to its destination. -1 uses the whole frame at its current spot.
+	void applyVideoDesc(int descID);
+
 	Graphics::ManagedSurface _fullFrame;
 	Graphics::ManagedSurface _maskImage;
 	ForegroundMask _mask;
@@ -363,7 +376,9 @@ protected:
 
 // Companion AR for the random-movie variant of PlaySecondaryMovie. When
 // executed it stops the currently-active random PlaySecondaryMovie and
-// optionally performs a scene change / event-flag set.
+// optionally performs a scene change / event-flag set. From Nancy15 on the
+// record names the movie it controls, so it can also address an already-loaded
+// movie by filename.
 class PlayRandomMovieControl : public ActionRecord {
 public:
 	PlayRandomMovieControl() {}
@@ -374,7 +389,9 @@ public:
 	enum RandomMovieControlMode : byte {
 		kStopNow = 0,
 		kPauseMovie = 1,
-		kResumeMovie = 2
+		kResumeMovie = 2,
+		kStopAtEnd = 3,
+		kPauseAtEnd = 4
 	};
 
 protected:
@@ -385,6 +402,9 @@ protected:
 	// Nancy13's record is the mode byte alone; earlier games append a scene
 	// change to it.
 	bool _hasSceneChange = true;
+	// Nancy15 prefixes the mode with the name of the movie to control.
+	Common::Path _movieName;
+	bool _isRandomMovie = true;
 };
 
 } // End of namespace Action

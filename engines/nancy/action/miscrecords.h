@@ -153,14 +153,15 @@ public:
 	void execute() override;
 
 	uint16 _uiButton = 0;
+	byte _characterIndex = kPlayerCharacterActive; // Nancy15+: whose taskbar the disable applies to
 	byte _autoOpenOrBadgeSound = 0; // 1 = auto-open popup; 0/10 = notification-badge click-sound selector
 	byte _flagB = 0;    // 0 = clear, 1 = enable+remember scene
 	int16 _startScene = 0; // start scene id (9999 = none); also the auto-open cell phone's call target
 	int16 _endScene = 0;   // end scene id (9999 = none)
 
 	Common::String getRecordExtraInfo() const override {
-		return Common::String::format("uiButton: %d, autoOpenOrBadgeSound: %d, flagB: %d, startScene: %d, endScene: %d",
-									  _uiButton, _autoOpenOrBadgeSound, _flagB, _startScene, _endScene);
+		return Common::String::format("uiButton: %d, character: %d, autoOpenOrBadgeSound: %d, flagB: %d, startScene: %d, endScene: %d",
+									  _uiButton, _characterIndex, _autoOpenOrBadgeSound, _flagB, _startScene, _endScene);
 	}
 
 protected:
@@ -250,8 +251,8 @@ public:
 	void execute() override;
 
 	byte _relative;
-	uint16 _hours;
-	uint16 _minutes;
+	int16 _hours;
+	int16 _minutes;
 
 protected:
 	Common::String getRecordTypeName() const override { return "BumpPlayerClock"; }
@@ -333,6 +334,7 @@ public:
 	int16 _hours = 0;
 	int16 _minutes = 0;
 	int16 _seconds = 0;
+	int16 _milliseconds = 0;
 	SoundDescription _sound;               // Played on expiry when configured
 	Common::Array<FlagDescription> _flags; // Fired on expiry when configured
 
@@ -506,9 +508,23 @@ protected:
 	// flag and starts the matching outcome sound.
 	void applyChange();
 
+	// The protagonist whose resources this record changes
+	byte getCharacterIndex() const;
+
+	enum ResourceUseMode : byte {
+		kSetValue = 0,			// set the resource to _amount
+		kAddValue = 1,			// add _amount, if the resource can cover it
+		kAddTableValue = 2,		// same, with the amount taken from the table
+		kSetTableValue = 3		// set to the table value at _amount
+	};
+
+	// Nancy15 pays from a named protagonist's resources; kPlayerCharacterActive
+	// (and every earlier game) means whoever is being played.
+	byte _characterIndex = kPlayerCharacterActive;
+
 	int16 _resourceIndex = 0;
-	int16 _amount = 0;
-	byte _mode = 0;        // 0 = set the resource, non-zero = add (clamped to >= 0)
+	int16 _amount = 0;     // an amount, or a table index in the table modes
+	byte _mode = kSetValue;
 	FlagDescription _flag; // event flag set when the change is applied
 
 	Common::String _failSoundName;    // played when the change can't be applied

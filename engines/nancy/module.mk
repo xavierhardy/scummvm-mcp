@@ -15,6 +15,7 @@ MODULE_OBJS = \
   action/conversation.o \
   action/interactivevideo.o \
   action/overlay.o \
+  action/puzzlerecord.o \
   action/secondarymovie.o \
   action/secondaryvideo.o \
   action/puzzle/adjustpuzzle.o \
@@ -37,12 +38,15 @@ MODULE_OBJS = \
   action/puzzle/dotconnectpuzzle.o \
   action/puzzle/drivingpuzzle.o \
   action/puzzle/dropsortpuzzle.o \
+  action/puzzle/escapegridpuzzle.o \
   action/puzzle/gridmappuzzle.o \
   action/puzzle/hamradiopuzzle.o \
   action/puzzle/hangmanpuzzle.o \
+  action/puzzle/lettergridpuzzle.o \
   action/puzzle/leverpuzzle.o \
   action/puzzle/magnetmazepuzzle.o \
   action/puzzle/mazechasepuzzle.o \
+  action/puzzle/magicboxpuzzle.o \
   action/puzzle/matchpuzzle.o \
   action/puzzle/memorypuzzle.o \
   action/puzzle/meterpuzzle.o \
@@ -51,6 +55,7 @@ MODULE_OBJS = \
   action/puzzle/mirrorlightpuzzle.o \
   action/puzzle/mouselightpuzzle.o \
   action/puzzle/multibuildpuzzle.o \
+  action/puzzle/necklacepuzzle.o \
   action/puzzle/onebuildpuzzle.o \
   action/puzzle/orderingpuzzle.o \
   action/puzzle/overridelockpuzzle.o \
@@ -80,6 +85,7 @@ MODULE_OBJS = \
   action/puzzle/turningpuzzle.o \
   action/puzzle/twodialpuzzle.o \
   action/puzzle/typingquizpuzzle.o \
+  action/puzzle/weightsortpuzzle.o \
   action/puzzle/whalesurvivorpuzzle.o \
   action/puzzle/wordfindpuzzle.o \
   ui/fullscreenimage.o \

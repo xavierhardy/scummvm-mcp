@@ -143,16 +143,16 @@ void SimplePuzzleData::synchronize(Common::Serializer &ser) {
 
 // PCUI has room for more characters than any game actually ships, so the
 // active one is kept inside the journals we keep
-static uint activeJournalSlot() {
+static uint activePlayerCharacterSlot() {
 	return MIN<uint>(g_nancy->getPlayerCharacter(), kMaxPlayerCharacters - 1);
 }
 
 Common::Array<JournalData::Entry> &JournalData::entries(uint16 surfaceID) {
-	return journalEntries[activeJournalSlot()][surfaceID];
+	return journalEntries[activePlayerCharacterSlot()][surfaceID];
 }
 
 bool JournalData::hasEntries(uint16 surfaceID) const {
-	return journalEntries[activeJournalSlot()].contains(surfaceID);
+	return journalEntries[activePlayerCharacterSlot()].contains(surfaceID);
 }
 
 void JournalData::inheritEntries(uint from, uint to) {
@@ -250,6 +250,26 @@ void TableData::synchronize(Common::Serializer &ser) {
 	}
 
 	ser.syncArray(comboValues.data(), num, Common::Serializer::FloatLE);
+
+	if (ser.isLoading() && ser.getVersion() < 11 && g_nancy->getGameType() >= kGameTypeNancy12) {
+		// Older saves split the values at index 30 instead of 100, so everything
+		// from index 30 on was stored as a combo value
+		Common::Array<float> oldComboValues = comboValues;
+		comboValues.clear();
+
+		for (uint i = 0; i < oldComboValues.size(); ++i) {
+			if (oldComboValues[i] == (float)kNoTableValue) {
+				continue;
+			}
+
+			uint index = i + 30;
+			if (index < getNumSingleValues()) {
+				setSingleValue(index, (int16)oldComboValues[i]);
+			} else {
+				setComboValue(index - getNumSingleValues(), oldComboValues[i]);
+			}
+		}
+	}
 }
 
 static void syncInt16Array(Common::Serializer &ser, Common::Array<int16> &arr) {
@@ -278,20 +298,26 @@ void GridMapPuzzleData::synchronize(Common::Serializer &ser) {
 }
 
 void QuizPuzzleData::synchronize(Common::Serializer &ser) {
-	// Serialize as: numScenes, then for each scene: sceneID, numBoxes, box data
-	uint16 numScenes = (uint16)boxCorrect.size();
-	ser.syncAsUint16LE(numScenes);
+	// Serialize as: numSlots, then for each slot: key, numBoxes, box data
+	uint16 numSlots = (uint16)boxCorrect.size();
+	ser.syncAsUint16LE(numSlots);
 
 	if (ser.isLoading()) {
 		boxCorrect.clear();
 		typedText.clear();
-		for (uint16 s = 0; s < numScenes; ++s) {
-			uint16 sceneID = 0;
-			ser.syncAsUint16LE(sceneID);
+		for (uint16 s = 0; s < numSlots; ++s) {
+			uint32 key = 0;
+			if (ser.getVersion() >= 12) {
+				ser.syncAsUint32LE(key);
+			} else {
+				uint16 sceneID = 0;
+				ser.syncAsUint16LE(sceneID);
+				key = sceneID;
+			}
 			byte num = 0;
 			ser.syncAsByte(num);
-			auto &bc = boxCorrect[sceneID];
-			auto &tt = typedText[sceneID];
+			auto &bc = boxCorrect[key];
+			auto &tt = typedText[key];
 			bc.resize(num, false);
 			tt.resize(num);
 			for (uint i = 0; i < num; ++i) {
@@ -303,11 +329,11 @@ void QuizPuzzleData::synchronize(Common::Serializer &ser) {
 		}
 	} else {
 		for (auto &entry : boxCorrect) {
-			uint16 sceneID = entry._key;
-			ser.syncAsUint16LE(sceneID);
+			uint32 key = entry._key;
+			ser.syncAsUint32LE(key);
 			byte num = (byte)entry._value.size();
 			ser.syncAsByte(num);
-			auto &tt = typedText[sceneID];
+			auto &tt = typedText[key];
 			for (uint i = 0; i < num; ++i) {
 				byte b = entry._value[i] ? 1 : 0;
 				ser.syncAsByte(b);
@@ -318,6 +344,11 @@ void QuizPuzzleData::synchronize(Common::Serializer &ser) {
 }
 
 void TableData::setSingleValue(uint16 index, int16 value) {
+	if (index >= getNumSingleValues()) {
+		warning("TableData: single value index %u is out of range", index);
+		return;
+	}
+
 	if (singleValues.size() <= index) {
 		singleValues.resize(index + 1, kNoTableValue);
 	}
@@ -330,6 +361,11 @@ int16 TableData::getSingleValue(uint16 index) const {
 }
 
 void TableData::setComboValue(uint16 index, float value) {
+	if (index >= getNumComboValues()) {
+		warning("TableData: combo value index %u is out of range", index);
+		return;
+	}
+
 	if (comboValues.size() <= index) {
 		comboValues.resize(index + 1, kNoTableValue);
 	}
@@ -342,8 +378,31 @@ float TableData::getComboValue(uint16 index) const {
 }
 
 uint TableData::getNumSingleValues() const {
-	// nancy8 has 20 single & 20 combo values, later games have 30/10
-	return g_nancy->getGameType() <= kGameTypeNancy8 ? 20 : 30;
+	if (g_nancy->getGameType() <= kGameTypeNancy8) {
+		return 20;
+	} else if (g_nancy->getGameType() <= kGameTypeNancy11) {
+		return 30;
+	}
+
+	return 100;
+}
+
+uint TableData::getNumComboValues() const {
+	return g_nancy->getGameType() == kGameTypeNancy8 ? 20 : 10;
+}
+
+byte TableData::getNoIndex() const {
+	if (g_nancy->getGameType() <= kGameTypeNancy11) {
+		return kNoTableIndex;
+	} else if (g_nancy->getGameType() == kGameTypeNancy12) {
+		return 121;
+	}
+
+	return 255;
+}
+
+byte TableData::getLiteralIndex() const {
+	return g_nancy->getGameType() <= kGameTypeNancy11 ? 100 : 120;
 }
 
 int16 TableData::getValue(uint16 index) const {
@@ -356,11 +415,41 @@ int16 TableData::getValue(uint16 index) const {
 	return (int16)(value + (value < 0 ? -0.5f : 0.5f));
 }
 
-void CellPhoneData::synchronize(Common::Serializer &ser) {
-	ser.syncAsByte(noSignal);
-	ser.syncAsByte(batteryLow);
-	ser.syncAsByte(seeded);
+void TableData::setValue(uint16 index, int16 value) {
+	uint numSingleValues = getNumSingleValues();
+	if (index < numSingleValues) {
+		setSingleValue(index, value);
+	} else {
+		setComboValue(index - numSingleValues, value);
+	}
+}
 
+CellPhoneData::Phone &CellPhoneData::active() {
+	return phones[activePlayerCharacterSlot()];
+}
+
+const CellPhoneData::Phone &CellPhoneData::active() const {
+	return phones[activePlayerCharacterSlot()];
+}
+
+void CellPhoneData::synchronize(Common::Serializer &ser) {
+	syncPhone(ser, phones[0]);
+
+	// Nancy15+ protagonists each carry their own phone. Only their slots are
+	// written, so the save format of every earlier game is untouched.
+	if (g_nancy->getGameType() >= kGameTypeNancy15 && ser.getVersion() >= 12) {
+		for (uint i = 1; i < kMaxPlayerCharacters; ++i) {
+			syncPhone(ser, phones[i]);
+		}
+	}
+}
+
+void CellPhoneData::syncPhone(Common::Serializer &ser, Phone &phone) {
+	ser.syncAsByte(phone.noSignal);
+	ser.syncAsByte(phone.batteryLow);
+	ser.syncAsByte(phone.seeded);
+
+	Common::Array<UICL::Contact> &contacts = phone.contacts;
 	uint16 numContacts = (uint16)contacts.size();
 	ser.syncAsUint16LE(numContacts);
 
@@ -395,8 +484,8 @@ void CellPhoneData::synchronize(Common::Serializer &ser) {
 		}
 	}
 
-	syncLinkArray(ser, emailMessages);
-	syncLinkArray(ser, searchLinks);
+	syncLinkArray(ser, phone.emailMessages);
+	syncLinkArray(ser, phone.searchLinks);
 }
 
 void CellPhoneData::syncLinkArray(Common::Serializer &ser, Common::Array<SearchLink> &arr) {
@@ -448,7 +537,9 @@ void CellPhonePictureData::synchronize(Common::Serializer &ser) {
 }
 
 void TimerData::synchronize(Common::Serializer &ser) {
-	for (uint i = 0; i < kNumTimers; ++i) {
+	// Nancy14 only saves 10 of its 20 timers, see kNumSavedTimers
+	const uint numTimers = g_nancy->getGameType() >= kGameTypeNancy15 ? kNumTimers : kNumSavedTimers;
+	for (uint i = 0; i < numTimers; ++i) {
 		Timer &t = timers[i];
 		ser.syncAsSint32LE(t.state);
 		ser.syncAsUint32LE(t.currentTimeMs);
@@ -652,8 +743,30 @@ void DrivingData::synchronize(Common::Serializer &ser) {
 	ser.syncAsByte(infiniteFuel, 8);
 }
 
+void MirrorLightData::synchronize(Common::Serializer &ser) {
+	uint16 num = (uint16)angles.size();
+	ser.syncAsUint16LE(num);
+	if (ser.isLoading())
+		angles.resize(num);
+	for (uint i = 0; i < num; ++i)
+		ser.syncAsDoubleLE(angles[i]);
+}
+
+void BuildPuzzleData::synchronize(Common::Serializer &ser) {
+	ser.syncAsUint16LE(sceneID);
+	ser.syncAsSint16LE(placedCount);
+	ser.syncAsByte(solved);
+	ser.syncAsByte(wrongIngredient);
+	syncInt16Array(ser, pieces);
+	syncInt16Array(ser, zones);
+}
+
 PuzzleData *makePuzzleData(const uint32 tag) {
 	switch(tag) {
+	case BuildPuzzleData::getTag():
+		return new BuildPuzzleData();
+	case MirrorLightData::getTag():
+		return new MirrorLightData();
 	case DrivingData::getTag():
 		return new DrivingData();
 	case WordFindPuzzleData::getTag():
