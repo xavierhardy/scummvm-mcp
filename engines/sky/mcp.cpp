@@ -544,7 +544,7 @@ bool SkyMcpBridge::toolAct(const Common::JSONValue &args, Common::String &errorO
 	if (item1) {
 		// Inventory item as primary target: click its icon in the top bar.
 		// The action button arms it (OBJECT_HELD), the look button examines it.
-		queueItemClick(item1, name2.empty() ? button : kActionButton);
+		queueItemClick(item1, name2.empty() ? button : (uint8)kActionButton);
 		if (screen2) {
 			// use <item> on <scene object>: with the item armed, click the
 			// object; its action script branches on OBJECT_HELD.
