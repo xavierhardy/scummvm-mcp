@@ -276,6 +276,9 @@ public:
 	void mcpPumpTransport();
 	void mcpOnTextDrawn(const char *text, int16 x, int16 y, int16 surface);
 	void mcpOnInputPoll(uint8 handleMouse);
+	// Is the bridge running hover handlers out of sight? Nothing reaches the
+	// screen while it does.
+	bool mcpHoldsScreen() const;
 
 	GobEngine(OSystem *syst);
 	~GobEngine() override;

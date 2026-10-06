@@ -182,6 +182,10 @@ void GobEngine::mcpOnInputPoll(uint8 handleMouse) {
 		_mcpBridge->onInputPoll(handleMouse);
 }
 
+bool GobEngine::mcpHoldsScreen() const {
+	return _mcpBridge && _mcpBridge->holdsScreen();
+}
+
 const char *GobEngine::getLangDesc(int16 language) const {
 	if ((language < 0) || (language > 10))
 		language = 2;

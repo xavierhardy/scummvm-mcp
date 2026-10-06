@@ -274,6 +274,12 @@ void Video::setSize(Graphics::PixelFormat *trueColorFormat) {
 }
 
 void Video::retrace(bool mouse) {
+	// The MCP bridge is running hover handlers that are not meant to be seen:
+	// keep the dirty rects for the next retrace, which shows the screen as
+	// the bridge left it.
+	if (_vm->mcpHoldsScreen())
+		return;
+
 	if (mouse)
 		CursorMan.showMouse((_vm->_draw->_showCursor & 6) != 0);
 

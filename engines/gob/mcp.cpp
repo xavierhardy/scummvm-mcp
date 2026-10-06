@@ -109,12 +109,11 @@ GobMcpBridge::GobMcpBridge(GobEngine *vm)
 	  _lastAnyPollFrame(0),
 	  _lastPushedFrame(0),
 	  _nextDrawSeq(1),
-	  _sweepIndex(-1),
-	  _sweepMoveFrame(0),
-	  _sweepMoveSeq(0),
-	  _sweepEndFrame(0),
-	  _sweepReturnX(0),
-	  _sweepReturnY(0),
+	  _probeActive(false),
+	  _probing(false),
+	  _probeWaited(false),
+	  _probeStartMs(0),
+	  _probeCheckFrame(0),
 	  _lastStepFrame(0),
 	  _lastDrawnTextFrame(0),
 	  _inventoryKnown(false),
@@ -182,16 +181,24 @@ void GobMcpBridge::pumpFromStall() {
 void GobMcpBridge::onInputPoll(uint8 handleMouse) {
 	if (!isEnabled())
 		return;
+	if (_probeActive) {
+		// A hover handler the bridge is running is waiting for input itself.
+		// This is not the game's own polling, so it says nothing about idle.
+		if (handleMouse)
+			onProbeInputWait();
+		return;
+	}
 	_lastAnyPollFrame = _frameCounter;
-	if (handleMouse)
+	if (handleMouse) {
 		_lastInputPollFrame = _frameCounter;
+		probeNames();
+	}
 }
 
 void GobMcpBridge::onTextDrawn(const char *text, int16 x, int16 y, int16 surface) {
 	if (!isEnabled() || !text || !text[0])
 		return;
 	(void)surface;
-	_lastDrawnTextFrame = _frameCounter;
 	DrawnText dt;
 	// The game's own code page, decoded once here so names, labels and dialogue
 	// all reach the client as UTF-8.
@@ -200,6 +207,13 @@ void GobMcpBridge::onTextDrawn(const char *text, int16 x, int16 y, int16 surface
 	dt.y = y;
 	dt.frame = _frameCounter;
 	dt.seq = _nextDrawSeq++;
+	if (_probing) {
+		// A hover handler run for naming: this is the hotspot's name, never a
+		// message, and nothing a player saw.
+		_probeTexts.push_back(dt);
+		return;
+	}
+	_lastDrawnTextFrame = _frameCounter;
 	_drawnTexts.push_back(dt);
 	const uint kMaxDrawnTexts = 256;
 	if (_drawnTexts.size() > kMaxDrawnTexts)
@@ -230,15 +244,14 @@ Common::String GobMcpBridge::hoveredLabel() const {
 }
 
 // Coalesce the segments drawn on earlier frames into lines (one line per text
-// row, segments joined left to right). Rows drawn while the hover sweep is
-// parked on a hotspot become that hotspot's name; everything else is queued as
-// a message. Hover names redraw every frame; the consecutive-duplicate check
-// drops the repeats.
+// row, segments joined left to right) and queue them as messages. Hover names
+// a player's own pointing draws redraw every frame; the consecutive-duplicate
+// check drops the repeats. (What naming draws never gets here: see
+// onTextDrawn().)
 void GobMcpBridge::pumpGame() {
 	// Flush finished rows of drawn text.
 	while (!_drawnTexts.empty() && _drawnTexts[0].frame < _frameCounter) {
 		uint32 frame = _drawnTexts[0].frame;
-		uint32 seq = _drawnTexts[0].seq;
 		int16 rowY = _drawnTexts[0].y;
 		Common::String line;
 		uint i = 0;
@@ -254,15 +267,6 @@ void GobMcpBridge::pumpGame() {
 		line = MCP::mcpCleanGameText(safeUtf8(line));
 		if (line.empty())
 			continue;
-		if (_sweepIndex >= 0 || _frameCounter - _sweepEndFrame < 6) {
-			// Attribute the row to the hovered hotspot when it was drawn
-			// after the sweep cursor moved there; every other row seen around
-			// a sweep is a stale redraw and is dropped rather than surfaced
-			// as a message.
-			if (_sweepIndex >= 0 && seq >= _sweepMoveSeq)
-				_sweepCaptured = line;
-			continue;
-		}
 		if (_invState != kInvIdle) {
 			// The overlay draws the name of the current item in its status
 			// area (on open, and again whenever the cursor lands on a slot).
@@ -309,14 +313,11 @@ void GobMcpBridge::pumpGame() {
 	}
 
 	pumpSteps();
-	// Both machines below exist to learn names the game paints for a player:
-	// the item overlay's labels and the status-bar text a hover draws. A game
-	// that never paints either (its state comes from the engine's own tables)
-	// would only have its cursor dragged around for nothing.
-	if (!usesCharacterTeam()) {
+	// The overlay machine exists to learn the item names the game paints for a
+	// player. A game that never paints any (its state comes from the engine's
+	// own tables) would only have its cursor dragged around for nothing.
+	if (!usesCharacterTeam())
 		pumpInventoryRefresh();
-		pumpNameSweep();
-	}
 }
 
 // Play out the synthetic-input queue, one step per frame.
@@ -420,14 +421,21 @@ void GobMcpBridge::pumpSteps() {
 }
 
 // ---------------------------------------------------------------------------
-// Hover-sweep naming
+// Hover naming
 // ---------------------------------------------------------------------------
 
 // Woodruff (and the other Gob games) show an object's name while the cursor
-// hovers it: the hotspot's enter/position scripts draw it into the status bar.
-// While the game is idle the bridge replays exactly that — park the virtual
-// cursor on each not-yet-named hotspot for a few frames and record what the
-// game draws. Learned names are cached per TOT/hotspot.
+// hovers it: the hotspot's enter() handler draws it into the status bar, there
+// and then, and its leave() handler takes it away again. So naming needs no
+// cursor at all. From the input wait loop — the very place the engine runs
+// those handlers when the mouse moves — the bridge runs them for every
+// hotspot that has no name yet, in one go: leave the hotspot the cursor is on,
+// enter and leave each unnamed one, enter the first again (Hotspots::
+// mcpProbe*). Each hotspot's name is the text its enter() drew. Nothing reaches
+// the screen meanwhile (holdsScreen()), and the screen is left the way the
+// handlers of the hotspot under the cursor draw it — the same state a player
+// moving the mouse there and back would leave behind. Learned names are cached
+// per TOT/hotspot, so a screen costs this once.
 
 bool GobMcpBridge::isPointableHotspot(const Hotspots::McpDesc &d) const {
 	if (d.window != 0)
@@ -461,98 +469,223 @@ bool GobMcpBridge::cachedName(const Hotspots::McpDesc &d, Common::String &out) c
 	return true;
 }
 
-void GobMcpBridge::cancelNameSweep() {
-	if (_sweepIndex >= 0)
-		_sweepEndFrame = _frameCounter;
-	_sweepIndex = -1;
-	_sweepSpots.clear();
-	_sweepCaptured.clear();
+Common::String GobMcpBridge::probedLabel() const {
+	// Segments of one row joined left to right; the last row drawn wins, as a
+	// handler that draws more than the name draws the name last.
+	Common::String label;
+	uint i = 0;
+	while (i < _probeTexts.size()) {
+		int16 rowY = _probeTexts[i].y;
+		Common::String line;
+		while (i < _probeTexts.size() && ABS(_probeTexts[i].y - rowY) <= 4) {
+			if (!line.empty())
+				line += " ";
+			line += _probeTexts[i].text;
+			i++;
+		}
+		line = MCP::mcpCleanGameText(safeUtf8(line));
+		if (!line.empty())
+			label = line;
+	}
+	return label;
 }
 
-void GobMcpBridge::pumpNameSweep() {
-	// Never take the cursor away while the game is animating: the status bar it
-	// paints then belongs to the action, not to whatever the sweep points at.
-	if (!engineReady() || !readyForClick() || !_steps.empty())
+void GobMcpBridge::onProbeInputWait() {
+	_probeWaited = true;
+	if (!_probing)
+		return; // already let go: the game is running as it would for a player
+	if (g_system->getMillis() - _probeStartMs > kProbeGiveUpMs) {
+		debug(1, "mcp: naming: a hover handler kept waiting, letting it run in view");
+		releaseProbe();
 		return;
+	}
+	// What a player does next: move on, into the picture. That closes what a
+	// hover opened, the way it closes for them.
+	_vm->_util->mcpHoldPointer(_vm->_video->_scrollOffsetX + _vm->_width / 2,
+	                           _vm->_video->_scrollOffsetY + _vm->_height / 2);
+}
+
+void GobMcpBridge::releaseProbe() {
+	_probing = false;
+	_inPump = false;
+	_vm->_util->mcpReleasePointer();
+	_probeTexts.clear();
+}
+
+void GobMcpBridge::takeProbeSnapshot() {
+	ProbeSnapshot &snap = _probeSnapshot;
+	Draw *draw = _vm->_draw;
+
+	snap.vars = _vm->_inter->_variables;
+	snap.varData.resize(snap.vars->getSize());
+	snap.vars->copyTo(0, snap.varData.data(), snap.vars->getSize());
+
+	// Front and back buffer sit in the sprite table too: keep each once.
+	snap.surfaces.clear();
+	for (uint i = 0; i < draw->_spritesArray.size(); i++) {
+		const SurfacePtr &surface = draw->_spritesArray[i];
+		if (!surface)
+			continue;
+		bool seen = false;
+		for (uint j = 0; j < snap.surfaces.size() && !seen; j++)
+			seen = snap.surfaces[j].surface == surface;
+		if (seen)
+			continue;
+		ProbeSurface ps;
+		ps.surface = surface;
+		ps.width = surface->getWidth();
+		ps.height = surface->getHeight();
+		ps.bpp = surface->getBPP();
+		ps.pixels.resize((uint32)ps.width * ps.height * ps.bpp);
+		memcpy(ps.pixels.data(), surface->getData(), ps.pixels.size());
+		snap.surfaces.push_back(ps);
+	}
+
+	snap.invalidatedCount = draw->_invalidatedCount;
+	memcpy(snap.invalidatedLefts, draw->_invalidatedLefts, sizeof(snap.invalidatedLefts));
+	memcpy(snap.invalidatedTops, draw->_invalidatedTops, sizeof(snap.invalidatedTops));
+	memcpy(snap.invalidatedRights, draw->_invalidatedRights, sizeof(snap.invalidatedRights));
+	memcpy(snap.invalidatedBottoms, draw->_invalidatedBottoms, sizeof(snap.invalidatedBottoms));
+	snap.noInvalidated = draw->_noInvalidated;
+
+	snap.showCursor = draw->_showCursor;
+	snap.cursorIndex = draw->_cursorIndex;
+	snap.cursorAnim = draw->_cursorAnim;
+	snap.cursorX = draw->_cursorX;
+	snap.cursorY = draw->_cursorY;
+	memcpy(snap.cursorAnimLow, draw->_cursorAnimLow, sizeof(snap.cursorAnimLow));
+	memcpy(snap.cursorAnimHigh, draw->_cursorAnimHigh, sizeof(snap.cursorAnimHigh));
+	memcpy(snap.cursorAnimDelays, draw->_cursorAnimDelays, sizeof(snap.cursorAnimDelays));
+}
+
+void GobMcpBridge::restoreProbeSnapshot() {
+	ProbeSnapshot &snap = _probeSnapshot;
+	Draw *draw = _vm->_draw;
+
+	// A handler may have switched to a script with variables of its own; it
+	// has switched back by now, but only the same block can be put back.
+	if (_vm->_inter->_variables == snap.vars && snap.vars->getSize() == snap.varData.size())
+		snap.vars->copyFrom(0, snap.varData.data(), snap.varData.size());
+
+	// A surface a handler reallocated is not the one that was saved; anything
+	// still the same is put back exactly.
+	for (uint i = 0; i < snap.surfaces.size(); i++) {
+		ProbeSurface &ps = snap.surfaces[i];
+		if (ps.surface->getWidth() != ps.width || ps.surface->getHeight() != ps.height ||
+		    ps.surface->getBPP() != ps.bpp)
+			continue;
+		memcpy(ps.surface->getData(), ps.pixels.data(), ps.pixels.size());
+	}
+	snap.surfaces.clear();
+	snap.varData.clear();
+
+	draw->_invalidatedCount = snap.invalidatedCount;
+	memcpy(draw->_invalidatedLefts, snap.invalidatedLefts, sizeof(snap.invalidatedLefts));
+	memcpy(draw->_invalidatedTops, snap.invalidatedTops, sizeof(snap.invalidatedTops));
+	memcpy(draw->_invalidatedRights, snap.invalidatedRights, sizeof(snap.invalidatedRights));
+	memcpy(draw->_invalidatedBottoms, snap.invalidatedBottoms, sizeof(snap.invalidatedBottoms));
+	draw->_noInvalidated = snap.noInvalidated;
+
+	draw->_showCursor = snap.showCursor;
+	draw->_cursorIndex = snap.cursorIndex;
+	draw->_cursorAnim = snap.cursorAnim;
+	draw->_cursorX = snap.cursorX;
+	draw->_cursorY = snap.cursorY;
+	memcpy(draw->_cursorAnimLow, snap.cursorAnimLow, sizeof(snap.cursorAnimLow));
+	memcpy(draw->_cursorAnimHigh, snap.cursorAnimHigh, sizeof(snap.cursorAnimHigh));
+	memcpy(draw->_cursorAnimDelays, snap.cursorAnimDelays, sizeof(snap.cursorAnimDelays));
+}
+
+void GobMcpBridge::probeNames() {
+	if (_probeActive || _inPump || !engineReady() || usesCharacterTeam())
+		return;
+	// Once per frame is plenty: the wait loop polls far more often than that.
+	if (_probeCheckFrame == _frameCounter)
+		return;
+	_probeCheckFrame = _frameCounter;
+	// The inventory refresh reads what the overlay draws as it hovers the item
+	// slots; its screen is its own.
 	if (_invState != kInvIdle)
 		return;
-	// During a stream, only sweep once the action has settled into idle.
-	if (isStreaming() && _sseDoneAtFrame == 0)
-		return;
-	// Keep out of windows where dialogue text is still appearing, so a spoken
-	// line can never be mistaken for a hover name.
-	if (_sweepIndex < 0 && _frameCounter - _lastDrawnTextFrame < 8)
+
+	Common::Array<Hotspots::McpDesc> spots;
+	collectHotspots(spots);
+	Common::Array<Hotspots::McpDesc> todo;
+	Common::String dummy;
+	for (uint i = 0; i < spots.size(); i++) {
+		if (!isPointableHotspot(spots[i]) || cachedName(spots[i], dummy))
+			continue;
+		if (!spots[i].hasEnter) {
+			// Nothing runs when this one is pointed at, so nothing names it.
+			_nameCache[nameKeyFor(spots[i])] = Common::String();
+			continue;
+		}
+		Common::HashMap<Common::String, EmptyProbe>::const_iterator it =
+		    _emptyProbes.find(nameKeyFor(spots[i]));
+		if (it != _emptyProbes.end() && _frameCounter - it->_value.frame < kProbeRetryFrames)
+			continue; // came back empty a moment ago; give it time to settle
+		todo.push_back(spots[i]);
+	}
+	if (todo.empty())
 		return;
 
-	if (_sweepIndex < 0) {
-		// Anything new to name?
-		Common::Array<Hotspots::McpDesc> spots;
-		collectHotspots(spots);
-		_sweepSpots.clear();
-		Common::String dummy;
-		for (uint i = 0; i < spots.size(); i++) {
-			if (isPointableHotspot(spots[i]) && !cachedName(spots[i], dummy))
-				_sweepSpots.push_back(spots[i]);
-		}
-		if (_sweepSpots.empty())
-			return;
-		const uint kMaxCache = 512;
-		if (_nameCache.size() > kMaxCache) {
-			_nameCache.clear();
-			_emptySweeps.clear();
-		}
-		_sweepReturnX = _vm->_global->_inter_mouseX;
-		// Never park the cursor back on the top edge: that is the hover zone
-		// that opens the game's own menu bar.
-		_sweepReturnY = MAX<int>(_vm->_global->_inter_mouseY, 16);
-		_sweepIndex = 0;
-		_sweepCaptured.clear();
-		_sweepMoveFrame = _frameCounter;
-		_sweepMoveSeq = _nextDrawSeq;
-		pushMouseMove((_sweepSpots[0].left + _sweepSpots[0].right) / 2,
-		              (_sweepSpots[0].top + _sweepSpots[0].bottom) / 2);
-		debug(2, "mcp: name sweep started (%u hotspots)", _sweepSpots.size());
-		return;
+	const uint kMaxCache = 512;
+	if (_nameCache.size() > kMaxCache) {
+		_nameCache.clear();
+		_emptyProbes.clear();
 	}
 
-	// Give the hover scripts a few frames to draw the name. A hotspot that has
-	// painted nothing by then waits out a longer grace window first: what gets
-	// cached below is final ("this one has no name"), so a label that merely
-	// arrived late leaves a perfectly nameable hotspot stuck as hotspot_<id> for
-	// the rest of the room. Hotspots that do paint promptly are unaffected.
-	const uint32 kSweepDwellFrames = 4;
-	const uint32 kSweepGraceFrames = 16;
-	uint32 dwelledFrames = _frameCounter - _sweepMoveFrame;
-	if (dwelledFrames < kSweepDwellFrames)
-		return;
-	if (_sweepCaptured.empty() && dwelledFrames < kSweepGraceFrames)
-		return;
-
-	Common::String key = nameKeyFor(_sweepSpots[_sweepIndex]);
-	if (_sweepCaptured.empty() && _emptySweeps[key] + 1 < kMaxEmptySweeps) {
-		// Nothing painted: leave the hotspot uncached so a later sweep can try
-		// again (see _emptySweeps). Only the last attempt records the emptiness.
-		_emptySweeps[key]++;
-		debug(2, "mcp: name sweep: hotspot %u -> '' (attempt %d, will retry)",
-		      _sweepSpots[_sweepIndex].id & 0x0FFF, _emptySweeps[key]);
+	// Handlers may wait out a short delay; nothing they reach must come back
+	// into the bridge while they run.
+	_probeActive = true;
+	_probing = true;
+	_inPump = true;
+	takeProbeSnapshot();
+	Hotspots *hotspots = _vm->_game->_hotspots;
+	hotspots->mcpProbeBegin();
+	for (uint i = 0; i < todo.size() && _probing; i++) {
+		const Hotspots::McpDesc &d = todo[i];
+		const int16 x = (d.left + d.right) / 2;
+		const int16 y = (d.top + d.bottom) / 2;
+		_probeTexts.clear();
+		_probeWaited = false;
+		_probeStartMs = g_system->getMillis();
+		_vm->_util->mcpHoldPointer(x, y);
+		hotspots->mcpProbe(d.index, d.id, x, y);
+		Common::String label = probedLabel();
+		Common::String key = nameKeyFor(d);
+		EmptyProbe &empty = _emptyProbes[key];
+		if (_probeWaited) {
+			// Something that opens when pointed at — a menu, not a thing in the
+			// picture. Whatever it showed first is all the name it has; never
+			// open it again.
+			_nameCache[key] = label;
+			_emptyProbes.erase(key);
+			debug(2, "mcp: naming: hotspot %u opens on hover -> '%s'", d.id & 0x0FFF, label.c_str());
+		} else if (label.empty() && empty.count + 1 < kMaxEmptyProbes) {
+			// Nothing drawn: leave the hotspot unnamed so a later probe can try
+			// again (see _emptyProbes). Only the last attempt records it.
+			empty.count++;
+			empty.frame = _frameCounter;
+			debug(2, "mcp: naming: hotspot %u -> '' (attempt %d, will retry)",
+			      d.id & 0x0FFF, empty.count);
+		} else {
+			_nameCache[key] = label;
+			_emptyProbes.erase(key);
+			debug(2, "mcp: naming: hotspot %u -> '%s'", d.id & 0x0FFF, label.c_str());
+		}
+	}
+	hotspots->mcpProbeEnd();
+	if (_probing) {
+		restoreProbeSnapshot();
+		releaseProbe();
 	} else {
-		_nameCache[key] = _sweepCaptured;
-		_emptySweeps.erase(key);
-		debug(2, "mcp: name sweep: hotspot %u -> '%s'",
-		      _sweepSpots[_sweepIndex].id & 0x0FFF, _sweepCaptured.c_str());
+		// Let go part-way: the game has moved on in plain view since, and what
+		// was saved no longer belongs to it.
+		_probeSnapshot.surfaces.clear();
+		_probeSnapshot.varData.clear();
 	}
-	_sweepCaptured.clear();
-
-	_sweepIndex++;
-	if ((uint)_sweepIndex >= _sweepSpots.size()) {
-		pushMouseMove(_sweepReturnX, _sweepReturnY);
-		cancelNameSweep();
-		return;
-	}
-	_sweepMoveFrame = _frameCounter;
-	_sweepMoveSeq = _nextDrawSeq;
-	pushMouseMove((_sweepSpots[_sweepIndex].left + _sweepSpots[_sweepIndex].right) / 2,
-	              (_sweepSpots[_sweepIndex].top + _sweepSpots[_sweepIndex].bottom) / 2);
+	_probeActive = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -585,7 +718,7 @@ void GobMcpBridge::pumpInventoryRefresh() {
 			return;
 		// Opening the game's own menu on top of a running animation is the most
 		// intrusive thing the bridge does; wait until the game is truly idle.
-		if (!readyForClick() || _sweepIndex >= 0)
+		if (!readyForClick())
 			return;
 		if (inventoryOverlayOpen())
 			return; // the player-visible menu is open; not ours to drive
@@ -749,7 +882,6 @@ void GobMcpBridge::pushButton(bool down, bool right, int gameX, int gameY) {
 // through here; the bridge's own housekeeping clicks use queueClick() directly,
 // since they run only when the game is already idle.
 void GobMcpBridge::queueClickWhenReady(int gameX, int gameY, bool right) {
-	cancelNameSweep();
 	queueWaitReady();
 	queueClick(gameX, gameY, right);
 }
@@ -768,7 +900,6 @@ void GobMcpBridge::queueWaitReady() {
 // which is what makes a click an action rather than a walk. See the
 // cursor-mode block above.
 void GobMcpBridge::queueClickWithCursorMode(int gameX, int gameY, int mode) {
-	cancelNameSweep();
 	queueWaitReady();
 	Step cursor;
 	cursor.kind = kStepCursorMode;
@@ -842,9 +973,6 @@ bool GobMcpBridge::hoverRegistered(int gameX, int gameY) const {
 // press, then release a few frames later so the scripts' polling loops see the
 // button held down.
 void GobMcpBridge::queueClick(int gameX, int gameY, bool right) {
-	// A real action owns the cursor from here; drop any hover sweep.
-	cancelNameSweep();
-
 	Step hover;
 	hover.kind = kStepHover;
 	hover.x = gameX;
@@ -1441,9 +1569,9 @@ void GobMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 	    "False while the game is not accepting input (video, scripted sequence). "
 	    "act/walk are rejected until it turns true again."));
 	outputProps.setVal("naming_pending", mcpProp("boolean",
-	    "True while object names are still being resolved (the bridge hovers "
-	    "each new hotspot to learn the name the game shows a player). Call "
-	    "state again shortly for the final names."));
+	    "True while object names are still being resolved (the names are the "
+	    "ones the game shows a player pointing at each thing). Call state "
+	    "again shortly for the final names."));
 
 	// Woodruff's snapshot differs from the SCUMM one the shared schema
 	// describes: restate the collections it fills differently, and drop what it
@@ -1455,7 +1583,7 @@ void GobMcpBridge::augmentStateSchema(Common::JSONObject &outputProps) {
 		props.setVal("name",    mcpProp("string",  "Object name, as act() expects it."));
 		props.setVal("label",   mcpProp("string",
 		    "The raw status-bar text the game shows for this hotspot, in the "
-		    "game's own language. Absent until the name sweep has read it."));
+		    "game's own language. Absent when the game shows none, or has not been asked yet (naming_pending)."));
 		props.setVal("x",       mcpProp("integer", "X coordinate of the hotspot centre."));
 		props.setVal("y",       mcpProp("integer", "Y coordinate of the hotspot centre."));
 		props.setVal("pathway", mcpProp("boolean",
@@ -1568,14 +1696,12 @@ Common::JSONValue *GobMcpBridge::toolState(const Common::JSONValue &, Common::St
 	}
 	out.setVal("objects", new Common::JSONValue(objects));
 
-	bool namingPending = _sweepIndex >= 0;
-	if (!namingPending) {
-		Common::String dummy;
-		for (uint i = 0; i < entries.size(); i++) {
-			if (!cachedName(entries[i].desc, dummy)) {
-				namingPending = true;
-				break;
-			}
+	bool namingPending = false;
+	Common::String dummy;
+	for (uint i = 0; i < entries.size(); i++) {
+		if (!cachedName(entries[i].desc, dummy)) {
+			namingPending = true;
+			break;
 		}
 	}
 	if (_vm->getGameType() == kGameTypeWoodruff && _inventoryDirty)

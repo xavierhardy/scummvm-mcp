@@ -82,8 +82,9 @@ def skip_intro(client: McpClient, max_skips: int = 30) -> bool:
 def wait_named_objects(client: McpClient, timeout: float = 12.0) -> list[str]:
     """Wait until the bridge has harvested the screen's object names.
 
-    After a room settles the bridge sweeps the hotspots to learn their names;
-    `naming_pending` is False and the object list is populated once it is done."""
+    The bridge asks the game for the name of each new hotspot as soon as the
+    screen polls for input; `naming_pending` is False and the object list is
+    populated once it is done."""
     for _ in range(int(timeout * 2)):
         st = _state(client)
         objs = [o["name"] for o in st.get("objects", [])]

@@ -31,10 +31,12 @@
 #include "common/str.h"
 
 #include "gob/hotspots.h"
+#include "gob/surface.h"
 
 namespace Gob {
 
 class GobEngine;
+class Variables;
 
 // MCP bridge for the Gob engine (currently exercised with The Bizarre
 // Adventures of Woodruff and the Schnibble).
@@ -91,8 +93,12 @@ public:
 	void onTextDrawn(const char *text, int16 x, int16 y, int16 surface);
 
 	// Called from the Hotspots::check() wait loop: the script is polling for
-	// player input (handleMouse != 0 means the mouse is live).
+	// player input (handleMouse != 0 means the mouse is live). This is also
+	// where unnamed hotspots are named (see probeNames()).
 	void onInputPoll(uint8 handleMouse);
+
+	// True while hover handlers run for naming: the engine shows nothing then.
+	bool holdsScreen() const { return _probing; }
 
 protected:
 	// --- Tools --------------------------------------------------------------
@@ -246,11 +252,18 @@ private:
 	// unset when not yet swept).
 	bool cachedName(const Hotspots::McpDesc &d, Common::String &out) const;
 
-	// Advance the hover-sweep machine: while the game is idle, hover each
-	// unnamed pointable hotspot for a few frames and record the name the
-	// game's own scripts draw in the status bar. See pumpGame().
-	void pumpNameSweep();
-	void cancelNameSweep();
+	// Name the pointable hotspots that have no name yet: run each one's hover
+	// handlers, which is where the game draws its name, out of sight and
+	// without the cursor moving. See the naming block in the cpp.
+	void probeNames();
+	// The text a probed hotspot drew, one row of it (the last one drawn).
+	Common::String probedLabel() const;
+	// A hover handler run for naming has started waiting for input itself
+	// (a menu that opens on hover and stays open while pointed at).
+	void onProbeInputWait();
+	// Stop holding the screen, the pointer and the pump: the game runs as if
+	// nothing were being probed.
+	void releaseProbe();
 
 	// Push a full click (hover, press, release) at game coordinates.
 	void queueClick(int gameX, int gameY, bool right);
@@ -409,31 +422,65 @@ private:
 	// recognised as UI and kept out of the dialogue messages.
 	Common::String _useCmdLabel;
 
-	// Hover-sweep state. _sweepIndex is the index into _sweepSpots of the
-	// hotspot currently hovered, or -1 while idle.
-	Common::Array<Hotspots::McpDesc> _sweepSpots;
-	int _sweepIndex;
-	uint32 _sweepMoveFrame;
-	// Draw-sequence stamp taken when the sweep cursor moved: only rows drawn
-	// after it belong to the hovered hotspot.
-	uint32 _sweepMoveSeq;
-	// Frame the last sweep ended at (rows drawn right after it are stale).
-	uint32 _sweepEndFrame;
-	int _sweepReturnX, _sweepReturnY;
-	// Text row(s) drawn while hovering the current sweep target.
-	Common::String _sweepCaptured;
-	// Hover names learned so far, keyed by nameKeyFor(). "" = swept, nameless.
+	// Naming state. _probeActive is set for the whole of probeNames().
+	// _probing is set while hover handlers run for naming: what is drawn then
+	// goes to _probeTexts instead of the message stream, and nothing reaches
+	// the screen; releaseProbe() clears it early when a handler takes too long.
+	bool _probeActive;
+	bool _probing;
+	// Set by onProbeInputWait() for the hotspot being probed.
+	bool _probeWaited;
+	uint32 _probeStartMs;
+	// How long one hotspot's handlers may keep the game before the bridge
+	// lets go and the game carries on in plain view.
+	static const uint32 kProbeGiveUpMs = 3000;
+
+	// What the hover handlers change that the scripts read back or a player
+	// would see: the script variables, every drawing surface, the pending
+	// screen updates and the cursor. Taken before naming and put back after,
+	// because nobody pointed at anything.
+	struct ProbeSurface {
+		SurfacePtr surface;
+		uint16 width, height;
+		uint8 bpp;
+		Common::Array<byte> pixels;
+	};
+	struct ProbeSnapshot {
+		Variables *vars;
+		Common::Array<byte> varData;
+		Common::Array<ProbeSurface> surfaces;
+		int16 invalidatedCount;
+		int16 invalidatedLefts[30], invalidatedTops[30];
+		int16 invalidatedRights[30], invalidatedBottoms[30];
+		bool noInvalidated;
+		uint8 showCursor;
+		int16 cursorIndex, cursorAnim, cursorX, cursorY;
+		int8 cursorAnimLow[40], cursorAnimHigh[40], cursorAnimDelays[40];
+	};
+	ProbeSnapshot _probeSnapshot;
+	void takeProbeSnapshot();
+	void restoreProbeSnapshot();
+	Common::Array<DrawnText> _probeTexts;
+	// Frame naming last looked for work at (once per frame is plenty).
+	uint32 _probeCheckFrame;
+	// Hover names learned so far, keyed by nameKeyFor(). "" = probed, nameless.
 	Common::HashMap<Common::String, Common::String> _nameCache;
-	// Sweeps that came back with nothing, per key. A character the player has
+	// Probes that came back with nothing, per key. A character the player has
 	// just interacted with is re-registered under a fresh hotspot id and paints
-	// no hover label while it settles, so the first empty sweep must not brand
+	// no hover label while it settles, so the first empty probe must not brand
 	// it nameless for good — that would leave the character addressable only as
 	// hotspot_<id> for the rest of the room. Emptiness is only cached once a
-	// hotspot has come back empty kMaxEmptySweeps times.
-	Common::HashMap<Common::String, int> _emptySweeps;
-	static const int kMaxEmptySweeps = 3;
-	// Frame of the most recent drawn-text row, to keep sweeps out of windows
-	// where dialogue is still being written to the screen.
+	// hotspot has come back empty kMaxEmptyProbes times, kProbeRetryFrames
+	// apart.
+	struct EmptyProbe {
+		int count;
+		uint32 frame;
+	};
+	Common::HashMap<Common::String, EmptyProbe> _emptyProbes;
+	static const int kMaxEmptyProbes = 3;
+	static const uint32 kProbeRetryFrames = 12;
+	// Frame of the most recent drawn-text row, to keep the inventory refresh
+	// out of windows where dialogue is still being written to the screen.
 	uint32 _lastDrawnTextFrame;
 
 	// Inventory tracking (Woodruff: the overlay a right click opens).

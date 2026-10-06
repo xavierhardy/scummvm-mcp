@@ -7,7 +7,7 @@ built from the engine's own tables. Goblins Quest 3 is the other shape - the one
 Woodruff has - with a hotspot per object, each naming itself in the status bar
 when the cursor rests on it. This checks that the second shape works for a
 game the bridge was not originally written for: that the hotspots come back,
-that the sweep puts names on them, and that a click reaches the game.
+that they get their names, and that a click reaches the game.
 
 No save support, so this is one ordered sequence on a fresh instance.
 """
@@ -53,22 +53,32 @@ def test_01_the_screen_has_hotspots(playing: McpClient) -> None:
         assert obj["x"] >= 0 and obj["y"] >= 0, f"{obj} has nowhere to click"
 
 
-def test_02_the_sweep_names_what_the_game_names(playing: McpClient) -> None:
-    """A hotspot's name is the label the game paints for it, and the sweep is
-    what collects those. Until it has run, a hotspot is only a number."""
+def _cursor(client: McpClient) -> tuple[int, int]:
+    """Where the game sees the mouse."""
+    system = client.debug()["system"]
+    return int(system["mouse_x"]), int(system["mouse_y"])
+
+
+def test_02_the_names_are_what_the_game_names(playing: McpClient) -> None:
+    """A hotspot's name is the label the game paints for it when pointed at.
+    Until the bridge has asked the game for it, a hotspot is only a number."""
     labelled: set[str] = set()
+    cursors = {_cursor(playing)}
     for _ in range(40):
         state = playing.state()
+        cursors.add(_cursor(playing))
         labelled |= {o["name"] for o in state["objects"] if o.get("label")}
         if labelled and not state.get("naming_pending"):
             break
         time.sleep(1)
     # How many a screen has is the screen's business - the first one here is
-    # mostly the two goblins. What matters is that the sweep ran and that what
+    # mostly the two goblins. What matters is that naming ran and that what
     # it produced are names, not numbers.
-    assert labelled, "the sweep named nothing at all"
+    assert labelled, "nothing was named at all"
     for name in labelled:
         assert name == name.lower() and " " not in name, name
+    # Naming is done behind the player's back: the cursor stays where it is.
+    assert len(cursors) == 1, f"the cursor moved while names were read: {cursors}"
 
 
 def test_03_the_verbs_are_the_two_this_engine_has(playing: McpClient) -> None:

@@ -211,6 +211,14 @@ Hotspots::Hotspots(GobEngine *vm) : _vm(vm) {
 	_currentId    = 0;
 	_currentX     = 0;
 	_currentY     = 0;
+
+	_mcpProbeKey    = 0;
+	_mcpProbeId     = 0;
+	_mcpProbeIndex  = 0;
+	_mcpProbeX      = 0;
+	_mcpProbeY      = 0;
+	_mcpProbeMouseX = 0;
+	_mcpProbeMouseY = 0;
 #ifdef USE_TTS
 	_currentHotspotTTSTextIndex = -1;
 	_hotspotSpokenLast = false;
@@ -1881,6 +1889,46 @@ int16 Hotspots::findCursor(uint16 x, uint16 y) const {
 	}
 
 	return cursor;
+}
+
+void Hotspots::mcpProbeBegin() {
+	_mcpProbeKey    = _currentKey;
+	_mcpProbeId     = _currentId;
+	_mcpProbeIndex  = _currentIndex;
+	_mcpProbeX      = _currentX;
+	_mcpProbeY      = _currentY;
+	_mcpProbeMouseX = _vm->_global->_inter_mouseX;
+	_mcpProbeMouseY = _vm->_global->_inter_mouseY;
+}
+
+void Hotspots::mcpProbe(uint16 index, uint16 id, int16 x, int16 y) {
+	if (index >= kHotspotCount)
+		return;
+
+	// A handler run before this one may have changed the table
+	const Hotspot &spot = _hotspots[index];
+	if ((spot.id != id) || spot.isDisabled() || !spot.isFilled())
+		return;
+
+	if (!isValid(spot.key, spot.id, index))
+		return;
+
+	_vm->_global->_inter_mouseX = x;
+	_vm->_global->_inter_mouseY = y;
+
+	enter(index);
+	leave(index);
+}
+
+void Hotspots::mcpProbeEnd() {
+	_vm->_global->_inter_mouseX = _mcpProbeMouseX;
+	_vm->_global->_inter_mouseY = _mcpProbeMouseY;
+
+	_currentKey   = _mcpProbeKey;
+	_currentId    = _mcpProbeId;
+	_currentIndex = _mcpProbeIndex;
+	_currentX     = _mcpProbeX;
+	_currentY     = _mcpProbeY;
 }
 
 void Hotspots::mcpList(Common::Array<McpDesc> &out) const {

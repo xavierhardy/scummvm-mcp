@@ -131,6 +131,22 @@ public:
 	 */
 	uint16 mcpCurrentId() const { return _currentId; }
 
+	/** Point at hotspots without the cursor (MCP bridge).
+	 *
+	 *  What a game shows for a hotspot (its name in the status bar, a cursor
+	 *  shape) comes from the hotspot's enter() handler, run when the cursor
+	 *  moves onto it, and leave() takes it away again. mcpProbe() runs that
+	 *  pair for one hotspot with the scripts seeing the cursor at (x, y). The
+	 *  hotspot the cursor is really on is not left or entered again — some
+	 *  react to being re-entered (a menu bar that drops down) — and
+	 *  mcpProbeEnd() puts back the hover state and cursor position that
+	 *  mcpProbeBegin() saved. Only to be called from the input wait loop,
+	 *  where enter() and leave() normally run.
+	 */
+	void mcpProbeBegin();
+	void mcpProbe(uint16 index, uint16 id, int16 x, int16 y);
+	void mcpProbeEnd();
+
 #ifdef USE_TTS
 	bool hoveringOverHotspot() const;
 	void addHotspotTTSText(const Common::String &text, uint16 x1, uint16 y1, uint16 x2, uint16 y2, int16 surf);
@@ -228,6 +244,15 @@ private:
 	Common::Stack<StackEntry> _stack;
 
 	bool _shouldPush;
+
+	// Hover state and cursor position saved by mcpProbeBegin().
+	uint16 _mcpProbeKey;
+	uint16 _mcpProbeId;
+	uint16 _mcpProbeIndex;
+	uint16 _mcpProbeX;
+	uint16 _mcpProbeY;
+	int16  _mcpProbeMouseX;
+	int16  _mcpProbeMouseY;
 
 	uint16 _currentKey;
 	uint16 _currentIndex;

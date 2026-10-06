@@ -52,6 +52,10 @@ Util::Util(GobEngine *vm) : _vm(vm) {
 	_startFrameTime = 0;
 
 	_keyState = 0;
+
+	_mcpPointerHeld = false;
+	_mcpPointerX    = 0;
+	_mcpPointerY    = 0;
 }
 
 uint32 Util::getTimeKey() {
@@ -372,15 +376,36 @@ bool Util::keyPressed() {
 }
 
 void Util::getMouseState(int16 *pX, int16 *pY, MouseButtons *pButtons) {
-	Common::Point mouse = g_system->getEventManager()->getMousePos();
-	*pX = mouse.x + _vm->_video->_scrollOffsetX - _vm->_video->_screenDeltaX;
-	*pY = mouse.y + _vm->_video->_scrollOffsetY - _vm->_video->_screenDeltaY;
+	if (_mcpPointerHeld) {
+		*pX = _mcpPointerX;
+		*pY = _mcpPointerY;
+	} else {
+		Common::Point mouse = g_system->getEventManager()->getMousePos();
+		*pX = mouse.x + _vm->_video->_scrollOffsetX - _vm->_video->_screenDeltaX;
+		*pY = mouse.y + _vm->_video->_scrollOffsetY - _vm->_video->_screenDeltaY;
+	}
 
 	if (pButtons != nullptr)
 		*pButtons = _mouseButtons;
 }
 
+void Util::mcpHoldPointer(int16 x, int16 y) {
+	_mcpPointerHeld = true;
+	_mcpPointerX    = x;
+	_mcpPointerY    = y;
+}
+
+void Util::mcpReleasePointer() {
+	_mcpPointerHeld = false;
+}
+
 void Util::setMousePos(int16 x, int16 y) {
+	if (_mcpPointerHeld) {
+		_mcpPointerX = x + _vm->_video->_scrollOffsetX;
+		_mcpPointerY = y + _vm->_video->_scrollOffsetY;
+		return;
+	}
+
 	x = CLIP<int>(x + _vm->_video->_screenDeltaX, 0, _vm->_width - 1);
 	y = CLIP<int>(y + _vm->_video->_screenDeltaY, 0, _vm->_height - 1);
 	g_system->warpMouse(x, y);

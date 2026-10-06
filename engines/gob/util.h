@@ -126,6 +126,15 @@ public:
 	void forceMouseUp(bool onlyWhenSynced = false);
 	void forceMouseButtonsSync();
 
+	/** Hold the pointer the scripts see at (x, y) in game coordinates (MCP bridge).
+	 *
+	 *  Until released, getMouseState() reports this point and setMousePos()
+	 *  moves it rather than the real cursor, so the bridge can point at things
+	 *  with the player's cursor left where it is.
+	 */
+	void mcpHoldPointer(int16 x, int16 y);
+	void mcpReleasePointer();
+
 	void clearPalette();
 	int16 getFrameRate();
 	void setFrameRate(int16 rate);
@@ -164,6 +173,10 @@ protected:
 	int16 _keyBufferTail;
 
 	uint8 _fastMode;
+
+	bool  _mcpPointerHeld;
+	int16 _mcpPointerX;
+	int16 _mcpPointerY;
 
 	int16 _frameRate;
 	int16 _frameWaitTime;
