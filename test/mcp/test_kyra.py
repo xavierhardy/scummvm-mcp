@@ -151,24 +151,34 @@ def test_kyra1_a_carried_item_can_be_used_on_another(kyra1_client: McpClient) ->
     assert "itself" in str(caught.value)
 
 
-def test_kyra1_the_long_speech_does_not_time_out(kyra1_client: McpClient) -> None:
-    """Trying the door the first time starts the house talking; the call lasts."""
+def test_kyra1_the_long_speech_hands_the_turn_back(kyra1_client: McpClient) -> None:
+    """Trying the door the first time starts the house talking for two
+    minutes; the call comes back a few lines in, so skip can be asked for."""
     wait_until_taking_input(kyra1_client, "kyra1")
-    kyra1_client.set_timeout(300.0)
+    kyra1_client.set_timeout(120.0)
 
+    started = time.time()
     result = kyra1_client.act("use", "exit_south")
 
+    assert time.time() - started < 30.0, "the act lasted the whole speech"
     lines = [m.get("text") for m in result.get("messages") or []]
     assert len(lines) >= 3, result
-    assert result.get("can_act") is True, result
+    assert result.get("can_act") is False, result
+    assert result.get("scene_playing") is True, result
+    assert "skip" in result.get("note", ""), result
+
+    assert kyra1_client.skip().get("can_act") is True
+    result = kyra1_client.act("use", "exit_south")
+    assert result.get("room_changed") == 1, result
 
 
 def test_kyra1_a_caller_that_gave_up_reads_the_rest_from_state(
     kyra1_client: McpClient,
 ) -> None:
-    """The client times out mid-speech; nothing said is lost."""
+    """The client times out mid-speech, before the call would have been handed
+    back; nothing said is lost."""
     wait_until_taking_input(kyra1_client, "kyra1")
-    _act_and_give_up(kyra1_client, "exit_south", 15.0)
+    _act_and_give_up(kyra1_client, "exit_south", 5.0)
     time.sleep(1.0)
 
     first = kyra1_client.state()
@@ -183,7 +193,7 @@ def test_kyra1_a_caller_that_gave_up_reads_the_rest_from_state(
 
 def test_kyra1_the_speech_can_be_skipped(kyra1_client: McpClient) -> None:
     wait_until_taking_input(kyra1_client, "kyra1")
-    _act_and_give_up(kyra1_client, "exit_south", 10.0)
+    _act_and_give_up(kyra1_client, "exit_south", 5.0)
     kyra1_client.set_timeout(120.0)
     # Read first, the way a caller coming back does. A call landing in the
     # very frame the server notices the old client gone is still queued behind

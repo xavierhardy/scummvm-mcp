@@ -127,6 +127,11 @@ protected:
 	// the caller refused with "not accepting input" for as long as it lasts.
 	bool streamRoomChanged() const override { return false; }
 	void pumpStreamTrack() override;
+	// An action that has turned into a long scene hands the turn back while
+	// the scene plays on, so the caller can cut it short with skip: a skip
+	// asked for while the action still holds the stream is refused, and the
+	// first way out of Brandon's house is two minutes of a talking tree.
+	bool pumpStreamGameEarly() override;
 	void pumpStreamGame() override;
 	void pumpGame() override;
 
@@ -198,6 +203,10 @@ private:
 	static const uint32 kLoopGoneFrames = 15;
 	// Frames between two presses of the skip key while a scene plays on.
 	static const uint32 kSkipRepeatFrames = 12;
+	// A scene an action started is handed back once it has said this many
+	// lines and run for this long: past a remark or two, short of a speech.
+	static const uint kSceneYieldLines = 4;
+	static const uint32 kSceneYieldMs = 8000;
 	// How long after arriving a line under the picture is taken for the room's
 	// name, as long as nothing has been clicked since.
 	static const uint32 kRoomNameFrames = 240;
@@ -265,6 +274,8 @@ private:
 	uint _passesSinceInput;
 	bool _skipStream;
 	uint32 _lastSkipFrame;
+	// The last action was handed back with its scene still playing.
+	bool _sceneYielded;
 
 	Common::Array<Step> _steps;
 	bool _pendingClick;

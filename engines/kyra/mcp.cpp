@@ -66,6 +66,7 @@ KyraMcpBridge::KyraMcpBridge(KyraEngine_v1 *vm) :
 	_lastLoopFrame(0),
 	_passesSinceInput(0),
 	_skipStream(false),
+	_sceneYielded(false),
 	_lastSkipFrame(0),
 	_pendingClick(false),
 	_pendingX(0), _pendingY(0),
@@ -158,6 +159,24 @@ void KyraMcpBridge::pumpGame() {
 	if (_inStallPump)
 		return;
 	runSteps();
+}
+
+bool KyraMcpBridge::pumpStreamGameEarly() {
+	// Steps can still be queued: the click that started the scene is not
+	// retired until the game loop comes round again, which it does not while
+	// the scene plays.
+	if (_skipStream || _pendingClick || playerHasControl())
+		return false;
+	if (_sseMessages.size() < kSceneYieldLines || g_system == nullptr ||
+	    g_system->getMillis() - _sseStartMs < kSceneYieldMs)
+		return false;
+	// The lines still to come are not lost: once the stream is closed they
+	// go on the queue state() reads. What is left of the action is dropped
+	// rather than clicked into whatever the scene ends on.
+	_steps.clear();
+	_sceneYielded = true;
+	closeStreamSuccess();
+	return true;
 }
 
 void KyraMcpBridge::pumpStreamGame() {
@@ -1653,6 +1672,9 @@ void KyraMcpBridge::augmentChangesSchema(Common::JSONObject &props) {
 	    "The item left in the hand, when one is (every box was full)."));
 	props.setVal("error", mcpProp("string",
 	    "Why the action stopped short of its last click, when it did."));
+	props.setVal("scene_playing", mcpProp("boolean",
+	    "The action started a long scene that is still playing."));
+	props.setVal("note", mcpProp("string", "What to do while the scene plays."));
 	Common::JSONObject changed;
 	changed.setVal("name", mcpProp("string", "The thing that appeared or went."));
 	changed.setVal("new_state", mcpProp("string", "'present' or 'gone'."));
@@ -1683,6 +1705,7 @@ void KyraMcpBridge::snapshotPreAction() {
 	// is worked out again once the game is back in the player's hands. The
 	// snapshot below still sees the list as it stood before.
 	_hotspotsStale = true;
+	_sceneYielded = false;
 	_ssePreRoom = roomNumber();
 	heroPosition(_ssePreX, _ssePreY);
 	_ssePreHand = handItem();
@@ -1802,6 +1825,12 @@ Common::JSONObject KyraMcpBridge::buildStateChanges() const {
 	if (!_stepError.empty())
 		out.setVal("error", mcpJsonString(_stepError));
 	out.setVal("can_act", mcpJsonBool(playerHasControl()));
+	if (_sceneYielded) {
+		out.setVal("scene_playing", mcpJsonBool(true));
+		out.setVal("note", mcpJsonString(_skipToolEnabled
+		    ? "A scene is still playing. Call skip to cut it short, or state to read what is said."
+		    : "A scene is still playing. Call state to read what is said until it is over."));
+	}
 	return out;
 }
 
