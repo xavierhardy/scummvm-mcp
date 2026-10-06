@@ -366,8 +366,18 @@ def test_14_de_seagull_state_name(monkey_de_client: McpClient) -> None:
     client = monkey_de_client
     _navigate_to_dock(client)
 
-    bird = next((o for o in client.state()["objects"] if o["name"] == "vogel"), None)
-    assert bird is not None, "seagull not surfaced as 'vogel' in the kitchen"
+    # The walk onto the dock can cross the plank and send the bird up on the
+    # way in; it lands again on its own, so give it the time to.
+    bird = None
+    for _ in range(30):
+        bird = next(
+            (o for o in client.state()["objects"] if o["name"] == "vogel"), None
+        )
+        assert bird is not None, "seagull not surfaced as 'vogel' in the kitchen"
+        if bird["state_name"] == "frisst":
+            break
+        sleep(1)
+    assert bird is not None
     assert bird["state_name"] == "frisst", f"seagull not eating at rest: {bird}"
 
     client.act("geh zu", "planke")
