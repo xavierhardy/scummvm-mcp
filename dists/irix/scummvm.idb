@@ -35,13 +35,13 @@ f 0644 root sys usr/ScummVM/share/scummvm/got.aud got.aud scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/got.gfx got.gfx scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/grim-patch.lab grim-patch.lab scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/helpdialog.zip helpdialog.zip scummvm.sw.eoe
+f 0644 root sys usr/ScummVM/share/scummvm/hollywood.dat hollywood.dat scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/hugo.dat hugo.dat scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/hadesch_translations.dat hadesch_translations.dat scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/kyra.dat kyra.dat scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/lure.dat lure.dat scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/macgui.dat macgui.dat scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/macventure.dat macventure.dat scummvm.sw.eoe
-f 0644 root sys usr/ScummVM/share/scummvm/macs2_translation.dat macs2_translation.dat scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/monkey4-patch.m4b monkey4-patch.m4b scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/mort.dat mort.dat scummvm.sw.eoe
 f 0644 root sys usr/ScummVM/share/scummvm/myst3.dat myst3.dat scummvm.sw.eoe

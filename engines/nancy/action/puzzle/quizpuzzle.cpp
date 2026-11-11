@@ -23,6 +23,7 @@
 
 #include "engines/nancy/nancy.h"
 #include "engines/nancy/cursor.h"
+#include "engines/nancy/font.h"
 #include "engines/nancy/graphics.h"
 #include "engines/nancy/sound.h"
 #include "engines/nancy/input.h"
@@ -45,7 +46,8 @@ QuizPuzzle::~QuizPuzzle() {
 }
 
 void QuizPuzzle::init() {
-	Common::Rect screenClip = NancySceneState.getViewport().getBounds();
+	// The text goes where the viewport is on the screen
+	Common::Rect screenClip = NancySceneState.getViewport().getScreenPosition();
 	const uint16 sceneId = NancySceneState.getSceneInfo().sceneID;
 	if (g_nancy->getGameType() == kGameTypeNancy9 && (sceneId == 6441 || sceneId == 6443))
 		screenClip.right += 20; // WORKAROUND for chess puzzle in Nancy 9: the rightmost answer box is partially off-screen
@@ -305,9 +307,81 @@ void QuizPuzzle::readDataNancy15(Common::SeekableReadStream &stream) {
 	}
 }
 
+// ---- Nancy 16 data format ----
+// The header grew to 109 bytes: the font is named, the typed text has its own
+// length limit, and the allowed characters moved out after it. The two captions
+// are gone, and the flag-setting hotspots share one cursor.
+void QuizPuzzle::readDataNancy16(Common::SeekableReadStream &stream) {
+	// The typed text is drawn by the UI, over the overlays of the scene; e.g. the
+	// lines of Nancy17's grave quiz are overlays, which come in as it gets solved
+	_z = kTextZ;
+
+	stream.skip(33);	// the record's name
+	_textColor = stream.readUint32BE();
+
+	readFilename(stream, _fontName);
+	_maxTypedLength = stream.readUint16LE();
+	_cursorBlinkInterval = stream.readUint16LE();
+	_cursorChar = stream.readByte();
+	_isDisplayOnly = (_cursorChar == 0);
+	_keepBoxOnWrongAnswer = (stream.readByte() != 0);
+	_autoCheck = (stream.readByte() == 0); // 0 = auto-check ON
+	_cycleSolvedBoxes = (stream.readByte() != 0);
+	stream.skip(66);
+	_hotspotCursor = stream.readUint16LE();
+
+	readFilename(stream, _allowedChars);
+	_invalidKeySound.readData(stream);
+
+	_solveScene._sceneChange.sceneID = stream.readUint16LE();
+	_solveScene._sceneChange.frameID = stream.readUint16LE();
+	_solveScene._flag.label = stream.readSint16LE();
+	_solveScene._flag.flag = stream.readByte();
+	_doneSoundBlock.readData(stream);
+
+	readRect(stream, _exitHotspot);
+	_exitCursorType = stream.readUint16LE();
+	_exitCursorFromData = true;
+	_exitScene._sceneChange.sceneID = stream.readUint16LE();
+	_exitScene._flag.label = stream.readSint16LE();
+	_exitScene._flag.flag = g_nancy->_true;
+
+	readExitHotspots(stream, _hotspots);
+
+	// The box count is stored doubled
+	uint16 numBoxes = stream.readUint16LE() / 2;
+
+	if (numBoxes > kMaxBoxes) {
+		warning("QuizPuzzle: numBoxes %d exceeds maximum %d, clamping", numBoxes, (int)kMaxBoxes);
+		numBoxes = kMaxBoxes;
+	}
+
+	_boxes.resize(numBoxes);
+
+	for (uint i = 0; i < _boxes.size(); ++i) {
+		Box &box = _boxes[i];
+		readRect(stream, box.rect);
+
+		uint16 numAnswers = stream.readUint16LE();
+		box.answers.resize(numAnswers);
+		for (uint j = 0; j < numAnswers; ++j) {
+			readFilename(stream, box.answers[j]);
+			box.maxAnswerLength = MAX<uint16>(box.maxAnswerLength, box.answers[j].size());
+		}
+
+		box.correctFlag = stream.readSint16LE();
+		box.nonEmptyFlag = stream.readSint16LE();
+
+		box.correctSound.readData(stream);
+		box.wrongSound.readData(stream);
+	}
+}
+
 void QuizPuzzle::readData(Common::SeekableReadStream &stream) {
 	if (g_nancy->getGameType() == kGameTypeNancy8) {
 		readDataNancy8(stream);
+	} else if (g_nancy->getGameType() >= kGameTypeNancy16) {
+		readDataNancy16(stream);
 	} else if (g_nancy->getGameType() >= kGameTypeNancy15) {
 		readDataNancy15(stream);
 	} else {
@@ -320,6 +394,10 @@ char QuizPuzzle::getCursorChar() const {
 }
 
 uint QuizPuzzle::getMaxTypedLength() const {
+	if (g_nancy->getGameType() >= kGameTypeNancy16) {
+		return _maxTypedLength;
+	}
+
 	return g_nancy->getGameType() >= kGameTypeNancy15 ? kMaxTypedLengthNancy15 : kMaxTypedLength;
 }
 
@@ -553,6 +631,7 @@ void QuizPuzzle::executeNancy9() {
 					saveAnswer(_currentBox);
 					if (_autoCheck && checkAnswerForCurrentBox()) {
 						_internalState = kStartCorrect;
+						_wasCheckedByTyping = true;
 					}
 				}
 
@@ -583,6 +662,7 @@ void QuizPuzzle::executeNancy9() {
 					if (_autoCheck) {
 						if (checkAnswerForCurrentBox()) {
 							_internalState = kStartCorrect;
+							_wasCheckedByTyping = true;
 						} else if (!isNancy15 && text.size() >= box.maxAnswerLength) {
 							_internalState = kStartWrong;
 						}
@@ -628,7 +708,14 @@ void QuizPuzzle::executeNancy9() {
 			showBoxSubtitle(box.correctText, _recordCorrectText);
 		}
 
-		advanceToNextBox();
+		// In Nancy16, an answer that turns out right while it is being typed keeps the
+		// cursor, unless the record holds on to wrong answers: scene 6275 also takes
+		// "Los Angele", and the player has to be able to go on typing
+		if (g_nancy->getGameType() <= kGameTypeNancy15 || !_wasCheckedByTyping || _keepBoxOnWrongAnswer) {
+			advanceToNextBox();
+		}
+
+		_wasCheckedByTyping = false;
 
 		// Nancy 15 does not wait for the feedback sound before carrying on
 		if (isNancy15) {
@@ -810,7 +897,9 @@ void QuizPuzzle::handleInput(NancyInput &input) {
 				continue;
 			}
 
-			if (hotspot.cursorType != 0) {
+			if (g_nancy->getGameType() >= kGameTypeNancy16) {
+				setDataCursor(_hotspotCursor);
+			} else if (hotspot.cursorType != 0) {
 				g_nancy->_cursor->setCursorType((CursorManager::CursorType)hotspot.cursorType, true);
 			} else {
 				g_nancy->_cursor->setCursorType(CursorManager::kHotspot);
@@ -834,11 +923,16 @@ void QuizPuzzle::handleInput(NancyInput &input) {
 	for (uint i = 0; i < _boxes.size() && !mouseOverHotspot; ++i) {
 		if (_boxes[i].correct && !isNancy15)
 			continue;
+		// From Nancy 10 the box being typed in is not clickable and keeps the normal cursor
+		if (i == _currentBox && g_nancy->getGameType() >= kGameTypeNancy10)
+			continue;
 		Common::Rect screenRect = NancySceneState.getViewport().convertViewportToScreen(_boxes[i].rect);
 		if (!screenRect.contains(input.mousePos))
 			continue;
 
-		g_nancy->_cursor->setCursorType(CursorManager::kHotspot);
+		// The puzzle arrow cursor only exists in Nancy 10 and up
+		g_nancy->_cursor->setCursorType(g_nancy->getGameType() >= kGameTypeNancy10 ?
+			CursorManager::kPuzzleArrow : CursorManager::kHotspot);
 
 		if (input.input & NancyInput::kLeftMouseButtonUp) {
 			if (i != _currentBox) {
@@ -862,6 +956,9 @@ void QuizPuzzle::handleInput(NancyInput &input) {
 
 	// The keyboard is read whatever the mouse happens to be over
 	for (auto &key : input.otherKbdInput) {
+		// Enhancement: Shift+Tab goes to the previous box, the way Tab goes to the next
+		_movesToPreviousBox = isNancy15 && key.keycode == Common::KEYCODE_TAB && key.hasFlags(Common::KBD_SHIFT);
+
 		if (key.keycode == Common::KEYCODE_BACKSPACE) {
 			_pendingBackspace = true;
 			_hasNewKey = true;
@@ -900,6 +997,11 @@ void QuizPuzzle::onPause(bool paused) {
 void QuizPuzzle::drawText() {
 	_drawSurface.clear(g_nancy->_graphics->getTransColor());
 
+	if (g_nancy->getGameType() >= kGameTypeNancy16) {
+		drawTextNancy16();
+		return;
+	}
+
 	const Graphics::Font *font = g_nancy->_graphics->getFont(_fontID);
 	if (!font) {
 		warning("QuizPuzzle: font %u is missing, no answer text will be drawn", _fontID);
@@ -925,9 +1027,38 @@ void QuizPuzzle::drawText() {
 	_needsRedraw = true;
 }
 
+void QuizPuzzle::drawTextNancy16() {
+	const Font *font = g_nancy->_graphics->getFont(_fontName);
+	const Graphics::Font *systemFont = font ? font->getSystemFont() : nullptr;
+	if (!systemFont) {
+		warning("QuizPuzzle: font %s is missing, no answer text will be drawn", _fontName.c_str());
+		return;
+	}
+
+	uint32 color = argbToColor(_drawSurface.format, _textColor | 0xFF000000);
+
+	for (uint i = 0; i < _boxes.size(); ++i) {
+		const Common::String &text = _boxes[i].typedText;
+		if (text.empty())
+			continue;
+
+		Common::Rect bounds = _boxes[i].rect;
+		bounds = NancySceneState.getViewport().convertViewportToScreen(bounds);
+		bounds = convertToLocal(bounds);
+
+		// On a single line, at the left of the box and centered in its height
+		int y = bounds.top + (bounds.height() - systemFont->getFontHeight()) / 2;
+		systemFont->drawString(_drawSurface.surfacePtr(), text, bounds.left, y, bounds.width(), color);
+	}
+
+	_needsRedraw = true;
+}
+
 void QuizPuzzle::advanceToNextBox() {
+	const uint step = _movesToPreviousBox ? _boxes.size() - 1 : 1;
+
 	for (uint n = 0; n < _boxes.size(); ++n) {
-		_currentBox = (_currentBox + 1) % _boxes.size();
+		_currentBox = (_currentBox + step) % _boxes.size();
 		if (_cycleSolvedBoxes || !_boxes[_currentBox].correct)
 			return;
 	}
@@ -951,9 +1082,12 @@ bool QuizPuzzle::checkAnswerForCurrentBox(bool silent) {
 	if (!input.empty() && input.lastChar() == cursorChar)
 		input.deleteLastChar();
 
+	// Nancy16 can list an empty answer, for a box that may be left empty
+	const bool matchesEmptyAnswers = g_nancy->getGameType() >= kGameTypeNancy16;
+
 	bool correct = false;
 	for (uint j = 0; j < box.answers.size(); ++j) {
-		if (!box.answers[j].empty() && input.equalsIgnoreCase(box.answers[j])) {
+		if ((matchesEmptyAnswers || !box.answers[j].empty()) && input.equalsIgnoreCase(box.answers[j])) {
 			correct = true;
 			break;
 		}
@@ -1021,9 +1155,10 @@ void QuizPuzzle::loadSavedAnswers() {
 				break;
 			}
 		}
-	} else if (g_nancy->getGameType() >= kGameTypeNancy15 &&
+	} else if (g_nancy->getGameType() == kGameTypeNancy15 &&
 			(_restoreFlag == -1 || !NancySceneState.getEventFlag(_restoreFlag, g_nancy->_true))) {
-		// Without the restore flag set the puzzle starts over
+		// Without the restore flag set the puzzle starts over. Nancy16 has no such
+		// flag, and always brings back what was typed.
 		data->boxCorrect.erase(key);
 		data->typedText.erase(key);
 		return;

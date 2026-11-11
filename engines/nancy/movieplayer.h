@@ -61,8 +61,10 @@ public:
 	// Load <name> + ".avf"/".bik" and create the matching decoder. videoPlaytype
 	// picks the container, falling back to the other one if its file is missing.
 	// bidirectionalCache enables fast bidirectional scrubbing; pass it only for
-	// scrubbed panorama scenes.
-	bool loadFile(const Common::Path &name, byte videoPlaytype = kVideoPlaytypeAuto, bool bidirectionalCache = false);
+	// scrubbed panorama scenes. screenFormat decodes Bink frames in the screen
+	// format instead of the input format; only for opaque videos, since the
+	// transparent color is defined in the input format.
+	bool loadFile(const Common::Path &name, byte videoPlaytype = kVideoPlaytypeAuto, bool bidirectionalCache = false, bool screenFormat = false);
 	bool isVideoLoaded() const;
 	void close();
 	Video::VideoDecoder *getDecoder() { return _decoder.get(); }
@@ -108,9 +110,13 @@ public:
 	void goToFrame(int frameNr);				// show a single still frame
 	void playRange(int first, int last);		// begin timed playback (reverse if last < first)
 	bool update();								// advance; true if the shown frame changed
+	// Advances by the time that went by in the game, which stops while the
+	// movie isn't run. A movie that falls behind skips frames to catch up.
+	bool advance(double elapsedMillis);
 	bool isRangePlaying() const { return _rangePlaying; }
 	int getCurrentFrame() const { return getCurFrame(); }
 	void drawFrame(Graphics::ManagedSurface &dst, const Common::Point &pos) const;
+	void drawFrame(Graphics::ManagedSurface &dst, const Common::Rect &source, const Common::Point &pos) const;	// a part of it
 
 private:
 	friend class BinkCacheLoader;
@@ -138,14 +144,19 @@ private:
 	Common::SharedPtr<DeferredLoader> _cacheLoader;
 	uint _cacheFillNext = 0;
 
+	double getFrameMillis() const;
+	bool showNextFrame();
+
 	// Simple frame-range player state. _currentSurface points at the decoder's
 	// last-decoded frame (owned by it, valid until the next decode).
 	const Graphics::Surface *_currentSurface = nullptr;
 	int _rangeLast = 0;
 	int _step = 1;
 	bool _rangePlaying = false;
-	uint32 _lastFrameTime = 0;
-	uint32 _frameDelayMs = 66;
+	double _nextFrameTime = 0.0;	// when the next frame is due, in milliseconds
+	double _playedMillis = 0.0;		// how long advance() has played the range
+	double _nextPlayedFrame = 0.0;	// when advance() shows the next frame
+	double _frameMillis = 1000.0 / 15.0;
 };
 
 } // End of namespace Nancy

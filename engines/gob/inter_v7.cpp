@@ -730,7 +730,8 @@ void Inter_v7::o7_playVmdOrMusic() {
 	props.startFrame = _vm->_game->_script->readValExpr();
 	props.lastFrame  = _vm->_game->_script->readValExpr();
 	props.breakKey   = _vm->_game->_script->readValExpr();
-	props.flags      = _vm->_game->_script->readValExpr();
+	// Original engine flags use 16bits, higher bits are ScummVM specific flags set elsewhere (kFlagScreenSurface)
+	props.flags      = (uint16)_vm->_game->_script->readValExpr();
 	props.palStart   = _vm->_game->_script->readValExpr();
 	props.palEnd     = _vm->_game->_script->readValExpr();
 	props.palCmd     = 1 << (props.flags & 0x3F);
@@ -847,13 +848,6 @@ void Inter_v7::o7_playVmdOrMusic() {
 	if (props.startFrame == -2)
 		props.noBlock    = true;
 
-	if ((props.slot == 1 && !(props.flags & VideoPlayer::kFlagNoVideo)) ||
-		startFrameCopy == -20) {
-		props.loop = true;
-		// TODO: one more mode is missing if start frame == -200
-		// In that case, the video is not closed at the end, but does not loop either
-	}
-
 	_vm->_vidPlayer->evaluateFlags(props);
 
 	bool primary = true;
@@ -871,13 +865,14 @@ void Inter_v7::o7_playVmdOrMusic() {
 		props.noBlock = true;
 	}
 
-	// if (_vm->_vidPlayer->getSoundFlags() & 0x100) {
-	// 	props.noWaitSound = true;
-	// }
-	// Actually, the noWaitSound flag seems to be always set (at least in Adibou/Adi4),
-	// independently of the "no wait" sound flag 0x100 in the VMD file header.
+	if ((props.slot == 1 && !(props.flags & VideoPlayer::kFlagNoVideo) && _vm->_vidPlayer->hasVideo(slot)) ||
+		startFrameCopy == -20) {
+		props.loop = true;
+		// TODO: one more mode is missing if start frame == -200
+		// In that case, the video is not closed at the end, but does not loop either
+	}
 
-	props.noWaitSound = true;
+	_vm->_vidPlayer->setAutoUpdate(slot, true);
 
 	if (props.startFrame == -2 || props.startFrame == -3) {
 		props.startFrame = 0;
@@ -896,14 +891,23 @@ void Inter_v7::o7_playVmdOrMusic() {
 
 }
 void Inter_v7::o7_setActiveCD() {
-	Common::String str0 = _vm->_game->_script->evalString();
-	Common::String str1 = _vm->_game->_script->evalString();
+	// Search for a "CD" directory containing a file matching a pattern, and mark it as the current CD directory (if found).
+	Common::String filePattern1 = _vm->_game->_script->evalString();
+	Common::String filePattern2 = _vm->_game->_script->evalString();
 
 	Common::ArchiveMemberDetailsList files;
-	SearchMan.listMatchingMembers(files, Common::Path(str0, '\\'));
+	SearchMan.listMatchingMembers(files, Common::Path(filePattern1, '\\'));
 	Common::Path savedCDpath = _currentCDPath;
 
 	for (const auto &file : files) {
+		if (!filePattern2.empty()) {
+			// If a second pattern is given, the searched directory must also contain a file matching it.
+			Common::Archive *cdDirArchive = SearchMan.getArchive(file.arcName);
+			Common::ArchiveMemberList cdDirFiles;
+			if (!cdDirArchive || cdDirArchive->listMatchingMembers(cdDirFiles, Common::Path(filePattern2, '\\')) == 0)
+				continue;
+		}
+
 		if (setCurrentCDPath(file.arcName)) {
 			debugC(5, kDebugFileIO, "o7_setActiveCD: %s -> %s", savedCDpath.toString().c_str(),  _currentCDPath.toString().c_str());
 			storeValue(1);
@@ -1656,12 +1660,11 @@ void Inter_v7::o7_printText(OpFuncParams &params) {
 		_vm->_draw->_transparency = 1;
 	}
 
-	// colMod is read from conf file (_off_=xxx).
-	// in Playtoons, it's not present in the conf file, thus always equal to the default value (0).
-	// Maybe used in ADIs...
-	//	if (!_vm->_draw->_transparency)
-	//		_vm->_draw->_backColor += colMod;
-	//	_vm->_draw->_frontColor += colMod;
+	int16 colorOffset = _vm->_draw->_colorOffset; // NB: _colorOffset is often 0, but set to 10 by o7_startAdi4Application
+	if (_vm->_draw->_transparency == 0 && (_vm->_draw->_backColor <= 255 - colorOffset))
+		_vm->_draw->_backColor += colorOffset;
+	if (_vm->_draw->_frontColor <= 255 - colorOffset)
+		_vm->_draw->_frontColor += colorOffset;
 
 	int16 oldTransparency = _vm->_draw->_transparency;
 	int i = 0;
@@ -1928,6 +1931,17 @@ void Inter_v7::o7_checkData(OpFuncParams &params) {
 		size = _vm->_dataIO->fileSize(file);
 		if (size == -1)
 			warning("File \"%s\" not found", file.c_str());
+		else if (_vm->getGameType() == kGameTypeAdi4 && file.matchString("DISC?", true)) {
+			// WORKAROUND: In some Adi4 applications (e.g. "Anglais"), the script use a flag file "DISC1", "DISC2", etc. to check which disc is currently inserted.
+			// If the found file is in a directory other than the current CD path, pretend it is not there.
+			Common::ArchiveMemberDetailsList matchingFiles;
+			SearchMan.listMatchingMembers(matchingFiles, file.c_str());
+			if (!matchingFiles.empty() && !matchingFiles.front().arcName.equalsIgnoreCase(_currentCDPath.baseName())) {
+				debugC(2, kDebugFileIO, "o7_checkData: file \"%s\" is not in current CD path \"%s\", pretending it does not exist", file.c_str(), _currentCDPath.toString().c_str());
+				WRITE_VAR(16, -1);
+				return;
+			}
+		}
 
 	} else if (mode == SaveLoad::kSaveModeSave)
 		size = _vm->_saveLoad->getSize(file.c_str());
@@ -2340,14 +2354,14 @@ void Inter_v7::o7_startAdi4Application(OpGobParams &params) {
 		warning("o7_startAdi4Application: c = 0 case stub");
 	} else {
 		Common::String appliStkFile = "ADI" + appliAbbreviation + ".STK";
-		_vm->_dataIO->openArchive(appliStkFile, false);
+		_vm->_dataIO->openArchive(appliStkFile, true);
 
 		Common::String appliIntroTotFile = appliAbbreviation + "INTRO";
 		_vm->_draw->_colorOffset = 10;
 		_vm->_game->totSub(1, appliIntroTotFile);
 		_vm->_draw->_colorOffset = 0;
 
-		_vm->_dataIO->closeArchive(false);
+		_vm->_dataIO->closeArchive(true);
 	}
 
 	_adi4CurrentSectionInAppChildData = 0;

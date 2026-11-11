@@ -25,7 +25,7 @@
 #include "engines/nancy/cursor.h"
 #include "engines/nancy/graphics.h"
 #include "engines/nancy/input.h"
-#include "engines/nancy/resource.h"
+#include "engines/nancy/resource/resource.h"
 #include "engines/nancy/sound.h"
 #include "engines/nancy/util.h"
 
@@ -83,33 +83,15 @@ void PuzzleRecord::setDataCursor(uint16 cursorType, bool hotspotVariant) const {
 	g_nancy->_cursor->setCursorType((CursorManager::CursorType)cursorType, true, hotspotVariant);
 }
 
+Common::Point PuzzleRecord::getHeldPiecePos(const Common::Point &mousePos, const Common::Rect &src, const Common::Point &offset) const {
+	const Common::Rect &cursor = g_nancy->_cursor->getCurrentCursorBounds();
+	Common::Point cursorCenter = mousePos - g_nancy->_cursor->getCurrentCursorHotspot() +
+		Common::Point(cursor.width() / 2, cursor.height() / 2);
+	return cursorCenter - Common::Point(src.width() / 2, src.height() / 2) - offset;
+}
+
 SoundDescription PuzzleRecord::playSoundBlock(const RandomSoundBlock &block) {
-	SoundDescription desc;
-	if (block.names.empty()) {
-		return desc;
-	}
-
-	uint idx = block.names.size() == 1 ? 0 : g_nancy->_randomSource->getRandomNumber(block.names.size() - 1);
-	const Common::String &name = block.names[idx];
-	if (name.empty() || name == "NO SOUND") {
-		return desc;
-	}
-
-	desc.name = name;
-	desc.channelID = block.channel;
-	desc.numLoops = block.numLoops > 0 ? block.numLoops : 1;
-	desc.volume = block.volume;
-
-	g_nancy->_sound->loadSound(desc);
-	g_nancy->_sound->playSound(desc);
-
-	Common::String caption = resolveSubtitleText(name);
-	if (caption.empty()) {
-		caption = resolveSubtitleText(name, Common::String(), "CONVO");
-	}
-	showSubtitle(caption);
-
-	return desc;
+	return block.play();
 }
 
 bool PuzzleRecord::isSoundBlockPlaying(const RandomSoundBlock &block) const {

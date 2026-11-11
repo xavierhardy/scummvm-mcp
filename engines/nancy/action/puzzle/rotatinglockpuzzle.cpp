@@ -22,12 +22,13 @@
 #include "common/random.h"
 
 #include "engines/nancy/nancy.h"
-#include "engines/nancy/resource.h"
+#include "engines/nancy/resource/resource.h"
 #include "engines/nancy/graphics.h"
 #include "engines/nancy/sound.h"
 #include "engines/nancy/input.h"
 #include "engines/nancy/util.h"
 
+#include "engines/nancy/action/soundrecords.h"
 #include "engines/nancy/action/puzzle/rotatinglockpuzzle.h"
 
 #include "engines/nancy/state/scene.h"
@@ -45,6 +46,11 @@ void RotatingLockPuzzle::init() {
 }
 
 void RotatingLockPuzzle::readData(Common::SeekableReadStream &stream) {
+	if (g_nancy->getGameType() >= kGameTypeNancy16) {
+		readDataNancy16(stream);
+		return;
+	}
+
 	const bool isNancy10 = g_nancy->getGameType() >= kGameTypeNancy10;
 
 	readFilename(stream, _imageName);
@@ -157,6 +163,79 @@ void RotatingLockPuzzle::readData(Common::SeekableReadStream &stream) {
 	}
 }
 
+// Nancy16 dropped the fixed-size slots in favor of arrays sized by the icon and dial counts
+void RotatingLockPuzzle::readDataNancy16(Common::SeekableReadStream &stream) {
+	readFilename(stream, _imageName);
+
+	_iconsPerDial = stream.readUint16LE();
+	readRectArray(stream, _srcRects, _iconsPerDial);
+
+	// Nancy17 added the pictures of the pressed buttons, and how long they show
+	const bool isNancy17 = g_nancy->getGameType() >= kGameTypeNancy17;
+
+	uint16 numDials = stream.readUint16LE();
+	readRectArray(stream, _destRects, numDials);
+
+	if (isNancy17) {
+		_pressedTime = (uint32)(stream.readDoubleLE() * 1000);
+		readRect(stream, _upPressedSrc);
+	}
+
+	readRectArray(stream, _upHotspots, numDials);
+
+	if (isNancy17) {
+		readRect(stream, _downPressedSrc);
+	}
+
+	readRectArray(stream, _downHotspots, numDials);
+
+	for (uint i = 0; i < numDials; ++i) {
+		if (i == 0) {
+			_screenPosition = _destRects[i];
+		} else {
+			_screenPosition.extend(_destRects[i]);
+		}
+
+		// The pressed buttons get drawn too
+		if (!_upPressedSrc.isEmpty()) {
+			_screenPosition.extend(_upHotspots[i]);
+		}
+
+		if (!_downPressedSrc.isEmpty()) {
+			_screenPosition.extend(_downHotspots[i]);
+		}
+	}
+
+	_correctSequence.resize(numDials);
+	stream.read(_correctSequence.data(), numDials);
+	_startSequence.resize(numDials);
+	stream.read(_startSequence.data(), numDials);
+
+	int16 upType = stream.readSint16LE();
+	int16 downType = stream.readSint16LE();
+	if (upType != 0) {
+		_upCursorType = (CursorManager::CursorType)upType;
+	}
+
+	if (downType != 0) {
+		_downCursorType = (CursorManager::CursorType)downType;
+	}
+
+	Common::String caption;
+	readMultiNameSound(stream, _clickSound, caption);
+
+	_solveCondition.label = stream.readSint16LE();
+	_solveCondition.flag = stream.readByte();
+
+	_solveScene._sceneChange.sceneID = stream.readUint16LE();
+	_solveScene._sceneChange.frameID = stream.readUint16LE();
+	_solveScene._flag.label = stream.readSint16LE();
+	_solveScene._flag.flag = stream.readByte();
+	readMultiNameSound(stream, _solveSound, caption);
+
+	readExitHotspot(stream);
+}
+
 void RotatingLockPuzzle::execute() {
 	const bool isNancy10 = g_nancy->getGameType() >= kGameTypeNancy10;
 
@@ -188,12 +267,25 @@ void RotatingLockPuzzle::execute() {
 		_state = kRun;
 		// fall through
 	case kRun:
+		if (!_pressedButton.isEmpty() && g_nancy->getTotalPlayTime() > _pressedEndTime) {
+			// The button comes back up
+			Common::Rect dest = _pressedButton;
+			dest.translate(-_screenPosition.left, -_screenPosition.top);
+			_drawSurface.fillRect(dest, g_nancy->_graphics->getTransColor());
+			_pressedButton = Common::Rect();
+			_needsRedraw = true;
+		}
+
 		switch (_solveState) {
 		case kNotSolved:
 			for (uint i = 0; i < _correctSequence.size(); ++i) {
 				if (_currentSequence[i] != (int16)_correctSequence[i]) {
 					return;
 				}
+			}
+
+			if (g_nancy->getGameType() >= kGameTypeNancy16 && !NancySceneState.getEventFlag(_solveCondition)) {
+				return;
 			}
 
 			_solveSoundPlayTime = g_nancy->getTotalPlayTime() + _solveSoundDelay * 1000;
@@ -260,6 +352,7 @@ void RotatingLockPuzzle::handleInput(NancyInput &input) {
 					n = 0;
 				_currentSequence[i] = (byte)n;
 				drawDial(i);
+				drawPressedButton(_upPressedSrc, _upHotspots[i]);
 			}
 
 			return;
@@ -279,6 +372,7 @@ void RotatingLockPuzzle::handleInput(NancyInput &input) {
 					n = (int)_iconsPerDial - 1;
 				_currentSequence[i] = (byte)n;
 				drawDial(i);
+				drawPressedButton(_downPressedSrc, _downHotspots[i]);
 			}
 
 			return;
@@ -289,6 +383,24 @@ void RotatingLockPuzzle::drawDial(uint id) {
 	Common::Point destPoint(_destRects[id].left - _screenPosition.left, _destRects[id].top - _screenPosition.top);
 	_drawSurface.blitFrom(_image, _srcRects[_currentSequence[id]], destPoint);
 
+	_needsRedraw = true;
+}
+
+void RotatingLockPuzzle::drawPressedButton(const Common::Rect &src, const Common::Rect &button) {
+	if (src.isEmpty()) {
+		return;
+	}
+
+	// One button shows as pressed at a time
+	if (!_pressedButton.isEmpty()) {
+		Common::Rect previous = _pressedButton;
+		previous.translate(-_screenPosition.left, -_screenPosition.top);
+		_drawSurface.fillRect(previous, g_nancy->_graphics->getTransColor());
+	}
+
+	_drawSurface.blitFrom(_image, src, Common::Point(button.left - _screenPosition.left, button.top - _screenPosition.top));
+	_pressedButton = button;
+	_pressedEndTime = g_nancy->getTotalPlayTime() + _pressedTime;
 	_needsRedraw = true;
 }
 

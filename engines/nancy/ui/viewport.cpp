@@ -220,7 +220,8 @@ void Viewport::loadVideo(const Common::Path &filename, uint frameNr, uint vertic
 	// Only panorama scenes step through frames, so only they need the frame cache
 	// for fast bidirectional scrubbing; other scenes would just waste memory.
 	const bool isPanorama = panningType == kPan360 || panningType == kPanLeftRight;
-	if (!_decoder.loadFile(filename, kVideoPlaytypeAuto, isPanorama)) {
+	// The background is drawn opaquely, so it can keep the screen format's precision.
+	if (!_decoder.loadFile(filename, kVideoPlaytypeAuto, isPanorama, true)) {
 		error("Couldn't load video file %s.avf or %s.bik", filename.toString().c_str(), filename.toString().c_str());
 	}
 
@@ -297,10 +298,14 @@ void Viewport::setPreviousFrame() {
 }
 
 void Viewport::setVerticalScroll(uint scroll) {
-	assert((int)scroll + _drawSurface.h <= _fullFrame.h);
-
+	// A background smaller than the viewport gets stretched over it. Nancy24
+	// keeps one of the size of the earlier games, toast_BG, for the scenes
+	// that only play movies.
 	Common::Rect sourceBounds = _screenPosition;
 	sourceBounds.moveTo(0, scroll);
+	sourceBounds.clip(Common::Rect(_fullFrame.w, _fullFrame.h));
+	assert(!sourceBounds.isEmpty() && sourceBounds.top == (int)scroll);
+
 	_drawSurface.create(_fullFrame, sourceBounds);
 	_needsRedraw = true;
 
@@ -336,17 +341,19 @@ uint16 Viewport::getMaxScroll() const {
 }
 
 // Convert a viewport-space rectangle to screen coordinates
+// A background smaller than the viewport is stretched over it, but what goes
+// in the viewport is placed in its own pixels all the same
 Common::Rect Viewport::convertViewportToScreen(const Common::Rect &viewportRect) const {
-	Common::Rect ret = convertToScreen(viewportRect);
-	ret.translate(0, -getCurVerticalScroll());
+	Common::Rect ret = viewportRect;
+	ret.translate(_screenPosition.left, _screenPosition.top - getCurVerticalScroll());
 	ret.clip(_screenPosition);
 	return ret;
 }
 
 // Convert a screen-space coordinate to viewport coordinates
 Common::Rect Viewport::convertScreenToViewport(const Common::Rect &viewportRect) const {
-	Common::Rect ret = convertToLocal(viewportRect);
-	ret.translate(0, getCurVerticalScroll());
+	Common::Rect ret = viewportRect;
+	ret.translate(-_screenPosition.left, getCurVerticalScroll() - _screenPosition.top);
 	return ret;
 }
 

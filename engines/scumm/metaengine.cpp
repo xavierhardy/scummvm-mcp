@@ -48,6 +48,10 @@
 #include "scumm/file.h"
 #include "scumm/file_nes.h"
 
+#ifdef ENABLE_SCUMM_7_8
+#include "scumm/insane/mortimer/mortimer.h"
+#endif
+
 #if defined(ENABLE_REBEL2_PSX) && !defined(ENABLE_SCUMM_7_8)
 #error "SCUMM v7 & v8 games must be enabled for Rebel Assault II PlayStation. Specify --enable-engine=scumm-7-8,rebel2-psx"
 #endif
@@ -467,6 +471,12 @@ Common::Error ScummMetaEngine::createInstance(OSystem *syst, Engine **engine,
 
 	// Finally, we have massaged the GameDescriptor to our satisfaction, and can
 	// instantiate the appropriate game engine. Hooray!
+#ifdef ENABLE_SCUMM_7_8
+	if (res.game.id == GID_MORTIMER) {
+		*engine = new MortimerEngine(syst, (res.game.features & GF_DEMO) != 0);
+		return Common::kNoError;
+	}
+#endif
 	switch (res.game.version) {
 	case 0:
 		*engine = new ScummEngine_v0(syst, res);
@@ -976,6 +986,33 @@ const ExtraGuiOption enableRebel1RestoredContent = {
 	0
 };
 
+const ExtraGuiOption enableMortimerRestoredContent = {
+	_s("Enable restored content"),
+	_s("Enable the full game's view jolt and recovery rules, including the demo's unused crash and repair animations"),
+	"mortimer_restored_content",
+	false,
+	0,
+	0
+};
+
+const ExtraGuiOption enableMortimerCheats = {
+	_s("Enable cheats"),
+	_s("Enable the original game's cheat shortcuts for rescuing animals, changing shellshock and skipping flights"),
+	"mortimer_cheats",
+	false,
+	0,
+	0
+};
+
+const ExtraGuiOption enableMortimerProgrammer = {
+	_s("Programmer's Easter egg"),
+	_s("Replace the rhinoceros interview text with the hidden programmer dialogue"),
+	"mortimer_programmer_easter_egg",
+	false,
+	0,
+	0
+};
+
 const ExtraGuiOptions ScummMetaEngine::getExtraGuiOptions(const Common::String &target) const {
 	ExtraGuiOptions options;
 	// Query the GUI options
@@ -1040,6 +1077,17 @@ const ExtraGuiOptions ScummMetaEngine::getExtraGuiOptions(const Common::String &
 	}
 	if (target.empty() || guiOptions.contains(GAMEOPTION_REBEL1_RESTORED_CONTENT)) {
 		options.push_back(enableRebel1RestoredContent);
+	}
+	if (target.empty() || guiOptions.contains(GAMEOPTION_MORTIMER_RESTORED_CONTENT) ||
+		(gameid == "mortimer" && extra == "Demo")) {
+		options.push_back(enableMortimerRestoredContent);
+	}
+	if (target.empty() || guiOptions.contains(GAMEOPTION_MORTIMER_CHEATS) || gameid == "mortimer") {
+		options.push_back(enableMortimerCheats);
+	}
+	if (target.empty() || guiOptions.contains(GAMEOPTION_MORTIMER_PROGRAMMER) ||
+		(gameid == "mortimer" && extra != "Demo" && !guiOptions.contains(GAMEOPTION_MORTIMER_RESTORED_CONTENT))) {
+		options.push_back(enableMortimerProgrammer);
 	}
 	if (target.empty() || gameid == "comi") {
 		options.push_back(comiObjectLabelsOption);
@@ -1123,6 +1171,14 @@ Common::KeymapArray ScummMetaEngine::initKeymaps(const char *target) const {
 	Common::KeymapArray keymaps = MetaEngine::initKeymaps(target);
 	Common::String gameId = ConfMan.get("gameid", target);
 	Action *act;
+
+#ifdef ENABLE_SCUMM_7_8
+	if (gameId == "mortimer") {
+		for (uint i = 0; i < keymaps.size(); ++i)
+			delete keymaps[i];
+		return MortimerEngine::initKeymaps();
+	}
+#endif
 
 	if (gameId == "rebel1" || gameId == "rebel2") {
 		for (uint i = 0; i < keymaps.size(); ++i) {

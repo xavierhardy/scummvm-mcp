@@ -6,19 +6,25 @@ MODULE_OBJS = \
   action/actionzone.o \
   action/arfactory.o \
   action/autotext.o \
+  action/autotextscroll.o \
   action/cameraaction.o \
   action/datarecords.o \
   action/inventoryrecords.o \
   action/navigationrecords.o \
   action/soundrecords.o \
   action/miscrecords.o \
+  action/mousefollow.o \
   action/conversation.o \
   action/interactivevideo.o \
   action/overlay.o \
+  action/physicalobject.o \
   action/puzzlerecord.o \
   action/secondarymovie.o \
+  action/typewritertext.o \
   action/secondaryvideo.o \
+  action/wolfcommands.o \
   action/puzzle/adjustpuzzle.o \
+  action/puzzle/analogclock.o \
   action/puzzle/angletosspuzzle.o \
   action/puzzle/arcadepuzzle.o \
   action/puzzle/assemblypuzzle.o \
@@ -30,18 +36,30 @@ MODULE_OBJS = \
   action/puzzle/buildpuzzle.o \
   action/puzzle/bulpuzzle.o \
   action/puzzle/bombpuzzle.o \
+  action/puzzle/booksortpuzzle.o \
   action/puzzle/cardgamepuzzle.o \
+  action/puzzle/chesschatpuzzle.o \
   action/puzzle/collisionpuzzle.o \
+  action/puzzle/cookingpuzzle.o \
   action/puzzle/cubepuzzle.o \
   action/puzzle/cuttingpuzzle.o \
+  action/puzzle/dancepuzzle.o \
   action/puzzle/decoderpuzzle.o \
+  action/puzzle/dialsequencepuzzle.o \
   action/puzzle/dotconnectpuzzle.o \
+  action/puzzle/dragsurfacepuzzle.o \
   action/puzzle/drivingpuzzle.o \
+  action/puzzle/escapepuzzle.o \
+  action/puzzle/flashmemorypuzzle.o \
   action/puzzle/dropsortpuzzle.o \
   action/puzzle/escapegridpuzzle.o \
+  action/puzzle/fishingpuzzle.o \
+  action/puzzle/foxgeesepuzzle.o \
+  action/puzzle/goldbergpuzzle.o \
   action/puzzle/gridmappuzzle.o \
   action/puzzle/hamradiopuzzle.o \
   action/puzzle/hangmanpuzzle.o \
+  action/puzzle/keypadphone.o \
   action/puzzle/lettergridpuzzle.o \
   action/puzzle/leverpuzzle.o \
   action/puzzle/magnetmazepuzzle.o \
@@ -50,6 +68,7 @@ MODULE_OBJS = \
   action/puzzle/matchpuzzle.o \
   action/puzzle/memorypuzzle.o \
   action/puzzle/meterpuzzle.o \
+  action/puzzle/minesweeperpuzzle.o \
   action/puzzle/mindpuzzle.o \
   action/puzzle/minigolfpuzzle.o \
   action/puzzle/mirrorlightpuzzle.o \
@@ -69,39 +88,62 @@ MODULE_OBJS = \
   action/puzzle/riddlepuzzle.o \
   action/puzzle/rippedletterpuzzle.o \
   action/puzzle/rotatinglockpuzzle.o \
+  action/puzzle/rowmatchpuzzle.o \
   action/puzzle/safedialpuzzle.o \
+  action/puzzle/sentrypuzzle.o \
+  action/puzzle/sequencelockpuzzle.o \
   action/puzzle/scalepuzzle.o \
+  action/puzzle/scopapuzzle.o \
   action/puzzle/setplayerclock.o \
   action/puzzle/sewingmachinepuzzle.o \
+  action/puzzle/shovelmeasurepuzzle.o \
+  action/puzzle/skeeballpuzzle.o \
   action/puzzle/sliderpuzzle.o \
+  action/puzzle/snowmobilepuzzle.o \
   action/puzzle/sortpuzzle.o \
   action/puzzle/soundequalizerpuzzle.o \
   action/puzzle/soundmatchpuzzle.o \
   action/puzzle/spigotpuzzle.o \
+  action/puzzle/stakeoutpuzzle.o \
   action/puzzle/stepobjectspuzzle.o \
   action/puzzle/tangrampuzzle.o \
   action/puzzle/telephone.o \
+  action/puzzle/tilecyclepuzzle.o \
   action/puzzle/towerpuzzle.o \
   action/puzzle/turningpuzzle.o \
   action/puzzle/twodialpuzzle.o \
   action/puzzle/typingquizpuzzle.o \
   action/puzzle/weightsortpuzzle.o \
+  action/puzzle/whackitpuzzle.o \
+  action/puzzle/wolfmazepuzzle.o \
   action/puzzle/whalesurvivorpuzzle.o \
   action/puzzle/wordfindpuzzle.o \
   ui/fullscreenimage.o \
   ui/animatedbutton.o \
   ui/button.o \
   ui/clock.o \
-  ui/camera.o \
-  ui/cellphonepopup.o \
-  ui/conversationpopup.o \
   ui/inventorybox.o \
-  ui/inventorypopup.o \
-  ui/notebookpopup.o \
+  ui/ndui/button.o \
+  ui/ndui/common.o \
+  ui/ndui/control.o \
+  ui/ndui/editbox.o \
+  ui/ndui/element.o \
+  ui/ndui/enginehandlers.o \
+  ui/ndui/listbox.o \
+  ui/ndui/manager.o \
+  ui/ndui/panel.o \
+  ui/ndui/saveload.o \
+  ui/ndui/scrollbar.o \
+  ui/ndui/slider.o \
   ui/ornaments.o \
   ui/scrollbar.o \
-  ui/scrolltextbox.o \
-  ui/taskbar.o \
+  ui/taskbar/camera.o \
+  ui/taskbar/cellphonepopup.o \
+  ui/taskbar/conversationpopup.o \
+  ui/taskbar/inventorypopup.o \
+  ui/taskbar/notebookpopup.o \
+  ui/taskbar/scrolltextbox.o \
+  ui/taskbar/taskbar.o \
   ui/textbox.o \
   ui/viewport.o \
   state/credits.o \
@@ -113,31 +155,104 @@ MODULE_OBJS = \
   state/map.o \
   state/savedialog.o \
   state/scene.o \
+  state/scenestream.o \
   state/setupmenu.o \
   misc/hypertext.o \
   misc/lightning.o \
-  misc/mousefollow.o \
   misc/specialeffect.o \
-  cif.o \
+  misc/viewportfader.o \
+  resource/cif.o \
+  resource/decompress.o \
+  resource/iff.o \
+  resource/resource.o \
+  resource/sound_vorbis.o \
+  resource/video.o \
+  resource/xsheetfile.o \
   commontypes.o \
   console.o \
   cursor.o \
-  decompress.o \
   enginedata.o \
   font.o \
   graphics.o \
-  iff.o \
   movieplayer.o \
   input.o \
   metaengine.o \
   nancy.o \
   puzzledata.o \
   renderobject.o \
-  resource.o \
   sound.o \
-  sound_vorbis.o \
-  util.o \
-  video.o
+  util.o
+
+# Nancy19 and newer, whose scenes are Lua scripts
+ifdef ENABLE_NANCY_V4
+MODULE_OBJS += \
+  box2d/Collision/b2BroadPhase.o \
+  box2d/Collision/b2CollideCircle.o \
+  box2d/Collision/b2CollidePoly.o \
+  box2d/Collision/b2Collision.o \
+  box2d/Collision/b2Distance.o \
+  box2d/Collision/b2PairManager.o \
+  box2d/Collision/b2TimeOfImpact.o \
+  box2d/Collision/Shapes/b2CircleShape.o \
+  box2d/Collision/Shapes/b2PolygonShape.o \
+  box2d/Collision/Shapes/b2Shape.o \
+  box2d/Common/b2BlockAllocator.o \
+  box2d/Common/b2Math.o \
+  box2d/Common/b2Settings.o \
+  box2d/Common/b2StackAllocator.o \
+  box2d/Dynamics/b2Body.o \
+  box2d/Dynamics/b2ContactManager.o \
+  box2d/Dynamics/b2Island.o \
+  box2d/Dynamics/b2World.o \
+  box2d/Dynamics/b2WorldCallbacks.o \
+  box2d/Dynamics/Contacts/b2CircleContact.o \
+  box2d/Dynamics/Contacts/b2Contact.o \
+  box2d/Dynamics/Contacts/b2ContactSolver.o \
+  box2d/Dynamics/Contacts/b2PolyAndCircleContact.o \
+  box2d/Dynamics/Contacts/b2PolyContact.o \
+  box2d/Dynamics/Joints/b2DistanceJoint.o \
+  box2d/Dynamics/Joints/b2GearJoint.o \
+  box2d/Dynamics/Joints/b2Joint.o \
+  box2d/Dynamics/Joints/b2MouseJoint.o \
+  box2d/Dynamics/Joints/b2PrismaticJoint.o \
+  box2d/Dynamics/Joints/b2PulleyJoint.o \
+  box2d/Dynamics/Joints/b2RevoluteJoint.o \
+  script/api.o \
+  script/bootapi.o \
+  script/convo.o \
+  script/gameapi.o \
+  script/graphnode.o \
+  script/luabind.o \
+  script/luastate.o \
+  script/mathtypes.o \
+  script/particles.o \
+  script/physics.o \
+  script/record.o \
+  script/records.o \
+  script/ref.o \
+  script/scenecontext.o \
+  script/timer.o \
+  script/transformer.o \
+  script/types.o \
+  script/uiapi.o \
+  script/xsheet.o
+
+# Nancy26 and newer, whose UI is made of records as well
+ifdef ENABLE_NANCY_V5
+MODULE_OBJS += \
+  script/v5/bitmaptext.o \
+  script/v5/bootobjects.o \
+  script/v5/brain.o \
+  script/v5/cliptransformer.o \
+  script/v5/gamefunctions.o \
+  script/v5/messaging.o \
+  script/v5/recordnode.o \
+  script/v5/scriptinput.o \
+  script/v5/streamtree.o \
+  script/v5/textrecord.o \
+  script/v5/widgets.o
+endif
+endif
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_NANCY), DYNAMIC_PLUGIN)

@@ -48,6 +48,8 @@ public:
 	void execute() override;
 
 	virtual bool isVideoDonePlaying() { return true; }
+	// Called when the line gets skipped, so the character stops animating with it
+	virtual void skipVideo() {}
 	bool isViewportRelative() const override { return true; }
 
 	// Enhancement: cut the currently playing line short, as if its sound and
@@ -136,6 +138,9 @@ protected:
 
 	byte _conditionalResponseCharacterID;
 	byte _goodbyeResponseCharacterID;
+	// Nancy16 names the conditional dialogue and goodbye scenes directly
+	Common::String _conditionalResponseScene;
+	Common::String _goodbyeResponseScene;
 	byte _defaultNextScene = kDefaultNextSceneEnabled;
 	byte _popNextScene = kNoPopNextScene;
 	SceneChangeDescription _sceneChange;
@@ -145,6 +150,7 @@ protected:
 	Common::Array<SceneBranchStruct> _sceneBranchStructs;
 
 	bool _hasDrawnTextbox;
+	bool _isDialogOpen = false;	// in the Nancy16 UI
 	int16 _pickedResponse;
 	bool _isSkipped = false;
 
@@ -214,6 +220,7 @@ protected:
 	static const byte kCelOverrideTreeRectsOn	= 2;
 
 	bool isVideoDonePlaying() override;
+	void skipVideo() override;
 	Cel &loadCel(const Common::Path &name, const Common::String &treeName);
 
 	void readXSheet(Common::SeekableReadStream &stream, const Common::String &xsheetName);
@@ -238,6 +245,17 @@ protected:
 	// into that rect; _treeMovies holds one player per such tree, null for cel trees.
 	Common::Array<Common::Rect> _treeRects;
 	Common::Array<Common::SharedPtr<MoviePlayer>> _treeMovies;
+
+	// Nancy16 has no cels left: every tree is a movie, and each XSheet frame holds
+	// the movie frame to show per tree. kMovieFrameFreeRunning leaves the tree
+	// playing on the movie's own clock (the lip-synced head); the body movie is a
+	// library of fidgets the XSheet picks frames from.
+	static const int32 kMovieFrameFreeRunning = -1;
+	Common::Array<Common::Array<int32>> _treeMovieFrames;
+	Common::Array<int32> _treeShownFrames;
+
+	bool isTreeFreeRunning(uint tree) const;
+	void showMovieFrame(uint tree, uint xsheetFrame);
 
 	uint _curFrame = 0;
 	uint32 _nextFrameTime = 0;
