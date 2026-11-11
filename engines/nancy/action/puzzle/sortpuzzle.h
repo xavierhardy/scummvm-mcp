@@ -23,7 +23,7 @@
 #define NANCY_ACTION_SORTPUZZLE_H
 
 #include "engines/nancy/action/puzzlerecord.h"
-#include "engines/nancy/misc/mousefollow.h"
+#include "engines/nancy/action/mousefollow.h"
 #include "engines/nancy/commontypes.h"
 
 namespace Nancy {
@@ -40,6 +40,7 @@ public:
 	virtual ~SortPuzzle() {}
 
 	void init() override;
+	void registerGraphics() override;
 
 	void readData(Common::SeekableReadStream &stream) override;
 	void readDataNancy12(Common::SeekableReadStream &stream);
@@ -131,9 +132,11 @@ protected:
 
 	Cell _held;
 	bool _hasHeld   = false;
+	int  _heldFromRow = -1; // The slot the held piece was picked up from, empty while it is carried
+	int  _heldFromCol = -1;
 	bool _isSolved  = false;
 
-	Misc::MouseFollowObject _heldObject;
+	MouseFollowObject _heldObject;
 
 	Graphics::ManagedSurface _boardImage;
 	Graphics::ManagedSurface _cursorImage;

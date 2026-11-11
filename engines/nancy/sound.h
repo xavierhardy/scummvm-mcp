@@ -70,6 +70,8 @@ public:
 
 	void playSound(uint16 channelID);
 	void playSound(const SoundDescription &description);
+	// Nancy24 scripts can pick the volume a sound goes by, whatever its channel
+	void playSound(uint16 channelID, Audio::Mixer::SoundType type);
 	void playSound(const Common::String &chunkName);
 
 	void pauseSound(uint16 channelID, bool pause);
@@ -80,6 +82,11 @@ public:
 	bool isSoundPlaying(uint16 channelID) const;
 	bool isSoundPlaying(const SoundDescription &description) const;
 	bool isSoundPlaying(const Common::String &chunkName) const;
+
+	// Goes up whenever a sound starts on the channel or the channel is stopped,
+	// but not when a sound ends by itself. Nancy19 records tell from it whether
+	// their sound was cut off.
+	uint32 getChannelSerial(uint16 channelID) const;
 
 	void stopSound(uint16 channelID);
 	void stopSound(const SoundDescription &description);
@@ -93,6 +100,10 @@ public:
 	void setVolume(uint16 channelID, uint16 volume);
 	void setVolume(const SoundDescription &description, uint16 volume);
 	void setVolume(const Common::String &chunkName, uint16 volume);
+
+	// The volume a channel was last given, by the sound loaded into it or by
+	// setVolume(), from 0 to 100. Nancy20 scripts read it back.
+	uint16 getRequestedVolume(uint16 channelID) const;
 
 	// Nancy 11+ Update3DSound (AR 156). Adjusts a playing fixed-position
 	// 3D sound's position and/or its min/max audible distance.
@@ -121,6 +132,8 @@ public:
 	Audio::Timestamp getLength(uint16 channelID);
 	Audio::Timestamp getLength(const SoundDescription &description);
 	Audio::Timestamp getLength(const Common::String &chunkName);
+	// How long the sound file plays, without loading it into a channel
+	Audio::Timestamp getFileLength(const Common::String &soundName);
 
 	bool isCommonSound(const Common::String &soundName) const { return _commonSounds.contains(soundName); }
 
@@ -144,12 +157,14 @@ protected:
 		uint16 playCommands = 1;
 		uint16 numLoops = 0;
 		uint volume = 0;
+		uint16 requestedVolume = 0;
 		uint16 panAnchorFrame = 0;
 		bool isPanning = false;
 		Audio::SeekableAudioStream *stream = nullptr;
 		Audio::AudioStream *streamForMixer = nullptr;
 		Audio::SoundHandle handle;
 		bool isPersistent = false;
+		uint32 serial = 0;
 
 		// Sound effect data, not applicable to nancy2 and below
 		SoundEffectDescription *effectData = nullptr;

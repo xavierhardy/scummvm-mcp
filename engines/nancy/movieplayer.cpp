@@ -25,7 +25,7 @@
 #include "video/bink_decoder.h"
 
 #include "engines/nancy/nancy.h"
-#include "engines/nancy/video.h"
+#include "engines/nancy/resource/video.h"
 #include "engines/nancy/graphics.h"
 #include "engines/nancy/util.h"
 #include "engines/nancy/commontypes.h"
@@ -83,7 +83,7 @@ byte MoviePlayer::resolvePlaytype(byte videoPlaytype) {
 	return g_nancy->getGameType() >= kGameTypeNancy10 ? kVideoPlaytypeBink : kVideoPlaytypeAVF;
 }
 
-bool MoviePlayer::loadFile(const Common::Path &name, byte videoPlaytype, bool bidirectionalCache) {
+bool MoviePlayer::loadFile(const Common::Path &name, byte videoPlaytype, bool bidirectionalCache, bool screenFormat) {
 	freeFrameCache();
 	unregisterMovie();
 
@@ -122,12 +122,15 @@ bool MoviePlayer::loadFile(const Common::Path &name, byte videoPlaytype, bool bi
 	// chroma-keyed video such as Nancy11's Nigel_Fidget.bik ends up storing its key
 	// colour as 0x07E0 while the engine keys on 0x03E0, and the green background is
 	// never keyed out. From Nancy13 both formats are BGRA32 and this is a no-op.
+	// Opaque videos may keep the screen format: RGB555 drops a bit of green, which
+	// bands smooth gradients such as the Nancy11 LIB_AlanLogin_TEXT_PUZ background.
 	// Has to come after loadFile(): setOutputPixelFormat() walks the decoder's tracks,
 	// and those only exist once the file is loaded.
 	if (_videoType == kVideoPlaytypeBink) {
-		const Graphics::PixelFormat &inputFormat = g_nancy->_graphics->getInputPixelFormat();
-		if (inputFormat.bytesPerPixel == 2 || inputFormat.bytesPerPixel == 4) {
-			_decoder->setOutputPixelFormat(inputFormat);
+		const Graphics::PixelFormat &outputFormat = screenFormat ?
+			g_nancy->_graphics->getScreenPixelFormat() : g_nancy->_graphics->getInputPixelFormat();
+		if (outputFormat.bytesPerPixel == 2 || outputFormat.bytesPerPixel == 4) {
+			_decoder->setOutputPixelFormat(outputFormat);
 		}
 	}
 
@@ -287,10 +290,13 @@ void MoviePlayer::goToFrame(int frameNr) {
 	_decoder->setReverse(false);
 	_decoder->seekToFrame(frameNr);
 	storeCurrentFrame();
+}
 
-	int frameCount = _decoder->getFrameCount();
-	uint32 durationMs = _decoder->getDuration().msecs();
-	_frameDelayMs = (frameCount > 0 && durationMs > 0) ? (durationMs / frameCount) : 66;
+// How long a frame shows, from the length of the movie
+double MoviePlayer::getFrameMillis() const {
+	const int frameCount = _decoder->getFrameCount();
+	const uint32 durationMs = _decoder->getDuration().msecs();
+	return (frameCount > 0 && durationMs > 0) ? (double)durationMs / frameCount : 1000.0 / 15.0;
 }
 
 void MoviePlayer::playRange(int first, int last) {
@@ -307,7 +313,10 @@ void MoviePlayer::playRange(int first, int last) {
 	_decoder->seekToFrame(first);
 	storeCurrentFrame();
 	_rangePlaying = (first != last);
-	_lastFrameTime = g_system->getMillis();
+	_frameMillis = getFrameMillis();
+	_nextFrameTime = g_system->getMillis() + _frameMillis;
+	_playedMillis = 0.0;
+	_nextPlayedFrame = _frameMillis;
 }
 
 bool MoviePlayer::update() {
@@ -315,15 +324,49 @@ bool MoviePlayer::update() {
 		return false;
 	}
 
-	// Own the frame timing (one frame per delay, never skipping), so playback
+	// Own the frame timing (one frame at a time, never skipping), so playback
 	// starts immediately and stays smooth even when the decoder's own timing
-	// would stall after a seek.
-	uint32 now = g_system->getMillis();
-	if (now - _lastFrameTime < _frameDelayMs) {
+	// would stall after a seek. Every frame is due at its own time, so frames
+	// that show a little late, as the game only draws 60 times a second, don't
+	// hold back the ones after them and leave the movie behind its sound.
+	const uint32 now = g_system->getMillis();
+	if (now < _nextFrameTime) {
 		return false;
 	}
-	_lastFrameTime = now;
 
+	_nextFrameTime += _frameMillis;
+
+	// A movie that is more than a frame late times the frames after it from now
+	if (_nextFrameTime < now) {
+		_nextFrameTime = now + _frameMillis;
+	}
+
+	return showNextFrame();
+}
+
+// Every frame is due at its own time from the start. A movie that is late
+// decodes a frame it missed without showing it, so it stays in time with its
+// sound even when the game draws fewer frames than the movie has. It doesn't
+// catch up on more than that at once: when decoding takes longer than the
+// frames last, each update would have more of them to decode than the last.
+bool MoviePlayer::advance(double elapsedMillis) {
+	if (!_rangePlaying || !_decoder) {
+		return false;
+	}
+
+	_playedMillis += elapsedMillis;
+
+	static const int kMaxFramesPerAdvance = 2;
+	int numShown = 0;
+	while (numShown < kMaxFramesPerAdvance && _playedMillis >= _nextPlayedFrame && showNextFrame()) {
+		_nextPlayedFrame += _frameMillis;
+		++numShown;
+	}
+
+	return numShown > 0;
+}
+
+bool MoviePlayer::showNextFrame() {
 	if (_decoder->endOfVideo() ||
 			(_step > 0 && _decoder->getCurFrame() >= _rangeLast) ||
 			(_step < 0 && _decoder->getCurFrame() <= _rangeLast)) {
@@ -338,6 +381,18 @@ bool MoviePlayer::update() {
 void MoviePlayer::drawFrame(Graphics::ManagedSurface &dst, const Common::Point &pos) const {
 	if (_currentSurface) {
 		dst.blitFrom(*_currentSurface, pos);
+	}
+}
+
+void MoviePlayer::drawFrame(Graphics::ManagedSurface &dst, const Common::Rect &source, const Common::Point &pos) const {
+	if (!_currentSurface) {
+		return;
+	}
+
+	Common::Rect area = source;
+	area.clip(Common::Rect(_currentSurface->w, _currentSurface->h));
+	if (!area.isEmpty()) {
+		dst.blitFrom(*_currentSurface, area, Common::Point(pos.x + area.left - source.left, pos.y + area.top - source.top));
 	}
 }
 

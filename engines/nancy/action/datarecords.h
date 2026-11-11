@@ -60,15 +60,22 @@ public:
 	void execute() override;
 
 	Common::String getRecordExtraInfo() const override {
-		return Common::String::format("Value %d -> %d (should set is %d)", _index, _value, _shouldSet);
+		return Common::String::format("Value %d -> %d (mode %d)", _index, _value, _mode);
 	}
 
 protected:
 	Common::String getRecordTypeName() const override { return "SetValue"; }
 
+	enum SetMode : byte {
+		kAdd		= 0,
+		kSet		= 1,
+		kSetRandom	= 2		// Nancy16+
+	};
+
 	byte _index = 0;
-	bool _shouldSet = false;
+	SetMode _mode = kAdd;
 	int16 _value = kNoTableValue;
+	int16 _randomMax = 0;
 };
 
 class SetValueCombo : public ActionRecord {
@@ -149,6 +156,11 @@ public:
 	HotspotType _hotspotType;
 
 	bool canHaveHotspot() const override { return true; }
+
+	// Nancy17 sets the flags on the click itself, so the records before this one
+	// see them in the next pass, even when a record after it changes the scene
+	// then (scene 2075, where Bess puts on the costume)
+	bool runsOnClick() const override;
 
 protected:
 	Common::String getRecordTypeName() const override {

@@ -24,12 +24,12 @@
 #include "engines/nancy/graphics.h"
 #include "engines/nancy/input.h"
 #include "engines/nancy/puzzledata.h"
-#include "engines/nancy/resource.h"
+#include "engines/nancy/resource/resource.h"
 #include "engines/nancy/util.h"
 
 #include "engines/nancy/action/cameraaction.h"
 
-#include "engines/nancy/ui/camera.h"
+#include "engines/nancy/ui/taskbar/camera.h"
 
 #include "engines/nancy/state/scene.h"
 

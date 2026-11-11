@@ -29,9 +29,10 @@
 namespace Nancy {
 namespace Action {
 
-// Text-entry quiz with multiple text boxes. Three data formats: Nancy 8,
-// Nancy 9 - Nancy 14, and Nancy 15, which rewrote the record around
-// count-prefixed answer lists and RandomSoundBlocks.
+// Text-entry quiz with multiple text boxes. Four data formats: Nancy 8,
+// Nancy 9 - Nancy 14, Nancy 15, which rewrote the record around count-prefixed
+// answer lists and RandomSoundBlocks, and Nancy 16, which draws with a named
+// system font and an explicit text color.
 class QuizPuzzle : public PuzzleRecord {
 public:
 	QuizPuzzle() : PuzzleRecord(7) {}
@@ -51,6 +52,7 @@ private:
 	// Sanity cap. Nancy 8 and Nancy 9 store a fixed five boxes; Nancy 15 keeps
 	// 30 slots of 27 bytes per save slot, so 30 is the engine's own maximum.
 	static const uint kMaxBoxes = 30;
+	static const uint16 kTextZ = 15;		// Nancy16+: the layer of the typed text, over the scene's overlays
 	// Nancy 15 rejects a keystroke once the typed text no longer fits a save
 	// slot's 27-byte text buffer, with room left for the cursor character.
 	static const uint kMaxTypedLengthNancy15 = 24;
@@ -83,6 +85,7 @@ private:
 	void readDataNancy8(Common::SeekableReadStream &stream);
 	void readDataNancy9(Common::SeekableReadStream &stream);
 	void readDataNancy15(Common::SeekableReadStream &stream);
+	void readDataNancy16(Common::SeekableReadStream &stream);
 
 	// Format-specific state machines
 	void executeNancy8();
@@ -90,6 +93,7 @@ private:
 
 	// Helpers
 	void drawText();
+	void drawTextNancy16();
 	void advanceToNextBox();
 	bool checkAllSolved() const;
 	// Scores the current box. A silent check only marks the box solved, as the
@@ -134,6 +138,7 @@ private:
 	// ---- Data (Nancy 15) ----
 	int16 _restoreFlag = -1;			// when set, previous answers are restored
 	bool _keepBoxOnWrongAnswer = false;	// don't move on after a wrong answer
+	bool _wasCheckedByTyping = false;	// the box got right through a typed key, not Enter or Tab
 	bool _cycleSolvedBoxes = false;		// cycling also stops on solved boxes
 	uint16 _displaySourceScene = kNoScene;	// see _isDisplayOnly
 	bool _isDisplayOnly = false;		// no cursor character: shows another quiz's answers
@@ -141,6 +146,12 @@ private:
 	Common::String _recordWrongText;
 	RandomSoundBlock _invalidKeySound;	// played when a character is not allowed
 	Common::Array<ExitHotspot> _hotspots;	// flag-setting regions around the boxes
+
+	// ---- Data (Nancy 16) ----
+	Common::String _fontName;			// replaces _fontID
+	uint32 _textColor = 0;				// ARGB
+	uint16 _maxTypedLength = 0;
+	uint16 _hotspotCursor = 0;			// over any of _hotspots
 
 	// ---- Runtime state ----
 	uint _currentBox = 0;		// which box currently receives keyboard input
@@ -166,6 +177,7 @@ private:
 	bool _hasNewKey = false;
 	bool _pendingReturn = false;
 	bool _pendingBackspace = false;
+	bool _movesToPreviousBox = false;	// the last key was Shift+Tab
 	char _pendingChar = 0;
 
 	Time _nextBlinkTime = 0;

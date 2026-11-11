@@ -1,7 +1,40 @@
 For a more comprehensive changelog of the latest experimental code, see:
         https://github.com/scummvm/scummvm/commits/
 
-#### 2026.4.0 (2026-10-XX)
+#### 2027.1.0 (2027-01-XX)
+
+ New games:
+   - Added support for Shadowgate.
+   - Added support for Deja Vu: A Nightmare Comes True!!
+   - Added support for Deja Vu II: Lost in Last Vegas.
+   - Added support for Uninvited.
+   - Added support for The Colony.
+
+ M4:
+   - Missing Animation and journal fixes for Ripley's Riddle of Master Lu
+ 
+ MADS:
+   - MT32 crash fixes for Dragonsphere
+
+ MM:
+   - Integrated Dragoo84's M&M1 Bugfix and Enhanced Mode improvements pack
+   - Party XP gain and training now work correctly.
+   - A blue arrow is shown beside XP value to indicate when a level-up is possible.
+   - Certain party members are now eligible for multiple attacks per turn, as originally intended.
+   - Added G/S (Gather/Share) button on character screen, normally available in classic mode.
+   - Spellbook improved - manual spell sorting with X and scrolling with PgUp/PgDn.
+   - Quest log implemented - keep track of quests with K.
+   - Battle log implemented - keep track of damage, spells and statuses during combat with L.
+   - Bestiary implemented - unlock enemy units and their stats through encounters and check with N or click the black skull icon in the interface corner.
+   - Post-combat loot (sacks, boxes and chests) are now finally enabled, as intended. Previously, only gold and gems were received (yeah, sucks).
+   - Many game-breaking quest bugs corrected.
+   - Spell behaviour corrected.
+   - Fixed several tavern bugs
+
+ Sherlock:
+   - Improved resource handling by not keeping entire resource files in memory at all times.
+
+#### 2026.4.0 "Never-slop" (2026-10-10)
 
  New games:
    - Added support for Mortadelo y Filemón: Una Aventura de Cine Edición Original.
@@ -51,6 +84,8 @@ For a more comprehensive changelog of the latest experimental code, see:
    - Added support for Harvester.
    - Added support for Lord Avalot d'Argent.
    - Added support for Dungeon Master.
+   - Added support for Eagle Eye Mysteries.
+   - Added support for Eagle Eye Mysteries in London.
 
  General:
    - Optimised mixing and rate converters, for better performance.
@@ -80,6 +115,7 @@ For a more comprehensive changelog of the latest experimental code, see:
 
  Hopkins:
    - Added the missing underwater base 3D first-person shooter.
+   - Optional quality-of-life HUD for underwater base shooter with map and autopilot.
 
  Kyra:
    - Added support for Korean fan-translation of kyra1 (added in 2026.3.0).
@@ -138,7 +174,12 @@ For a more comprehensive changelog of the latest experimental code, see:
    - Fixed time-based puzzles sometimes getting stuck after restarting ScummVM.
 
  Voyeur:
-   - Match original first person movement with mouse when looking at mansion
+   - Match original first person movement with mouse when looking at mansion.
+
+ Android port:
+   - Support Android 17.
+   - Add TTS support.
+   - Add external MIDI device support.
 
  Atari port:
    - Added integration with nFM library.

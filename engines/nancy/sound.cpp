@@ -27,11 +27,11 @@
 
 #include "audio/audiostream.h"
 #include "audio/decoders/raw.h"
-#include "engines/nancy/sound_vorbis.h"
+#include "engines/nancy/resource/sound_vorbis.h"
 
 #include "engines/nancy/nancy.h"
 #include "engines/nancy/sound.h"
-#include "engines/nancy/iff.h"
+#include "engines/nancy/resource/iff.h"
 
 #include "engines/nancy/state/scene.h"
 #include "engines/nancy/state/map.h"
@@ -133,7 +133,8 @@ bool readHISHeader(Common::SeekableReadStream *stream, SoundType &type, uint16 &
 	size = stream->readUint32LE();
 
 	if (hasType) {
-		uint16 tp = stream->readUint16LE();
+		// Nancy20 made the type 32 bits wide
+		uint32 tp = g_nancy->getGameType() >= kGameTypeNancy20 ? stream->readUint32LE() : stream->readUint16LE();
 		switch (tp) {
 		case 1:
 			type = kSoundTypeRaw;
@@ -142,7 +143,7 @@ bool readHISHeader(Common::SeekableReadStream *stream, SoundType &type, uint16 &
 			type = kSoundTypeOgg;
 			break;
 		default:
-			warning("Unsupported sound type %d found in HIS file", tp);
+			warning("Unsupported sound type %u found in HIS file", tp);
 			return false;
 		}
 	} else
@@ -263,6 +264,23 @@ SoundManager::~SoundManager() {
 }
 
 Common::String SoundManager::resolveMusicMix(const Common::String &name) const {
+	// Nancy17 keeps the music tracks in the environment table
+	auto *envs = GetEngineData(ENVS);
+	if (envs) {
+		for (const ENVS::Environment &env : envs->environments) {
+			if (env.code.equalsIgnoreCase(name)) {
+				if (env.musicNames.empty()) {
+					return "NO SOUND";
+				}
+
+				uint pick = g_nancy->_randomSource->getRandomNumber(env.musicNames.size() - 1);
+				return env.musicNames[pick];
+			}
+		}
+
+		return name;
+	}
+
 	auto *mmix = GetEngineData(MMIX);
 	if (!mmix) {
 		// Pre-Nancy13, or no mix table present
@@ -295,6 +313,8 @@ void SoundManager::loadSound(const SoundDescription &description, SoundEffectDes
 	}
 
 	Channel &existing = _channels[description.channelID];
+	++existing.serial;
+
 	if (!forceReload && existing.stream != nullptr) {
 		// There's a channel already loaded. Check if we're trying to reload the exact same sound
 		if (	description.name == existing.name &&
@@ -324,6 +344,7 @@ void SoundManager::loadSound(const SoundDescription &description, SoundEffectDes
 	chan.playCommands = description.playCommands;
 	chan.numLoops = description.numLoops;
 	chan.volume = description.volume;
+	chan.requestedVolume = description.volume;
 	chan.panAnchorFrame = description.panAnchorFrame;
 	chan.isPanning = description.isPanning;
 
@@ -339,6 +360,12 @@ void SoundManager::loadSound(const SoundDescription &description, SoundEffectDes
 	Common::String soundName = resolveMusicMix(description.name);
 	if (soundName.empty() || soundName == "NO SOUND") {
 		// The mix maps this location to silence
+		return;
+	}
+
+	// Nancy19 and up play nothing for a sound named "silence", which only
+	// stops the channel
+	if (g_nancy->getGameType() >= kGameTypeNancy19 && soundName == "silence") {
 		return;
 	}
 
@@ -360,6 +387,12 @@ void SoundManager::loadSound(const SoundDescription &description, SoundEffectDes
 }
 
 void SoundManager::playSound(uint16 channelID) {
+	if (channelID < _channels.size()) {
+		playSound(channelID, _channels[channelID].type);
+	}
+}
+
+void SoundManager::playSound(uint16 channelID, Audio::Mixer::SoundType type) {
 	if (channelID >= _channels.size() || _channels[channelID].stream == nullptr || isSoundPlaying(channelID))
 		return;
 
@@ -417,7 +450,7 @@ void SoundManager::playSound(uint16 channelID) {
 		}
 	}
 
-	_mixer->playStream(	chan.type,
+	_mixer->playStream(	type,
 						&chan.handle,
 						chan.streamForMixer,
 						channelID,
@@ -434,6 +467,11 @@ void SoundManager::playSound(const SoundDescription &description) {
 }
 
 void SoundManager::playSound(const Common::String &chunkName) {
+	// Nancy16 has no menu sound
+	if (!_commonSounds.contains(chunkName)) {
+		return;
+	}
+
 	const SoundDescription &desc = _commonSounds[chunkName];
 
 	if (!isSoundPlaying(desc)) {
@@ -459,7 +497,9 @@ void SoundManager::pauseSound(const SoundDescription &description, bool pause) {
 }
 
 void SoundManager::pauseSound(const Common::String &chunkName, bool pause) {
-	pauseSound(_commonSounds[chunkName], pause);
+	if (_commonSounds.contains(chunkName)) {
+		pauseSound(_commonSounds[chunkName], pause);
+	}
 }
 
 void SoundManager::pauseAllSounds(bool pause) {
@@ -486,8 +526,13 @@ bool SoundManager::isSoundPlaying(const SoundDescription &description) const {
 	}
 }
 
+// Nancy19 and up have no common sounds
 bool SoundManager::isSoundPlaying(const Common::String &chunkName) const {
-	return isSoundPlaying(_commonSounds[chunkName]);
+	return _commonSounds.contains(chunkName) && isSoundPlaying(_commonSounds[chunkName]);
+}
+
+uint32 SoundManager::getChannelSerial(uint16 channelID) const {
+	return channelID < _channels.size() ? _channels[channelID].serial : 0;
 }
 
 void SoundManager::stopSound(uint16 channelID) {
@@ -495,6 +540,7 @@ void SoundManager::stopSound(uint16 channelID) {
 		return;
 
 	Channel &chan = _channels[channelID];
+	++chan.serial;
 
 	if (isSoundPlaying(channelID)) {
 		_mixer->stopHandle(chan.handle);
@@ -522,7 +568,9 @@ void SoundManager::stopSound(const SoundDescription &description) {
 }
 
 void SoundManager::stopSound(const Common::String &chunkName) {
-	stopSound(_commonSounds[chunkName]);
+	if (_commonSounds.contains(chunkName)) {
+		stopSound(_commonSounds[chunkName]);
+	}
 }
 
 void SoundManager::stopAllSounds() {
@@ -551,10 +599,19 @@ byte SoundManager::getVolume(const Common::String &chunkName) {
 }
 
 void SoundManager::setVolume(uint16 channelID, uint16 volume) {
-	if (channelID >= _channels.size() || !isSoundPlaying(channelID))
+	if (channelID >= _channels.size())
+		return;
+
+	_channels[channelID].requestedVolume = volume;
+
+	if (!isSoundPlaying(channelID))
 		return;
 
 	_mixer->setChannelVolume(_channels[channelID].handle, getAdjustedVolume(volume) * 255 / 100);
+}
+
+uint16 SoundManager::getRequestedVolume(uint16 channelID) const {
+	return channelID < _channels.size() ? _channels[channelID].requestedVolume : 0;
 }
 
 void SoundManager::setVolume(const SoundDescription &description, uint16 volume) {
@@ -700,6 +757,23 @@ Audio::Timestamp SoundManager::getLength(const SoundDescription &description) {
 
 Audio::Timestamp SoundManager::getLength(const Common::String &chunkName) {
 	return getLength(_commonSounds[chunkName]);
+}
+
+Audio::Timestamp SoundManager::getFileLength(const Common::String &soundName) {
+	if (soundName == "silence") {
+		return Audio::Timestamp();
+	}
+
+	Common::SeekableReadStream *file = SearchMan.createReadStreamForMember(Common::Path(soundName + ".his"));
+	if (!file) {
+		return Audio::Timestamp();
+	}
+
+	Audio::SeekableAudioStream *stream = makeHISStream(file, DisposeAfterUse::NO);
+	const Audio::Timestamp length = stream ? stream->getLength() : Audio::Timestamp();
+	delete stream;
+	delete file;
+	return length;
 }
 
 void SoundManager::recalculateSoundEffects() {

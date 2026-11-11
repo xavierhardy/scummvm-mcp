@@ -66,6 +66,10 @@ public:
 
 	void onPause(bool pause);
 
+	// Enhancement: stops the lines being spoken by sound records that don't lead to
+	// another scene, after a cinematic got skipped
+	void stopSkippedMovieSounds(const Common::Array<int16> &movieFlags, bool stopsSpeech);
+
 	void synchronize(Common::Serializer &serializer);
 
 	static ActionRecord *createAndLoadNewRecord(Common::SeekableReadStream &inputData);
@@ -74,6 +78,7 @@ public:
 
 protected:
 	static ActionRecord *createActionRecord(uint16 type, Common::SeekableReadStream *recordStream = nullptr);
+	static void readDependencies(Common::SeekableReadStream &inputData, ActionRecord &record, uint numDependencies, uint singleDepSize);
 
 	void synchronizeMovieWithSound();
 

@@ -77,6 +77,7 @@ static const PlainGameDescriptor gameDescriptions[] = {
 	{ "ft", "Full Throttle" },
 	{ "rebel1", "Star Wars: Rebel Assault" },
 	{ "rebel2", "Star Wars: Rebel Assault II: The Hidden Empire" },
+	{ "mortimer", "Mortimer and the Riddles of the Medallion" },
 	{ "dig", "The Dig" },
 	{ "comi", "The Curse of Monkey Island" },
 
@@ -241,6 +242,7 @@ static const GameSettings gameVariantsTable[] = {
 	{"rebel1", "Demo v1.02c", 0, GID_REBEL1, 7, 0, MDT_NONE, GF_DEMO | GF_TESTING, Common::kPlatformMacintosh, GUIO3(GUIO_NOMIDI, GAMEOPTION_REBEL1_UNLOCK_ALL, GAMEOPTION_REBEL1_NO_DAMAGE)},
 
 	{"rebel2", "", 0, GID_REBEL2, 7, 0, MDT_NONE, GF_TESTING, Common::kPlatformDOS, GUIO5(GUIO_NOMIDI, GAMEOPTION_REBEL2_HIRES, GAMEOPTION_REBEL2_UNLOCK_ALL, GAMEOPTION_REBEL2_NO_DAMAGE, GAMEOPTION_REBEL2_YODA_MODE)},
+	{"rebel2", "Mac", 0, GID_REBEL2, 7, 0, MDT_NONE, GF_TESTING, Common::kPlatformMacintosh, GUIO5(GUIO_NOMIDI, GAMEOPTION_REBEL2_HIRES, GAMEOPTION_REBEL2_UNLOCK_ALL, GAMEOPTION_REBEL2_NO_DAMAGE, GAMEOPTION_REBEL2_YODA_MODE)},
 	{"rebel2", "Demo", 0, GID_REBEL2, 7, 0, MDT_NONE, GF_DEMO | GF_TESTING, Common::kPlatformDOS, GUIO3(GUIO_NOMIDI, GUIO_NOLAUNCHLOAD, GUIO_NOSUBTITLES)},
 	{"rebel2", "Demo Windows 95", 0, GID_REBEL2, 7, 0, MDT_NONE, GF_DEMO | GF_TESTING, Common::kPlatformWindows, GUIO3(GUIO_NOMIDI, GUIO_NOLAUNCHLOAD, GUIO_NOSUBTITLES)},
 	{"rebel2", "Demo DA1.06", 0, GID_REBEL2, 7, 0, MDT_NONE, GF_DEMO | GF_TESTING, Common::kPlatformDOS, GUIO6(GUIO_NOMIDI, GAMEOPTION_REBEL2_HIRES, GAMEOPTION_REBEL2_UNLOCK_ALL, GAMEOPTION_REBEL2_NO_DAMAGE, GAMEOPTION_REBEL2_YODA_MODE, GAMEOPTION_REBEL2_RESTORED_CONTENT)},
@@ -249,6 +251,9 @@ static const GameSettings gameVariantsTable[] = {
 	{"rebel2", "Demo Special Edition", 0, GID_REBEL2, 7, 0, MDT_NONE, GF_DEMO | GF_TESTING, Common::kPlatformDOS, GUIO5(GUIO_NOMIDI, GAMEOPTION_REBEL2_HIRES, GAMEOPTION_REBEL2_UNLOCK_ALL, GAMEOPTION_REBEL2_NO_DAMAGE, GAMEOPTION_REBEL2_YODA_MODE)},
 	{"rebel2", "Demo v1.0", 0, GID_REBEL2, 7, 0, MDT_NONE, GF_DEMO | GF_TESTING, Common::kPlatformMacintosh, GUIO6(GUIO_NOMIDI, GAMEOPTION_REBEL2_HIRES, GAMEOPTION_REBEL2_UNLOCK_ALL, GAMEOPTION_REBEL2_NO_DAMAGE, GAMEOPTION_REBEL2_YODA_MODE, GAMEOPTION_REBEL2_RESTORED_CONTENT)},
 	{"rebel2", "PlayStation", 0, GID_REBEL2, 7, 0, MDT_NONE, GF_UNSTABLE | GF_16BIT_COLOR, Common::kPlatformPSX, GUIO5(GUIO_NOMIDI, GUIO_NOASPECT, GAMEOPTION_REBEL2_UNLOCK_ALL, GAMEOPTION_REBEL2_NO_DAMAGE, GAMEOPTION_REBEL2_YODA_MODE)},
+
+	{"mortimer", "", 0, GID_MORTIMER, 7, 0, MDT_NONE, GF_UNSTABLE, Common::kPlatformWindows, GUIO4(GUIO_NOMIDI, GUIO_NOASPECT, GAMEOPTION_MORTIMER_CHEATS, GAMEOPTION_MORTIMER_PROGRAMMER)},
+	{"mortimer", "Demo", 0, GID_MORTIMER, 7, 0, MDT_NONE, GF_DEMO | GF_UNSTABLE, Common::kPlatformWindows, GUIO6(GUIO_NOMIDI, GUIO_NOLAUNCHLOAD, GUIO_NOSUBTITLES, GUIO_NOASPECT, GAMEOPTION_MORTIMER_RESTORED_CONTENT, GAMEOPTION_MORTIMER_CHEATS)},
 
 	{"dig",  "", 0, GID_DIG, 7, 0, MDT_NONE, 0, UNK, GUIO5(GUIO_NOMIDI, GAMEOPTION_ENHANCEMENTS, GAMEOPTION_ORIGINALGUI, GAMEOPTION_LOWLATENCYAUDIO, GAMEOPTION_TTS)},
 	{"dig",  "Demo", 0, GID_DIG, 7, 0, MDT_NONE, GF_DEMO, UNK, GUIO4(GUIO_NOMIDI, GAMEOPTION_ORIGINALGUI, GAMEOPTION_LOWLATENCYAUDIO, GAMEOPTION_TTS)},
@@ -518,6 +523,8 @@ static const GameFilenamePattern gameFilenamesTable[] = {
 	{ "ft", "Vollgas Data", kGenUnchanged, Common::DE_DEU, Common::kPlatformMacintosh, 0 },
 	{ "ft", "Vollgas Demo Data", kGenUnchanged, Common::DE_DEU, Common::kPlatformMacintosh, "Demo" },
 
+	{ "mortimer", "MORTIMER.EXE", kGenUnchanged, Common::EN_ANY, Common::kPlatformWindows, 0 },
+
 	{ "rebel1", "ASSAULT.EXE", kGenUnchanged, UNK_LANG, Common::kPlatformDOS, "" },
 	{ "rebel1", "ASSAULT.EXE", kGenUnchanged, UNK_LANG, Common::kPlatformDOS, "Demo v1.51" },
 	{ "rebel1", "REBEL.EXE", kGenUnchanged, UNK_LANG, Common::kPlatformDOS, "Demo 1994-04-13" },
@@ -529,6 +536,7 @@ static const GameFilenamePattern gameFilenamesTable[] = {
 	{ "rebel2", "REBEL2.EXE", kGenUnchanged, UNK_LANG, Common::kPlatformDOS, "Demo" },
 	{ "rebel2", "LUCASDMO.EXE", kGenUnchanged, UNK_LANG, Common::kPlatformWindows, "Demo Windows 95" },
 	{ "rebel2", "RA2.EXE", kGenUnchanged, UNK_LANG, Common::kPlatformDOS, "Demo DA1.06" },
+	{ "rebel2", "Rebel Assault II Data 1", kGenUnchanged, UNK_LANG, Common::kPlatformMacintosh, "Mac" },
 	{ "rebel2", "Rebel Assault II Demo Data", kGenUnchanged, UNK_LANG, Common::kPlatformMacintosh, "Demo v1.0" },
 	{ "rebel2", "SLUS_003.81", kGenUnchanged, Common::EN_USA, Common::kPlatformPSX, "PlayStation" },
 
@@ -541,6 +549,7 @@ static const GameFilenamePattern gameFilenamesTable[] = {
 	{ "fbpack", "Fatty Bear's Funpack", kGenHEMacNoParens, UNK_LANG, Common::kPlatformMacintosh, 0 },
 	{ "funpack", "funpack", kGenHEPC, UNK_LANG, UNK, 0 },
 	{ "funpack", "Putt-Putt's Funpack", kGenHEMacNoParens, UNK_LANG, Common::kPlatformMacintosh, 0 },
+	{ "funpack", "Putt-Putt's Fun Pack", kGenHEMacNoParens, UNK_LANG, Common::kPlatformMacintosh, 0 },
 
 	{ "brstorm", "brstorm", kGenHEPC, UNK_LANG, UNK, 0 },
 

@@ -86,7 +86,11 @@ void RenderObject::moveTo(const Common::Rect &bounds) {
 	_hasMoved = true;
 }
 
-void RenderObject::setVisible(bool visible) {
+void RenderObject::setVisible(bool visible, bool forceRedraw) {
+	if (!forceRedraw && visible == _isVisible) {
+		return;
+	}
+
 	_isVisible = visible;
 	_needsRedraw = true;
 }
@@ -96,6 +100,13 @@ void RenderObject::setTransparent(bool isTransparent) {
 		_drawSurface.setTransparentColor(g_nancy->_graphics->getTransColor());
 	} else {
 		_drawSurface.clearTransparentColor();
+	}
+}
+
+void RenderObject::setClipRect(const Common::Rect &clip) {
+	if (clip != _clipRect) {
+		_clipRect = clip;
+		_needsRedraw = true;
 	}
 }
 

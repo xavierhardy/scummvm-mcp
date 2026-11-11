@@ -36,6 +36,7 @@
 #include "scumm/actor.h"
 #include "scumm/file.h"
 #include "scumm/resource.h"
+#include "scumm/insane/saveload.h"
 #include "scumm/scumm_v7.h"
 #include "scumm/sound.h"
 
@@ -164,11 +165,13 @@ bool InsaneRebel2::isSkippableVideoState() const {
 InsaneRebel2::InsaneRebel2(ScummEngine_v7 *scumm) :
 		_release(getRebel2Release(scumm->_game.variant, ConfMan.getBool("rebel2_restored_content"))) {
 	_vm = scumm;
-	if (_release.container) {
-		Common::Archive *archive = createRebel2MacArchive(_vm, _release.container);
-		if (!archive)
-			error("Cannot open Rebel Assault II data bundle '%s'", _release.container);
-		SearchMan.add("rebel2-mac-data", archive, 1);
+	if (_release.containers) {
+		for (const char *const *container = _release.containers; *container; ++container) {
+			Common::Archive *archive = createRebel2MacArchive(_vm, *container);
+			if (!archive)
+				error("Cannot open Rebel Assault II data bundle '%s'", *container);
+			SearchMan.add(*container, archive, 1);
+		}
 	}
 
 	// Rebel Assault II skips ScummEngine::resetScumm(), which normally clears this state.
@@ -641,8 +644,10 @@ InsaneRebel2::~InsaneRebel2() {
 		_rebelEmbeddedHud[i].pixels = nullptr;
 	}
 
-	if (_release.container)
-		SearchMan.remove("rebel2-mac-data");
+	if (_release.containers) {
+		for (const char *const *container = _release.containers; *container; ++container)
+			SearchMan.remove(*container);
+	}
 }
 
 bool InsaneRebel2::isHiRes() const {
@@ -1407,51 +1412,6 @@ void InsaneRebel2::renderScoreHUD(byte *renderBitmap, int pitch, int width, int 
 const uint32 kPilotSaveMagic = MKTAG('R', 'A', '2', 'P');
 const uint16 kPilotSaveVersion = 2;
 
-// Pilots occupy the regular ScummVM save slots, so they need the standard SCUMM
-// header too: without it every slot reads as an invalid savegame.
-const uint32 kPilotScummSaveVersion = 124;
-
-bool writeRebel2SavegameHeader(Common::WriteStream *out, const Common::String &desc) {
-	char name[32];
-	memset(name, 0, sizeof(name));
-	Common::strlcpy(name, desc.c_str(), sizeof(name));
-
-	out->writeUint32BE(MKTAG('S', 'C', 'V', 'M'));
-	out->writeUint32LE(0);
-	out->writeUint32LE(kPilotScummSaveVersion);
-	out->write(name, sizeof(name));
-	return !out->err();
-}
-
-// A stream starting with the pilot magic is a pre-header file; rewind it.
-bool readRebel2SavegameHeader(Common::SeekableReadStream *in, uint32 *version) {
-	const uint32 tag = in->readUint32BE();
-	if (tag == kPilotSaveMagic) {
-		in->seek(0);
-		if (version)
-			*version = 0;
-		return true;
-	}
-	if (tag != MKTAG('S', 'C', 'V', 'M'))
-		return false;
-
-	in->readUint32LE(); // size, unused
-	uint32 hdrVersion = in->readUint32LE();
-	if (hdrVersion > 0xFFFFFF)
-		hdrVersion = SWAP_BYTES_32(hdrVersion);
-	if (hdrVersion < VER(52) || hdrVersion > kPilotScummSaveVersion)
-		return false;
-
-	char name[32];
-	in->read(name, sizeof(name));
-	if (in->err())
-		return false;
-
-	if (version)
-		*version = hdrVersion;
-	return true;
-}
-
 bool InsaneRebel2::loadPilots() {
 	_numPilots = 0;
 
@@ -1461,23 +1421,13 @@ bool InsaneRebel2::loadPilots() {
 		if (!sf)
 			break; // Slots are contiguous
 
-		uint32 scummVersion = 0;
-		if (!readRebel2SavegameHeader(sf, &scummVersion)) {
+		SaveStateMetaInfos infos;
+		// Early pilot files have no SCUMM envelope.
+		const bool legacy = sf->readUint32BE() == kPilotSaveMagic;
+		sf->seek(0);
+		if (!legacy && !readInsaneSavegameHeader(sf, nullptr, infos)) {
 			delete sf;
 			break;
-		}
-
-		// Only present once the slot carries a SCUMM header.
-		if (scummVersion >= VER(52) && !Graphics::skipThumbnail(*sf)) {
-			delete sf;
-			break;
-		}
-		if (scummVersion >= VER(56)) {
-			SaveStateMetaInfos infos;
-			if (!_vm->loadInfos(sf, &infos)) {
-				delete sf;
-				break;
-			}
 		}
 
 		uint32 magic = sf->readUint32BE();
@@ -1527,9 +1477,11 @@ bool InsaneRebel2::savePilots() {
 		Common::String desc(_pilots[i].name);
 		if (desc.empty())
 			desc = Common::String::format("Pilot %d", i + 1);
-		writeRebel2SavegameHeader(sf, desc);
-		Graphics::saveThumbnail(*sf);
-		_vm->saveInfos(sf);
+		if (!writeInsaneSavegameHeader(sf, desc, _vm->getTotalPlayTime())) {
+			delete sf;
+			ok = false;
+			continue;
+		}
 
 		sf->writeUint32BE(kPilotSaveMagic);
 		sf->writeUint16LE(kPilotSaveVersion);
@@ -1547,6 +1499,7 @@ bool InsaneRebel2::savePilots() {
 			sf->writeSint16LE(p.rating[j]);
 
 		sf->finalize();
+		ok = !sf->err() && ok;
 		delete sf;
 	}
 

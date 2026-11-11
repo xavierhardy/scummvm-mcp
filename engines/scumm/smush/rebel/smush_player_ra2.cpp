@@ -125,6 +125,9 @@ SmushPlayerRebel2::SmushPlayerRebel2(ScummEngine_v7 *scumm, IMuseDigital *imuseD
 	: SmushPlayer(scumm, imuseDigital, insane) {
 	initGamePlayerFields();
 	ra2InitAudioTrackSizes();
+	// The original uses a 40/256 music floor and a rate of 256.
+	// Compensate for RebelAudio doubling the configured rate.
+	setGainReductionParams(40, 256 / 2);
 }
 
 SmushPlayerRebel2::~SmushPlayerRebel2() {
@@ -477,7 +480,8 @@ bool SmushPlayerRebel2::handleGameTextResource(uint32 subType, int32 subSize, Co
 	}
 
 	TextStyleFlags flg = (TextStyleFlags)(flags & 7);
-	if (static_cast<InsaneRebel2 *>(_insane)->_release.nonInteractiveVideos || ConfMan.getBool("subtitles"))
+	// Only switchable dialogue text is controlled by the subtitle setting.
+	if (!(flags & 8) || static_cast<InsaneRebel2 *>(_insane)->_release.nonInteractiveVideos || ConfMan.getBool("subtitles"))
 		ra2HandleTextResource(str, fontId, color, posX, posY, left, top, width, height, flg);
 
 	free(text);
@@ -579,9 +583,12 @@ public:
 				line_start = line_end + 1;
 				if (line_start[0] == '/' && line_start[1] == '/') {
 					line_start += 2;
-					if (line_end[-1] == '\r')
-						line_end[-1] = '\n';
+					// Preserve one line break when stripping the continuation prefix.
+					if (line_end > value && line_end[-1] == '\r')
+						line_end--;
+					*line_end = '\n';
 					memmove(line_end + 1, line_start, strlen(line_start) + 1);
+					line_start = line_end + 1;
 				}
 			}
 
@@ -1276,7 +1283,8 @@ void SmushPlayerRebel2::handleGameParseNextFrame() {
 		_startTime = _vm->_system->getMillis();
 		_pauseTime = 0;
 	}
-	processDispatches(_smushAudioSampleRate / 12);
+	// Queue one frame of audio at the movie's actual playback rate.
+	processDispatches(_smushAudioSampleRate / _speed);
 }
 
 void SmushPlayerRebel2::ra2StartLoadPlayback() {

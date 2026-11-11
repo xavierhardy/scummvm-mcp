@@ -86,8 +86,6 @@ public:
 
 	void enableLights() override;
 	void disableLights() override;
-	void setupLight(Light *light, int lightId) override;
-	void turnOffLight(int lightId) override;
 
 	void createTexture(Texture *texture, const uint8 *data, const CMap *cmap, bool clamp) override;
 	void selectTexture(const Texture *texture) override;
@@ -129,11 +127,16 @@ public:
 
 protected:
 	void createSpecialtyTextureFromScreen(uint id, uint8 *data, int x, int y, int width, int height) override;
+	void setupLight(Light *light, int lightId) override;
+	void turnOffLight(int lightId) override;
 
 private:
 	Graphics::PixelFormat _pixelFormat;
 	TinyGL::BlitImage *_emergFont[96];
 	TinyGL::BlitImage *_smushImage;
+	TinyGL::BlitImage *_storedImage;
+	// _storedDisplay changed after _storedImage was uploaded
+	bool _storedImageDirty;
 	Graphics::Surface *_storedDisplay;
 	float _alpha;
 	const Actor *_currentActor;

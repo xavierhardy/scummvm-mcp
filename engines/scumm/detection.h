@@ -46,6 +46,9 @@ namespace Scumm {
 #define GAMEOPTION_REBEL1_NO_DAMAGE                          GUIO_GAMEOPTIONS15
 #define GAMEOPTION_REBEL1_RESTORED_CONTENT                   GUIO_GAMEOPTIONS16
 #define GAMEOPTION_REBEL2_RESTORED_CONTENT                   GUIO_GAMEOPTIONS17
+#define GAMEOPTION_MORTIMER_RESTORED_CONTENT                 GUIO_GAMEOPTIONS18
+#define GAMEOPTION_MORTIMER_CHEATS                           GUIO_GAMEOPTIONS19
+#define GAMEOPTION_MORTIMER_PROGRAMMER                       GUIO_GAMEOPTIONS20
 
 /**
  * Descriptor of a specific SCUMM game. Used internally to store
@@ -274,7 +277,8 @@ enum ScummGameId {
 	GID_BASKETBALL,
 	GID_MOONBASE,
 	GID_PJGAMES,
-	GID_HECUP		// CUP demos
+	GID_HECUP,		// CUP demos
+	GID_MORTIMER
 };
 
 struct RuScummPatcher {

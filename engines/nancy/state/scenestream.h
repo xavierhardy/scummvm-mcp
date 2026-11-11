@@ -1,0 +1,328 @@
+/* ScummVM - Graphic Adventure Engine
+ *
+ * ScummVM is the legal property of its developers, whose names
+ * are too numerous to list here. Please refer to the COPYRIGHT
+ * file distributed with this source distribution.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+#ifndef NANCY_STATE_SCENESTREAM_H
+#define NANCY_STATE_SCENESTREAM_H
+
+#include "common/array.h"
+#include "common/str.h"
+
+#include "engines/nancy/commontypes.h"
+#include "engines/nancy/puzzledata.h"
+#include "engines/nancy/renderobject.h"
+
+#include "engines/nancy/action/actionmanager.h"
+
+#ifdef ENABLE_NANCY_V4
+#include "engines/nancy/script/mathtypes.h"
+#endif
+
+#ifdef ENABLE_NANCY_V5
+#include "engines/nancy/script/v5/streamtree.h"
+
+struct lua_State;
+#endif
+
+namespace Common {
+class SeekableReadStream;
+}
+
+namespace Nancy {
+
+struct ENVS;
+struct NancyInput;
+
+namespace UI {
+class Viewport;
+}
+
+namespace Script {
+class SceneContext;
+struct Message;
+}
+
+namespace State {
+
+// What a stream gets started with
+struct StreamFlags {
+	enum Lifetime {
+		kIndependent			= 0,
+		kEndsWithParentScene	= 1,	// ...and with the parent itself
+		kEndsWithParent			= 2
+	};
+
+	void read(Common::SeekableReadStream &stream);
+
+	byte lifetime = kIndependent;
+	bool capturesInput = false;	// the streams after this one get no input
+	bool runsFirst = false;		// put in front of the running streams
+	int32 zOffset = 0;			// added to the z order of everything the stream draws
+
+	// Nancy26
+	double z = 0.0;				// where the stream is among the others
+	bool isInViewport = true;	// false for the ones placed on the whole screen
+	bool isSaved = true;		// kept in saved games
+};
+
+// Nancy17 runs several scenes side by side, each in a stream of its own. The scene
+// the player walks around in is the main stream, and is still handled by the Scene
+// state itself; this is one of the others. Those play the ambient sounds of an
+// environment, fill the journal, show a close-up or a phone call on top of the main
+// scene, and so on. A scene change made by a stream's records only changes the scene
+// of that stream.
+class SceneStream {
+public:
+	typedef StreamData::Child Child;
+
+	// The z offset is the stream's own on top of the one of the stream that started it
+	SceneStream(const Common::String &name, const StreamFlags &flags, int32 zOffset);
+	~SceneStream();
+
+	// Runs the records of the stream's scene, and loads the next scene when one got
+	// requested. Returns false once the stream is over.
+	bool update();
+	void handleInput(NancyInput &input);
+
+	// Nancy19: the scripts of the scene store what they keep in a saved game
+	void onSave();
+
+	// Nancy19: hands a message to the scene. Returns false when it isn't for it.
+	bool receiveMessage(const Script::Message &message, bool &wasTaken);
+
+#ifdef ENABLE_NANCY_V4
+	// Enhancement: what Esc skips in the scene of the stream
+	bool skipSpeech();
+	bool skipMovies();
+#endif
+
+	void changeScene(const Common::String &sceneName, uint16 frameID);
+	void end() { _isEnded = true; }
+	bool isEnded() const { return _isEnded; }
+
+	// Nancy20: lets the records of the scene know that it is being left
+	void endScene();
+
+	// Puts the background and what the records draw back on the screen
+	void registerGraphics();
+
+	// Loads the scene the stream was asked to go to, without running it.
+	// Returns whether there was one, and it could be loaded.
+	bool loadNextScene();
+
+	void setEventFlag(int16 index, byte flag);
+	byte getEventFlag(int16 index) const;
+
+	const Common::String &getName() const { return _name; }
+	const StreamFlags &getFlags() const { return _flags; }
+	int32 getZOffset() const { return _zOffset; }
+#ifdef ENABLE_NANCY_V4
+	Script::SceneContext *getScriptScene() const { return _scriptScene; }
+#endif
+	const Common::String &getSceneName() const { return _sceneName; }
+	SceneChangeDescription &getSceneInfo() { return _sceneInfo; }
+	Action::ActionManager &getActionManager() { return _actionManager; }
+#ifdef ENABLE_NANCY_V4
+	Script::ScriptMatrix &getTransform() { return _transform; }
+#endif
+	ViewTransform &getViewTransform() { return _viewTransform; }
+
+#ifdef ENABLE_NANCY_V5
+	// Nancy26: what the stream says about the records of its scenes
+	Script::StreamNodeState &getNodeState() { return _nodeState; }
+	const Script::StreamNodeState &getNodeState() const { return _nodeState; }
+
+	// The stream was put at another place among the others
+	void onBandChanged();
+#endif
+
+	Common::Array<Child> _children;
+
+private:
+	bool loadScene();
+#ifdef ENABLE_NANCY_V4
+	bool loadScriptedScene();	// Nancy19+
+#endif
+	void beginScene();
+	void loadBackground(const Common::Path &videoFile);
+	void clearScene();
+	void processRecords();
+
+	Common::String _name;
+	StreamFlags _flags;
+	int32 _zOffset;
+
+	Common::String _sceneName;
+	SceneChangeDescription _sceneInfo;
+	Action::ActionManager _actionManager;
+	UI::Viewport *_background = nullptr;
+
+#ifdef ENABLE_NANCY_V4
+	// Nancy19: the script of the scene, which takes the place of the action records
+	Script::SceneContext *_scriptScene = nullptr;
+
+	Script::ScriptMatrix _transform;	// Nancy21
+#endif
+#ifdef ENABLE_NANCY_V5
+	Script::StreamNodeState _nodeState;	// Nancy26
+#endif
+
+	// The zoom of everything the stream draws
+	ViewTransform _viewTransform;
+
+	// Every stream has generic event flags of its own
+	Common::Array<byte> _genericFlags;
+
+	bool _hasNextScene = false;
+	Common::String _nextSceneName;
+	uint16 _nextFrameID = 0;
+
+	bool _isEnded = false;
+};
+
+// The streams running next to the main one. Where a stream gets named, no name
+// stands for the stream whose records are running.
+class SceneStreamManager {
+public:
+	void begin(const Common::String &name, const Common::String &sceneName, uint16 frameID, const StreamFlags &flags);
+	void end(const Common::String &name);
+
+	// Loads the scene a stream that was just begun starts with right away,
+	// instead of with the next frame
+	void loadNow(const Common::String &name);
+
+	void registerGraphics();
+
+	void changeScene(const Common::String &name, const SceneChangeDescription &sceneDescription);
+	void changeScene(const Common::String &name, const Common::String &sceneName, uint16 frameID);
+	Common::String getSceneName(const Common::String &name) const;
+
+	// Nancy23: how long the scene the stream is in has been running, or -1 when
+	// there is none
+	double getSceneTime(const Common::String &name) const;
+
+	// Nancy24: the frame of the scene the stream is in, or -1 when there is none
+	int getSceneFrame(const Common::String &name) const;
+
+	bool isRunning(const Common::String &name) const { return find(name) != nullptr; }
+
+	// The stream whose records are running or getting input; null for the main one
+	SceneStream *getRunning() const { return _running; }
+
+	void process();
+	bool handleInput(NancyInput &input, bool beforeMainStream);
+
+	void clear();
+	bool isEmpty() const { return _streams.empty(); }
+
+	void onMainSceneChange();
+	void changeEnvironment(const Common::String &newEnvironment);
+	const Common::String &getEnvironment() const { return _environment; }
+
+	// The names of the running streams, in the order they run in. The UI's
+	// stream is left out unless asked for.
+	void getStreamNames(Common::Array<Common::String> &names, bool withUI) const;
+
+	// The running stream of that name; null when there is none
+	SceneStream *find(const Common::String &name) const;
+
+	static const char *getMainStreamName();
+	static const char *getUIStreamName();
+	static const char *getManagerStreamName();	// Nancy22
+
+	// Nancy19: hands a message to the scenes of the streams it is for. Returns
+	// false when there is none.
+	bool receiveMessage(const Script::Message &message, bool &wasTaken);
+
+#ifdef ENABLE_NANCY_V5
+	// Nancy26: a message to a stream by its name, sent from the Lua state L. It
+	// enables, disables, pauses, locks or unlocks the stream, or asks whether it
+	// is paused. Returns the number of results left on the stack of L.
+	int receiveNancy26Message(lua_State *L, const Common::String &sender, const Common::String &name, const Common::String &action);
+
+	// Nancy26: what a stream says about its records; null for no such stream
+	Script::StreamNodeState *getNodeState(const Common::String &name);
+
+	// Nancy26: the streams in the order they get drawn in, the main one as null
+	void getDrawOrder(Common::Array<SceneStream *> &streams) const;
+
+	// Nancy26: a stream that keeps the input goes in front of the others of its
+	// tree, the managers and the cheat tools left aside; the z it gets for that
+	double getCapturingZ(double z, bool isInViewport) const;
+#endif
+
+#ifdef ENABLE_NANCY_V4
+	// Enhancement: Esc skips what is being said in any of the streams, or else
+	// the movies they play. Returns whether there was something to skip.
+	bool skipSpeech();
+	bool skipMovies();
+#endif
+
+#ifdef ENABLE_NANCY_V4
+	// Nancy21: what the scripts move and scale everything in a stream with; null
+	// when there is no such stream. Only the scaling and the offset get drawn.
+	const Script::ScriptMatrix *getTransform(const Common::String &name);
+	void setTransform(const Common::String &name, const Script::ScriptMatrix &transform);
+#endif
+
+	// What a stream gets drawn with; null when there is no such stream
+	const ViewTransform *getViewTransform(const Common::String &name);
+
+	// Nancy21: where a stream is among the others. The main stream is at 0.
+	double getZ(const Common::String &name) const;
+
+	// The z of the frontmost stream, and of the one that is running
+	int32 getFrontZOffset() const;
+	int32 getRunningZOffset() const { return _running ? _running->getZOffset() : 0; }
+
+	// Keeps the streams in the saved game, and starts them again after loading
+	void store();
+	void restore();
+
+private:
+	void endChildren(const Common::Array<SceneStream::Child> &children);
+	void changeEnvironmentStream(const ENVS &envs, const Common::String &newEnvironment);
+
+	// Every stream in the order they run and get input in. The main stream is
+	// the scene itself, and takes part as a null entry.
+	Common::Array<SceneStream *> _streams;
+	Common::Array<SceneStream::Child> _mainStreamChildren;
+	SceneStream *_running = nullptr;
+	Common::String _environment;
+
+#ifdef ENABLE_NANCY_V4
+	const Script::SceneContext *findScriptScene(const Common::String &name) const;
+
+	Script::ScriptMatrix _mainStreamTransform;
+#endif
+#ifdef ENABLE_NANCY_V5
+	// Nancy26: puts every stream at its place in the order they get drawn in
+	void updateBands();
+
+	Script::StreamNodeState _mainNodeState;
+	uint32 _numBegun = 0;
+#endif
+	ViewTransform _mainStreamViewTransform;
+};
+
+} // End of namespace State
+} // End of namespace Nancy
+
+#endif // NANCY_STATE_SCENESTREAM_H

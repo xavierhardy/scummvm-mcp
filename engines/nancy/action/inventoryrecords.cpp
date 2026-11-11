@@ -21,24 +21,49 @@
 
 #include "engines/nancy/nancy.h"
 #include "engines/nancy/util.h"
-#include "engines/nancy/resource.h"
+#include "engines/nancy/resource/resource.h"
 #include "engines/nancy/sound.h"
 
 #include "engines/nancy/action/inventoryrecords.h"
 
 #include "engines/nancy/state/scene.h"
 
+#include "engines/nancy/ui/ndui/manager.h"
+
 namespace Nancy {
 namespace Action {
+
+// Nancy17 names the character an item belongs to; anything that isn't a
+// character's name stands for whoever is being played
+static byte readCharacterName(Common::SeekableReadStream &stream) {
+	Common::String name;
+	readFilename(stream, name);
+
+	const PCUI *pcui = GetEngineData(PCUI);
+	for (uint i = 0; pcui && i < pcui->characters.size(); ++i) {
+		if (pcui->characters[i].name.equalsIgnoreCase(name)) {
+			return i;
+		}
+	}
+
+	return kPlayerCharacterActive;
+}
 
 void AddInventoryNoHS::readData(Common::SeekableReadStream &stream) {
 	_itemID = stream.readUint16LE();
 
-	if (g_nancy->getGameType() >= kGameTypeNancy15) {
+	if (g_nancy->getGameType() >= kGameTypeNancy17) {
+		_characterIndex = readCharacterName(stream);
+		_setCursor = stream.readByte();
+	} else if (g_nancy->getGameType() >= kGameTypeNancy15) {
 		// The character the item goes to took the first half of the cursor flag
 		_characterIndex = stream.readByte();
 		_setCursor = stream.readByte();
-		_forceCursor = stream.readUint16LE();
+
+		// Nancy16 dropped the force cursor field
+		if (g_nancy->getGameType() == kGameTypeNancy15) {
+			_forceCursor = stream.readUint16LE();
+		}
 	} else if (g_nancy->getGameType() >= kGameTypeNancy6) {
 		_setCursor = stream.readUint16LE();
 		_forceCursor = stream.readUint16LE();
@@ -57,7 +82,9 @@ void AddInventoryNoHS::execute() {
 void RemoveInventoryNoHS::readData(Common::SeekableReadStream &stream) {
 	_itemID = stream.readUint16LE();
 
-	if (g_nancy->getGameType() >= kGameTypeNancy15) {
+	if (g_nancy->getGameType() >= kGameTypeNancy17) {
+		_characterIndex = readCharacterName(stream);
+	} else if (g_nancy->getGameType() >= kGameTypeNancy15) {
 		_characterIndex = stream.readByte();
 	}
 }
@@ -224,10 +251,22 @@ void PopInvViewPriorScene::execute() {
 
 void GoInvViewScene::readData(Common::SeekableReadStream &stream) {
 	_itemID = stream.readUint16LE();
-	_addToInventory = stream.readUint16LE();
+
+	// Nancy17 only names the item
+	if (g_nancy->getGameType() <= kGameTypeNancy16) {
+		_addToInventory = stream.readUint16LE();
+	}
 }
 
 void GoInvViewScene::execute() {
+	if (g_nancy->getGameType() >= kGameTypeNancy16) {
+		// The inventory of the UI has taken over what the item data of the earlier
+		// games said about the items. Every record of Nancy16 adds its item.
+		NancySceneState.getNDUI()->viewInventoryItem(_itemID);
+		_isDone = true;
+		return;
+	}
+
 	auto *inv = GetEngineData(INV);
 	assert(inv);
 

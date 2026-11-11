@@ -22,6 +22,7 @@
 #include "common/serializer.h"
 #include "common/array.h"
 #include "common/hashmap.h"
+#include "common/str-array.h"
 
 #include "engines/nancy/commontypes.h"
 #include "engines/nancy/enginedata.h"
@@ -215,6 +216,34 @@ private:
 	static void syncOneJournal(Common::Serializer &ser, Common::HashMap<uint16, Common::Array<Entry>> &journal);
 };
 
+// Nancy16: the entries of the task list the player has checked off
+struct TasklistData : public PuzzleData {
+	TasklistData() {}
+	virtual ~TasklistData() {}
+
+	static constexpr uint32 getTag() { return MKTAG('T', 'L', 'S', 'T'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<Common::String> checkedEntries;
+};
+
+// Nancy16: how the panels and controls of the UI differ from the state they start in,
+// as the actions that bring them there, e.g. a meter a scene has shown or disabled
+struct UIStateData : public PuzzleData {
+	UIStateData() {}
+	virtual ~UIStateData() {}
+
+	struct Change {
+		Common::String name;
+		int32 action = 0;
+	};
+
+	static constexpr uint32 getTag() { return MKTAG('U', 'I', 'S', 'T'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<Change> changes;
+};
+
 // Contains variables that can be read and modified through action records.
 // Mixes two separate things:
 // - the exhibit data table in nancy6
@@ -247,6 +276,21 @@ struct TableData : public PuzzleData {
 	// Combo (float) values are rounded to the nearest integer.
 	int16 getValue(uint16 index) const;
 	void setValue(uint16 index, int16 value);
+
+	// Nancy16 reads a value that was never set as 0
+	int16 getValueOrZero(uint16 index) const;
+
+	// How Nancy14+ value tests compare a value against another
+	enum Comparison {
+		kEqual			= 0,
+		kGreater		= 1,
+		kGreaterOrEqual	= 2,
+		kLess			= 3,
+		kLessOrEqual	= 4,
+		kNotEqual		= 5		// Nancy16+
+	};
+
+	static bool compare(int32 value, int32 other, uint16 comparison);
 
 	Common::Array<int16> singleValues;
 	Common::Array<float> comboValues;
@@ -453,6 +497,29 @@ struct PlayerCharacterData : public PuzzleData {
 	Common::String designs[kMaxPlayerCharacters];
 };
 
+// Inventory "can't" sound overrides, installed by AR 123 (InventorySoundOverride).
+// An override stays in place until another record replaces or removes it, so it
+// has to survive both scene changes and a save/load. One set per player character;
+// everything before Nancy15 only ever touches the first.
+struct InventorySoundOverrideData : public PuzzleData {
+	struct Override {
+		bool isDefault = false; // When true, other fields are ignored
+		SoundDescription sound;
+		Common::String caption;
+	};
+
+	InventorySoundOverrideData() {}
+	virtual ~InventorySoundOverrideData() {}
+
+	static constexpr uint32 getTag() { return MKTAG('I', 'S', 'N', 'D'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<uint16, Override> overrides[kMaxPlayerCharacters];
+
+private:
+	static void syncOverride(Common::Serializer &ser, Override &override);
+};
+
 // Nancy13+ WordFindPuzzle (AR 170). The puzzle is solved one word at a time across
 // several scene visits; this remembers which word is currently active so progress
 // survives leaving and re-entering the scene (and saving/loading).
@@ -529,6 +596,18 @@ struct MirrorLightData : public PuzzleData {
 	Common::Array<double> angles;	// radians, indexed by mirror
 };
 
+// Nancy10 MultiBuildPuzzle (AR 235). How many times each ingredient went in when
+// the puzzle was last left. A record with its retain byte set picks the counts
+// back up when it runs in the same scene (cake mixing, after "add more
+// ingredients"); any other record starts over.
+struct MultiBuildPuzzleData : public PuzzleData {
+	static constexpr uint32 getTag() { return MKTAG('M', 'B', 'L', 'D'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	uint16 sceneID = kNoScene;
+	Common::Array<int16> placeCounts;
+};
+
 // Nancy14 BuildPuzzle (AR 166). The board as it was after the last drop. A puzzle
 // scene that re-runs picks it back up, as long as it is still the last build
 // puzzle entered and its resume flag is set; otherwise the puzzle starts over.
@@ -545,6 +624,180 @@ struct BuildPuzzleData : public PuzzleData {
 	bool wrongIngredient = false;
 	Common::Array<int16> pieces;	// 6 per piece: sourceID, assignedZone, left, top, right, bottom
 	Common::Array<int16> zones;		// per zone: numWrong, then one count per ingredient
+};
+
+// Nancy17 BuildPuzzle. The boards the puzzles were left with, by the name each
+// puzzle keeps its board under. GoldbergPuzzle looks at what was built.
+struct BuildBoardData : public PuzzleData {
+	struct Piece {
+		int16 sourceID = -1;	// index of the piece in the puzzle's record
+		int16 zoneID = -1;		// -1 when the piece is not in a zone
+		Common::Rect rect;		// where the piece sits
+		bool isLocked = false;
+	};
+
+	struct Board {
+		int16 placedCount = 0;
+		int16 heldPiece = -1;
+		Common::Array<Piece> pieces;
+
+		// The sourceID of the piece in a zone, -1 when the zone is empty
+		int16 getPieceInZone(int16 zoneID) const;
+	};
+
+	static constexpr uint32 getTag() { return MKTAG('B', 'L', 'D', 'B'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, Board, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> boards;
+};
+
+// Nancy17 DragSurfacePuzzle. The part of each picture that was last looked at,
+// by the name the puzzle keeps it under.
+struct DragSurfaceData : public PuzzleData {
+	static constexpr uint32 getTag() { return MKTAG('D', 'R', 'G', 'S'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, Common::Point, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> viewOrigins;
+};
+
+// Nancy17. The scenes that run in streams next to the main one, so they can be
+// started again after loading
+struct StreamData : public PuzzleData {
+	struct Child {
+		Common::String name;
+		byte lifetime = 0;
+	};
+
+	struct Stream {
+		bool isMainStream = false;
+		Common::String name;
+		byte lifetime = 0;
+		bool capturesInput = false;
+		bool runsFirst = false;
+		int32 zOffset = 0;
+		Common::String sceneName;
+		uint16 frameID = 0;
+		Common::Array<Child> children;
+	};
+
+	static constexpr uint32 getTag() { return MKTAG('S', 'T', 'R', 'M'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<Stream> streams;
+};
+
+// Nancy17. Named lists of numbers that the scenes fill and check, e.g. the
+// buttons the player pressed so far. Nancy18 also has lists of names.
+struct CollectionData : public PuzzleData {
+	struct Values {
+		Common::Array<double> numbers;
+		Common::StringArray names;
+
+		void clear() { numbers.clear(); names.clear(); }
+	};
+
+	struct Collection {
+		uint32 maxSize = 0;
+		Values values;
+	};
+
+	static constexpr uint32 getTag() { return MKTAG('C', 'O', 'L', 'L'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, Collection, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> collections;
+};
+
+// Nancy18. What puzzles keep under a name of their own, like where the player
+// stands in each of the sentry rooms, or a card game that was left unfinished.
+// The scenes can throw away what a name holds.
+struct SavedStateData : public PuzzleData {
+	static constexpr uint32 getTag() { return MKTAG('S', 'V', 'S', 'T'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, Common::Array<int32>, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> states;
+};
+
+// Nancy19. The values the scripts keep by name, which take the place of the
+// numbered ones of the table
+struct ScriptValueData : public PuzzleData {
+	static constexpr uint32 getTag() { return MKTAG('S', 'C', 'V', 'L'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, int32, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> values;
+};
+
+// Nancy1New. The texts the scripts keep by name, next to the values
+struct ScriptTextData : public PuzzleData {
+	static constexpr uint32 getTag() { return MKTAG('S', 'C', 'S', 'T'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, Common::String, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> texts;
+};
+
+// Nancy19. What the scripts ask to have kept under a name: a number, a text,
+// or a table of those, already packed into bytes
+struct ScriptSavedData : public PuzzleData {
+	static constexpr uint32 getTag() { return MKTAG('S', 'C', 'S', 'D'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, Common::Array<byte>, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> values;
+};
+
+// Nancy27. The results of the conditions of the Brain that are only worked out
+// again when the scripts ask for it
+struct BrainData : public PuzzleData {
+	static constexpr uint32 getTag() { return MKTAG('B', 'R', 'N', 'S'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, bool, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> results;
+};
+
+// Nancy21. The pictures the camera of the cell phone took, as PNG files, which
+// the scripts show from the "LOADSAVE" tree
+struct ScriptPictureData : public PuzzleData {
+	static constexpr uint32 getTag() { return MKTAG('S', 'C', 'P', 'C'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::HashMap<Common::String, Common::Array<byte>, Common::IgnoreCase_Hash, Common::IgnoreCase_EqualTo> pictures;
+};
+
+// Nancy19. The journal entries and the tasks the scripts gave every player
+// character. A script only hands them out while its conditions hold, so they
+// are kept with the game.
+struct ScriptJournalData : public PuzzleData {
+	struct JournalEntry {
+		Common::String heading;	// the keys of the texts
+		Common::String text;
+	};
+
+	struct Task {
+		Common::String text;
+		Common::String flagName;	// the flag that has to be set to check the task off
+	};
+
+	static constexpr uint32 getTag() { return MKTAG('S', 'C', 'J', 'N'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<JournalEntry> journalEntries[kMaxPlayerCharacters];
+	Common::Array<Task> tasks[kMaxPlayerCharacters];
+};
+
+// Nancy17. The contacts in the cell phone of every player character
+struct PhoneBookData : public PuzzleData {
+	struct Entry {
+		Common::String name;
+		Common::String number;
+		Common::String sceneName;	// the scene that plays the call
+		int16 nameFlag = -1;		// the number shows in place of the name until this is set
+
+		// What the phone lists the contact as
+		Common::String getDisplayText() const;
+	};
+
+	static constexpr uint32 getTag() { return MKTAG('P', 'H', 'B', 'K'); }
+	virtual void synchronize(Common::Serializer &ser);
+
+	Common::Array<Entry> entries[kMaxPlayerCharacters];
 };
 
 PuzzleData *makePuzzleData(const uint32 tag);

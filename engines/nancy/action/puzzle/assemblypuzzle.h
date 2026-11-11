@@ -23,7 +23,7 @@
 #define NANCY_ACTION_ASSEMBLYPUZZLE_H
 
 #include "engines/nancy/action/puzzlerecord.h"
-#include "engines/nancy/misc/mousefollow.h"
+#include "engines/nancy/action/mousefollow.h"
 
 namespace Nancy {
 
@@ -37,8 +37,6 @@ class AssemblyPuzzle : public PuzzleRecord {
 public:
 	AssemblyPuzzle() : PuzzleRecord(7) {}
 	virtual ~AssemblyPuzzle() {}
-
-	AssemblyPuzzle(AssemblyPuzzle &&) = default;
 
 	void init() override;
 	void registerGraphics() override;
@@ -54,7 +52,7 @@ protected:
 
 	void rotateBase(bool ccw);
 
-	struct Piece : Misc::MouseFollowObject {
+	struct Piece : MouseFollowObject {
 		Common::Array<Common::Rect> srcRects;
 		Common::Array<Common::Rect> destRects;
 
